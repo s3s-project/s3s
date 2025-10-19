@@ -81,7 +81,7 @@ impl<S> UploadStream<S> {
     /// Finalizes the hash and transitions to [`State::AwaitingEof`] when all declared bytes are read.
     ///
     /// Returns `Ok(true)` if the state was updated to `AwaitingEof`, `Ok(false)` if there are still
-    /// bytes remaining, and propagates the checksum mismatch as `Err` while moving to `Failed`.
+    /// bytes remaining, and returns an error while moving to `Failed` if hash finalization fails.
     fn finalize_if_complete(&mut self) -> Result<bool, UploadStreamError> {
         if self.remaining_length != 0 {
             return Ok(false);
