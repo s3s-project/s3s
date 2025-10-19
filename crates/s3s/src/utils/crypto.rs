@@ -84,3 +84,7 @@ pub fn hex_sha256<R>(data: &[u8], f: impl FnOnce(&str) -> R) -> R {
 pub fn hex_sha256_chunk<R>(chunk: &[Bytes], f: impl FnOnce(&str) -> R) -> R {
     hex_bytes32(sha256_chunk(chunk).as_ref(), f)
 }
+
+pub fn hex_sha256_string(data: &[u8]) -> String {
+    hex_sha256(data, str::to_owned)
+}

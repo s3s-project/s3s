@@ -76,7 +76,7 @@ pub enum Payload<'a> {
     /// empty
     Empty,
     /// single chunk
-    SingleChunk(&'a [u8]),
+    SingleChunk(&'a str),
     /// multiple chunks
     MultipleChunks,
     /// multiple chunks with trailing headers
@@ -179,7 +179,7 @@ pub fn create_canonical_request(
         match payload {
             Payload::Unsigned => ans.push_str("UNSIGNED-PAYLOAD"),
             Payload::Empty => ans.push_str(EMPTY_STRING_SHA256_HASH),
-            Payload::SingleChunk(data) => hex_sha256(data, |s| ans.push_str(s)),
+            Payload::SingleChunk(checksum) => ans.push_str(checksum),
             Payload::MultipleChunks => ans.push_str("STREAMING-AWS4-HMAC-SHA256-PAYLOAD"),
             Payload::MultipleChunksWithTrailer => ans.push_str("STREAMING-AWS4-HMAC-SHA256-PAYLOAD-TRAILER"),
             Payload::UnsignedMultipleChunksWithTrailer => ans.push_str("STREAMING-UNSIGNED-PAYLOAD-TRAILER"),
@@ -436,6 +436,7 @@ mod tests {
 
     use crate::http::OrderedQs;
     use crate::sig_v4::PresignedUrlV4;
+    use crate::utils::crypto::hex_sha256_string;
 
     #[test]
     fn example_get_object() {
@@ -510,10 +511,10 @@ mod tests {
         ]);
 
         let method = Method::PUT;
-        let payload = "Welcome to Amazon S3.";
+        let payload_checksum = &hex_sha256_string("Welcome to Amazon S3.".as_bytes());
         let qs: &[(String, String)] = &[];
 
-        let canonical_request = create_canonical_request(&method, path, qs, &headers, Payload::SingleChunk(payload.as_bytes()));
+        let canonical_request = create_canonical_request(&method, path, qs, &headers, Payload::SingleChunk(payload_checksum));
 
         assert_eq!(
             canonical_request,
@@ -1150,7 +1151,8 @@ mod tests {
             "x-amz-user-agent",
         ];
 
-        let payload = Payload::SingleChunk(b"RoleArn=arn%3Aaws%3Aiam%3A%3A%2A%3Arole%2FAdmin&RoleSessionName=console&DurationSeconds=43200&Action=AssumeRole&Version=2011-06-15");
+        let body = b"RoleArn=arn%3Aaws%3Aiam%3A%3A%2A%3Arole%2FAdmin&RoleSessionName=console&DurationSeconds=43200&Action=AssumeRole&Version=2011-06-15";
+        let payload = Payload::SingleChunk(&hex_sha256_string(body));
         let date = AmzDate::parse(x_amz_date).unwrap();
         let region = "cn-east-1";
         let service = "sts";

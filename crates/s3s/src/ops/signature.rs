@@ -12,6 +12,7 @@ use crate::sig_v4::PostSignatureV4;
 use crate::sig_v4::PresignedUrlV4;
 use crate::sig_v4::{AmzContentSha256, AmzDate};
 use crate::sig_v4::{AuthorizationV4, CredentialV4};
+use crate::utils::crypto::hex_sha256_string;
 use crate::utils::is_base64_encoded;
 
 use std::mem;
@@ -372,12 +373,13 @@ impl SignatureContext<'_> {
                     if bytes.is_empty() {
                         sig_v4::create_canonical_request(method, uri_path, query_strings, &headers, sig_v4::Payload::Empty)
                     } else {
+                        let payload_checksum = hex_sha256_string(&bytes);
                         sig_v4::create_canonical_request(
                             method,
                             uri_path,
                             query_strings,
                             &headers,
-                            sig_v4::Payload::SingleChunk(&bytes),
+                            sig_v4::Payload::SingleChunk(&payload_checksum),
                         )
                     }
                 }
@@ -395,12 +397,13 @@ impl SignatureContext<'_> {
                         if bytes.is_empty() {
                             sig_v4::create_canonical_request(method, uri_path, query_strings, &headers, sig_v4::Payload::Empty)
                         } else {
+                            let payload_checksum = hex_sha256_string(&bytes);
                             sig_v4::create_canonical_request(
                                 method,
                                 uri_path,
                                 query_strings,
                                 &headers,
-                                sig_v4::Payload::SingleChunk(&bytes),
+                                sig_v4::Payload::SingleChunk(&payload_checksum),
                             )
                         }
                     }
