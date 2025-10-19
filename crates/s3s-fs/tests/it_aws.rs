@@ -154,6 +154,8 @@ macro_rules! log_and_unwrap {
 #[tokio::test]
 #[tracing::instrument]
 async fn test_list_buckets() -> Result<()> {
+    let _guard = serial().await;
+
     let c = Client::new(config());
     let response1 = log_and_unwrap!(c.list_buckets().send().await);
     drop(response1);
@@ -177,6 +179,8 @@ async fn test_list_buckets() -> Result<()> {
 #[tokio::test]
 #[tracing::instrument]
 async fn test_list_objects_v2() -> Result<()> {
+    let _guard = serial().await;
+
     let c = Client::new(config());
     let bucket = format!("test-list-objects-v2-{}", Uuid::new_v4());
     let bucket_str = bucket.as_str();
@@ -219,6 +223,8 @@ async fn test_list_objects_v2() -> Result<()> {
 #[tokio::test]
 #[tracing::instrument]
 async fn test_list_objects_v2_with_prefixes() -> Result<()> {
+    let _guard = serial().await;
+
     let c = Client::new(config());
     let bucket = format!("test-list-prefixes-{}", Uuid::new_v4());
     let bucket_str = bucket.as_str();
@@ -301,6 +307,8 @@ async fn test_list_objects_v2_with_prefixes() -> Result<()> {
 #[tokio::test]
 #[tracing::instrument]
 async fn test_list_objects_v1_with_prefixes() -> Result<()> {
+    let _guard = serial().await;
+
     let c = Client::new(config());
     let bucket = format!("test-list-v1-prefixes-{}", Uuid::new_v4());
     let bucket_str = bucket.as_str();
@@ -342,6 +350,8 @@ async fn test_list_objects_v1_with_prefixes() -> Result<()> {
 #[tokio::test]
 #[tracing::instrument]
 async fn test_list_objects_v2_max_keys() -> Result<()> {
+    let _guard = serial().await;
+
     let c = Client::new(config());
     let bucket = format!("test-max-keys-{}", Uuid::new_v4());
     let bucket_str = bucket.as_str();

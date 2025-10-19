@@ -1152,7 +1152,7 @@ mod tests {
         ];
 
         let body = b"RoleArn=arn%3Aaws%3Aiam%3A%3A%2A%3Arole%2FAdmin&RoleSessionName=console&DurationSeconds=43200&Action=AssumeRole&Version=2011-06-15";
-        let payload = Payload::SingleChunk(&hex_sha256_string(body));
+        let payload_checksum = hex_sha256_string(body);
         let date = AmzDate::parse(x_amz_date).unwrap();
         let region = "cn-east-1";
         let service = "sts";
@@ -1168,7 +1168,13 @@ mod tests {
                 .unwrap()
                 .find_multiple_with_on_missing(signed_header_names, |_| panic!());
 
-            let canonical_request = create_canonical_request(req.method(), uri_path, query_strings, &signed_headers, payload);
+            let canonical_request = create_canonical_request(
+                req.method(),
+                uri_path,
+                query_strings,
+                &signed_headers,
+                Payload::SingleChunk(&payload_checksum),
+            );
 
             let string_to_sign = create_string_to_sign(&canonical_request, &date, region, service);
 
