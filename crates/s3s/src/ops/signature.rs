@@ -323,14 +323,7 @@ impl SignatureContext<'_> {
 
         let amz_date = extract_amz_date(&self.hs)?.ok_or_else(|| invalid_request!("missing header: x-amz-date"))?;
 
-        let is_stream = matches!(
-            amz_content_sha256,
-            Some(
-                AmzContentSha256::MultipleChunks
-                    | AmzContentSha256::MultipleChunksWithTrailer
-                    | AmzContentSha256::UnsignedPayloadWithTrailer
-            )
-        );
+        let is_stream = amz_content_sha256.is_some_and(|v| v.is_streaming());
 
         let signature = {
             let method = &self.req_method;
@@ -354,10 +347,10 @@ impl SignatureContext<'_> {
             });
 
             let canonical_request = match amz_content_sha256 {
-                Some(AmzContentSha256::MultipleChunks) => {
+                Some(AmzContentSha256::StreamingAws4HmacSha256Payload) => {
                     sig_v4::create_canonical_request(method, uri_path, query_strings, &headers, sig_v4::Payload::MultipleChunks)
                 }
-                Some(AmzContentSha256::MultipleChunksWithTrailer) => sig_v4::create_canonical_request(
+                Some(AmzContentSha256::StreamingAws4HmacSha256PayloadTrailer) => sig_v4::create_canonical_request(
                     method,
                     uri_path,
                     query_strings,
@@ -367,7 +360,7 @@ impl SignatureContext<'_> {
                 Some(AmzContentSha256::UnsignedPayload) => {
                     sig_v4::create_canonical_request(method, uri_path, query_strings, &headers, sig_v4::Payload::Unsigned)
                 }
-                Some(AmzContentSha256::UnsignedPayloadWithTrailer) => sig_v4::create_canonical_request(
+                Some(AmzContentSha256::StreamingUnsignedPayloadTrailer) => sig_v4::create_canonical_request(
                     method,
                     uri_path,
                     query_strings,
@@ -387,6 +380,12 @@ impl SignatureContext<'_> {
                             sig_v4::Payload::SingleChunk(&bytes),
                         )
                     }
+                }
+                Some(
+                    AmzContentSha256::StreamingAws4EcdsaP256Sha256Payload
+                    | AmzContentSha256::StreamingAws4EcdsaP256Sha256PayloadTrailer,
+                ) => {
+                    return Err(s3_error!(NotImplemented, "AWS4-ECDSA-P256-SHA256 signing method is not implemented yet"));
                 }
                 None => {
                     if matches!(*self.req_method, Method::GET | Method::HEAD) {
@@ -419,10 +418,7 @@ impl SignatureContext<'_> {
 
         if is_stream {
             // For streaming with trailers, AWS requires x-amz-trailer header present.
-            let has_trailer = matches!(
-                amz_content_sha256,
-                Some(AmzContentSha256::MultipleChunksWithTrailer | AmzContentSha256::UnsignedPayloadWithTrailer)
-            );
+            let has_trailer = amz_content_sha256.is_some_and(|v| v.has_trailer());
             if has_trailer && self.hs.get_unique("x-amz-trailer").is_none() {
                 return Err(invalid_request!("missing header: x-amz-trailer"));
             }
@@ -430,7 +426,7 @@ impl SignatureContext<'_> {
                 .decoded_content_length
                 .ok_or_else(|| s3_error!(MissingContentLength, "missing header: x-amz-decoded-content-length"))?;
 
-            let unsigned = matches!(amz_content_sha256, Some(AmzContentSha256::UnsignedPayloadWithTrailer));
+            let unsigned = matches!(amz_content_sha256, Some(AmzContentSha256::StreamingUnsignedPayloadTrailer));
             let stream = AwsChunkedStream::new(
                 mem::take(self.req_body),
                 signature.into(),
