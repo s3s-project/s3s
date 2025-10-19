@@ -20,5 +20,8 @@ pub use self::amz_date::*;
 mod post_signature_v4;
 pub use self::post_signature_v4::*;
 
+mod upload_stream;
+pub use self::upload_stream::*;
+
 mod methods;
 pub use self::methods::*;

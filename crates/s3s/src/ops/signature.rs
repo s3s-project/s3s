@@ -8,10 +8,11 @@ use crate::protocol::TrailingHeaders;
 use crate::sig_v2;
 use crate::sig_v2::{AuthorizationV2, PostSignatureV2, PresignedUrlV2};
 use crate::sig_v4;
-use crate::sig_v4::PostSignatureV4;
-use crate::sig_v4::PresignedUrlV4;
-use crate::sig_v4::{AmzContentSha256, AmzDate};
-use crate::sig_v4::{AuthorizationV4, CredentialV4};
+use crate::sig_v4::AmzContentSha256;
+use crate::sig_v4::AmzDate;
+use crate::sig_v4::UploadStream;
+use crate::sig_v4::{AuthorizationV4, CredentialV4, PostSignatureV4, PresignedUrlV4};
+use crate::stream::ByteStream as _;
 use crate::utils::crypto::hex_sha256_string;
 use crate::utils::is_base64_encoded;
 
@@ -368,21 +369,13 @@ impl SignatureContext<'_> {
                     &headers,
                     sig_v4::Payload::UnsignedMultipleChunksWithTrailer,
                 ),
-                Some(AmzContentSha256::SingleChunk { .. }) => {
-                    let bytes = super::extract_full_body(self.content_length, self.req_body).await?;
-                    if bytes.is_empty() {
-                        sig_v4::create_canonical_request(method, uri_path, query_strings, &headers, sig_v4::Payload::Empty)
-                    } else {
-                        let payload_checksum = hex_sha256_string(&bytes);
-                        sig_v4::create_canonical_request(
-                            method,
-                            uri_path,
-                            query_strings,
-                            &headers,
-                            sig_v4::Payload::SingleChunk(&payload_checksum),
-                        )
-                    }
-                }
+                Some(AmzContentSha256::SingleChunk(payload_checksum)) => sig_v4::create_canonical_request(
+                    method,
+                    uri_path,
+                    query_strings,
+                    &headers,
+                    sig_v4::Payload::SingleChunk(payload_checksum),
+                ),
                 Some(
                     AmzContentSha256::StreamingAws4EcdsaP256Sha256Payload
                     | AmzContentSha256::StreamingAws4EcdsaP256Sha256PayloadTrailer,
@@ -448,6 +441,20 @@ impl SignatureContext<'_> {
             let trailers = stream.trailing_headers_handle();
             self.transformed_body = Some(Body::from(stream.into_byte_stream()));
             self.trailing_headers = Some(trailers);
+        } else if let Some(AmzContentSha256::SingleChunk(expected_checksum)) = amz_content_sha256 {
+            let length = if let Some(content_length) = self.content_length {
+                usize::try_from(content_length).map_err(|_| invalid_request!("content-length exceeds platform limits"))?
+            } else {
+                self.req_body
+                    .remaining_length()
+                    .exact()
+                    .ok_or_else(|| s3_error!(MissingContentLength, "missing header: content-length"))?
+            };
+
+            let body = mem::take(self.req_body);
+            let stream = UploadStream::new(body, length, expected_checksum)
+                .map_err(|_| invalid_request!("invalid header: x-amz-content-sha256"))?;
+            *self.req_body = Body::from(stream.into_byte_stream());
         }
 
         Ok(CredentialsExt {
