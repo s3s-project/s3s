@@ -3,7 +3,6 @@ use crate::utils::*;
 
 use std::sync::Arc;
 
-use base64::Engine as _;
 use s3s_test::Result;
 use s3s_test::TestFixture;
 use s3s_test::TestSuite;
@@ -15,8 +14,6 @@ use aws_sdk_s3::primitives::SdkBody;
 use bytes::Bytes;
 use futures::StreamExt as _;
 use http_body_util::StreamBody;
-use sha2::Digest as _;
-use sha2::Sha256;
 
 pub fn register(tcx: &mut TestContext) {
     case!(tcx, Basic, Essential, test_list_buckets);
@@ -393,56 +390,85 @@ impl Put {
         let bucket = self.bucket.as_str();
         let key = "with-checksum-trailer";
 
-        let body = {
-            let bytes = Bytes::from_static(&[b'a'; 1024]);
+        for checksum_algorithm in [
+            ChecksumAlgorithm::Crc32,
+            ChecksumAlgorithm::Crc32C,
+            ChecksumAlgorithm::Sha1,
+            ChecksumAlgorithm::Sha256,
+            ChecksumAlgorithm::Crc64Nvme,
+        ] {
+            let body = {
+                let bytes = Bytes::from_static(&[b'a'; 1024]);
 
-            let stream = futures::stream::repeat_with(move || {
-                let frame = http_body::Frame::data(bytes.clone());
-                Ok::<_, std::io::Error>(frame)
-            });
+                let stream = futures::stream::repeat_with(move || {
+                    let frame = http_body::Frame::data(bytes.clone());
+                    Ok::<_, std::io::Error>(frame)
+                });
 
-            let body = WithSizeHint::new(StreamBody::new(stream.take(70)), 70 * 1024);
-            ByteStream::new(SdkBody::from_body_1_x(body))
-        };
+                let body = WithSizeHint::new(StreamBody::new(stream.take(70)), 70 * 1024);
+                ByteStream::new(SdkBody::from_body_1_x(body))
+            };
 
-        let put_resp = s3
-            .put_object()
-            .bucket(bucket)
-            .key(key)
-            .checksum_algorithm(ChecksumAlgorithm::Crc32)
-            .body(body)
-            .send()
-            .await?;
+            let put_resp = s3
+                .put_object()
+                .bucket(bucket)
+                .key(key)
+                .checksum_algorithm(checksum_algorithm.clone())
+                .body(body)
+                .send()
+                .await?;
 
-        let put_crc32 = put_resp
-            .checksum_crc32()
-            .expect("PUT should return checksum when checksum_algorithm is used");
+            let put_resp_checksum = match checksum_algorithm {
+                ChecksumAlgorithm::Crc32 => put_resp
+                    .checksum_crc32()
+                    .expect("PUT should return checksum when checksum_algorithm is used"),
+                ChecksumAlgorithm::Crc32C => put_resp
+                    .checksum_crc32_c()
+                    .expect("PUT should return checksum when checksum_algorithm is used"),
+                ChecksumAlgorithm::Sha1 => put_resp
+                    .checksum_sha1()
+                    .expect("PUT should return checksum when checksum_algorithm is used"),
+                ChecksumAlgorithm::Sha256 => put_resp
+                    .checksum_sha256()
+                    .expect("PUT should return checksum when checksum_algorithm is used"),
+                ChecksumAlgorithm::Crc64Nvme => put_resp
+                    .checksum_crc64_nvme()
+                    .expect("PUT should return checksum when checksum_algorithm is used"),
+                _ => panic!("Unsupported checksum algorithm"),
+            };
 
-        let resp = s3
-            .get_object()
-            .bucket(bucket)
-            .key(key)
-            .checksum_mode(ChecksumMode::Enabled)
-            .send()
-            .await?;
+            let mut resp = s3
+                .get_object()
+                .bucket(bucket)
+                .key(key)
+                .checksum_mode(ChecksumMode::Enabled)
+                .send()
+                .await?;
 
-        let get_crc32 = resp
-            .checksum_crc32()
-            .expect("GET should return checksum when checksum_mode is enabled and full object is returned")
-            .to_owned();
+            let body = std::mem::replace(&mut resp.body, ByteStream::new(SdkBody::empty()))
+                .collect()
+                .await?;
+            // let body = resp.body.collect().await?;
+            let body = String::from_utf8(body.to_vec())?;
+            assert_eq!(body, "a".repeat(70 * 1024));
 
-        let body = resp.body.collect().await?;
-        let body = String::from_utf8(body.to_vec())?;
-        assert_eq!(body, "a".repeat(70 * 1024));
+            let get_resp_checksum = match checksum_algorithm {
+                ChecksumAlgorithm::Crc32 => resp.checksum_crc32(),
+                ChecksumAlgorithm::Crc32C => resp.checksum_crc32_c(),
+                ChecksumAlgorithm::Sha1 => resp.checksum_sha1(),
+                ChecksumAlgorithm::Sha256 => resp.checksum_sha256(),
+                ChecksumAlgorithm::Crc64Nvme => resp.checksum_crc64_nvme(),
+                _ => panic!("Unsupported checksum algorithm"),
+            };
 
-        assert_eq!(get_crc32, put_crc32);
+            assert_eq!(get_resp_checksum, Some(put_resp_checksum));
+        }
 
         Ok(())
     }
 
     async fn test_put_object_with_content_checksums(self: Arc<Self>) -> Result {
         use base64::Engine;
-        use sha2::{Digest, Sha256};
 
         let s3 = &self.s3;
         let bucket = self.bucket.as_str();

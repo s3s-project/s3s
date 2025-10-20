@@ -255,6 +255,7 @@ impl S3 for FileSystem {
             checksum_crc32c: checksum.checksum_crc32c,
             checksum_sha1: checksum.checksum_sha1,
             checksum_sha256: checksum.checksum_sha256,
+            checksum_crc64nvme: checksum.checksum_crc64nvme,
             ..Default::default()
         };
         Ok(S3Response::new(output))
@@ -472,6 +473,7 @@ impl S3 for FileSystem {
             key,
             metadata,
             content_length,
+            content_md5,
             ..
         } = input;
 
@@ -529,6 +531,16 @@ impl S3 for FileSystem {
         file_writer.done().await?;
 
         let md5_sum = hex(md5_hash.finalize());
+
+        if let Some(content_md5) = content_md5 {
+            let content_md5 = base64_simd::STANDARD
+                .decode_to_vec(content_md5)
+                .map_err(|_| s3_error!(InvalidArgument))?;
+            let content_md5 = hex(content_md5);
+            if content_md5 != md5_sum {
+                return Err(s3_error!(BadDigest, "content_md5 mismatch"));
+            }
+        }
 
         let checksum = checksum.finalize();
 
@@ -589,6 +601,7 @@ impl S3 for FileSystem {
             checksum_crc32c: checksum.checksum_crc32c,
             checksum_sha1: checksum.checksum_sha1,
             checksum_sha256: checksum.checksum_sha256,
+            checksum_crc64nvme: checksum.checksum_crc64nvme,
             ..Default::default()
         };
         Ok(S3Response::new(output))
