@@ -3,6 +3,7 @@ use crate::utils::*;
 
 use std::sync::Arc;
 
+use base64::Engine as _;
 use s3s_test::Result;
 use s3s_test::TestFixture;
 use s3s_test::TestSuite;
@@ -14,6 +15,8 @@ use aws_sdk_s3::primitives::SdkBody;
 use bytes::Bytes;
 use futures::StreamExt as _;
 use http_body_util::StreamBody;
+use sha2::Digest as _;
+use sha2::Sha256;
 
 pub fn register(tcx: &mut TestContext) {
     case!(tcx, Basic, Essential, test_list_buckets);
@@ -25,6 +28,7 @@ pub fn register(tcx: &mut TestContext) {
     case!(tcx, Basic, Put, test_put_object_with_metadata);
     case!(tcx, Basic, Put, test_put_object_larger);
     case!(tcx, Basic, Put, test_put_object_with_checksum_algorithm);
+    case!(tcx, Basic, Put, test_put_object_with_content_checksums);
     case!(tcx, Basic, Copy, test_copy_object);
 }
 
@@ -432,6 +436,100 @@ impl Put {
         assert_eq!(body, "a".repeat(70 * 1024));
 
         assert_eq!(get_crc32, put_crc32);
+
+        Ok(())
+    }
+
+    async fn test_put_object_with_content_checksums(self: Arc<Self>) -> Result {
+        use base64::Engine;
+        use sha2::{Digest, Sha256};
+
+        let s3 = &self.s3;
+        let bucket = self.bucket.as_str();
+        let key = "file-with-content-checksums";
+
+        // Create test content
+        let content = "Hello, World! This is a test content for checksum validation. 你好世界！";
+        let content_bytes = content.as_bytes();
+
+        // Calculate MD5 hash
+        let md5_digest = md5::compute(content_bytes);
+        let md5_hash = base64_simd::STANDARD.encode_to_string(md5_digest.as_ref());
+
+        // Test with Content-MD5
+        s3.put_object()
+            .bucket(bucket)
+            .key(format!("{key}-md5"))
+            .body(ByteStream::from_static(content_bytes))
+            .content_md5(&md5_hash)
+            .send()
+            .await?;
+
+        // Test with different content sizes and MD5
+        let large_content = "x".repeat(2048);
+        let large_md5_digest = md5::compute(large_content.as_bytes());
+        let large_md5_hash = base64::engine::general_purpose::STANDARD.encode(large_md5_digest.as_ref());
+
+        s3.put_object()
+            .bucket(bucket)
+            .key(format!("{key}-large"))
+            .body(ByteStream::from(large_content.clone().into_bytes()))
+            .content_md5(&large_md5_hash)
+            .send()
+            .await?;
+
+        // Test with empty content and MD5
+        let empty_content = "";
+        let empty_md5_digest = md5::compute(empty_content.as_bytes());
+        let empty_md5_hash = base64::engine::general_purpose::STANDARD.encode(empty_md5_digest.as_ref());
+
+        s3.put_object()
+            .bucket(bucket)
+            .key(format!("{key}-empty"))
+            .body(ByteStream::from_static(empty_content.as_bytes()))
+            .content_md5(&empty_md5_hash)
+            .send()
+            .await?;
+
+        // Verify all objects were uploaded correctly
+        for (suffix, expected_content) in [("md5", content), ("large", &large_content), ("empty", empty_content)] {
+            let resp = s3.get_object().bucket(bucket).key(format!("{key}-{suffix}")).send().await?;
+
+            let body = resp.body.collect().await?;
+            let body = String::from_utf8(body.to_vec())?;
+            assert_eq!(body, expected_content);
+        }
+
+        // Test with incorrect MD5 (should fail)
+        let incorrect_md5 = base64::engine::general_purpose::STANDARD.encode(b"incorrect_md5_hash");
+        let result = s3
+            .put_object()
+            .bucket(bucket)
+            .key(format!("{key}-incorrect-md5"))
+            .body(ByteStream::from_static(content_bytes))
+            .content_md5(&incorrect_md5)
+            .send()
+            .await;
+
+        // This should fail with a checksum mismatch error
+        assert!(result.is_err(), "Expected checksum mismatch error for incorrect MD5");
+
+        // Test with correct MD5 but wrong content (should fail)
+        let wrong_content = "This is different content";
+        let wrong_md5_digest = md5::compute(wrong_content.as_bytes());
+        let wrong_md5_hash = base64::engine::general_purpose::STANDARD.encode(wrong_md5_digest.as_ref());
+
+        let result = s3
+            .put_object()
+            .bucket(bucket)
+            .key(format!("{key}-wrong-content"))
+            .body(ByteStream::from_static(content_bytes)) // Using original content
+            .content_md5(&wrong_md5_hash) // But wrong MD5
+            .send()
+            .await;
+
+        // This should also fail
+        assert!(result.is_err(), "Expected checksum mismatch error for wrong content with correct MD5");
 
         Ok(())
     }
