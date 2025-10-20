@@ -2,9 +2,10 @@
 
 cargo build -p s3s-e2e --release
 
-export AWS_ACCESS_KEY_ID=minioadmin
-export AWS_SECRET_ACCESS_KEY=minioadmin
+export AWS_ACCESS_KEY_ID=rustfsadmin
+export AWS_SECRET_ACCESS_KEY=rustfsadmin
 export AWS_REGION=us-east-1
+# export AWS_REGION=cn-north-1
 export AWS_ENDPOINT_URL=http://localhost:9000
 
 if [ -z "$RUST_LOG" ]; then

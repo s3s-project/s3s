@@ -1,5 +1,6 @@
 use crate::case;
 
+use aws_sdk_s3::types::ChecksumAlgorithm;
 use s3s_test::Result;
 use s3s_test::TestFixture;
 use s3s_test::TestSuite;
@@ -114,7 +115,13 @@ impl Multipart {
         let key = self.key.as_str();
 
         // Create multipart upload
-        let create_resp = s3.create_multipart_upload().bucket(bucket).key(key).send().await?;
+        let create_resp = s3
+            .create_multipart_upload()
+            .checksum_algorithm(ChecksumAlgorithm::Crc32)
+            .bucket(bucket)
+            .key(key)
+            .send()
+            .await?;
 
         let upload_id = create_resp.upload_id().unwrap();
 
