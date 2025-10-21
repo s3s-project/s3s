@@ -151,7 +151,7 @@ pub fn add_opt_metadata(res: &mut Response, metadata: Option<Metadata>) -> S3Res
         for (key, val) in map {
             write!(&mut buf, "x-amz-meta-{key}").unwrap();
             let name = HeaderName::from_bytes(buf.as_bytes()).map_err(S3Error::internal_error)?;
-            
+
             // Percent-encode the value to ensure it's ASCII-safe for HTTP headers
             let encoded_val = urlencoding::encode(&val);
             let value = HeaderValue::try_from(encoded_val.as_ref()).map_err(S3Error::internal_error)?;

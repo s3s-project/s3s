@@ -275,7 +275,7 @@ pub fn parse_opt_metadata(req: &Request) -> S3Result<Option<Metadata>> {
                     .map_err(|_| invalid_request!("metadata value is not valid UTF-8: {}", name.as_str()))?
             }
         };
-        
+
         // Try to percent-decode the value if it contains percent-encoding
         let decoded = if val_str.contains('%') {
             urlencoding::decode(&val_str)
@@ -284,7 +284,7 @@ pub fn parse_opt_metadata(req: &Request) -> S3Result<Option<Metadata>> {
         } else {
             val_str
         };
-        
+
         metadata.insert(key.into(), decoded);
     }
     if metadata.is_empty() {

@@ -366,7 +366,7 @@ impl Put {
         let key = "file-with-utf8-metadata";
 
         let content = "object with UTF-8 metadata";
-        
+
         // Test various UTF-8 characters in metadata values
         let test_cases = vec![
             ("chinese", "你好世界"),
@@ -387,7 +387,8 @@ impl Put {
                 .await?;
 
             // Check metadata using head_object
-            let head_resp = s3.head_object()
+            let head_resp = s3
+                .head_object()
                 .bucket(bucket)
                 .key(format!("{key}-{metadata_key}"))
                 .send()
