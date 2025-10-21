@@ -117,7 +117,7 @@ impl Multipart {
         // Create multipart upload
         let create_resp = s3
             .create_multipart_upload()
-            .checksum_algorithm(ChecksumAlgorithm::Crc32)
+            // .checksum_algorithm(ChecksumAlgorithm::Crc32)
             .bucket(bucket)
             .key(key)
             .send()
