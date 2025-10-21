@@ -266,10 +266,26 @@ pub fn parse_opt_metadata(req: &Request) -> S3Result<Option<Metadata>> {
         let val = iter.next().unwrap();
         let None = iter.next() else { return Err(duplicate_header(name)) };
 
-        // Decode header value as UTF-8 to support non-ASCII characters in metadata
-        let val = String::from_utf8_simd(val.as_bytes().into())
-            .map_err(|_| invalid_request!("metadata value is not valid UTF-8: {}", name.as_str()))?;
-        metadata.insert(key.into(), val);
+        // First try to decode as ASCII using to_str() for backwards compatibility
+        let val_str = match val.to_str() {
+            Ok(s) => s.to_owned(),
+            Err(_) => {
+                // If that fails, decode bytes as UTF-8 directly for UTF-8 metadata support
+                String::from_utf8_simd(val.as_bytes().into())
+                    .map_err(|_| invalid_request!("metadata value is not valid UTF-8: {}", name.as_str()))?
+            }
+        };
+        
+        // Try to percent-decode the value if it contains percent-encoding
+        let decoded = if val_str.contains('%') {
+            urlencoding::decode(&val_str)
+                .map_err(|_| invalid_request!("metadata value has invalid percent-encoding: {}", name.as_str()))?
+                .into_owned()
+        } else {
+            val_str
+        };
+        
+        metadata.insert(key.into(), decoded);
     }
     if metadata.is_empty() {
         return Ok(None);
