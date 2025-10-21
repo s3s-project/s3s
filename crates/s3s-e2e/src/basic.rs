@@ -448,7 +448,6 @@ impl Put {
             let body = std::mem::replace(&mut resp.body, ByteStream::new(SdkBody::empty()))
                 .collect()
                 .await?;
-            // let body = resp.body.collect().await?;
             let body = String::from_utf8(body.to_vec())?;
             assert_eq!(body, "a".repeat(70 * 1024));
 
