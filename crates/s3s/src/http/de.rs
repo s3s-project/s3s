@@ -266,8 +266,10 @@ pub fn parse_opt_metadata(req: &Request) -> S3Result<Option<Metadata>> {
         let val = iter.next().unwrap();
         let None = iter.next() else { return Err(duplicate_header(name)) };
 
-        let val = val.to_str().map_err(|err| invalid_header(err, name, val))?;
-        metadata.insert(key.into(), val.into());
+        // Decode header value as UTF-8 to support non-ASCII characters in metadata
+        let val = String::from_utf8_simd(val.as_bytes().into())
+            .map_err(|_| invalid_request!("metadata value is not valid UTF-8: {}", name.as_str()))?;
+        metadata.insert(key.into(), val);
     }
     if metadata.is_empty() {
         return Ok(None);
