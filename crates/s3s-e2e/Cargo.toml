@@ -25,8 +25,6 @@ bytes = "1.10.1"
 http-body = "1.0.1"
 md5 = "0.7.0"
 base64 = "0.22.0"
-sha2 = "0.10.8"
-hex-simd = "0.8.0"
 base64-simd = "0.8.0"
 
 
