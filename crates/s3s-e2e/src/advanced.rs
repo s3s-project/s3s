@@ -1,5 +1,6 @@
 use crate::case;
 
+use aws_sdk_s3::types::ChecksumAlgorithm;
 use s3s_test::Result;
 use s3s_test::TestFixture;
 use s3s_test::TestSuite;
@@ -114,7 +115,13 @@ impl Multipart {
         let key = self.key.as_str();
 
         // Create multipart upload
-        let create_resp = s3.create_multipart_upload().bucket(bucket).key(key).send().await?;
+        let create_resp = s3
+            .create_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .checksum_algorithm(ChecksumAlgorithm::Crc32)
+            .send()
+            .await?;
 
         let upload_id = create_resp.upload_id().unwrap();
 
@@ -132,6 +139,8 @@ impl Multipart {
             .send()
             .await?;
 
+        let part1_checksum_crc32 = part1_resp.checksum_crc32().expect("checksum_crc32 should be present");
+
         let part2_resp = s3
             .upload_part()
             .bucket(bucket)
@@ -142,15 +151,21 @@ impl Multipart {
             .send()
             .await?;
 
+        let part2_checksum_crc32 = part2_resp
+            .checksum_crc32()
+            .expect("part 2 checksum_crc32 should be present in upload response");
+
         // Complete multipart upload
         let completed_parts = vec![
             aws_sdk_s3::types::CompletedPart::builder()
                 .part_number(1)
                 .e_tag(part1_resp.e_tag().unwrap())
+                .checksum_crc32(part1_checksum_crc32)
                 .build(),
             aws_sdk_s3::types::CompletedPart::builder()
                 .part_number(2)
                 .e_tag(part2_resp.e_tag().unwrap())
+                .checksum_crc32(part2_checksum_crc32)
                 .build(),
         ];
 
