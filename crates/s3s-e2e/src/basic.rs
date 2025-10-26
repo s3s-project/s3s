@@ -24,6 +24,7 @@ pub fn register(tcx: &mut TestContext) {
     case!(tcx, Basic, Essential, test_head_operations);
     case!(tcx, Basic, Put, test_put_object_tiny);
     case!(tcx, Basic, Put, test_put_object_with_metadata);
+    case!(tcx, Basic, Put, test_put_object_with_utf8_metadata);
     case!(tcx, Basic, Put, test_put_object_larger);
     case!(tcx, Basic, Put, test_put_object_with_checksum_algorithm);
     case!(tcx, Basic, Put, test_put_object_with_content_checksums);
@@ -355,6 +356,48 @@ impl Put {
         let metadata = head_resp.metadata().unwrap();
         let value = metadata.get(metadata_key).unwrap();
         assert_eq!(value, metadata_value);
+
+        Ok(())
+    }
+
+    async fn test_put_object_with_utf8_metadata(self: Arc<Self>) -> Result {
+        let s3 = &self.s3;
+        let bucket = self.bucket.as_str();
+        let key = "file-with-utf8-metadata";
+
+        let content = "object with UTF-8 metadata";
+
+        // Test various UTF-8 characters in metadata values
+        let test_cases = vec![
+            ("chinese", "你好世界"),
+            ("japanese", "こんにちは世界"),
+            ("korean", "안녕하세요"),
+            ("emoji", "Hello 👋 World 🌍"),
+            ("special", "Café ñoño"),
+            ("mixed", "Test UTF-8: 你好 🎉 Café"),
+        ];
+
+        for (metadata_key, metadata_value) in test_cases {
+            s3.put_object()
+                .bucket(bucket)
+                .key(format!("{key}-{metadata_key}"))
+                .body(ByteStream::from_static(content.as_bytes()))
+                .metadata(metadata_key, metadata_value)
+                .send()
+                .await?;
+
+            // Check metadata using head_object
+            let head_resp = s3
+                .head_object()
+                .bucket(bucket)
+                .key(format!("{key}-{metadata_key}"))
+                .send()
+                .await?;
+
+            let metadata = head_resp.metadata().unwrap();
+            let value = metadata.get(metadata_key).unwrap();
+            assert_eq!(value, metadata_value, "UTF-8 metadata mismatch for key: {metadata_key}");
+        }
 
         Ok(())
     }
