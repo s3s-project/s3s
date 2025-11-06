@@ -498,7 +498,29 @@ fn codegen_op_http_de(op: &Operation, rust_types: &RustTypes) {
                                 g!("let {}: Option<{}> = Some(http::take_stream_body(req));", field.name, field.type_);
                             }
                             _ => {
-                                if field.option_type {
+                                // AWS S3 returns MalformedXML for empty bodies on these operations,
+                                // which differs from the default behavior where empty optional XML bodies are accepted.
+                                // - CompleteMultipartUpload: requires XML body with list of uploaded parts
+                                // - PutObjectLegalHold: requires XML body with ON/OFF legal hold status
+                                // - PutObjectRetention: requires XML body with retention mode and date
+                                let requires_body = matches!(
+                                    (op.name.as_str(), field.name.as_str()),
+                                    ("CompleteMultipartUpload", "multipart_upload")
+                                        | ("PutObjectLegalHold", "legal_hold")
+                                        | ("PutObjectRetention", "retention")
+                                );
+
+                                if requires_body {
+                                    // These operations require XML body to match AWS S3 behavior; empty body should return MalformedXML instead of being treated as optional
+                                    assert!(field.option_type);
+                                    g!("let {}: Option<{}> = match http::take_xml_body(req) {{", field.name, field.type_);
+                                    g!("    Ok(body) => Some(body),");
+                                    g!("    Err(e) if *e.code() == crate::S3ErrorCode::MissingRequestBodyError => {{");
+                                    g!("        return Err(crate::S3ErrorCode::MalformedXML.into());");
+                                    g!("    }}");
+                                    g!("    Err(e) => return Err(e),");
+                                    g!("}};");
+                                } else if field.option_type {
                                     g!("let {}: Option<{}> = http::take_opt_xml_body(req)?;", field.name, field.type_);
                                 } else {
                                     g!("let {}: {} = http::take_xml_body(req)?;", field.name, field.type_);
