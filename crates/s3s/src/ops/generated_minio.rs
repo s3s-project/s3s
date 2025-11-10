@@ -555,7 +555,13 @@ impl CompleteMultipartUpload {
 
         let mpu_object_size: Option<MpuObjectSize> = http::parse_opt_header(req, &X_AMZ_MP_OBJECT_SIZE)?;
 
-        let multipart_upload: Option<CompletedMultipartUpload> = http::take_opt_xml_body(req)?;
+        let multipart_upload: Option<CompletedMultipartUpload> = match http::take_xml_body(req) {
+            Ok(body) => Some(body),
+            Err(e) if *e.code() == crate::S3ErrorCode::MissingRequestBodyError => {
+                return Err(crate::S3ErrorCode::MalformedXML.into());
+            }
+            Err(e) => return Err(e),
+        };
 
         let request_payer: Option<RequestPayer> = http::parse_opt_header(req, &X_AMZ_REQUEST_PAYER)?;
 
@@ -5737,7 +5743,13 @@ impl PutObjectLegalHold {
 
         let expected_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_EXPECTED_BUCKET_OWNER)?;
 
-        let legal_hold: Option<ObjectLockLegalHold> = http::take_opt_xml_body(req)?;
+        let legal_hold: Option<ObjectLockLegalHold> = match http::take_xml_body(req) {
+            Ok(body) => Some(body),
+            Err(e) if *e.code() == crate::S3ErrorCode::MissingRequestBodyError => {
+                return Err(crate::S3ErrorCode::MalformedXML.into());
+            }
+            Err(e) => return Err(e),
+        };
 
         let request_payer: Option<RequestPayer> = http::parse_opt_header(req, &X_AMZ_REQUEST_PAYER)?;
 
@@ -5865,7 +5877,13 @@ impl PutObjectRetention {
 
         let request_payer: Option<RequestPayer> = http::parse_opt_header(req, &X_AMZ_REQUEST_PAYER)?;
 
-        let retention: Option<ObjectLockRetention> = http::take_opt_xml_body(req)?;
+        let retention: Option<ObjectLockRetention> = match http::take_xml_body(req) {
+            Ok(body) => Some(body),
+            Err(e) if *e.code() == crate::S3ErrorCode::MissingRequestBodyError => {
+                return Err(crate::S3ErrorCode::MalformedXML.into());
+            }
+            Err(e) => return Err(e),
+        };
 
         let version_id: Option<ObjectVersionId> = http::parse_opt_query(req, "versionId")?;
 
