@@ -25,3 +25,9 @@ multiple_crate_versions = "allow"
 
 [profile.release]
 debug = "line-tables-only"
+
+[workspace.dependencies]
+hmac = "=0.13.0-rc.3"
+md-5 = "=0.11.0-rc.3"
+sha1 = "=0.11.0-rc.3"
+sha2 = "=0.11.0-rc.3"
