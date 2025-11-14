@@ -137,7 +137,7 @@ impl Message {
         buf.put_u32(total_byte_length);
         buf.put_u32(headers_byte_length);
 
-        let prelude_crc = crc32fast::hash(&buf);
+        let prelude_crc = crc_fast::checksum(crc_fast::CrcAlgorithm::Crc32IsoHdlc, &buf) as u32;
         buf.put_u32(prelude_crc);
 
         for h in &self.headers {
@@ -156,7 +156,7 @@ impl Message {
             buf.put(payload);
         }
 
-        let message_crc = crc32fast::hash(&buf);
+        let message_crc = crc_fast::checksum(crc_fast::CrcAlgorithm::Crc32IsoHdlc, &buf) as u32;
         buf.put_u32(message_crc);
 
         Ok(buf.into())

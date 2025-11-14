@@ -974,15 +974,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "crc64fast-nvme"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4955638f00a809894c947f85a024020a20815b65a5eea633798ea7924edab2b3"
-dependencies = [
- "crc",
-]
-
-[[package]]
 name = "crunchy"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2772,9 +2763,7 @@ dependencies = [
  "cfg-if",
  "chrono",
  "const-str",
- "crc32c",
- "crc32fast",
- "crc64fast-nvme",
+ "crc-fast",
  "futures",
  "hex-simd",
  "hmac 0.13.0-rc.3",

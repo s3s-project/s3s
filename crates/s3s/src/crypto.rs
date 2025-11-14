@@ -20,8 +20,13 @@ pub trait Checksum {
     }
 }
 
-#[derive(Default)]
-pub struct Crc32(crc32fast::Hasher);
+pub struct Crc32(crc_fast::Digest);
+
+impl Default for Crc32 {
+    fn default() -> Self {
+        Self(crc_fast::Digest::new(crc_fast::CrcAlgorithm::Crc32IsoHdlc))
+    }
+}
 
 impl Checksum for Crc32 {
     type Output = [u8; 4];
@@ -35,12 +40,17 @@ impl Checksum for Crc32 {
     }
 
     fn finalize(self) -> Self::Output {
-        self.0.finalize().to_be_bytes()
+        (self.0.finalize() as u32).to_be_bytes()
     }
 }
 
-#[derive(Default)]
-pub struct Crc32c(u32);
+pub struct Crc32c(crc_fast::Digest);
+
+impl Default for Crc32c {
+    fn default() -> Self {
+        Self(crc_fast::Digest::new(crc_fast::CrcAlgorithm::Crc32Iscsi))
+    }
+}
 
 impl Checksum for Crc32c {
     type Output = [u8; 4];
@@ -50,16 +60,21 @@ impl Checksum for Crc32c {
     }
 
     fn update(&mut self, data: &[u8]) {
-        self.0 = crc32c::crc32c_append(self.0, data);
+        self.0.update(data);
     }
 
     fn finalize(self) -> Self::Output {
-        self.0.to_be_bytes()
+        (self.0.finalize() as u32).to_be_bytes()
     }
 }
 
-#[derive(Default)]
-pub struct Crc64Nvme(crc64fast_nvme::Digest);
+pub struct Crc64Nvme(crc_fast::Digest);
+
+impl Default for Crc64Nvme {
+    fn default() -> Self {
+        Self(crc_fast::Digest::new(crc_fast::CrcAlgorithm::Crc64Nvme))
+    }
+}
 
 impl Checksum for Crc64Nvme {
     type Output = [u8; 8];
@@ -69,11 +84,11 @@ impl Checksum for Crc64Nvme {
     }
 
     fn update(&mut self, data: &[u8]) {
-        self.0.write(data);
+        self.0.update(data);
     }
 
     fn finalize(self) -> Self::Output {
-        self.0.sum64().to_be_bytes()
+        self.0.finalize().to_be_bytes()
     }
 }
 
