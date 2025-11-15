@@ -1,3 +1,5 @@
+use numeric_cast::TruncatingCast;
+
 pub trait Checksum {
     type Output: AsRef<[u8]>;
 
@@ -40,7 +42,7 @@ impl Checksum for Crc32 {
     }
 
     fn finalize(self) -> Self::Output {
-        (self.0.finalize() as u32).to_be_bytes()
+        self.0.finalize().truncating_cast::<u32>().to_be_bytes()
     }
 }
 
@@ -64,7 +66,7 @@ impl Checksum for Crc32c {
     }
 
     fn finalize(self) -> Self::Output {
-        (self.0.finalize() as u32).to_be_bytes()
+        self.0.finalize().truncating_cast::<u32>().to_be_bytes()
     }
 }
 
