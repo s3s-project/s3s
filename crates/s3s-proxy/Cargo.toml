@@ -20,7 +20,7 @@ aws-config = { version = "1.8.7", default-features = false, features = [
 aws-credential-types = "1.2.6"
 aws-sdk-s3 = "1.107.0"
 clap = { version = "4.5.51", features = ["derive"] }
-hyper-util = { version = "0.1.17", features = [
+hyper-util = { version = "0.1.18", features = [
     "server-auto",
     "server-graceful",
     "http1",
