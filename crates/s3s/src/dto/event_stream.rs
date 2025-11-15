@@ -4,7 +4,7 @@ use super::{ContinuationEvent, EndEvent, ProgressEvent, RecordsEvent, StatsEvent
 use crate::S3Error;
 use crate::S3Result;
 use crate::StdError;
-use crate::crypto::{Checksum as _, Crc32};
+use crate::crypto::Crc32;
 use crate::stream::ByteStream;
 use crate::stream::DynByteStream;
 use crate::{S3ErrorCode, xml};
@@ -138,8 +138,8 @@ impl Message {
         buf.put_u32(total_byte_length);
         buf.put_u32(headers_byte_length);
 
-        let prelude_crc = Crc32::checksum(&buf);
-        buf.put_u32(u32::from_be_bytes(prelude_crc));
+        let prelude_crc = Crc32::checksum_u32(&buf);
+        buf.put_u32(prelude_crc);
 
         for h in &self.headers {
             let header_name_byte_length = u8::try_from(h.name.len())?;
@@ -157,8 +157,8 @@ impl Message {
             buf.put(payload);
         }
 
-        let message_crc = Crc32::checksum(&buf);
-        buf.put_u32(u32::from_be_bytes(message_crc));
+        let message_crc = Crc32::checksum_u32(&buf);
+        buf.put_u32(message_crc);
 
         Ok(buf.into())
     }

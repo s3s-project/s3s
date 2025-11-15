@@ -30,6 +30,15 @@ impl Default for Crc32 {
     }
 }
 
+impl Crc32 {
+    #[must_use]
+    pub fn checksum_u32(data: &[u8]) -> u32 {
+        let mut hasher = Self::new();
+        hasher.update(data);
+        hasher.0.finalize().truncating_cast::<u32>()
+    }
+}
+
 impl Checksum for Crc32 {
     type Output = [u8; 4];
 
