@@ -27,14 +27,36 @@ where
     s3_error!(source, InvalidArgument, "invalid header: {}: {:?}", name.as_str(), val)
 }
 
+fn get_required_header<'r>(req: &'r Request, name: &HeaderName) -> S3Result<&'r HeaderValue> {
+    let mut iter = req.headers.get_all(name).into_iter();
+    let Some(val) = iter.next() else { return Err(missing_header(name)) };
+    let None = iter.next() else { return Err(duplicate_header(name)) };
+
+    if val.is_empty() {
+        return Err(missing_header(name));
+    }
+
+    Ok(val)
+}
+
+fn get_optional_header<'r>(req: &'r Request, name: &HeaderName) -> S3Result<Option<&'r HeaderValue>> {
+    let mut iter = req.headers.get_all(name).into_iter();
+    let Some(val) = iter.next() else { return Ok(None) };
+    let None = iter.next() else { return Err(duplicate_header(name)) };
+
+    if val.is_empty() {
+        return Ok(None);
+    }
+
+    Ok(Some(val))
+}
+
 pub fn parse_header<T>(req: &Request, name: &HeaderName) -> S3Result<T>
 where
     T: TryFromHeaderValue,
     T::Error: std::error::Error + Send + Sync + 'static,
 {
-    let mut iter = req.headers.get_all(name).into_iter();
-    let Some(val) = iter.next() else { return Err(missing_header(name)) };
-    let None = iter.next() else { return Err(duplicate_header(name)) };
+    let val = get_required_header(req, name)?;
 
     T::try_from_header_value(val).map_err(|err| invalid_header(err, name, val))
 }
@@ -44,9 +66,7 @@ where
     T: TryFromHeaderValue,
     T::Error: std::error::Error + Send + Sync + 'static,
 {
-    let mut iter = req.headers.get_all(name).into_iter();
-    let Some(val) = iter.next() else { return Ok(None) };
-    let None = iter.next() else { return Err(duplicate_header(name)) };
+    let Some(val) = get_optional_header(req, name)? else { return Ok(None) };
 
     match T::try_from_header_value(val) {
         Ok(ans) => Ok(Some(ans)),
@@ -85,9 +105,7 @@ pub fn parse_checksum_algorithm_header(req: &Request) -> S3Result<Option<crate::
 }
 
 pub fn parse_opt_header_timestamp(req: &Request, name: &HeaderName, fmt: TimestampFormat) -> S3Result<Option<Timestamp>> {
-    let mut iter = req.headers.get_all(name).into_iter();
-    let Some(val) = iter.next() else { return Ok(None) };
-    let None = iter.next() else { return Err(duplicate_header(name)) };
+    let Some(val) = get_optional_header(req, name)? else { return Ok(None) };
 
     let s = val.to_str().map_err(|err| invalid_header(err, name, val))?;
     match Timestamp::parse(fmt, s) {
