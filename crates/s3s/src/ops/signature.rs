@@ -93,7 +93,7 @@ impl SignatureContext<'_> {
     pub async fn check(&mut self) -> S3Result<Option<CredentialsExt>> {
         if self.req_method == Method::POST {
             if let Some(ref mime) = self.mime {
-                if mime.type_() == mime::MULTIPART && mime.subtype() == mime::FORM_DATA {
+                if http::is_multipart_form_data(mime) {
                     return Ok(Some(self.check_post_signature().await?));
                 }
             }

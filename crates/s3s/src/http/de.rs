@@ -374,3 +374,13 @@ pub fn parse_field_value_timestamp(m: &Multipart, name: &str, fmt: TimestampForm
         Err(source) => Err(s3_error!(source, InvalidArgument, "invalid field value: {}: {:?}", name, val)),
     }
 }
+
+/// Parse content-type field value from multipart with detailed error messages
+#[allow(dead_code)]
+pub fn parse_field_value_content_type<T>(m: &Multipart, name: &str) -> S3Result<Option<T>>
+where
+    T: FromStr,
+    T::Err: std::error::Error + Send + Sync + 'static,
+{
+    crate::http::parse_multipart_content_type(m, name)
+}
