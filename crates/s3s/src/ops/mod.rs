@@ -154,7 +154,7 @@ fn extract_mime(hs: &OrderedHeaders<'_>) -> S3Result<Option<Mime>> {
 
     match content_type.parse::<Mime>() {
         Ok(x) => Ok(Some(x)),
-        Err(e) => Err(invalid_request!(e, "invalid content type")),
+        Err(e) => Err(invalid_request!(e, "invalid content type: {content_type:?}")),
     }
 }
 
