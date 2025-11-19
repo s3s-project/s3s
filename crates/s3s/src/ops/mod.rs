@@ -144,17 +144,17 @@ fn extract_headers(headers: &HeaderMap) -> S3Result<OrderedHeaders<'_>> {
     OrderedHeaders::from_headers(headers).map_err(|source| invalid_request!(source, "invalid headers"))
 }
 
-fn extract_mime(hs: &OrderedHeaders<'_>) -> S3Result<Option<Mime>> {
-    let Some(content_type) = hs.get_unique(crate::header::CONTENT_TYPE) else { return Ok(None) };
+fn extract_mime(hs: &OrderedHeaders<'_>) -> Option<Mime> {
+    let Some(content_type) = hs.get_unique(crate::header::CONTENT_TYPE) else { return None };
 
     // https://github.com/s3s-project/s3s/issues/361
     if content_type.is_empty() {
-        return Ok(None);
+        return None;
     }
 
     match content_type.parse::<Mime>() {
-        Ok(x) => Ok(Some(x)),
-        Err(e) => Err(invalid_request!(e, "invalid content type: {content_type:?}")),
+        Ok(x) => Some(x),
+        Err(_) => None,
     }
 }
 
@@ -302,7 +302,7 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
         content_length = extract_content_length(req);
 
         let hs = extract_headers(&req.headers)?;
-        let mime = extract_mime(&hs)?;
+        let mime = extract_mime(&hs);
         let decoded_content_length = extract_decoded_content_length(&hs)?;
 
         let body_changed;

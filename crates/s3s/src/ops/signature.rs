@@ -115,8 +115,12 @@ impl SignatureContext<'_> {
     #[tracing::instrument(skip(self))]
     async fn check_post_signature(&mut self) -> S3Result<CredentialsExt> {
         let multipart = {
-            let mime = self.mime.as_ref().unwrap(); // assume: multipart
+            if self.mime.is_none() {
+                return Err(invalid_request!("missing content type"));
+            }
 
+            let mime = self.mime.as_ref().unwrap();
+            
             let boundary = mime
                 .get_param(mime::BOUNDARY)
                 .ok_or_else(|| invalid_request!("missing boundary"))?;
