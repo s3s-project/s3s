@@ -69,19 +69,6 @@ impl AwsConversion for s3s::dto::Timestamp {
     }
 }
 
-impl AwsConversion for s3s::dto::ContentType {
-    type Target = String;
-    type Error = S3Error;
-
-    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
-        x.parse::<Self>().map_err(S3Error::internal_error)
-    }
-
-    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
-        Ok(x.to_string())
-    }
-}
-
 impl AwsConversion for s3s::dto::CopySource {
     type Target = String;
     type Error = S3Error;

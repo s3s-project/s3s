@@ -289,7 +289,7 @@ impl S3 for FileSystem {
         let object_metadata = self.load_metadata(&input.bucket, &input.key, None).await?;
 
         // TODO: detect content type
-        let content_type = mime::APPLICATION_OCTET_STREAM;
+        let content_type = ContentType::from("application/octet-stream");
 
         let output = HeadObjectOutput {
             content_length: Some(try_!(i64::try_from(file_len))),
