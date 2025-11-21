@@ -6,7 +6,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use bytes::Bytes;
-use futures::{Stream, StreamExt, pin_mut};
+use futures::Stream;
 
 pub trait ByteStream: Stream {
     fn remaining_length(&self) -> RemainingLength {
@@ -130,19 +130,6 @@ where
     fn remaining_length(&self) -> RemainingLength {
         self.0.remaining_length()
     }
-}
-
-// FIXME: unbounded memory allocation
-pub(crate) async fn aggregate_unlimited<S, E>(stream: S) -> Result<Vec<Bytes>, E>
-where
-    S: ByteStream<Item = Result<Bytes, E>>,
-{
-    let mut vec = Vec::new();
-    pin_mut!(stream);
-    while let Some(result) = stream.next().await {
-        vec.push(result?);
-    }
-    Ok(vec)
 }
 
 pub(crate) struct VecByteStream {
