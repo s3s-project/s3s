@@ -145,17 +145,14 @@ fn extract_headers(headers: &HeaderMap) -> S3Result<OrderedHeaders<'_>> {
 }
 
 fn extract_mime(hs: &OrderedHeaders<'_>) -> Option<Mime> {
-    let Some(content_type) = hs.get_unique(crate::header::CONTENT_TYPE) else { return None };
+    let content_type = hs.get_unique(crate::header::CONTENT_TYPE)?;
 
     // https://github.com/s3s-project/s3s/issues/361
     if content_type.is_empty() {
         return None;
     }
 
-    match content_type.parse::<Mime>() {
-        Ok(x) => Some(x),
-        Err(_) => None,
-    }
+    content_type.parse::<Mime>().ok()
 }
 
 fn extract_content_length(req: &Request) -> Option<u64> {
