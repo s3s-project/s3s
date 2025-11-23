@@ -54,30 +54,46 @@ fn extract_amz_date(hs: &'_ OrderedHeaders<'_>) -> S3Result<Option<AmzDate>> {
     }
 }
 
+/// Context for AWS signature verification containing all request information needed
+/// to validate signatures and extract credentials.
+///
+/// This structure bundles all the components required for signature verification:
+/// request metadata, headers, body, and authentication provider.
 pub struct SignatureContext<'a> {
+    /// Optional authentication provider to retrieve secret keys
     pub auth: Option<&'a dyn S3Auth>,
 
+    // Request components
     pub req_version: ::http::Version,
     pub req_method: &'a Method,
     pub req_uri: &'a Uri,
     pub req_body: &'a mut Body,
 
+    // Parsed headers and query string
     pub qs: Option<&'a OrderedQs>,
     pub hs: OrderedHeaders<'a>,
 
+    // Path information
     pub decoded_uri_path: String,
     pub vh_bucket: Option<&'a str>,
 
+    // Content metadata
     pub content_length: Option<u64>,
     pub mime: Option<Mime>,
     pub decoded_content_length: Option<usize>,
 
+    // Output: transformed body after signature processing
     pub transformed_body: Option<Body>,
     pub multipart: Option<Multipart>,
 
+    // Output: trailing headers for chunked uploads
     pub trailing_headers: Option<TrailingHeaders>,
 }
 
+/// Extended credentials extracted from signature verification.
+///
+/// Contains not just access/secret keys but also region and service information
+/// from the signature, which may be needed for subsequent operations.
 pub struct CredentialsExt {
     pub access_key: String,
     pub secret_key: SecretKey,
@@ -90,7 +106,43 @@ fn require_auth(auth: Option<&dyn S3Auth>) -> S3Result<&dyn S3Auth> {
 }
 
 impl SignatureContext<'_> {
+    /// Main entry point for AWS signature verification.
+    ///
+    /// This method orchestrates the entire signature verification process by:
+    ///
+    /// 1. **POST Multipart Signature** (checked first)
+    ///    - Handles POST requests with multipart/form-data
+    ///    - Used for browser-based uploads with policy documents
+    ///    - Supports both V2 and V4 POST signatures
+    ///
+    /// 2. **Signature V2 Verification**
+    ///    - Legacy AWS signature scheme
+    ///    - Checks for `Authorization: AWS` header or `Signature` query param
+    ///    - Simpler than V4, uses HMAC-SHA1
+    ///
+    /// 3. **Signature V4 Verification** (preferred)
+    ///    - Modern AWS signature scheme (AWS4-HMAC-SHA256)
+    ///    - Checks for `Authorization: AWS4-HMAC-SHA256` header or `X-Amz-Signature` query param
+    ///    - Supports streaming uploads, chunked encoding, and trailing headers
+    ///
+    /// 4. **Anonymous Access**
+    ///    - If no signature is found, returns None (anonymous request)
+    ///    - Access control layer will decide if anonymous access is allowed
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Some(CredentialsExt))` - Valid signature with extracted credentials
+    /// * `Ok(None)` - No signature present (anonymous request)
+    /// * `Err(S3Error)` - Invalid, expired, or malformed signature
+    ///
+    /// # Side Effects
+    ///
+    /// May transform `self.req_body` to handle:
+    /// - AWS chunked encoding (for streaming uploads)
+    /// - Multipart form data parsing
+    /// - Content-SHA256 verification streams
     pub async fn check(&mut self) -> S3Result<Option<CredentialsExt>> {
+        // Special case: POST with multipart/form-data (browser uploads)
         if self.req_method == Method::POST {
             if let Some(ref mime) = self.mime {
                 if mime.type_() == mime::MULTIPART && mime.subtype() == mime::FORM_DATA {
@@ -99,16 +151,19 @@ impl SignatureContext<'_> {
             }
         }
 
+        // Try Signature V2 first (legacy)
         if let Some(result) = self.v2_check().await {
             debug!("checked signature v2");
             return Ok(Some(result?));
         }
 
+        // Try Signature V4 (modern, preferred)
         if let Some(result) = self.v4_check().await {
             debug!("checked signature v4");
             return Ok(Some(result?));
         }
 
+        // No signature found - anonymous request
         Ok(None)
     }
 
@@ -146,6 +201,25 @@ impl SignatureContext<'_> {
         Err(invalid_request!("unsupported post signature"))
     }
 
+    /// Detects and verifies AWS Signature V4 (AWS4-HMAC-SHA256).
+    ///
+    /// Checks for V4 signatures in two forms:
+    ///
+    /// 1. **Presigned URL** - Query string contains `X-Amz-Signature`
+    ///    - Used for temporary access URLs (e.g., download links)
+    ///    - All auth info is in query parameters
+    ///    - Includes expiration time validation
+    ///
+    /// 2. **Header-based Auth** - `Authorization` header is present
+    ///    - Standard request signing method
+    ///    - Requires `X-Amz-Date` and `X-Amz-Content-SHA256` headers
+    ///    - Supports streaming uploads and chunked encoding
+    ///
+    /// # Returns
+    ///
+    /// * `Some(Ok(credentials))` - Valid V4 signature found
+    /// * `Some(Err(error))` - V4 signature found but invalid
+    /// * `None` - No V4 signature detected (try V2 or anonymous)
     #[tracing::instrument(skip(self))]
     pub async fn v4_check(&mut self) -> Option<S3Result<CredentialsExt>> {
         // query auth
@@ -469,6 +543,25 @@ impl SignatureContext<'_> {
         })
     }
 
+    /// Detects and verifies AWS Signature V2 (legacy signing method).
+    ///
+    /// Checks for V2 signatures in two forms:
+    ///
+    /// 1. **Presigned URL** - Query string contains `Signature` parameter
+    ///    - Used for temporary access URLs
+    ///    - Includes `AWSAccessKeyId` and `Expires` in query
+    ///    - Simpler than V4, uses HMAC-SHA1
+    ///
+    /// 2. **Header-based Auth** - `Authorization: AWS` header format
+    ///    - Legacy authentication method
+    ///    - Requires `Date` or `X-Amz-Date` header
+    ///    - No content-hash verification
+    ///
+    /// # Returns
+    ///
+    /// * `Some(Ok(credentials))` - Valid V2 signature found
+    /// * `Some(Err(error))` - V2 signature found but invalid
+    /// * `None` - No V2 signature detected
     #[tracing::instrument(skip(self))]
     pub async fn v2_check(&mut self) -> Option<S3Result<CredentialsExt>> {
         // query auth
