@@ -37,14 +37,14 @@ install name *ARGS:
 # ------------------------------------------------
 
 sync-version:
-    cargo set-version -p s3s            0.12.0-rc.3
-    cargo set-version -p s3s-aws        0.12.0-rc.3
-    cargo set-version -p s3s-model      0.12.0-rc.3
-    cargo set-version -p s3s-policy     0.12.0-rc.3
-    cargo set-version -p s3s-test       0.12.0-rc.3
-    cargo set-version -p s3s-proxy      0.12.0-rc.3
-    cargo set-version -p s3s-fs         0.12.0-rc.3
-    cargo set-version -p s3s-e2e        0.12.0-rc.3
+    cargo set-version -p s3s            0.12.0-rc.4
+    cargo set-version -p s3s-aws        0.12.0-rc.4
+    cargo set-version -p s3s-model      0.12.0-rc.4
+    cargo set-version -p s3s-policy     0.12.0-rc.4
+    cargo set-version -p s3s-test       0.12.0-rc.4
+    cargo set-version -p s3s-proxy      0.12.0-rc.4
+    cargo set-version -p s3s-fs         0.12.0-rc.4
+    cargo set-version -p s3s-e2e        0.12.0-rc.4
 
 # ------------------------------------------------
 
