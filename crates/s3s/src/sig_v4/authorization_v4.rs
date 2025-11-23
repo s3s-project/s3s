@@ -82,6 +82,7 @@ mod parser {
     use crate::utils::parser::{Error, consume, digit2, digit4};
 
     use nom::IResult;
+    use nom::Parser;
     use nom::bytes::complete::{tag, take, take_till, take_till1};
     use nom::character::complete::{multispace0, multispace1};
     use nom::combinator::verify;
@@ -94,14 +95,14 @@ mod parser {
         let algorithm = consume(s, till_space1)?;
 
         consume(s, multispace1)?;
-        let credential = consume(s, delimited(tag("Credential="), parse_credential, tag(",")))?;
+        let credential = consume(s, |i| delimited(tag("Credential="), parse_credential, tag(",")).parse(i))?;
 
         consume(s, multispace0)?;
         let parse_headers = separated_list1(tag(";"), take_till(|c| c == ';' || c == ','));
-        let signed_headers = consume(s, delimited(tag("SignedHeaders="), parse_headers, tag(",")))?;
+        let signed_headers = consume(s, |i| delimited(tag("SignedHeaders="), parse_headers, tag(",")).parse(i))?;
 
         consume(s, multispace0)?;
-        let signature = consume(s, preceded(tag("Signature="), till_space0))?;
+        let signature = consume(s, |i| preceded(tag("Signature="), till_space0).parse(i))?;
 
         consume(s, multispace0)?;
 
@@ -127,7 +128,7 @@ mod parser {
         let s = &mut input;
 
         let access_key_id = consume(s, until_slash0)?;
-        let date = consume(s, verify(until_slash1, |s| verify_date(s).is_ok()))?;
+        let date = consume(s, |i| verify(until_slash1, |s| verify_date(s).is_ok()).parse(i))?;
         let aws_region = consume(s, until_slash0)?;
         let aws_service = consume(s, until_slash1)?;
         consume(s, tag("aws4_request"))?;
@@ -143,11 +144,11 @@ mod parser {
     }
 
     fn until_slash0(input: &str) -> IResult<&str, &str> {
-        terminated(take_till(|c| c == '/'), take(1_usize))(input)
+        terminated(take_till(|c| c == '/'), take(1_usize)).parse(input)
     }
 
     fn until_slash1(input: &str) -> IResult<&str, &str> {
-        terminated(take_till1(|c| c == '/'), take(1_usize))(input)
+        terminated(take_till1(|c| c == '/'), take(1_usize)).parse(input)
     }
 
     fn verify_date(s: &str) -> Result<(), Error> {
