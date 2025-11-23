@@ -115,7 +115,9 @@ impl SignatureContext<'_> {
     #[tracing::instrument(skip(self))]
     async fn check_post_signature(&mut self) -> S3Result<CredentialsExt> {
         let multipart = {
-            let mime = self.mime.as_ref().unwrap(); // assume: multipart
+            let Some(mime) = self.mime.as_ref() else {
+                return Err(invalid_request!("internal error: mime was unexpectedly None"));
+            };
 
             let boundary = mime
                 .get_param(mime::BOUNDARY)
