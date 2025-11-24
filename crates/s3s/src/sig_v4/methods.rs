@@ -65,6 +65,23 @@ fn is_skipped_query_string(name: &str) -> bool {
     name == "X-Amz-Signature"
 }
 
+/// Normalize header value according to AWS `SigV4` specification:
+/// Trim leading and trailing whitespace and replace sequential whitespace with a single space.
+///
+/// Reference: <https://docs.aws.amazon.com/general/latest/gr/sigv4-create-canonical-request.html>
+fn normalize_header_value(ans: &mut String, value: &str) {
+    let trimmed = value.trim();
+
+    // Fast path: if no internal whitespace, append as-is
+    if !trimmed.chars().any(char::is_whitespace) {
+        ans.push_str(trimmed);
+        return;
+    }
+
+    // Split on any whitespace and rejoin with single spaces
+    ans.push_str(&trimmed.split_whitespace().collect::<Vec<_>>().join(" "));
+}
+
 /// sha256 hash of an empty string
 const EMPTY_STRING_SHA256_HASH: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
@@ -150,7 +167,7 @@ pub fn create_canonical_request(
             }
             ans.push_str(name);
             ans.push(':');
-            ans.push_str(value.trim());
+            normalize_header_value(&mut ans, value);
             ans.push('\n');
         }
         ans.push('\n');
@@ -401,7 +418,7 @@ pub fn create_presigned_canonical_request(
             }
             ans.push_str(name);
             ans.push(':');
-            ans.push_str(value.trim());
+            normalize_header_value(&mut ans, value);
             ans.push('\n');
         }
         ans.push('\n');
