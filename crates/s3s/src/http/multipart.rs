@@ -508,26 +508,31 @@ struct ContentDisposition<'a> {
 
 /// parse content disposition value
 fn parse_content_disposition(input: &[u8]) -> nom::IResult<&[u8], ContentDisposition<'_>> {
+    use nom::Parser;
     use nom::bytes::complete::{tag, take, take_till1};
     use nom::combinator::{all_consuming, map_res, opt};
-    use nom::sequence::{delimited, preceded, tuple};
+    use nom::sequence::{delimited, preceded};
 
     // TODO: escape?
 
-    let parse_name = delimited(tag(b"name=\""), map_res(take_till1(|c| c == b'"'), std::str::from_utf8), take(1_usize));
-
-    let parse_filename = delimited(
-        tag(b"filename=\""),
+    let parse_name = delimited(
+        tag(&b"name=\""[..]),
         map_res(take_till1(|c| c == b'"'), std::str::from_utf8),
         take(1_usize),
     );
 
-    let mut parse = all_consuming(tuple((
-        preceded(tag(b"form-data; "), parse_name),
-        opt(preceded(tag(b"; "), parse_filename)),
-    )));
+    let parse_filename = delimited(
+        tag(&b"filename=\""[..]),
+        map_res(take_till1(|c| c == b'"'), std::str::from_utf8),
+        take(1_usize),
+    );
 
-    let (remaining, (name, filename)) = parse(input)?;
+    let mut parse = all_consuming((
+        preceded(tag(&b"form-data; "[..]), parse_name),
+        opt(preceded(tag(&b"; "[..]), parse_filename)),
+    ));
+
+    let (remaining, (name, filename)) = parse.parse(input)?;
 
     Ok((remaining, ContentDisposition { name, filename }))
 }
