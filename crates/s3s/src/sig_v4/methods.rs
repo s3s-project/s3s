@@ -79,7 +79,15 @@ fn normalize_header_value(ans: &mut String, value: &str) {
     }
 
     // Split on any whitespace and rejoin with single spaces
-    ans.push_str(&trimmed.split_whitespace().collect::<Vec<_>>().join(" "));
+    let mut first = true;
+    for word in trimmed.split_whitespace() {
+        if first {
+            first = false;
+        } else {
+            ans.push(' ');
+        }
+        ans.push_str(word);
+    }
 }
 
 /// sha256 hash of an empty string
@@ -1198,5 +1206,29 @@ mod tests {
             let signature = calculate_signature(&string_to_sign, &secret_access_key, &date, region, service);
             assert_eq!(signature, "7ed3ea6c69ed841068bbdd3cc1eb92a9ae5a4b1b0635267066bd676f6edc0189");
         }
+    }
+
+    #[test]
+    fn normalize_header_value_no_internal_whitespace() {
+        let mut ans = String::new();
+        // leading/trailing spaces should be trimmed, no internal whitespace => fast path
+        normalize_header_value(&mut ans, "  value  ");
+        assert_eq!(ans, "value");
+    }
+
+    #[test]
+    fn normalize_header_value_collapse_whitespace() {
+        let mut ans = String::new();
+        // multiple spaces, tabs and newlines should collapse into single spaces
+        normalize_header_value(&mut ans, "  foo   bar\tbaz\nqux  ");
+        assert_eq!(ans, "foo bar baz qux");
+    }
+
+    #[test]
+    fn normalize_header_value_only_spaces() {
+        let mut ans = String::new();
+        // value with only whitespace becomes empty string after trimming
+        normalize_header_value(&mut ans, "    ");
+        assert_eq!(ans, "");
     }
 }
