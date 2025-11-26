@@ -89,6 +89,7 @@ struct ChunkMeta<'a> {
 /// nom parser
 fn parse_chunk_meta(mut input: &[u8]) -> nom::IResult<&[u8], ChunkMeta<'_>> {
     use crate::utils::parser::consume;
+    use nom::Parser;
     use nom::bytes::complete::{tag, take, take_till1};
     use nom::combinator::{all_consuming, map_res};
     use nom::number::complete::hex_u32;
@@ -98,15 +99,16 @@ fn parse_chunk_meta(mut input: &[u8]) -> nom::IResult<&[u8], ChunkMeta<'_>> {
 
     // read size until ';' or CR
     let size = consume(s, take_till1(|c| c == b';' || c == b'\r'))?;
-    let (_, size) = map_res(hex_u32, TryInto::try_into)(size)?;
+    let (_, size) = map_res(hex_u32, TryInto::try_into).parse(size)?;
 
     // Either ";chunk-signature=<64>\r\n" or just "\r\n"
-    let signature = if let Ok(sig) = consume(s, all_consuming(delimited(tag(b";chunk-signature="), take(64_usize), tag(b"\r\n"))))
-    {
+    let signature = if let Ok(sig) = consume(s, |i| {
+        all_consuming(delimited(tag(&b";chunk-signature="[..]), take(64_usize), tag(&b"\r\n"[..]))).parse(i)
+    }) {
         Some(sig)
     } else {
         // If no signature extension, accept plain CRLF
-        let _ = consume(s, all_consuming(tag(b"\r\n")))?;
+        let _ = consume(s, |i| all_consuming(tag(&b"\r\n"[..])).parse(i))?;
         None
     };
 
