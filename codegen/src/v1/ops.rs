@@ -993,9 +993,36 @@ fn codegen_router(ops: &Operations, rust_types: &RustTypes) {
                                 (true, false) => {
                                     let tag = route.query_tag.as_deref().unwrap();
 
-                                    g!("if qs.has(\"{tag}\") {{");
-                                    succ(route, true);
-                                    g!("}}");
+                                    // Special handling for operations that share the same query tag
+                                    // but are differentiated by the presence of an 'id' parameter
+                                    let needs_id_check = matches!(
+                                        route.op.name.as_str(),
+                                        "GetBucketAnalyticsConfiguration"
+                                            | "GetBucketIntelligentTieringConfiguration"
+                                            | "GetBucketInventoryConfiguration"
+                                            | "GetBucketMetricsConfiguration"
+                                    );
+                                    let needs_no_id_check = matches!(
+                                        route.op.name.as_str(),
+                                        "ListBucketAnalyticsConfigurations"
+                                            | "ListBucketIntelligentTieringConfigurations"
+                                            | "ListBucketInventoryConfigurations"
+                                            | "ListBucketMetricsConfigurations"
+                                    );
+
+                                    if needs_id_check {
+                                        g!("if qs.has(\"{tag}\") && qs.has(\"id\") {{");
+                                        succ(route, true);
+                                        g!("}}");
+                                    } else if needs_no_id_check {
+                                        g!("if qs.has(\"{tag}\") && !qs.has(\"id\") {{");
+                                        succ(route, true);
+                                        g!("}}");
+                                    } else {
+                                        g!("if qs.has(\"{tag}\") {{");
+                                        succ(route, true);
+                                        g!("}}");
+                                    }
                                 }
                                 (false, true) => {
                                     let (n, v) = qp.first().unwrap();

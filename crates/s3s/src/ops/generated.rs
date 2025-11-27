@@ -6562,16 +6562,16 @@ pub fn resolve_route(
             S3Path::Root => Ok((&ListBuckets as &'static dyn super::Operation, false)),
             S3Path::Bucket { .. } => {
                 if let Some(qs) = qs {
-                    if qs.has("analytics") {
+                    if qs.has("analytics") && qs.has("id") {
                         return Ok((&GetBucketAnalyticsConfiguration as &'static dyn super::Operation, false));
                     }
-                    if qs.has("intelligent-tiering") {
+                    if qs.has("intelligent-tiering") && qs.has("id") {
                         return Ok((&GetBucketIntelligentTieringConfiguration as &'static dyn super::Operation, false));
                     }
-                    if qs.has("inventory") {
+                    if qs.has("inventory") && qs.has("id") {
                         return Ok((&GetBucketInventoryConfiguration as &'static dyn super::Operation, false));
                     }
-                    if qs.has("metrics") {
+                    if qs.has("metrics") && qs.has("id") {
                         return Ok((&GetBucketMetricsConfiguration as &'static dyn super::Operation, false));
                     }
                     if qs.has("accelerate") {
@@ -6631,16 +6631,16 @@ pub fn resolve_route(
                     if qs.has("publicAccessBlock") {
                         return Ok((&GetPublicAccessBlock as &'static dyn super::Operation, false));
                     }
-                    if qs.has("analytics") {
+                    if qs.has("analytics") && !qs.has("id") {
                         return Ok((&ListBucketAnalyticsConfigurations as &'static dyn super::Operation, false));
                     }
-                    if qs.has("intelligent-tiering") {
+                    if qs.has("intelligent-tiering") && !qs.has("id") {
                         return Ok((&ListBucketIntelligentTieringConfigurations as &'static dyn super::Operation, false));
                     }
-                    if qs.has("inventory") {
+                    if qs.has("inventory") && !qs.has("id") {
                         return Ok((&ListBucketInventoryConfigurations as &'static dyn super::Operation, false));
                     }
-                    if qs.has("metrics") {
+                    if qs.has("metrics") && !qs.has("id") {
                         return Ok((&ListBucketMetricsConfigurations as &'static dyn super::Operation, false));
                     }
                     if qs.has("uploads") {
