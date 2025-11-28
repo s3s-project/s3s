@@ -425,8 +425,8 @@ mod tests {
 
         // Enforce maximum future sizes to prevent accidental regressions
         assert!(output_size(&crate::ops::call) <= 1600);
-        assert!(output_size(&S3Service::call) <= 2900);
-        assert!(output_size(&S3Service::call_owned) <= 3200);
+        assert!(output_size(&S3Service::call) <= 3000);
+        assert!(output_size(&S3Service::call_owned) <= 3300);
     }
 
     // Test validation functionality

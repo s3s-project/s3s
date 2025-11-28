@@ -609,7 +609,8 @@ fn codegen_op_http_de_multipart(op: &Operation, rust_types: &RustTypes) {
         "",
         "let vec_stream = req.s3ext.vec_stream.take().expect(\"missing vec stream\");",
         "",
-        "let content_length = i64::try_from(vec_stream.exact_remaining_length()).map_err(|e|s3_error!(e, InvalidArgument, \"content-length overflow\"))?;",
+        "let content_length = i64::try_from(vec_stream.exact_remaining_length())",
+        "    .map_err(|e| s3_error!(e, InvalidArgument, \"content-length overflow\"))?;",
         "let content_length = (content_length != 0).then_some(content_length);",
         "",
         "let body: Option<StreamingBlob> = Some(StreamingBlob::new(vec_stream));",
@@ -992,9 +993,36 @@ fn codegen_router(ops: &Operations, rust_types: &RustTypes) {
                                 (true, false) => {
                                     let tag = route.query_tag.as_deref().unwrap();
 
-                                    g!("if qs.has(\"{tag}\") {{");
-                                    succ(route, true);
-                                    g!("}}");
+                                    // Special handling for operations that share the same query tag
+                                    // but are differentiated by the presence of an 'id' parameter
+                                    let needs_id_check = matches!(
+                                        route.op.name.as_str(),
+                                        "GetBucketAnalyticsConfiguration"
+                                            | "GetBucketIntelligentTieringConfiguration"
+                                            | "GetBucketInventoryConfiguration"
+                                            | "GetBucketMetricsConfiguration"
+                                    );
+                                    let needs_no_id_check = matches!(
+                                        route.op.name.as_str(),
+                                        "ListBucketAnalyticsConfigurations"
+                                            | "ListBucketIntelligentTieringConfigurations"
+                                            | "ListBucketInventoryConfigurations"
+                                            | "ListBucketMetricsConfigurations"
+                                    );
+
+                                    if needs_id_check {
+                                        g!("if qs.has(\"{tag}\") && qs.has(\"id\") {{");
+                                        succ(route, true);
+                                        g!("}}");
+                                    } else if needs_no_id_check {
+                                        g!("if qs.has(\"{tag}\") && !qs.has(\"id\") {{");
+                                        succ(route, true);
+                                        g!("}}");
+                                    } else {
+                                        g!("if qs.has(\"{tag}\") {{");
+                                        succ(route, true);
+                                        g!("}}");
+                                    }
                                 }
                                 (false, true) => {
                                     let (n, v) = qp.first().unwrap();
