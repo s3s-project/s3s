@@ -1287,8 +1287,12 @@ mod tests {
             ("X-Amz-Signature", signature.as_str()),
         ];
 
-        let qs =
-            OrderedQs::from_vec_unchecked(query_strings_complete.iter().map(|&(n, v)| (n.to_owned(), v.to_owned())).collect());
+        let qs = OrderedQs::from_vec_unchecked(
+            query_strings_complete
+                .iter()
+                .map(|&(n, v)| (n.to_owned(), v.to_owned()))
+                .collect(),
+        );
 
         let info = PresignedUrlV4::parse(&qs).unwrap();
 
@@ -1365,8 +1369,12 @@ mod tests {
             ("X-Amz-Signature", signature.as_str()),
         ];
 
-        let qs =
-            OrderedQs::from_vec_unchecked(query_strings_complete.iter().map(|&(n, v)| (n.to_owned(), v.to_owned())).collect());
+        let qs = OrderedQs::from_vec_unchecked(
+            query_strings_complete
+                .iter()
+                .map(|&(n, v)| (n.to_owned(), v.to_owned()))
+                .collect(),
+        );
 
         let info = PresignedUrlV4::parse(&qs).unwrap();
 
