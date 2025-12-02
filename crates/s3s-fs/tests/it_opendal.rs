@@ -138,7 +138,7 @@ async fn test_operator_info() -> Result<()> {
     debug!("Operator capabilities: {:?}", info.full_capability());
 
     // Basic smoke test - operator should be created successfully
-    assert_eq!(info.scheme(), opendal::Scheme::S3);
+    assert_eq!(info.scheme(), "s3");
 
     Ok(())
 }
