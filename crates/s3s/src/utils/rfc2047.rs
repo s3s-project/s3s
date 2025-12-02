@@ -21,6 +21,12 @@ pub fn encode(s: &str) -> String {
 /// Decodes an RFC 2047 encoded-word string.
 /// If the string is not RFC 2047 encoded, returns it unchanged.
 /// Supports both Base64 (B) and Quoted-Printable (Q) encodings.
+///
+/// # Charset Handling
+/// This implementation primarily supports UTF-8 charset. For other charsets,
+/// it attempts to decode the bytes as UTF-8, which may fail if the original
+/// encoding used a different character set. A full implementation would need
+/// to support additional charsets like ISO-8859-1, etc.
 pub fn decode(s: &str) -> Result<String, DecodeError> {
     // Check if this looks like an RFC 2047 encoded word
     let s = s.trim();
@@ -47,15 +53,16 @@ pub fn decode(s: &str) -> Result<String, DecodeError> {
     };
 
     // Convert to string based on charset
+    // Note: For non-UTF-8 charsets, we attempt UTF-8 decoding which may fail
     match charset.to_ascii_uppercase().as_str() {
         "UTF-8" | "UTF8" => String::from_utf8(decoded_bytes).map_err(|_| DecodeError::InvalidUtf8),
-        // For simplicity, try UTF-8 for other charsets too
-        // A full implementation would support more charsets
         _ => String::from_utf8(decoded_bytes).map_err(|_| DecodeError::InvalidUtf8),
     }
 }
 
 /// Decodes a Quoted-Printable encoded string according to RFC 2047.
+/// According to RFC 2047, only ASCII printable characters should appear
+/// directly in Q-encoded text, with non-ASCII bytes encoded as =XX.
 fn decode_quoted_printable(s: &str) -> Result<Vec<u8>, DecodeError> {
     let mut result = Vec::with_capacity(s.len());
     let mut chars = s.chars().peekable();
@@ -74,9 +81,13 @@ fn decode_quoted_printable(s: &str) -> Result<Vec<u8>, DecodeError> {
                 // Underscore represents space in RFC 2047 Q encoding
                 result.push(b' ');
             }
-            _ => {
-                // Regular ASCII character
+            c if c.is_ascii() => {
+                // Regular ASCII character - safe to cast to u8
                 result.push(c as u8);
+            }
+            _ => {
+                // Non-ASCII character in Q-encoded text is invalid
+                return Err(DecodeError::InvalidFormat);
             }
         }
     }
@@ -192,5 +203,14 @@ mod tests {
         let input = "=?utf-8?b?5L2g5aW9?=";
         let decoded = decode(input).unwrap();
         assert_eq!(decoded, "你好");
+    }
+
+    #[test]
+    fn test_decode_qp_non_ascii_rejected() {
+        // Non-ASCII characters should not appear directly in Q-encoded text
+        // They should be encoded as =XX sequences
+        let input = "=?UTF-8?Q?café?="; // The 'é' should have been =C3=A9
+        let result = decode(input);
+        assert!(result.is_err());
     }
 }

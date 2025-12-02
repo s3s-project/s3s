@@ -295,6 +295,7 @@ pub fn parse_opt_metadata(req: &Request) -> S3Result<Option<Metadata>> {
             Err(_) => {
                 // Header contains non-ASCII bytes, try to decode as UTF-8 directly
                 // This can happen if the value was sent as raw UTF-8 bytes
+                // Note: to_vec() is needed because from_utf8 requires ownership
                 String::from_utf8(val.as_bytes().to_vec()).map_err(|err| invalid_header(err, name, val))?
             }
         };
