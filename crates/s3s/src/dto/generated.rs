@@ -2759,11 +2759,11 @@ impl fmt::Debug for CopyPartResult {
     }
 }
 
-pub type CopySourceIfMatch = String;
+pub type CopySourceIfMatch = ETag;
 
 pub type CopySourceIfModifiedSince = Timestamp;
 
-pub type CopySourceIfNoneMatch = String;
+pub type CopySourceIfNoneMatch = ETag;
 
 pub type CopySourceIfUnmodifiedSince = Timestamp;
 
@@ -10555,7 +10555,7 @@ pub type HttpRedirectCode = String;
 
 pub type ID = String;
 
-pub type IfMatch = String;
+pub type IfMatch = ETag;
 
 pub type IfMatchInitiatedTime = Timestamp;
 
@@ -10565,7 +10565,7 @@ pub type IfMatchSize = i64;
 
 pub type IfModifiedSince = Timestamp;
 
-pub type IfNoneMatch = String;
+pub type IfNoneMatch = ETag;
 
 pub type IfUnmodifiedSince = Timestamp;
 
@@ -31881,12 +31881,6 @@ impl DtoExt for CompleteMultipartUploadInput {
         if self.expected_bucket_owner.as_deref() == Some("") {
             self.expected_bucket_owner = None;
         }
-        if self.if_match.as_deref() == Some("") {
-            self.if_match = None;
-        }
-        if self.if_none_match.as_deref() == Some("") {
-            self.if_none_match = None;
-        }
         if let Some(ref mut val) = self.multipart_upload {
             val.ignore_empty_strings();
         }
@@ -32013,12 +32007,6 @@ impl DtoExt for CopyObjectInput {
         }
         if self.content_language.as_deref() == Some("") {
             self.content_language = None;
-        }
-        if self.copy_source_if_match.as_deref() == Some("") {
-            self.copy_source_if_match = None;
-        }
-        if self.copy_source_if_none_match.as_deref() == Some("") {
-            self.copy_source_if_none_match = None;
         }
         if self.copy_source_sse_customer_algorithm.as_deref() == Some("") {
             self.copy_source_sse_customer_algorithm = None;
@@ -32531,9 +32519,6 @@ impl DtoExt for DeleteObjectInput {
     fn ignore_empty_strings(&mut self) {
         if self.expected_bucket_owner.as_deref() == Some("") {
             self.expected_bucket_owner = None;
-        }
-        if self.if_match.as_deref() == Some("") {
-            self.if_match = None;
         }
         if self.mfa.as_deref() == Some("") {
             self.mfa = None;
@@ -33116,12 +33101,6 @@ impl DtoExt for GetObjectInput {
         if self.expected_bucket_owner.as_deref() == Some("") {
             self.expected_bucket_owner = None;
         }
-        if self.if_match.as_deref() == Some("") {
-            self.if_match = None;
-        }
-        if self.if_none_match.as_deref() == Some("") {
-            self.if_none_match = None;
-        }
         if let Some(ref val) = self.request_payer {
             if val.as_str() == "" {
                 self.request_payer = None;
@@ -33426,12 +33405,6 @@ impl DtoExt for HeadObjectInput {
         }
         if self.expected_bucket_owner.as_deref() == Some("") {
             self.expected_bucket_owner = None;
-        }
-        if self.if_match.as_deref() == Some("") {
-            self.if_match = None;
-        }
-        if self.if_none_match.as_deref() == Some("") {
-            self.if_none_match = None;
         }
         if let Some(ref val) = self.request_payer {
             if val.as_str() == "" {
@@ -34845,12 +34818,6 @@ impl DtoExt for PutObjectInput {
         if self.grant_write_acp.as_deref() == Some("") {
             self.grant_write_acp = None;
         }
-        if self.if_match.as_deref() == Some("") {
-            self.if_match = None;
-        }
-        if self.if_none_match.as_deref() == Some("") {
-            self.if_none_match = None;
-        }
         if let Some(ref val) = self.object_lock_legal_hold_status {
             if val.as_str() == "" {
                 self.object_lock_legal_hold_status = None;
@@ -35465,12 +35432,6 @@ impl DtoExt for Transition {
 }
 impl DtoExt for UploadPartCopyInput {
     fn ignore_empty_strings(&mut self) {
-        if self.copy_source_if_match.as_deref() == Some("") {
-            self.copy_source_if_match = None;
-        }
-        if self.copy_source_if_none_match.as_deref() == Some("") {
-            self.copy_source_if_none_match = None;
-        }
         if self.copy_source_range.as_deref() == Some("") {
             self.copy_source_range = None;
         }
