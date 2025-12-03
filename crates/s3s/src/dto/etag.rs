@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use http::HeaderValue;
 use http::header::InvalidHeaderValue;
 use stdx::str::StrExt;
@@ -135,6 +137,14 @@ impl ETag {
             }
         };
         HeaderValue::try_from(buf)
+    }
+}
+
+impl FromStr for ETag {
+    type Err = ParseETagError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::parse_http_header(s.as_bytes())
     }
 }
 
@@ -281,5 +291,20 @@ mod tests {
             let p = ETag::parse_http_header(hv.as_bytes()).expect("parse weak back");
             assert_eq!(p.as_weak(), Some(v));
         }
+    }
+
+    #[test]
+    fn from_str_trait() {
+        // strong ETag via FromStr
+        let e: ETag = "\"abc123\"".parse().expect("parse strong from str");
+        assert_eq!(e.as_strong(), Some("abc123"));
+
+        // weak ETag via FromStr
+        let e: ETag = "W/\"xyz\"".parse().expect("parse weak from str");
+        assert_eq!(e.as_weak(), Some("xyz"));
+
+        // invalid format via FromStr
+        let err = "abc".parse::<ETag>().unwrap_err();
+        assert!(matches!(err, ParseETagError::InvalidFormat));
     }
 }

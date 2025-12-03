@@ -46,10 +46,26 @@ pub fn collect_rust_types(model: &smithy::Model, ops: &Operations) -> RustTypes 
             "ETag",          //
         ];
 
+        // ETag-related header types that should be aliased to ETag instead of String
+        let etag_alias_types = [
+            "IfMatch",               //
+            "IfNoneMatch",           //
+            "CopySourceIfMatch",     //
+            "CopySourceIfNoneMatch", //
+        ];
+
         if provided_types.contains(&rs_shape_name.as_str()) {
             let ty = rust::Type::provided(&rs_shape_name);
             insert(rs_shape_name, ty);
             continue;
+        }
+
+        if etag_alias_types.contains(&rs_shape_name.as_str()) {
+            if let smithy::Shape::String(shape) = shape {
+                let ty = rust::Type::alias(&rs_shape_name, "ETag", shape.traits.doc());
+                insert(rs_shape_name, ty);
+                continue;
+            }
         }
 
         match shape {
