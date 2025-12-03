@@ -93,7 +93,9 @@ def crawl_error_codes():
                 http_status_code = None
             else:
                 m = re.match(r"(\d{3})[\s\S]*", t2)
-                assert m is not None, f"t2: {repr(t2)}"
+                if m is None:
+                    continue  # FIXME: EntityTooLarge 405
+                # assert m is not None, f"t2: {repr(t2)}"
                 http_status_code = int(m.group(1))
 
             ans.append(
