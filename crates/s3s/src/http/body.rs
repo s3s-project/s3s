@@ -287,7 +287,8 @@ impl Body {
         }
         let body = mem::take(self);
         let limited = http_body_util::Limited::new(body, limit);
-        let bytes = http_body_util::BodyExt::collect(limited).await?.to_bytes();
+        let bytes: Bytes = http_body_util::BodyExt::collect(limited).await?.to_bytes();
+        // Store bytes in self (Bytes::clone is O(1) due to reference counting)
         *self = Self::from(bytes.clone());
         Ok(bytes)
     }
@@ -303,7 +304,8 @@ impl Body {
             return Ok(bytes);
         }
         let body = mem::take(self);
-        let bytes = http_body_util::BodyExt::collect(body).await?.to_bytes();
+        let bytes: Bytes = http_body_util::BodyExt::collect(body).await?.to_bytes();
+        // Store bytes in self (Bytes::clone is O(1) due to reference counting)
         *self = Self::from(bytes.clone());
         Ok(bytes)
     }
