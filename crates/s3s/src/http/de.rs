@@ -4,7 +4,6 @@ use crate::dto::{List, Metadata, StreamingBlob, Timestamp, TimestampFormat};
 use crate::error::*;
 use crate::http::{HeaderName, HeaderValue};
 use crate::path::S3Path;
-use crate::utils::rfc2047;
 use crate::xml;
 
 use std::fmt;
@@ -285,21 +284,8 @@ pub fn parse_opt_metadata(req: &Request) -> S3Result<Option<Metadata>> {
         let val = iter.next().unwrap();
         let None = iter.next() else { return Err(duplicate_header(name)) };
 
-        // Try to get the header value as a string
-        // If it's valid ASCII, use it directly; otherwise, try RFC 2047 decoding
-        let decoded_val = match val.to_str() {
-            Ok(s) => {
-                // Check if it's RFC 2047 encoded and decode it
-                rfc2047::decode(s).map_err(|err| invalid_header(err, name, val))?
-            }
-            Err(_) => {
-                // Header contains non-ASCII bytes, try to decode as UTF-8 directly
-                // This can happen if the value was sent as raw UTF-8 bytes
-                // Note: to_vec() is needed because from_utf8 requires ownership
-                String::from_utf8(val.as_bytes().to_vec()).map_err(|err| invalid_header(err, name, val))?
-            }
-        };
-        metadata.insert(key.into(), decoded_val);
+        let val = val.to_str().map_err(|err| invalid_header(err, name, val))?;
+        metadata.insert(key.into(), val.into());
     }
     if metadata.is_empty() {
         return Ok(None);

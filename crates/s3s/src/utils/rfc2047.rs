@@ -2,6 +2,8 @@
 //!
 //! See <https://datatracker.ietf.org/doc/html/rfc2047> for the specification.
 
+#![allow(dead_code)] // Functions will be used when integrating with http/de.rs and http/ser.rs
+
 /// Checks if a string contains only ASCII characters that are valid in HTTP header values.
 fn is_ascii_header_safe(s: &str) -> bool {
     s.bytes().all(|b| b.is_ascii() && b >= 0x20 && b != 0x7f)
@@ -128,6 +130,8 @@ impl std::error::Error for DecodeError {}
 mod tests {
     use super::*;
 
+    // ==================== Encoding Tests ====================
+
     #[test]
     fn test_encode_ascii() {
         let input = "hello world";
@@ -142,6 +146,39 @@ mod tests {
         assert!(encoded.starts_with("=?UTF-8?B?"));
         assert!(encoded.ends_with("?="));
     }
+
+    #[test]
+    fn test_encode_control_characters() {
+        // Control characters (< 0x20) should be encoded
+        let input = "hello\x00world";
+        let encoded = encode(input);
+        assert!(encoded.starts_with("=?UTF-8?B?"));
+    }
+
+    #[test]
+    fn test_encode_del_character() {
+        // DEL character (0x7f) should be encoded
+        let input = "hello\x7fworld";
+        let encoded = encode(input);
+        assert!(encoded.starts_with("=?UTF-8?B?"));
+    }
+
+    #[test]
+    fn test_encode_empty_string() {
+        let input = "";
+        let encoded = encode(input);
+        assert_eq!(encoded, "");
+    }
+
+    #[test]
+    fn test_encode_mixed_content() {
+        // Mixed ASCII and non-ASCII should trigger encoding
+        let input = "Hello 世界";
+        let encoded = encode(input);
+        assert!(encoded.starts_with("=?UTF-8?B?"));
+    }
+
+    // ==================== Decoding Tests ====================
 
     #[test]
     fn test_decode_plain() {
@@ -167,34 +204,10 @@ mod tests {
     }
 
     #[test]
-    fn test_roundtrip() {
-        let original = "Hello 世界 🌍";
-        let encoded = encode(original);
-        let decoded = decode(&encoded).unwrap();
-        assert_eq!(decoded, original);
-    }
-
-    #[test]
     fn test_decode_underscore_as_space() {
         let input = "=?UTF-8?Q?hello_world?=";
         let decoded = decode(input).unwrap();
         assert_eq!(decoded, "hello world");
-    }
-
-    #[test]
-    fn test_decode_invalid_format() {
-        // This string starts with =? and ends with ?= but has invalid Base64 content
-        let input = "=?UTF-8?B?!!!?=";
-        let result = decode(input);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_encode_control_characters() {
-        // Control characters should be encoded
-        let input = "hello\x00world";
-        let encoded = encode(input);
-        assert!(encoded.starts_with("=?UTF-8?B?"));
     }
 
     #[test]
@@ -206,11 +219,211 @@ mod tests {
     }
 
     #[test]
+    fn test_decode_lowercase_q_encoding() {
+        // Q encoding specifier should be case-insensitive
+        let input = "=?UTF-8?q?hello_world?=";
+        let decoded = decode(input).unwrap();
+        assert_eq!(decoded, "hello world");
+    }
+
+    #[test]
+    fn test_decode_with_whitespace_trim() {
+        // Input with leading/trailing whitespace should be trimmed
+        let input = "  =?UTF-8?B?5L2g5aW9?=  ";
+        let decoded = decode(input).unwrap();
+        assert_eq!(decoded, "你好");
+    }
+
+    #[test]
+    fn test_decode_utf8_charset_variant() {
+        // UTF8 without hyphen should also work
+        let input = "=?UTF8?B?5L2g5aW9?=";
+        let decoded = decode(input).unwrap();
+        assert_eq!(decoded, "你好");
+    }
+
+    #[test]
+    fn test_decode_other_charset_as_utf8() {
+        // Non-UTF-8 charset falls back to UTF-8 decoding
+        // This works if the actual bytes are valid UTF-8
+        let input = "=?ISO-8859-1?B?SGVsbG8=?="; // "Hello" in Base64
+        let decoded = decode(input).unwrap();
+        assert_eq!(decoded, "Hello");
+    }
+
+    // ==================== Roundtrip Tests ====================
+
+    #[test]
+    fn test_roundtrip() {
+        let original = "Hello 世界 🌍";
+        let encoded = encode(original);
+        let decoded = decode(&encoded).unwrap();
+        assert_eq!(decoded, original);
+    }
+
+    #[test]
+    fn test_roundtrip_ascii() {
+        let original = "plain ascii text";
+        let encoded = encode(original);
+        let decoded = decode(&encoded).unwrap();
+        assert_eq!(decoded, original);
+    }
+
+    #[test]
+    fn test_roundtrip_emoji() {
+        let original = "🎉🎊🎁";
+        let encoded = encode(original);
+        let decoded = decode(&encoded).unwrap();
+        assert_eq!(decoded, original);
+    }
+
+    // ==================== Error Cases ====================
+
+    #[test]
+    fn test_decode_invalid_base64() {
+        let input = "=?UTF-8?B?!!!?=";
+        let result = decode(input);
+        assert_eq!(result, Err(DecodeError::Base64Error));
+    }
+
+    #[test]
+    fn test_decode_unsupported_encoding() {
+        // X is not a valid encoding type
+        let input = "=?UTF-8?X?dGVzdA==?=";
+        let result = decode(input);
+        assert_eq!(result, Err(DecodeError::UnsupportedEncoding));
+    }
+
+    #[test]
+    fn test_decode_missing_encoding_part() {
+        // Missing the encoding part (only has charset)
+        let input = "=?UTF-8?=";
+        let result = decode(input);
+        assert_eq!(result, Err(DecodeError::InvalidFormat));
+    }
+
+    #[test]
+    fn test_decode_missing_encoded_text() {
+        // Missing the encoded text part - "=?UTF-8?B?=" only has charset and encoding
+        let input = "=?UTF-8?B?=";
+        let result = decode(input);
+        // After removing "=?" and "?=", we get "UTF-8?B"
+        // splitn(3, '?') gives ["UTF-8", "B"] - only 2 parts, missing encoded_text
+        assert_eq!(result, Err(DecodeError::InvalidFormat));
+    }
+
+    #[test]
     fn test_decode_qp_non_ascii_rejected() {
         // Non-ASCII characters should not appear directly in Q-encoded text
-        // They should be encoded as =XX sequences
         let input = "=?UTF-8?Q?café?="; // The 'é' should have been =C3=A9
         let result = decode(input);
-        assert!(result.is_err());
+        assert_eq!(result, Err(DecodeError::InvalidFormat));
+    }
+
+    #[test]
+    fn test_decode_qp_incomplete_hex_one_char() {
+        // Only one hex digit after =
+        let input = "=?UTF-8?Q?test=A?=";
+        let result = decode(input);
+        assert_eq!(result, Err(DecodeError::InvalidFormat));
+    }
+
+    #[test]
+    fn test_decode_qp_incomplete_hex_no_chars() {
+        // = at the end with no hex digits
+        let input = "=?UTF-8?Q?test=?=";
+        let result = decode(input);
+        assert_eq!(result, Err(DecodeError::InvalidFormat));
+    }
+
+    #[test]
+    fn test_decode_qp_invalid_hex() {
+        // Invalid hex digits (GG is not valid hex)
+        let input = "=?UTF-8?Q?test=GG?=";
+        let result = decode(input);
+        assert_eq!(result, Err(DecodeError::InvalidHex));
+    }
+
+    #[test]
+    fn test_decode_invalid_utf8_bytes() {
+        // Base64 encoded invalid UTF-8 sequence (0xFF 0xFE)
+        let input = "=?UTF-8?B?//4=?=";
+        let result = decode(input);
+        assert_eq!(result, Err(DecodeError::InvalidUtf8));
+    }
+
+    #[test]
+    fn test_decode_not_starting_with_marker() {
+        // Ends with ?= but doesn't start with =?
+        let input = "hello?=";
+        let decoded = decode(input).unwrap();
+        assert_eq!(decoded, "hello?=");
+    }
+
+    #[test]
+    fn test_decode_not_ending_with_marker() {
+        // Starts with =? but doesn't end with ?=
+        let input = "=?hello";
+        let decoded = decode(input).unwrap();
+        assert_eq!(decoded, "=?hello");
+    }
+
+    // ==================== DecodeError Display Tests ====================
+
+    #[test]
+    fn test_decode_error_display_invalid_format() {
+        let err = DecodeError::InvalidFormat;
+        assert_eq!(err.to_string(), "invalid RFC 2047 encoded-word format");
+    }
+
+    #[test]
+    fn test_decode_error_display_base64_error() {
+        let err = DecodeError::Base64Error;
+        assert_eq!(err.to_string(), "base64 decoding failed");
+    }
+
+    #[test]
+    fn test_decode_error_display_invalid_hex() {
+        let err = DecodeError::InvalidHex;
+        assert_eq!(err.to_string(), "invalid hex in quoted-printable encoding");
+    }
+
+    #[test]
+    fn test_decode_error_display_invalid_utf8() {
+        let err = DecodeError::InvalidUtf8;
+        assert_eq!(err.to_string(), "decoded bytes are not valid UTF-8");
+    }
+
+    #[test]
+    fn test_decode_error_display_unsupported_encoding() {
+        let err = DecodeError::UnsupportedEncoding;
+        assert_eq!(err.to_string(), "unsupported encoding type");
+    }
+
+    // ==================== DecodeError Trait Tests ====================
+
+    #[test]
+    fn test_decode_error_is_error() {
+        let err: &dyn std::error::Error = &DecodeError::InvalidFormat;
+        assert!(err.source().is_none());
+    }
+
+    #[test]
+    fn test_decode_error_debug() {
+        let err = DecodeError::InvalidFormat;
+        assert_eq!(format!("{err:?}"), "InvalidFormat");
+    }
+
+    #[test]
+    fn test_decode_error_clone() {
+        let err = DecodeError::Base64Error;
+        let cloned = err.clone();
+        assert_eq!(err, cloned);
+    }
+
+    #[test]
+    fn test_decode_error_eq() {
+        assert_eq!(DecodeError::InvalidFormat, DecodeError::InvalidFormat);
+        assert_ne!(DecodeError::InvalidFormat, DecodeError::Base64Error);
     }
 }
