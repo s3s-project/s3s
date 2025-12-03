@@ -173,9 +173,9 @@ async fn extract_full_body(content_length: Option<u64>, body: &mut Body) -> S3Re
     }
 
     let bytes = body
-        .store_all_unlimited()
+        .store_all_limited(http::MAX_XML_BODY_SIZE)
         .await
-        .map_err(|e| S3Error::with_source(S3ErrorCode::InternalError, e))?;
+        .map_err(|e| S3Error::with_source(S3ErrorCode::MaxMessageLengthExceeded, e))?;
 
     if bytes.is_empty().not() {
         let content_length = content_length.ok_or(S3ErrorCode::MissingContentLength)?;

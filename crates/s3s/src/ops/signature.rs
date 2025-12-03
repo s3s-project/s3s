@@ -13,7 +13,6 @@ use crate::sig_v4::AmzDate;
 use crate::sig_v4::UploadStream;
 use crate::sig_v4::{AuthorizationV4, CredentialV4, PostSignatureV4, PresignedUrlV4};
 use crate::stream::ByteStream as _;
-use crate::utils::crypto::hex_sha256_string;
 use crate::utils::is_base64_encoded;
 
 use std::mem;
@@ -385,22 +384,14 @@ impl SignatureContext<'_> {
                     return Err(s3_error!(NotImplemented, "AWS4-ECDSA-P256-SHA256 signing method is not implemented yet"));
                 }
                 None => {
+                    // When x-amz-content-sha256 header is missing, treat non-GET/HEAD requests
+                    // as having unsigned payload to avoid unbounded memory allocation.
+                    // This follows the streaming verification approach where signature errors
+                    // are detected when the stream is consumed.
                     if matches!(*self.req_method, Method::GET | Method::HEAD) {
                         sig_v4::create_canonical_request(method, uri_path, query_strings, &headers, sig_v4::Payload::Empty)
                     } else {
-                        let bytes = super::extract_full_body(self.content_length, self.req_body).await?;
-                        if bytes.is_empty() {
-                            sig_v4::create_canonical_request(method, uri_path, query_strings, &headers, sig_v4::Payload::Empty)
-                        } else {
-                            let payload_checksum = hex_sha256_string(&bytes);
-                            sig_v4::create_canonical_request(
-                                method,
-                                uri_path,
-                                query_strings,
-                                &headers,
-                                sig_v4::Payload::SingleChunk(&payload_checksum),
-                            )
-                        }
+                        sig_v4::create_canonical_request(method, uri_path, query_strings, &headers, sig_v4::Payload::Unsigned)
                     }
                 }
             };
