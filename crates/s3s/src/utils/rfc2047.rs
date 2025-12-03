@@ -304,11 +304,10 @@ mod tests {
 
     #[test]
     fn test_decode_missing_encoded_text() {
-        // Missing the encoded text part - "=?UTF-8?B?=" only has charset and encoding
+        // Input: "=?UTF-8?B?=" - after removing delimiters we get "UTF-8?B"
+        // This only has 2 parts when split by '?', but we need 3 (charset, encoding, encoded_text)
         let input = "=?UTF-8?B?=";
         let result = decode(input);
-        // After removing "=?" and "?=", we get "UTF-8?B"
-        // splitn(3, '?') gives ["UTF-8", "B"] - only 2 parts, missing encoded_text
         assert_eq!(result, Err(DecodeError::InvalidFormat));
     }
 
