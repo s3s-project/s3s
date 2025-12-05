@@ -1352,7 +1352,7 @@ mod tests {
         assert!(canonical_request.contains("x-amz-object-attributes:ETag,ObjectSize\n"));
         assert!(canonical_request.contains(";x-amz-object-attributes\n"));
         // Make sure the header name doesn't appear twice in SignedHeaders
-        let signed_headers_line = canonical_request.lines().find(|l| l.contains(";")).unwrap();
+        let signed_headers_line = canonical_request.lines().find(|l| l.contains(';')).unwrap();
         let count = signed_headers_line.matches("x-amz-object-attributes").count();
         assert_eq!(count, 1, "x-amz-object-attributes should appear only once in SignedHeaders");
     }
