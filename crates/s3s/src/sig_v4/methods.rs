@@ -166,8 +166,7 @@ pub fn create_canonical_request(
 
     {
         // <CanonicalHeaders>\n
-        // According to AWS SigV4 spec, multiple headers with the same name should be
-        // separate the values for a multi-value header using commas.
+        // According to AWS SigV4 spec, multiple headers with the same name should be combined with comma-separated values.
         // Reference: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-create-signed-request.html
 
         // FIXME: check HOST, Content-Type, x-amz-security-token, x-amz-content-sha256
