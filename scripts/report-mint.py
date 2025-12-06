@@ -89,7 +89,8 @@ if __name__ == "__main__":
     )
 
     passed_groups = [
-        "aws-sdk-go",
+        # FIXME: https://github.com/minio/mint/blob/master/run/core/aws-sdk-go-v2/main.go#L294 
+        # "aws-sdk-go",  version outdated
         "aws-sdk-ruby",
         "awscli",
         "minio-go",
