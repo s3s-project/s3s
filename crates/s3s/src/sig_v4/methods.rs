@@ -98,8 +98,6 @@ const EMPTY_STRING_SHA256_HASH: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4
 pub enum Payload<'a> {
     /// unsigned
     Unsigned,
-    /// empty
-    Empty,
     /// single chunk
     SingleChunk(&'a str),
     /// multiple chunks
@@ -108,6 +106,13 @@ pub enum Payload<'a> {
     MultipleChunksWithTrailer,
     /// unsigned streaming with trailing headers
     UnsignedMultipleChunksWithTrailer,
+}
+
+#[cfg(test)]
+impl Payload<'_> {
+    pub fn empty() -> Self {
+        Payload::SingleChunk(EMPTY_STRING_SHA256_HASH)
+    }
 }
 
 /// create canonical request
@@ -166,34 +171,62 @@ pub fn create_canonical_request(
 
     {
         // <CanonicalHeaders>\n
+        // According to AWS SigV4 spec, multiple headers with the same name should be combined with comma-separated values.
+        // Reference: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-create-signed-request.html
 
         // FIXME: check HOST, Content-Type, x-amz-security-token, x-amz-content-sha256
 
-        for &(name, value) in signed_headers.as_ref() {
+        let headers_slice = signed_headers.as_ref();
+        let mut i = 0;
+        while i < headers_slice.len() {
+            let (name, value) = headers_slice[i];
             if is_skipped_header(name) {
+                i += 1;
                 continue;
             }
+
             ans.push_str(name);
             ans.push(':');
             normalize_header_value(&mut ans, value);
+
+            // Combine values for headers with the same name (comma-separated)
+            let mut j = i + 1;
+            while j < headers_slice.len() && headers_slice[j].0 == name {
+                ans.push(',');
+                normalize_header_value(&mut ans, headers_slice[j].1);
+                j += 1;
+            }
+
             ans.push('\n');
+            i = j;
         }
         ans.push('\n');
     }
 
     {
         // <SignedHeaders>\n
+        // Each header name should only appear once, even if the header has multiple values
+        let headers_slice = signed_headers.as_ref();
         let mut first_flag = true;
-        for &(name, _) in signed_headers.as_ref() {
+        let mut i = 0;
+        while i < headers_slice.len() {
+            let (name, _) = headers_slice[i];
             if is_skipped_header(name) {
+                i += 1;
                 continue;
             }
+
             if first_flag {
                 first_flag = false;
             } else {
                 ans.push(';');
             }
             ans.push_str(name);
+
+            // Skip duplicate header names
+            while i < headers_slice.len() && headers_slice[i].0 == name {
+                i += 1;
+            }
         }
 
         ans.push('\n');
@@ -203,7 +236,6 @@ pub fn create_canonical_request(
         // <HashedPayload>
         match payload {
             Payload::Unsigned => ans.push_str("UNSIGNED-PAYLOAD"),
-            Payload::Empty => ans.push_str(EMPTY_STRING_SHA256_HASH),
             Payload::SingleChunk(checksum) => ans.push_str(checksum),
             Payload::MultipleChunks => ans.push_str("STREAMING-AWS4-HMAC-SHA256-PAYLOAD"),
             Payload::MultipleChunksWithTrailer => ans.push_str("STREAMING-AWS4-HMAC-SHA256-PAYLOAD-TRAILER"),
@@ -419,31 +451,59 @@ pub fn create_presigned_canonical_request(
     }
     {
         // <CanonicalHeaders>\n
+        // According to AWS SigV4 spec, multiple headers with the same name should be
+        // combined into a single header with values separated by commas.
 
-        for &(name, value) in signed_headers.as_ref() {
+        let headers_slice = signed_headers.as_ref();
+        let mut i = 0;
+        while i < headers_slice.len() {
+            let (name, value) = headers_slice[i];
             if is_skipped_header(name) {
+                i += 1;
                 continue;
             }
+
             ans.push_str(name);
             ans.push(':');
             normalize_header_value(&mut ans, value);
+
+            // Combine values for headers with the same name (comma-separated)
+            let mut j = i + 1;
+            while j < headers_slice.len() && headers_slice[j].0 == name {
+                ans.push(',');
+                normalize_header_value(&mut ans, headers_slice[j].1);
+                j += 1;
+            }
+
             ans.push('\n');
+            i = j;
         }
         ans.push('\n');
     }
     {
         // <SignedHeaders>\n
+        // Each header name should only appear once, even if the header has multiple values
+        let headers_slice = signed_headers.as_ref();
         let mut first_flag = true;
-        for &(name, _) in signed_headers.as_ref() {
+        let mut i = 0;
+        while i < headers_slice.len() {
+            let (name, _) = headers_slice[i];
             if is_skipped_header(name) {
+                i += 1;
                 continue;
             }
+
             if first_flag {
                 first_flag = false;
             } else {
                 ans.push(';');
             }
             ans.push_str(name);
+
+            // Skip duplicate header names
+            while i < headers_slice.len() && headers_slice[i].0 == name {
+                i += 1;
+            }
         }
 
         ans.push('\n');
@@ -483,7 +543,7 @@ mod tests {
         let method = Method::GET;
         let qs: &[(String, String)] = &[];
 
-        let canonical_request = create_canonical_request(&method, path, qs, &headers, Payload::Empty);
+        let canonical_request = create_canonical_request(&method, path, qs, &headers, Payload::empty());
 
         assert_eq!(
             canonical_request,
@@ -920,7 +980,7 @@ mod tests {
 
         let method = Method::GET;
 
-        let canonical_request = create_canonical_request(&method, path, query_strings, &headers, Payload::Empty);
+        let canonical_request = create_canonical_request(&method, path, query_strings, &headers, Payload::empty());
         assert_eq!(
             canonical_request,
             concat!(
@@ -972,7 +1032,7 @@ mod tests {
 
         let method = Method::GET;
 
-        let canonical_request = create_canonical_request(&method, path, query_strings, &headers, Payload::Empty);
+        let canonical_request = create_canonical_request(&method, path, query_strings, &headers, Payload::empty());
 
         assert_eq!(
             canonical_request,
@@ -1107,7 +1167,7 @@ mod tests {
 
         let signed_header_names = &["content-md5", "host", "x-amz-content-sha256", "x-amz-date"];
 
-        let payload = Payload::Empty;
+        let payload = Payload::empty();
         let date = AmzDate::parse(x_amz_date).unwrap();
         let region = "us-east-1";
         let service = "s3";
@@ -1320,5 +1380,89 @@ mod tests {
         // Verify signature can be computed (non-empty and valid hex)
         assert_eq!(signature.len(), 64);
         assert!(signature.chars().all(|c| c.is_ascii_hexdigit()));
+    fn multi_value_headers_combined_with_comma() {
+        // Test that multiple headers with the same name are combined into a single line
+        // with values separated by commas, as per AWS SigV4 spec.
+        // This matches the behavior of AWS SDK Go which sends multiple x-amz-object-attributes headers.
+        let headers = OrderedHeaders::from_slice_unchecked(&[
+            ("host", "127.0.0.1:9001"),
+            ("x-amz-content-sha256", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
+            ("x-amz-date", "20251205T145918Z"),
+            ("x-amz-object-attributes", "ETag"),
+            ("x-amz-object-attributes", "ObjectSize"),
+            ("x-amz-object-attributes", "StorageClass"),
+        ]);
+
+        let method = Method::GET;
+        let qs: &[(String, String)] = &[];
+
+        let canonical_request = create_canonical_request(&method, "/bucket/key", qs, &headers, Payload::empty());
+
+        // According to AWS SigV4 spec:
+        // - Multiple headers with the same name should be combined with comma-separated values
+        // - Each header name should appear only once in SignedHeaders
+        assert_eq!(
+            canonical_request,
+            concat!(
+                "GET\n",
+                "/bucket/key\n",
+                "\n",
+                "host:127.0.0.1:9001\n",
+                "x-amz-content-sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n",
+                "x-amz-date:20251205T145918Z\n",
+                "x-amz-object-attributes:ETag,ObjectSize,StorageClass\n",
+                "\n",
+                "host;x-amz-content-sha256;x-amz-date;x-amz-object-attributes\n",
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            )
+        );
+    }
+
+    #[test]
+    fn multi_value_headers_presigned_url() {
+        // Test that presigned URL canonical request also handles multi-value headers correctly
+        let headers = OrderedHeaders::from_slice_unchecked(&[
+            ("host", "s3.amazonaws.com"),
+            ("x-amz-object-attributes", "ETag"),
+            ("x-amz-object-attributes", "ObjectSize"),
+        ]);
+
+        let method = Method::GET;
+        let qs: &[(String, String)] = &[
+            ("X-Amz-Algorithm".to_string(), "AWS4-HMAC-SHA256".to_string()),
+            (
+                "X-Amz-Credential".to_string(),
+                "AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request".to_string(),
+            ),
+        ];
+
+        let canonical_request = create_presigned_canonical_request(&method, "/bucket/key", qs, &headers);
+
+        // Verify that x-amz-object-attributes values are comma-separated
+        // and the header name appears only once in SignedHeaders
+        assert!(canonical_request.contains("x-amz-object-attributes:ETag,ObjectSize\n"));
+        assert!(canonical_request.contains(";x-amz-object-attributes\n"));
+        // Make sure the header name doesn't appear twice in SignedHeaders
+        let signed_headers_line = canonical_request.lines().find(|l| l.contains(';')).unwrap();
+        let count = signed_headers_line.matches("x-amz-object-attributes").count();
+        assert_eq!(count, 1, "x-amz-object-attributes should appear only once in SignedHeaders");
+    }
+
+    #[test]
+    fn multi_value_headers_with_whitespace_normalization() {
+        // Test that multi-value headers also have their values normalized (whitespace trimmed/collapsed)
+        let headers = OrderedHeaders::from_slice_unchecked(&[
+            ("host", "s3.amazonaws.com"),
+            ("x-amz-meta-custom", "  value1  "),
+            ("x-amz-meta-custom", "value2   with   spaces"),
+        ]);
+
+        let method = Method::GET;
+        let qs: &[(String, String)] = &[];
+
+        let canonical_request = create_canonical_request(&method, "/bucket/key", qs, &headers, Payload::empty());
+
+        // Both values should be normalized and combined with comma
+        assert!(canonical_request.contains("x-amz-meta-custom:value1,value2 with spaces\n"));
     }
 }
