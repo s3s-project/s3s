@@ -125,7 +125,7 @@ impl ETag {
 
     /// Compares two `ETags` and returns the match result.
     ///
-    /// This is useful when you need to know both whether `ETags`gs match AND
+    /// This is useful when you need to know both whether `ETags` match AND
     /// the strength of that match. For simple conditional checks, prefer
     /// [`strong_compare`](Self::strong_compare) or [`weak_compare`](Self::weak_compare).
     ///
