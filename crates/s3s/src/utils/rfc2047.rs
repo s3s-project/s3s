@@ -4,6 +4,8 @@
 
 #![allow(dead_code)] // Functions will be used when integrating with http/de.rs and http/ser.rs
 
+use std::borrow::Cow;
+
 /// Checks if a string contains only ASCII characters that are valid in HTTP header values.
 fn is_ascii_header_safe(s: &str) -> bool {
     s.bytes().all(|b| b.is_ascii() && b >= 0x20 && b != 0x7f)
@@ -11,13 +13,13 @@ fn is_ascii_header_safe(s: &str) -> bool {
 
 /// Encodes a string using RFC 2047 Base64 encoding if it contains non-ASCII characters.
 /// Returns the original string if it only contains ASCII characters.
-pub fn encode(s: &str) -> String {
+pub fn encode(s: &str) -> Cow<'_, str> {
     if is_ascii_header_safe(s) {
-        return s.to_owned();
+        return Cow::Borrowed(s);
     }
     // Use UTF-8 charset with Base64 encoding
     let encoded = base64_simd::STANDARD.encode_to_string(s.as_bytes());
-    format!("=?UTF-8?B?{encoded}?=")
+    Cow::Owned(format!("=?UTF-8?B?{encoded}?="))
 }
 
 /// Decodes an RFC 2047 encoded-word string.
@@ -29,12 +31,12 @@ pub fn encode(s: &str) -> String {
 /// it attempts to decode the bytes as UTF-8, which may fail if the original
 /// encoding used a different character set. A full implementation would need
 /// to support additional charsets like ISO-8859-1, etc.
-pub fn decode(s: &str) -> Result<String, DecodeError> {
+pub fn decode(s: &str) -> Result<Cow<'_, str>, DecodeError> {
     // Check if this looks like an RFC 2047 encoded word
     let s = s.trim();
     if !s.starts_with("=?") || !s.ends_with("?=") {
         // Not encoded, return as-is
-        return Ok(s.to_owned());
+        return Ok(Cow::Borrowed(s));
     }
 
     // Parse the encoded word: =?charset?encoding?encoded_text?=
@@ -57,8 +59,12 @@ pub fn decode(s: &str) -> Result<String, DecodeError> {
     // Convert to string based on charset
     // Note: For non-UTF-8 charsets, we attempt UTF-8 decoding which may fail
     match charset.to_ascii_uppercase().as_str() {
-        "UTF-8" | "UTF8" => String::from_utf8(decoded_bytes).map_err(|_| DecodeError::InvalidUtf8),
-        _ => String::from_utf8(decoded_bytes).map_err(|_| DecodeError::InvalidUtf8),
+        "UTF-8" | "UTF8" => String::from_utf8(decoded_bytes)
+            .map(Cow::Owned)
+            .map_err(|_| DecodeError::InvalidUtf8),
+        _ => String::from_utf8(decoded_bytes)
+            .map(Cow::Owned)
+            .map_err(|_| DecodeError::InvalidUtf8),
     }
 }
 
@@ -98,33 +104,24 @@ fn decode_quoted_printable(s: &str) -> Result<Vec<u8>, DecodeError> {
 }
 
 /// Errors that can occur during RFC 2047 decoding.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum DecodeError {
     /// The encoded word format is invalid.
+    #[error("invalid RFC 2047 encoded-word format")]
     InvalidFormat,
     /// Base64 decoding failed.
+    #[error("base64 decoding failed")]
     Base64Error,
     /// Hex decoding failed in Quoted-Printable.
+    #[error("invalid hex in quoted-printable encoding")]
     InvalidHex,
     /// The decoded bytes are not valid UTF-8.
+    #[error("decoded bytes are not valid UTF-8")]
     InvalidUtf8,
     /// The encoding type is not supported.
+    #[error("unsupported encoding type")]
     UnsupportedEncoding,
 }
-
-impl std::fmt::Display for DecodeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::InvalidFormat => write!(f, "invalid RFC 2047 encoded-word format"),
-            Self::Base64Error => write!(f, "base64 decoding failed"),
-            Self::InvalidHex => write!(f, "invalid hex in quoted-printable encoding"),
-            Self::InvalidUtf8 => write!(f, "decoded bytes are not valid UTF-8"),
-            Self::UnsupportedEncoding => write!(f, "unsupported encoding type"),
-        }
-    }
-}
-
-impl std::error::Error for DecodeError {}
 
 #[cfg(test)]
 mod tests {
