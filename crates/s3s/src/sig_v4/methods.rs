@@ -1330,7 +1330,7 @@ mod tests {
         let string_to_sign = create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
         let signature = calculate_signature(&string_to_sign, &secret_access_key, &amz_date, "us-east-1", "s3");
 
-        // Fixed signature value observed when computing with test vectors
+        // Signature value derived from the above test inputs (not from official AWS test vectors)
         assert_eq!(signature, "f4db56459304dafaa603a99a23c6bea8821890259a65c18ff503a4a72a80efd9");
     }
 
@@ -1376,7 +1376,7 @@ mod tests {
         let string_to_sign = create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
         let signature = calculate_signature(&string_to_sign, &secret_access_key, &amz_date, "us-east-1", "s3");
 
-        // Fixed signature value observed when computing with test vectors
+        // Signature value derived from the test inputs above; not from official AWS test vectors.
         assert_eq!(signature, "fd31b71961609f4b313497cb07ab0aedd268863bd547cc198db23cf04b8f663d");
     }
 
