@@ -110,12 +110,14 @@ where
     }
 }
 
-impl<S> ByteStream for StreamWrapper<S>
+impl<S, E> ByteStream for StreamWrapper<S>
 where
-    StreamWrapper<S>: Stream<Item = Result<Bytes, StdError>>,
+    S: Stream<Item = Result<Bytes, E>> + Send + Sync + 'static,
+    E: std::error::Error + Send + Sync + 'static,
 {
     fn remaining_length(&self) -> RemainingLength {
-        RemainingLength::unknown()
+        let (lower, upper) = self.inner.size_hint();
+        RemainingLength::new(lower, upper)
     }
 }
 
