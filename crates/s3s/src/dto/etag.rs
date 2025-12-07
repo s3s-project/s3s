@@ -99,8 +99,7 @@ impl ETag {
     /// Strong comparison: two `ETags` match only if both are strong and have the same value.
     ///
     /// According to RFC 9110 §8.8.3:
-    /// > Two entity-tags are equivalent if both are not weak and their
-    /// > opaque-tags match character-by-character.
+    /// > Two entity tags are equivalent if both are not weak and their opaque-tags match character-by-character.
     ///
     /// Used for `If-Match` conditions and Range requests.
     #[must_use]
@@ -114,8 +113,8 @@ impl ETag {
     /// Weak comparison: two `ETags` match if their values are the same, regardless of weakness.
     ///
     /// According to RFC 9110 §8.8.3:
-    /// > Two entity-tags are equivalent if their opaque-tags match
-    /// > character-by-character, regardless of either or both being tagged as "weak".
+    /// > Two entity tags are equivalent if their opaque-tags match character-by-character,
+    /// > regardless of either or both being tagged as "weak".
     ///
     /// Used for `If-None-Match` conditions.
     #[must_use]
