@@ -34,13 +34,13 @@ pub enum ParseETagError {
 ///
 /// See RFC 7232 §2.3.2 for strong and weak comparison semantics.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ETagMatch {
+pub enum ETagComparison {
     /// Both `ETags` are strong and have the same value.
-    Strong,
+    StrongMatch,
     /// `ETags` have the same value but at least one is weak.
-    Weak,
+    WeakMatch,
     /// `ETags` have different values.
-    NotEqual,
+    NoMatch,
 }
 
 impl ETag {
@@ -130,19 +130,19 @@ impl ETag {
     /// [`strong_cmp`](Self::strong_cmp) or [`weak_cmp`](Self::weak_cmp).
     ///
     /// Returns:
-    /// - [`ETagMatch::Strong`] if both are strong `ETags` with the same value
-    /// - [`ETagMatch::Weak`] if values are equal but at least one is weak
-    /// - [`ETagMatch::NotEqual`] if values are different
+    /// - [`ETagComparison::StrongMatch`] if both are strong `ETags` with the same value
+    /// - [`ETagComparison::WeakMatch`] if values are equal but at least one is weak
+    /// - [`ETagComparison::NoMatch`] if values are different
     ///
     /// This method combines both strong and weak comparison semantics from RFC 7232 §2.3.2.
     #[must_use]
-    pub fn compare(&self, other: &Self) -> ETagMatch {
+    pub fn compare(&self, other: &Self) -> ETagComparison {
         if self.value() != other.value() {
-            return ETagMatch::NotEqual;
+            return ETagComparison::NoMatch;
         }
         match (self, other) {
-            (ETag::Strong(_), ETag::Strong(_)) => ETagMatch::Strong,
-            _ => ETagMatch::Weak,
+            (ETag::Strong(_), ETag::Strong(_)) => ETagComparison::StrongMatch,
+            _ => ETagComparison::WeakMatch,
         }
     }
 }
@@ -213,7 +213,7 @@ impl FromStr for ETag {
 
 #[cfg(test)]
 mod tests {
-    use super::{ETag, ETagMatch, ParseETagError};
+    use super::{ETag, ETagComparison, ParseETagError};
 
     #[test]
     fn strong_value_and_header_ok() {
@@ -422,8 +422,8 @@ mod tests {
     fn compare_strong_match() {
         let a = ETag::Strong("abc".to_string());
         let b = ETag::Strong("abc".to_string());
-        assert_eq!(a.compare(&b), ETagMatch::Strong);
-        assert_eq!(b.compare(&a), ETagMatch::Strong);
+        assert_eq!(a.compare(&b), ETagComparison::StrongMatch);
+        assert_eq!(b.compare(&a), ETagComparison::StrongMatch);
     }
 
     #[test]
@@ -433,10 +433,10 @@ mod tests {
         let w2 = ETag::Weak("abc".to_string());
 
         // Strong vs Weak => Weak match
-        assert_eq!(s.compare(&w), ETagMatch::Weak);
-        assert_eq!(w.compare(&s), ETagMatch::Weak);
+        assert_eq!(s.compare(&w), ETagComparison::WeakMatch);
+        assert_eq!(w.compare(&s), ETagComparison::WeakMatch);
         // Weak vs Weak => Weak match
-        assert_eq!(w.compare(&w2), ETagMatch::Weak);
+        assert_eq!(w.compare(&w2), ETagComparison::WeakMatch);
     }
 
     #[test]
@@ -447,19 +447,19 @@ mod tests {
         let w2 = ETag::Weak("xyz".to_string());
 
         // Strong vs Strong (different values)
-        assert_eq!(s1.compare(&s2), ETagMatch::NotEqual);
-        assert_eq!(s2.compare(&s1), ETagMatch::NotEqual);
+        assert_eq!(s1.compare(&s2), ETagComparison::NoMatch);
+        assert_eq!(s2.compare(&s1), ETagComparison::NoMatch);
 
         // Strong vs Weak (different values)
-        assert_eq!(s1.compare(&w2), ETagMatch::NotEqual);
-        assert_eq!(s2.compare(&w1), ETagMatch::NotEqual);
+        assert_eq!(s1.compare(&w2), ETagComparison::NoMatch);
+        assert_eq!(s2.compare(&w1), ETagComparison::NoMatch);
 
         // Weak vs Strong (different values)
-        assert_eq!(w1.compare(&s2), ETagMatch::NotEqual);
-        assert_eq!(w2.compare(&s1), ETagMatch::NotEqual);
+        assert_eq!(w1.compare(&s2), ETagComparison::NoMatch);
+        assert_eq!(w2.compare(&s1), ETagComparison::NoMatch);
 
         // Weak vs Weak (different values)
-        assert_eq!(w1.compare(&w2), ETagMatch::NotEqual);
-        assert_eq!(w2.compare(&w1), ETagMatch::NotEqual);
+        assert_eq!(w1.compare(&w2), ETagComparison::NoMatch);
+        assert_eq!(w2.compare(&w1), ETagComparison::NoMatch);
     }
 }
