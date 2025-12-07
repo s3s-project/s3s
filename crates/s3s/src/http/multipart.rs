@@ -28,6 +28,11 @@ const MAX_FORM_FIELDS_SIZE: usize = 20 * 1024 * 1024;
 /// This prevents `DoS` attacks via excessive part count
 const MAX_FORM_PARTS: usize = 1000;
 
+/// Maximum size for boundary matching buffer in FileStream
+/// This buffer accumulates bytes when looking for a boundary pattern that spans chunks
+/// Conservative limit: 64KB should be more than enough for any reasonable boundary pattern
+const MAX_BOUNDARY_BUFFER_SIZE: usize = 64 * 1024;
+
 /// Maximum file size for POST object (5 GB - S3 limit for single PUT)
 /// This prevents `DoS` attacks via oversized file uploads
 /// Note: S3 has a 5GB limit for single PUT object, so this is a reasonable default
@@ -309,6 +314,9 @@ pub enum FileStreamError {
     /// IO error
     #[error("FileStreamError: Underlying: {0}")]
     Underlying(StdError),
+    /// Boundary buffer too large
+    #[error("FileStreamError: BoundaryBufferTooLarge: size {0} exceeds limit {1}")]
+    BoundaryBufferTooLarge(usize, usize),
 }
 
 /// File stream
@@ -396,7 +404,16 @@ impl FileStream {
                         match body.as_mut().next().await {
                             None => return Err(FileStreamError::Incomplete),
                             Some(Err(e)) => return Err(FileStreamError::Underlying(e)),
-                            Some(Ok(b)) => buf.extend_from_slice(&b),
+                            Some(Ok(b)) => {
+                                // Check buffer size limit before extending
+                                if buf.len().saturating_add(b.len()) > MAX_BOUNDARY_BUFFER_SIZE {
+                                    return Err(FileStreamError::BoundaryBufferTooLarge(
+                                        buf.len().saturating_add(b.len()),
+                                        MAX_BOUNDARY_BUFFER_SIZE,
+                                    ));
+                                }
+                                buf.extend_from_slice(&b);
+                            }
                         }
                         bytes = Bytes::from(mem::take(&mut buf));
                         state = 2;

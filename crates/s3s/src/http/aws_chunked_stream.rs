@@ -22,6 +22,20 @@ use hyper::body::{Buf, Bytes};
 use memchr::memchr;
 use transform_stream::AsyncTryStream;
 
+/// Maximum size for chunk metadata line (chunk-size + optional signature)
+/// Format: "{hex-size};chunk-signature={64-hex-chars}\r\n"
+/// Conservative limit: 1KB should be plenty for any valid chunk metadata
+const MAX_CHUNK_META_SIZE: usize = 1024;
+
+/// Maximum size for trailing headers block
+/// S3 trailing headers are typically checksums and metadata
+/// Conservative limit: 16KB for all trailing headers
+const MAX_TRAILERS_SIZE: usize = 16 * 1024;
+
+/// Maximum number of trailing headers
+/// Prevents DoS via excessive header count
+const MAX_TRAILER_HEADERS: usize = 100;
+
 /// Aws chunked stream
 pub struct AwsChunkedStream {
     /// inner
@@ -73,6 +87,15 @@ pub enum AwsChunkedStreamError {
     /// Incomplete stream
     #[error("AwsChunkedStreamError: Incomplete")]
     Incomplete,
+    /// Chunk metadata too large
+    #[error("AwsChunkedStreamError: ChunkMetaTooLarge: size {0} exceeds limit {1}")]
+    ChunkMetaTooLarge(usize, usize),
+    /// Trailers too large
+    #[error("AwsChunkedStreamError: TrailersTooLarge: size {0} exceeds limit {1}")]
+    TrailersTooLarge(usize, usize),
+    /// Too many trailer headers
+    #[error("AwsChunkedStreamError: TooManyTrailerHeaders: count {0} exceeds limit {1}")]
+    TooManyTrailerHeaders(usize, usize),
 }
 
 /// Chunk meta
@@ -256,18 +279,29 @@ impl AwsChunkedStream {
     where
         S: Stream<Item = Result<Bytes, StdError>> + Send + 'static,
     {
-        // Accumulate all remaining bytes until EOF.
+        // Accumulate all remaining bytes until EOF, with size limit.
         let mut buf: Vec<u8> = Vec::new();
+        let mut total_size: usize = 0;
 
         if !prev_bytes.is_empty() {
+            total_size = prev_bytes.len();
+            if total_size > MAX_TRAILERS_SIZE {
+                return Some(Err(AwsChunkedStreamError::TrailersTooLarge(total_size, MAX_TRAILERS_SIZE)));
+            }
             buf.extend_from_slice(prev_bytes.as_ref());
         }
 
-        // Read to end
+        // Read to end with size limit
         while let Some(next) = body.next().await {
             match next {
                 Err(e) => return Some(Err(AwsChunkedStreamError::Underlying(e))),
-                Ok(bytes) => buf.extend_from_slice(bytes.as_ref()),
+                Ok(bytes) => {
+                    total_size = total_size.saturating_add(bytes.len());
+                    if total_size > MAX_TRAILERS_SIZE {
+                        return Some(Err(AwsChunkedStreamError::TrailersTooLarge(total_size, MAX_TRAILERS_SIZE)));
+                    }
+                    buf.extend_from_slice(bytes.as_ref());
+                }
             }
         }
 
@@ -306,6 +340,7 @@ impl AwsChunkedStream {
         // Split into lines by `\n`. Accept optional `\r` before `\n` and also handle last line without `\n`.
         let mut entries: Vec<(String, String)> = Vec::new();
         let mut provided_signature: Option<Vec<u8>> = None;
+        let mut header_count: usize = 0;
 
         let mut start = 0usize;
         for i in 0..=buf.len() {
@@ -322,6 +357,12 @@ impl AwsChunkedStream {
 
                 if line.is_empty() {
                     continue;
+                }
+
+                // Check header count limit
+                header_count += 1;
+                if header_count > MAX_TRAILER_HEADERS {
+                    return Err(AwsChunkedStreamError::TooManyTrailerHeaders(header_count, MAX_TRAILER_HEADERS));
                 }
 
                 // Find ':'
@@ -354,8 +395,16 @@ impl AwsChunkedStream {
         entries.sort_by(|a, b| a.0.cmp(&b.0));
 
         // Build canonical bytes: name:value\n
+        // Check canonical buffer size as we build it
         let mut canonical: Vec<u8> = Vec::new();
         for (n, v) in &entries {
+            let entry_size = n.len() + 1 + v.len() + 1; // name + ':' + value + '\n'
+            if canonical.len().saturating_add(entry_size) > MAX_TRAILERS_SIZE {
+                return Err(AwsChunkedStreamError::TrailersTooLarge(
+                    canonical.len().saturating_add(entry_size),
+                    MAX_TRAILERS_SIZE,
+                ));
+            }
             canonical.extend_from_slice(n.as_bytes());
             canonical.push(b':');
             canonical.extend_from_slice(v.as_bytes());
@@ -372,30 +421,40 @@ impl AwsChunkedStream {
     {
         buf.clear();
 
-        let mut push_meta_bytes = |mut bytes: Bytes| {
+        let mut push_meta_bytes = |mut bytes: Bytes| -> Result<Option<Bytes>, StdError> {
             if let Some(idx) = memchr(b'\n', bytes.as_ref()) {
                 let len = idx.wrapping_add(1); // assume: idx < bytes.len()
                 let leading = bytes.split_to(len);
                 buf.extend_from_slice(leading.as_ref());
-                return Some(bytes);
+                return Ok(Some(bytes));
+            }
+
+            // Check size limit before extending
+            if buf.len().saturating_add(bytes.len()) > MAX_CHUNK_META_SIZE {
+                return Err(Box::new(AwsChunkedStreamError::ChunkMetaTooLarge(
+                    buf.len().saturating_add(bytes.len()),
+                    MAX_CHUNK_META_SIZE,
+                )));
             }
 
             buf.extend_from_slice(bytes.as_ref());
-            None
+            Ok(None)
         };
 
-        if let Some(remaining_bytes) = push_meta_bytes(prev_bytes) {
-            return Some(Ok(remaining_bytes));
+        match push_meta_bytes(prev_bytes) {
+            Err(e) => return Some(Err(e)),
+            Ok(Some(remaining_bytes)) => return Some(Ok(remaining_bytes)),
+            Ok(None) => {}
         }
 
         loop {
             match body.next().await? {
                 Err(e) => return Some(Err(e)),
-                Ok(bytes) => {
-                    if let Some(remaining_bytes) = push_meta_bytes(bytes) {
-                        return Some(Ok(remaining_bytes));
-                    }
-                }
+                Ok(bytes) => match push_meta_bytes(bytes) {
+                    Err(e) => return Some(Err(e)),
+                    Ok(Some(remaining_bytes)) => return Some(Ok(remaining_bytes)),
+                    Ok(None) => {}
+                },
             }
         }
     }
@@ -757,5 +816,67 @@ mod tests {
         assert_eq!(trailers.len(), 2);
         assert_eq!(trailers.get("x-amz-meta-a").unwrap(), &HeaderValue::from_static("1"));
         assert_eq!(trailers.get("x-amz-meta-b").unwrap(), &HeaderValue::from_static("2"));
+    }
+
+    #[tokio::test]
+    async fn test_limits_constants_exist() {
+        // This test verifies that the limit constants are defined and have reasonable values
+        assert!(MAX_CHUNK_META_SIZE > 0);
+        assert!(MAX_CHUNK_META_SIZE <= 10 * 1024); // Should be reasonable, less than 10KB
+        assert!(MAX_TRAILERS_SIZE > 0);
+        assert!(MAX_TRAILERS_SIZE <= 100 * 1024); // Should be reasonable, less than 100KB
+        assert!(MAX_TRAILER_HEADERS > 0);
+        assert!(MAX_TRAILER_HEADERS <= 1000); // Should be reasonable
+    }
+
+    #[tokio::test]
+    async fn test_normal_sized_trailers_work() {
+        // Verify that normal-sized trailers work fine (well within limits)
+        let chunk1_meta = b"3\r\n";
+        let chunk2_meta = b"0\r\n";
+        
+        let chunk1_data = b"abc";
+        let decoded_content_length = chunk1_data.len();
+        
+        let chunk1 = join(&[chunk1_meta, chunk1_data.as_ref(), b"\r\n"]);
+        let chunk2 = join(&[chunk2_meta, b"\r\n"]);
+        
+        // Create trailers with reasonable number of headers (50, well under limit of 100)
+        let mut trailers = Vec::new();
+        for i in 0..50 {
+            trailers.extend_from_slice(format!("x-amz-meta-{}: value{}\r\n", i, i).as_bytes());
+        }
+        
+        let chunk_results: Vec<Result<Bytes, _>> = vec![Ok(chunk1), Ok(chunk2), Ok(Bytes::from(trailers))];
+        
+        let seed_signature = "deadbeef";
+        let timestamp = "20130524T000000Z";
+        let region = "us-east-1";
+        let service = "s3";
+        let secret_access_key = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+        let date = AmzDate::parse(timestamp).unwrap();
+        
+        let stream = futures::stream::iter(chunk_results);
+        let mut chunked_stream = AwsChunkedStream::new(
+            stream,
+            seed_signature.into(),
+            date,
+            region.into(),
+            service.into(),
+            secret_access_key.into(),
+            decoded_content_length,
+            true, // unsigned
+        );
+        
+        let ans1 = chunked_stream.next().await.unwrap();
+        assert_eq!(ans1.unwrap(), chunk1_data.as_slice());
+        
+        // Should complete successfully
+        assert!(chunked_stream.next().await.is_none());
+        
+        // Verify trailers were parsed
+        let handle = chunked_stream.trailing_headers_handle();
+        let trailers = handle.take().expect("trailers present");
+        assert_eq!(trailers.len(), 50);
     }
 }
