@@ -11,8 +11,9 @@ fn is_ascii_header_safe(s: &str) -> bool {
     s.bytes().all(|b| b.is_ascii() && b >= 0x20 && b != 0x7f)
 }
 
-/// Encodes a string using RFC 2047 Base64 encoding if it contains non-ASCII characters.
-/// Returns the original string if it only contains ASCII characters.
+/// Encodes a string using RFC 2047 Base64 encoding if it contains non-ASCII
+/// or control characters. Returns the original string if it only contains
+/// ASCII printable characters (0x20-0x7E excluding 0x7F).
 pub fn encode(s: &str) -> Cow<'_, str> {
     if is_ascii_header_safe(s) {
         return Cow::Borrowed(s);
@@ -58,14 +59,11 @@ pub fn decode(s: &str) -> Result<Cow<'_, str>, DecodeError> {
 
     // Convert to string based on charset
     // Note: For non-UTF-8 charsets, we attempt UTF-8 decoding which may fail
-    match charset.to_ascii_uppercase().as_str() {
-        "UTF-8" | "UTF8" => String::from_utf8(decoded_bytes)
-            .map(Cow::Owned)
-            .map_err(|_| DecodeError::InvalidUtf8),
-        _ => String::from_utf8(decoded_bytes)
-            .map(Cow::Owned)
-            .map_err(|_| DecodeError::InvalidUtf8),
-    }
+    // Convert to string based on charset
+    // Note: For non-UTF-8 charsets, we attempt UTF-8 decoding which may fail
+    String::from_utf8(decoded_bytes)
+        .map(Cow::Owned)
+        .map_err(|_| DecodeError::InvalidUtf8)
 }
 
 /// Decodes a Quoted-Printable encoded string according to RFC 2047.
@@ -81,8 +79,9 @@ fn decode_quoted_printable(s: &str) -> Result<Vec<u8>, DecodeError> {
                 // Hex-encoded byte
                 let h1 = chars.next().ok_or(DecodeError::InvalidFormat)?;
                 let h2 = chars.next().ok_or(DecodeError::InvalidFormat)?;
-                let hex_str: String = [h1, h2].iter().collect();
-                let byte = u8::from_str_radix(&hex_str, 16).map_err(|_| DecodeError::InvalidHex)?;
+                let high = h1.to_digit(16).ok_or(DecodeError::InvalidHex)? as u8;
+                let low = h2.to_digit(16).ok_or(DecodeError::InvalidHex)? as u8;
+                let byte = (high << 4) | low;
                 result.push(byte);
             }
             '_' => {
