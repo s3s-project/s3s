@@ -293,23 +293,6 @@ impl Body {
         Ok(bytes)
     }
 
-    /// Stores all bytes in memory.
-    ///
-    /// WARNING: This function may cause **unbounded memory allocation**.
-    ///
-    /// # Errors
-    /// Returns an error if `hyper` fails to read the body.
-    pub async fn store_all_unlimited(&mut self) -> Result<Bytes, StdError> {
-        if let Some(bytes) = self.bytes() {
-            return Ok(bytes);
-        }
-        let body = mem::take(self);
-        let bytes: Bytes = http_body_util::BodyExt::collect(body).await?.to_bytes();
-        // Store bytes in self (Bytes::clone is O(1) due to reference counting)
-        *self = Self::from(bytes.clone());
-        Ok(bytes)
-    }
-
     pub fn bytes(&self) -> Option<Bytes> {
         match &self.kind {
             Kind::Empty => Some(Bytes::new()),

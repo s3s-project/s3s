@@ -98,8 +98,6 @@ const EMPTY_STRING_SHA256_HASH: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4
 pub enum Payload<'a> {
     /// unsigned
     Unsigned,
-    /// empty
-    Empty,
     /// single chunk
     SingleChunk(&'a str),
     /// multiple chunks
@@ -108,6 +106,13 @@ pub enum Payload<'a> {
     MultipleChunksWithTrailer,
     /// unsigned streaming with trailing headers
     UnsignedMultipleChunksWithTrailer,
+}
+
+#[cfg(test)]
+impl Payload<'_> {
+    pub fn empty() -> Self {
+        Payload::SingleChunk(EMPTY_STRING_SHA256_HASH)
+    }
 }
 
 /// create canonical request
@@ -203,7 +208,6 @@ pub fn create_canonical_request(
         // <HashedPayload>
         match payload {
             Payload::Unsigned => ans.push_str("UNSIGNED-PAYLOAD"),
-            Payload::Empty => ans.push_str(EMPTY_STRING_SHA256_HASH),
             Payload::SingleChunk(checksum) => ans.push_str(checksum),
             Payload::MultipleChunks => ans.push_str("STREAMING-AWS4-HMAC-SHA256-PAYLOAD"),
             Payload::MultipleChunksWithTrailer => ans.push_str("STREAMING-AWS4-HMAC-SHA256-PAYLOAD-TRAILER"),
@@ -483,7 +487,7 @@ mod tests {
         let method = Method::GET;
         let qs: &[(String, String)] = &[];
 
-        let canonical_request = create_canonical_request(&method, path, qs, &headers, Payload::Empty);
+        let canonical_request = create_canonical_request(&method, path, qs, &headers, Payload::empty());
 
         assert_eq!(
             canonical_request,
@@ -920,7 +924,7 @@ mod tests {
 
         let method = Method::GET;
 
-        let canonical_request = create_canonical_request(&method, path, query_strings, &headers, Payload::Empty);
+        let canonical_request = create_canonical_request(&method, path, query_strings, &headers, Payload::empty());
         assert_eq!(
             canonical_request,
             concat!(
@@ -972,7 +976,7 @@ mod tests {
 
         let method = Method::GET;
 
-        let canonical_request = create_canonical_request(&method, path, query_strings, &headers, Payload::Empty);
+        let canonical_request = create_canonical_request(&method, path, query_strings, &headers, Payload::empty());
 
         assert_eq!(
             canonical_request,
@@ -1107,7 +1111,7 @@ mod tests {
 
         let signed_header_names = &["content-md5", "host", "x-amz-content-sha256", "x-amz-date"];
 
-        let payload = Payload::Empty;
+        let payload = Payload::empty();
         let date = AmzDate::parse(x_amz_date).unwrap();
         let region = "us-east-1";
         let service = "s3";
