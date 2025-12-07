@@ -1,7 +1,5 @@
 use crate::case;
 
-use aws_sdk_s3::presigning::PresigningConfig;
-use aws_sdk_s3::types::ChecksumAlgorithm;
 use s3s_test::Result;
 use s3s_test::TestFixture;
 use s3s_test::TestSuite;
@@ -11,7 +9,10 @@ use std::ops::Not;
 use std::sync::Arc;
 use std::time::Duration;
 
+use aws_sdk_s3::presigning::PresigningConfig;
 use aws_sdk_s3::primitives::ByteStream;
+use aws_sdk_s3::types::ChecksumAlgorithm;
+
 use tracing::debug;
 
 pub fn register(tcx: &mut TestContext) {

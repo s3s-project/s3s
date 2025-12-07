@@ -1330,9 +1330,8 @@ mod tests {
         let string_to_sign = create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
         let signature = calculate_signature(&string_to_sign, &secret_access_key, &amz_date, "us-east-1", "s3");
 
-        // Verify signature can be computed (non-empty and valid hex)
-        assert_eq!(signature.len(), 64);
-        assert!(signature.chars().all(|c| c.is_ascii_hexdigit()));
+        // Fixed signature value observed when computing with test vectors
+        assert_eq!(signature, "f4db56459304dafaa603a99a23c6bea8821890259a65c18ff503a4a72a80efd9");
     }
 
     #[test]
@@ -1377,9 +1376,11 @@ mod tests {
         let string_to_sign = create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
         let signature = calculate_signature(&string_to_sign, &secret_access_key, &amz_date, "us-east-1", "s3");
 
-        // Verify signature can be computed (non-empty and valid hex)
-        assert_eq!(signature.len(), 64);
-        assert!(signature.chars().all(|c| c.is_ascii_hexdigit()));
+        // Fixed signature value observed when computing with test vectors
+        assert_eq!(signature, "fd31b71961609f4b313497cb07ab0aedd268863bd547cc198db23cf04b8f663d");
+    }
+
+    #[test]
     fn multi_value_headers_combined_with_comma() {
         // Test that multiple headers with the same name are combined into a single line
         // with values separated by commas, as per AWS SigV4 spec.
