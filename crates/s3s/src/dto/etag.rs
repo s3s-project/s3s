@@ -343,7 +343,7 @@ mod tests {
         let etag = ETag::Strong("abc".to_string());
         let s = etag.as_str();
         assert_eq!(s, "abc");
-        let ref expected = String::from("abc");
+        let expected = &String::from("abc");
         assert_eq!(&etag == expected, true);
     }
 }
