@@ -82,6 +82,42 @@ impl ETag {
             ETag::Strong(_) => None,
         }
     }
+
+    /// Returns the raw value as a string slice (alias for `value()`).
+    #[must_use]
+    pub fn to_str(&self) -> &str {
+        self.value()
+    }
+}
+
+impl PartialEq<String> for ETag {
+    fn eq(&self, other: &String) -> bool {
+        self.value() == other
+    }
+}
+
+impl PartialEq<ETag> for String {
+    fn eq(&self, other: &ETag) -> bool {
+        self == other.value()
+    }
+}
+
+impl PartialEq<str> for ETag {
+    fn eq(&self, other: &str) -> bool {
+        self.value() == other
+    }
+}
+
+impl PartialEq<ETag> for str {
+    fn eq(&self, other: &ETag) -> bool {
+        self == other.value()
+    }
+}
+
+impl PartialEq<&str> for ETag {
+    fn eq(&self, other: &&str) -> bool {
+        self.value() == *other
+    }
 }
 
 impl ETag {
@@ -306,5 +342,14 @@ mod tests {
         // invalid format via FromStr
         let err = "abc".parse::<ETag>().unwrap_err();
         assert!(matches!(err, ParseETagError::InvalidFormat));
+    }
+
+    #[test]
+    fn test_to_str() {
+        let etag = ETag::Strong("abc".to_string());
+        let s = etag.to_str();
+        assert_eq!(s, "abc");
+        let ref expected = String::from("abc");
+        assert_eq!(&etag == expected, true);
     }
 }
