@@ -6,7 +6,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example https --features openssl
+//! cargo run --example https
 //! ```
 //!
 //! Then you can access the server at <https://localhost:8014> (note: you'll need to accept
