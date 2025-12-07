@@ -114,12 +114,6 @@ impl PartialEq<ETag> for str {
     }
 }
 
-impl PartialEq<&str> for ETag {
-    fn eq(&self, other: &&str) -> bool {
-        self.value() == *other
-    }
-}
-
 impl ETag {
     fn check_header_value(s: &[u8]) -> bool {
         s.iter().all(|&b| b >= 32 && b != 127 || b == b'\t')
