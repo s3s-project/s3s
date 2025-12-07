@@ -33,7 +33,7 @@ const MAX_CHUNK_META_SIZE: usize = 1024;
 const MAX_TRAILERS_SIZE: usize = 16 * 1024;
 
 /// Maximum number of trailing headers
-/// Prevents DoS via excessive header count
+/// Prevents `DoS` via excessive header count
 const MAX_TRAILER_HEADERS: usize = 100;
 
 /// Aws chunked stream
@@ -819,14 +819,15 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::assertions_on_constants)]
     async fn test_limits_constants_exist() {
         // This test verifies that the limit constants are defined and have reasonable values
         assert!(MAX_CHUNK_META_SIZE > 0);
-        assert!(MAX_CHUNK_META_SIZE <= 10 * 1024); // Should be reasonable, less than 10KB
+        assert!(MAX_CHUNK_META_SIZE < 10 * 1024); // Should be reasonable, less than 10KB
         assert!(MAX_TRAILERS_SIZE > 0);
-        assert!(MAX_TRAILERS_SIZE <= 100 * 1024); // Should be reasonable, less than 100KB
+        assert!(MAX_TRAILERS_SIZE < 100 * 1024); // Should be reasonable, less than 100KB
         assert!(MAX_TRAILER_HEADERS > 0);
-        assert!(MAX_TRAILER_HEADERS <= 1000); // Should be reasonable
+        assert!(MAX_TRAILER_HEADERS < 1000); // Should be reasonable
     }
 
     #[tokio::test]
@@ -834,28 +835,28 @@ mod tests {
         // Verify that normal-sized trailers work fine (well within limits)
         let chunk1_meta = b"3\r\n";
         let chunk2_meta = b"0\r\n";
-        
+
         let chunk1_data = b"abc";
         let decoded_content_length = chunk1_data.len();
-        
+
         let chunk1 = join(&[chunk1_meta, chunk1_data.as_ref(), b"\r\n"]);
         let chunk2 = join(&[chunk2_meta, b"\r\n"]);
-        
+
         // Create trailers with reasonable number of headers (50, well under limit of 100)
         let mut trailers = Vec::new();
         for i in 0..50 {
-            trailers.extend_from_slice(format!("x-amz-meta-{}: value{}\r\n", i, i).as_bytes());
+            trailers.extend_from_slice(format!("x-amz-meta-{i}: value{i}\r\n").as_bytes());
         }
-        
+
         let chunk_results: Vec<Result<Bytes, _>> = vec![Ok(chunk1), Ok(chunk2), Ok(Bytes::from(trailers))];
-        
+
         let seed_signature = "deadbeef";
         let timestamp = "20130524T000000Z";
         let region = "us-east-1";
         let service = "s3";
         let secret_access_key = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
         let date = AmzDate::parse(timestamp).unwrap();
-        
+
         let stream = futures::stream::iter(chunk_results);
         let mut chunked_stream = AwsChunkedStream::new(
             stream,
@@ -867,13 +868,13 @@ mod tests {
             decoded_content_length,
             true, // unsigned
         );
-        
+
         let ans1 = chunked_stream.next().await.unwrap();
         assert_eq!(ans1.unwrap(), chunk1_data.as_slice());
-        
+
         // Should complete successfully
         assert!(chunked_stream.next().await.is_none());
-        
+
         // Verify trailers were parsed
         let handle = chunked_stream.trailing_headers_handle();
         let trailers = handle.take().expect("trailers present");

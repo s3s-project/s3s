@@ -28,7 +28,7 @@ const MAX_FORM_FIELDS_SIZE: usize = 20 * 1024 * 1024;
 /// This prevents `DoS` attacks via excessive part count
 const MAX_FORM_PARTS: usize = 1000;
 
-/// Maximum size for boundary matching buffer in FileStream
+/// Maximum size for boundary matching buffer in `FileStream`
 /// This buffer accumulates bytes when looking for a boundary pattern that spans chunks
 /// Conservative limit: 64KB should be more than enough for any reasonable boundary pattern
 const MAX_BOUNDARY_BUFFER_SIZE: usize = 64 * 1024;
