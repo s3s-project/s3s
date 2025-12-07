@@ -579,3 +579,46 @@ impl SignatureContext<'_> {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_amz_content_sha256_missing() {
+        // Test that extract_amz_content_sha256 returns None when header is missing
+        let headers = OrderedHeaders::from_slice_unchecked(&[
+            ("host", "example.s3.amazonaws.com"),
+            ("x-amz-date", "20130524T000000Z"),
+        ]);
+        let result = extract_amz_content_sha256(&headers).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_extract_amz_content_sha256_present() {
+        // Test that extract_amz_content_sha256 returns Some when header is present
+        let headers = OrderedHeaders::from_slice_unchecked(&[
+            ("host", "example.s3.amazonaws.com"),
+            ("x-amz-content-sha256", "UNSIGNED-PAYLOAD"),
+            ("x-amz-date", "20130524T000000Z"),
+        ]);
+        let result = extract_amz_content_sha256(&headers).unwrap();
+        assert!(result.is_some());
+        assert!(matches!(result.unwrap(), AmzContentSha256::UnsignedPayload));
+    }
+
+    #[test]
+    fn test_extract_amz_content_sha256_invalid() {
+        // Test that extract_amz_content_sha256 returns error for invalid header value
+        let headers = OrderedHeaders::from_slice_unchecked(&[
+            ("host", "example.s3.amazonaws.com"),
+            ("x-amz-content-sha256", "INVALID-VALUE"),
+            ("x-amz-date", "20130524T000000Z"),
+        ]);
+        let result = extract_amz_content_sha256(&headers);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.message().unwrap().contains("x-amz-content-sha256"));
+    }
+}
