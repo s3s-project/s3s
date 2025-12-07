@@ -2932,6 +2932,7 @@ dependencies = [
  "http-body 1.0.1",
  "http-body-util",
  "md-5 0.11.0-rc.3",
+ "reqwest",
  "s3s-test",
  "tracing",
 ]

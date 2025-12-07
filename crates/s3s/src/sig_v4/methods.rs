@@ -1293,6 +1293,94 @@ mod tests {
     }
 
     #[test]
+    fn example_put_presigned_url() {
+        // Test PUT presigned URL signing - similar to GET but with PUT method
+        // This is used for uploading files to S3 using presigned URLs
+        // Reference: https://docs.aws.amazon.com/AmazonS3/latest/userguide/PresignedUrlUploadObject.html
+        let secret_access_key = SecretKey::from("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
+        let method = Method::PUT;
+        let headers = OrderedHeaders::from_slice_unchecked(&[("host", "examplebucket.s3.amazonaws.com")]);
+
+        // Query strings for signing (without signature - signature is computed from these)
+        let query_strings_for_signing = &[
+            ("X-Amz-Algorithm", "AWS4-HMAC-SHA256"),
+            ("X-Amz-Credential", "AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request"),
+            ("X-Amz-Date", "20130524T000000Z"),
+            ("X-Amz-Expires", "86400"),
+            ("X-Amz-SignedHeaders", "host"),
+        ];
+
+        let canonical_request = create_presigned_canonical_request(&method, "/test.txt", query_strings_for_signing, &headers);
+
+        // Canonical request for PUT should be similar to GET, just with PUT method
+        assert_eq!(
+            canonical_request,
+            concat!(
+                "PUT\n",
+                "/test.txt\n",
+                "X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAIOSFODNN7EXAMPLE%2F20130524%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20130524T000000Z&X-Amz-Expires=86400&X-Amz-SignedHeaders=host\n",
+                "host:examplebucket.s3.amazonaws.com\n",
+                "\n",
+                "host\n",
+                "UNSIGNED-PAYLOAD",
+            )
+        );
+
+        let amz_date = AmzDate::parse("20130524T000000Z").unwrap();
+        let string_to_sign = create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
+        let signature = calculate_signature(&string_to_sign, &secret_access_key, &amz_date, "us-east-1", "s3");
+
+        // Signature value derived from the above test inputs (not from official AWS test vectors)
+        assert_eq!(signature, "f4db56459304dafaa603a99a23c6bea8821890259a65c18ff503a4a72a80efd9");
+    }
+
+    #[test]
+    fn example_put_presigned_url_with_content_type() {
+        // Test PUT presigned URL with content-type signed header
+        // When content-type is in signed headers, it must match the request header exactly
+        let secret_access_key = SecretKey::from("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
+        let method = Method::PUT;
+
+        // Headers include content-type which is signed
+        let headers = OrderedHeaders::from_slice_unchecked(&[
+            ("content-type", "application/octet-stream"),
+            ("host", "examplebucket.s3.amazonaws.com"),
+        ]);
+
+        let query_strings_for_signing = &[
+            ("X-Amz-Algorithm", "AWS4-HMAC-SHA256"),
+            ("X-Amz-Credential", "AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request"),
+            ("X-Amz-Date", "20130524T000000Z"),
+            ("X-Amz-Expires", "86400"),
+            ("X-Amz-SignedHeaders", "content-type;host"),
+        ];
+
+        let canonical_request = create_presigned_canonical_request(&method, "/test.txt", query_strings_for_signing, &headers);
+
+        // Canonical request should include content-type header
+        assert_eq!(
+            canonical_request,
+            concat!(
+                "PUT\n",
+                "/test.txt\n",
+                "X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAIOSFODNN7EXAMPLE%2F20130524%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20130524T000000Z&X-Amz-Expires=86400&X-Amz-SignedHeaders=content-type%3Bhost\n",
+                "content-type:application/octet-stream\n",
+                "host:examplebucket.s3.amazonaws.com\n",
+                "\n",
+                "content-type;host\n",
+                "UNSIGNED-PAYLOAD",
+            )
+        );
+
+        let amz_date = AmzDate::parse("20130524T000000Z").unwrap();
+        let string_to_sign = create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
+        let signature = calculate_signature(&string_to_sign, &secret_access_key, &amz_date, "us-east-1", "s3");
+
+        // Signature value derived from the test inputs above; not from official AWS test vectors.
+        assert_eq!(signature, "fd31b71961609f4b313497cb07ab0aedd268863bd547cc198db23cf04b8f663d");
+    }
+
+    #[test]
     fn multi_value_headers_combined_with_comma() {
         // Test that multiple headers with the same name are combined into a single line
         // with values separated by commas, as per AWS SigV4 spec.
