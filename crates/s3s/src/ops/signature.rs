@@ -384,15 +384,9 @@ impl SignatureContext<'_> {
                     return Err(s3_error!(NotImplemented, "AWS4-ECDSA-P256-SHA256 signing method is not implemented yet"));
                 }
                 None => {
-                    // When x-amz-content-sha256 header is missing, treat non-GET/HEAD requests
-                    // as having unsigned payload to avoid unbounded memory allocation.
-                    // This follows the streaming verification approach where signature errors
-                    // are detected when the stream is consumed.
-                    if matches!(*self.req_method, Method::GET | Method::HEAD) {
-                        sig_v4::create_canonical_request(method, uri_path, query_strings, &headers, sig_v4::Payload::Empty)
-                    } else {
-                        sig_v4::create_canonical_request(method, uri_path, query_strings, &headers, sig_v4::Payload::Unsigned)
-                    }
+                    // According to AWS S3 protocol, x-amz-content-sha256 header is required for
+                    // all requests authenticated with Signature V4. Reject if missing.
+                    return Err(invalid_request!("missing header: x-amz-content-sha256"));
                 }
             };
             let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, region, service);
