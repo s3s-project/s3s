@@ -127,7 +127,7 @@ impl ETag {
     ///
     /// This is useful when you need to know both whether `ETags` match AND
     /// the strength of that match. For simple conditional checks, prefer
-    /// [`strong_compare`](Self::strong_compare) or [`weak_compare`](Self::weak_compare).
+    /// [`strong_cmp`](Self::strong_cmp) or [`weak_cmp`](Self::weak_cmp).
     ///
     /// Returns:
     /// - [`ETagMatch::Strong`] if both are strong `ETags` with the same value
