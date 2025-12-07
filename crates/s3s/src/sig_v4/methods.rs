@@ -1309,7 +1309,7 @@ mod tests {
         let method = Method::GET;
         let qs: &[(String, String)] = &[];
 
-        let canonical_request = create_canonical_request(&method, "/bucket/key", qs, &headers, Payload::Empty);
+        let canonical_request = create_canonical_request(&method, "/bucket/key", qs, &headers, Payload::empty());
 
         // According to AWS SigV4 spec:
         // - Multiple headers with the same name should be combined with comma-separated values
@@ -1373,7 +1373,7 @@ mod tests {
         let method = Method::GET;
         let qs: &[(String, String)] = &[];
 
-        let canonical_request = create_canonical_request(&method, "/bucket/key", qs, &headers, Payload::Empty);
+        let canonical_request = create_canonical_request(&method, "/bucket/key", qs, &headers, Payload::empty());
 
         // Both values should be normalized and combined with comma
         assert!(canonical_request.contains("x-amz-meta-custom:value1,value2 with spaces\n"));
