@@ -8,8 +8,8 @@ use stdx::str::StrExt;
 ///
 /// Strong: "value"; Weak: W/"value".
 ///
-/// See RFC 7232 §2.3 and MDN:
-/// + <https://www.rfc-editor.org/rfc/rfc7232#section-2.3>
+/// See RFC 9110 §8.8.3 and MDN:
+/// + <https://www.rfc-editor.org/rfc/rfc9110#section-8.8.3>
 /// + <https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/ETag>
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ETag {
@@ -32,7 +32,7 @@ pub enum ParseETagError {
 
 /// Result of comparing two `ETags`.
 ///
-/// See RFC 7232 §2.3.2 for strong and weak comparison semantics.
+/// See RFC 9110 for strong and weak comparison semantics.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ETagComparison {
     /// Both `ETags` are strong and have the same value.
@@ -98,7 +98,7 @@ impl ETag {
 
     /// Strong comparison: two `ETags` match only if both are strong and have the same value.
     ///
-    /// According to RFC 7232 §2.3.2:
+    /// According to RFC 9110 §8.8.3:
     /// > Two entity-tags are equivalent if both are not weak and their
     /// > opaque-tags match character-by-character.
     ///
@@ -113,7 +113,7 @@ impl ETag {
 
     /// Weak comparison: two `ETags` match if their values are the same, regardless of weakness.
     ///
-    /// According to RFC 7232 §2.3.2:
+    /// According to RFC 9110 §8.8.3:
     /// > Two entity-tags are equivalent if their opaque-tags match
     /// > character-by-character, regardless of either or both being tagged as "weak".
     ///
@@ -134,7 +134,7 @@ impl ETag {
     /// - [`ETagComparison::WeakMatch`] if values are equal but at least one is weak
     /// - [`ETagComparison::NoMatch`] if values are different
     ///
-    /// This method combines both strong and weak comparison semantics from RFC 7232 §2.3.2.
+    /// This method combines both strong and weak comparison semantics from RFC 9110 §8.8.3.
     #[must_use]
     pub fn compare(&self, other: &Self) -> ETagComparison {
         if self.value() != other.value() {
