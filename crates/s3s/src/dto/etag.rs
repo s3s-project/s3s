@@ -8,10 +8,10 @@ use stdx::str::StrExt;
 ///
 /// Strong: "value"; Weak: W/"value".
 ///
-/// See RFC 7232 §2.3 and MDN:
-/// + <https://www.rfc-editor.org/rfc/rfc7232#section-2.3>
+/// See RFC 9110 §8.8.3 and MDN:
+/// + <https://www.rfc-editor.org/rfc/rfc9110#section-8.8.3>
 /// + <https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/ETag>
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ETag {
     /// Strong validator: "value"
     Strong(String),
@@ -28,6 +28,19 @@ pub enum ParseETagError {
     /// Contains invalid characters (control chars, DEL 0x7f, or non-ASCII).
     #[error("ParseETagError: InvalidChar")]
     InvalidChar,
+}
+
+/// Result of comparing two `ETags`.
+///
+/// See RFC 9110 for strong and weak comparison semantics.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ETagComparison {
+    /// Both `ETags` are strong and have the same value.
+    StrongMatch,
+    /// `ETags` have the same value but at least one is weak.
+    WeakMatch,
+    /// `ETags` have different values.
+    NoMatch,
 }
 
 impl ETag {
@@ -80,6 +93,55 @@ impl ETag {
         match self {
             ETag::Weak(s) => Some(s),
             ETag::Strong(_) => None,
+        }
+    }
+
+    /// Strong comparison: two `ETags` match only if both are strong and have the same value.
+    ///
+    /// According to RFC 9110 §8.8.3:
+    /// > Two entity tags are equivalent if both are not weak and their opaque-tags match character-by-character.
+    ///
+    /// Used for `If-Match` conditions and Range requests.
+    #[must_use]
+    pub fn strong_cmp(&self, other: &Self) -> bool {
+        match (self, other) {
+            (ETag::Strong(a), ETag::Strong(b)) => a == b,
+            _ => false,
+        }
+    }
+
+    /// Weak comparison: two `ETags` match if their values are the same, regardless of weakness.
+    ///
+    /// According to RFC 9110 §8.8.3:
+    /// > Two entity tags are equivalent if their opaque-tags match character-by-character,
+    /// > regardless of either or both being tagged as "weak".
+    ///
+    /// Used for `If-None-Match` conditions.
+    #[must_use]
+    pub fn weak_cmp(&self, other: &Self) -> bool {
+        self.value() == other.value()
+    }
+
+    /// Compares two `ETags` and returns the match result.
+    ///
+    /// This is useful when you need to know both whether `ETags` match AND
+    /// the strength of that match. For simple conditional checks, prefer
+    /// [`strong_cmp`](Self::strong_cmp) or [`weak_cmp`](Self::weak_cmp).
+    ///
+    /// Returns:
+    /// - [`ETagComparison::StrongMatch`] if both are strong `ETags` with the same value
+    /// - [`ETagComparison::WeakMatch`] if values are equal but at least one is weak
+    /// - [`ETagComparison::NoMatch`] if values are different
+    ///
+    /// This method combines both strong and weak comparison semantics from RFC 9110 §8.8.3.
+    #[must_use]
+    pub fn compare(&self, other: &Self) -> ETagComparison {
+        if self.value() != other.value() {
+            return ETagComparison::NoMatch;
+        }
+        match (self, other) {
+            (ETag::Strong(_), ETag::Strong(_)) => ETagComparison::StrongMatch,
+            _ => ETagComparison::WeakMatch,
         }
     }
 }
@@ -150,7 +212,7 @@ impl FromStr for ETag {
 
 #[cfg(test)]
 mod tests {
-    use super::{ETag, ParseETagError};
+    use super::{ETag, ETagComparison, ParseETagError};
 
     #[test]
     fn strong_value_and_header_ok() {
@@ -306,5 +368,97 @@ mod tests {
         // invalid format via FromStr
         let err = "abc".parse::<ETag>().unwrap_err();
         assert!(matches!(err, ParseETagError::InvalidFormat));
+    }
+
+    #[test]
+    fn strong_cmp_both_strong_same_value() {
+        let a = ETag::Strong("abc".to_string());
+        let b = ETag::Strong("abc".to_string());
+        assert!(a.strong_cmp(&b));
+        assert!(b.strong_cmp(&a));
+    }
+
+    #[test]
+    fn strong_cmp_both_strong_diff_value() {
+        let a = ETag::Strong("abc".to_string());
+        let b = ETag::Strong("xyz".to_string());
+        assert!(!a.strong_cmp(&b));
+    }
+
+    #[test]
+    fn strong_cmp_weak_never_matches() {
+        let strong = ETag::Strong("abc".to_string());
+        let weak = ETag::Weak("abc".to_string());
+        // Strong vs Weak => false
+        assert!(!strong.strong_cmp(&weak));
+        assert!(!weak.strong_cmp(&strong));
+        // Weak vs Weak => false
+        assert!(!weak.strong_cmp(&weak));
+    }
+
+    #[test]
+    fn weak_cmp_same_value() {
+        let s1 = ETag::Strong("abc".to_string());
+        let s2 = ETag::Strong("abc".to_string());
+        let w1 = ETag::Weak("abc".to_string());
+        let w2 = ETag::Weak("abc".to_string());
+
+        // All combinations with same value should match
+        assert!(s1.weak_cmp(&s2));
+        assert!(s1.weak_cmp(&w1));
+        assert!(w1.weak_cmp(&s1));
+        assert!(w1.weak_cmp(&w2));
+    }
+
+    #[test]
+    fn weak_cmp_diff_value() {
+        let a = ETag::Strong("abc".to_string());
+        let b = ETag::Weak("xyz".to_string());
+        assert!(!a.weak_cmp(&b));
+    }
+
+    #[test]
+    fn compare_strong_match() {
+        let a = ETag::Strong("abc".to_string());
+        let b = ETag::Strong("abc".to_string());
+        assert_eq!(a.compare(&b), ETagComparison::StrongMatch);
+        assert_eq!(b.compare(&a), ETagComparison::StrongMatch);
+    }
+
+    #[test]
+    fn compare_weak_match() {
+        let s = ETag::Strong("abc".to_string());
+        let w = ETag::Weak("abc".to_string());
+        let w2 = ETag::Weak("abc".to_string());
+
+        // Strong vs Weak => Weak match
+        assert_eq!(s.compare(&w), ETagComparison::WeakMatch);
+        assert_eq!(w.compare(&s), ETagComparison::WeakMatch);
+        // Weak vs Weak => Weak match
+        assert_eq!(w.compare(&w2), ETagComparison::WeakMatch);
+    }
+
+    #[test]
+    fn compare_not_equal() {
+        let s1 = ETag::Strong("abc".to_string());
+        let s2 = ETag::Strong("xyz".to_string());
+        let w1 = ETag::Weak("abc".to_string());
+        let w2 = ETag::Weak("xyz".to_string());
+
+        // Strong vs Strong (different values)
+        assert_eq!(s1.compare(&s2), ETagComparison::NoMatch);
+        assert_eq!(s2.compare(&s1), ETagComparison::NoMatch);
+
+        // Strong vs Weak (different values)
+        assert_eq!(s1.compare(&w2), ETagComparison::NoMatch);
+        assert_eq!(s2.compare(&w1), ETagComparison::NoMatch);
+
+        // Weak vs Strong (different values)
+        assert_eq!(w1.compare(&s2), ETagComparison::NoMatch);
+        assert_eq!(w2.compare(&s1), ETagComparison::NoMatch);
+
+        // Weak vs Weak (different values)
+        assert_eq!(w1.compare(&w2), ETagComparison::NoMatch);
+        assert_eq!(w2.compare(&w1), ETagComparison::NoMatch);
     }
 }
