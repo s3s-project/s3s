@@ -587,10 +587,8 @@ mod tests {
     #[test]
     fn test_extract_amz_content_sha256_missing() {
         // Test that extract_amz_content_sha256 returns None when header is missing
-        let headers = OrderedHeaders::from_slice_unchecked(&[
-            ("host", "example.s3.amazonaws.com"),
-            ("x-amz-date", "20130524T000000Z"),
-        ]);
+        let headers =
+            OrderedHeaders::from_slice_unchecked(&[("host", "example.s3.amazonaws.com"), ("x-amz-date", "20130524T000000Z")]);
         let result = extract_amz_content_sha256(&headers).unwrap();
         assert!(result.is_none());
     }
