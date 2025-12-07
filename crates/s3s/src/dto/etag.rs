@@ -85,7 +85,7 @@ impl ETag {
 
     /// Returns the raw value as a string slice (alias for `value()`).
     #[must_use]
-    pub fn to_str(&self) -> &str {
+    pub fn as_str(&self) -> &str {
         self.value()
     }
 }
@@ -339,9 +339,9 @@ mod tests {
     }
 
     #[test]
-    fn test_to_str() {
+    fn test_as_str() {
         let etag = ETag::Strong("abc".to_string());
-        let s = etag.to_str();
+        let s = etag.as_str();
         assert_eq!(s, "abc");
         let ref expected = String::from("abc");
         assert_eq!(&etag == expected, true);
