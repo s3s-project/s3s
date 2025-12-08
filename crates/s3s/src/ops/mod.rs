@@ -46,13 +46,26 @@ use hyper::Uri;
 use mime::Mime;
 use tracing::{debug, error};
 
+/// Trait representing a single S3 operation (e.g., GetObject, PutObject).
+///
+/// Each S3 operation implements this trait to handle specific API requests.
+/// Operations are resolved during the routing phase and executed via `call()`.
 #[async_trait::async_trait]
 pub trait Operation: Send + Sync + 'static {
+    /// Returns the operation name (e.g., "GetObject", "ListBuckets")
     fn name(&self) -> &'static str;
 
+    /// Executes the operation with the given context and request.
+    ///
+    /// This method contains the core logic for processing the specific S3 operation,
+    /// interacting with the storage backend, and building the response.
     async fn call(&self, ccx: &CallContext<'_>, req: &mut Request) -> S3Result<Response>;
 }
 
+/// Context passed to operations containing all configured service components.
+///
+/// This structure bundles all optional components (auth, access control, routing, etc.)
+/// so operations can access them as needed during request processing.
 pub struct CallContext<'a> {
     pub s3: &'a Arc<dyn S3>,
     pub host: Option<&'a dyn S3Host>,
@@ -62,6 +75,11 @@ pub struct CallContext<'a> {
     pub validation: Option<&'a dyn NameValidation>,
 }
 
+/// Builds an S3Request by extracting components from the internal Request.
+///
+/// Transfers ownership of method, URI, headers, extensions, and S3-specific
+/// metadata (credentials, region, etc.) from the internal request to create
+/// a clean S3Request that operations can work with.
 fn build_s3_request<T>(input: T, req: &mut Request) -> S3Request<T> {
     let method = req.method.clone();
     let uri = mem::take(&mut req.uri);
@@ -85,6 +103,15 @@ fn build_s3_request<T>(input: T, req: &mut Request) -> S3Request<T> {
     }
 }
 
+/// Converts an S3Error into an HTTP response with XML error body.
+///
+/// This function ensures all errors are returned in S3-compatible format
+/// with proper status codes and XML error structure.
+///
+/// # Arguments
+///
+/// * `e` - The S3 error to serialize
+/// * `no_decl` - If true, omits XML declaration (for certain edge cases)
 pub(crate) fn serialize_error(mut e: S3Error, no_decl: bool) -> S3Result<Response> {
     let status = e.status_code().unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
     let mut res = Response::with_status(status);
@@ -111,10 +138,15 @@ fn extract_host(req: &Request) -> S3Result<Option<String>> {
     Ok(Some(host.into()))
 }
 
+/// Checks if the host string is an IP address or socket address.
+///
+/// Used to determine if virtual-hosted-style parsing should be skipped.
+/// When connecting via IP (e.g., 127.0.0.1:8080), path-style is used.
 fn is_socket_addr_or_ip_addr(host: &str) -> bool {
     host.parse::<SocketAddr>().is_ok() || host.parse::<IpAddr>().is_ok()
 }
 
+/// Converts path parsing errors to appropriate S3 error codes.
 fn convert_parse_s3_path_error(err: &ParseS3PathError) -> S3Error {
     match err {
         ParseS3PathError::InvalidPath => s3_error!(InvalidURI),
@@ -167,6 +199,14 @@ fn extract_decoded_content_length(hs: &'_ OrderedHeaders<'_>) -> S3Result<Option
     }
 }
 
+/// Extracts and validates the complete request body.
+///
+/// This function handles body extraction and validation:
+/// - If body is already buffered, returns it immediately
+/// - Otherwise, reads the entire body into memory
+/// - Validates that actual body size matches Content-Length header
+///
+/// Used for operations that require the full body upfront (e.g., PutObject).
 async fn extract_full_body(content_length: Option<u64>, body: &mut Body) -> S3Result<Bytes> {
     if let Some(bytes) = body.bytes() {
         return Ok(bytes);
@@ -200,6 +240,118 @@ fn fmt_content_length(len: usize) -> http::HeaderValue {
     }
 }
 
+/// The main dispatcher that orchestrates the entire S3 request processing pipeline.
+///
+/// This function is the core of the S3 request handling system. It coordinates
+/// authentication, authorization, routing, and operation execution.
+///
+/// # Flow Diagram
+///
+/// ```text
+///                                ┌─────────────┐
+///                                │   call()    │
+///                                └──────┬──────┘
+///                                       │
+///                                       ▼
+///                            ┌──────────────────────┐
+///                            │   prepare(req, ccx)  │
+///                            │                      │
+///                            │ • Parse S3 path      │
+///                            │ • Extract headers/qs │
+///                            │ • Verify signature   │
+///                            │ • Transform body     │
+///                            │ • Route resolution   │
+///                            └──────────┬───────────┘
+///                                       │
+///                    ┌──────────────────┴──────────────────┐
+///                    │                                     │
+///              ┌─────▼─────┐                         ┌────▼────┐
+///              │   Error   │                         │   Ok    │
+///              └─────┬─────┘                         └────┬────┘
+///                    │                                    │
+///                    ▼                                    ▼
+///         ┌────────────────────┐              ┌──────────────────────┐
+///         │ serialize_error()  │              │  Prepare Result      │
+///         │  • Convert to XML  │              └──────────┬───────────┘
+///         │  • Set status code │                         │
+///         └────────────────────┘          ┌──────────────┴───────────────┐
+///                                         │                              │
+///                                   ┌─────▼──────┐              ┌────────▼────────┐
+///                                   │ Prepare::S3│              │Prepare::Custom  │
+///                                   │ (operation)│              │     Route       │
+///                                   └─────┬──────┘              └────────┬────────┘
+///                                         │                              │
+///                                         ▼                              ▼
+///                              ┌────────────────────┐        ┌──────────────────────┐
+///                              │  op.call(ccx, req) │        │ route.check_access() │
+///                              │                    │        │ route.call()         │
+///                              │ • Execute S3 op    │        │                      │
+///                              │   (GetObject, etc) │        │ • Custom handler     │
+///                              └──────────┬─────────┘        └──────────┬───────────┘
+///                                         │                              │
+///                          ┌──────────────┴──────────────┐               │
+///                          │                             │               │
+///                    ┌─────▼─────┐               ┌──────▼──────┐        │
+///                    │    Ok     │               │    Error    │        │
+///                    │           │               │             │        │
+///                    └─────┬─────┘               └──────┬──────┘        │
+///                          │                            │               │
+///                          │                            ▼               │
+///                          │                 ┌────────────────────┐     │
+///                          │                 │ serialize_error()  │     │
+///                          │                 └────────────────────┘     │
+///                          │                                            │
+///                          └────────────────────┬───────────────────────┘
+///                                               │
+///                                               ▼
+///                                      ┌─────────────────┐
+///                                      │  S3 Response    │
+///                                      │                 │
+///                                      │ • Status code   │
+///                                      │ • Headers       │
+///                                      │ • Body          │
+///                                      └─────────────────┘
+/// ```
+///
+/// # Processing Stages
+///
+/// ## 1. Preparation Phase (`prepare`)
+///
+/// The preparation phase handles:
+/// - **Path parsing**: Extracts bucket/object from URI (path-style or virtual-hosted-style)
+/// - **Authentication**: Verifies AWS Signature V2/V4, extracts credentials
+/// - **Body transformation**: Handles chunked encoding, multipart forms
+/// - **Route resolution**: Determines which operation to execute
+/// - **Access control**: Checks permissions for the requested operation
+///
+/// ## 2. Execution Phase
+///
+/// Depending on the preparation result:
+///
+/// ### Standard S3 Operations (`Prepare::S3`)
+/// - Calls the resolved operation (e.g., `GetObject`, `PutObject`)
+/// - Operation processes the request using the S3 storage backend
+/// - Returns success response or error
+///
+/// ### Custom Routes (`Prepare::CustomRoute`)
+/// - Checks access permissions via `route.check_access()`
+/// - Delegates to custom route handler
+/// - Useful for extending S3 API with custom endpoints
+///
+/// ## 3. Error Handling
+///
+/// All errors are serialized to S3-compatible XML error responses with appropriate
+/// HTTP status codes. Errors are logged at the `error` level with context.
+///
+/// # Arguments
+///
+/// * `req` - Mutable reference to the incoming HTTP request
+/// * `ccx` - Call context containing configured components (auth, access, routing, etc.)
+///
+/// # Returns
+///
+/// * `Ok(Response)` - Successfully processed response (may be error response with proper XML)
+/// * `Err(S3Error)` - Only returned if error serialization itself fails (rare)
 pub async fn call(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Response> {
     let prep = match prepare(req, ccx).await {
         Ok(op) => op,
@@ -248,11 +400,47 @@ pub async fn call(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Response
     }
 }
 
+/// Result of the preparation phase indicating how to handle the request.
 enum Prepare {
+    /// Standard S3 operation with resolved operation handler
     S3(&'static dyn Operation),
+    /// Custom route that bypasses standard S3 operation handling
     CustomRoute,
 }
 
+/// Prepares an incoming request for execution.
+///
+/// This complex function handles the entire request preparation pipeline:
+///
+/// 1. **Path Resolution**
+///    - Decodes URI path
+///    - Parses virtual-hosted-style (bucket.s3.example.com) or path-style (/bucket/key)
+///    - Validates bucket/object names
+///
+/// 2. **Signature Verification**
+///    - Checks AWS Signature V2/V4 if auth is configured
+///    - Handles chunked encoding (aws-chunked)
+///    - Processes multipart/form-data uploads
+///    - Transforms request body if needed
+///
+/// 3. **Route Resolution**
+///    - Checks for custom route matches first
+///    - Falls back to standard S3 operation resolution
+///    - Maps (method, path, query) to specific operations
+///
+/// 4. **Access Control**
+///    - Verifies permissions for the resolved operation
+///    - Uses configured access handler or default rules
+///
+/// 5. **Body Handling**
+///    - Loads full body if operation requires it
+///    - Validates content-length matches actual body size
+///
+/// # Returns
+///
+/// * `Ok(Prepare::S3(op))` - Resolved to a standard S3 operation
+/// * `Ok(Prepare::CustomRoute)` - Matched a custom route
+/// * `Err(S3Error)` - Preparation failed (invalid request, auth failure, etc.)
 #[allow(clippy::too_many_lines)]
 #[tracing::instrument(level = "debug", skip_all, err)]
 async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> {
@@ -270,6 +458,7 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
             let default_validation = &const { AwsNameValidation::new() };
             let validation = ccx.validation.unwrap_or(default_validation);
 
+            // Core Logic: Parse the S3 path based on the host header and URI path.
             let result = 'parse: {
                 if let (Some(host_header), Some(s3_host)) = (host_header.as_deref(), ccx.host) {
                     if !is_socket_addr_or_ip_addr(host_header) {
@@ -303,10 +492,41 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
         let mime = extract_mime(&hs);
         let decoded_content_length = extract_decoded_content_length(&hs)?;
 
+        // ===================================================================
+        // AWS Signature V2/V4 Verification (Core Authentication Logic)
+        // ===================================================================
+        //
+        // This block handles all forms of AWS signature verification:
+        //
+        // Signature V4 (AWS4-HMAC-SHA256):
+        //   1. Header-based auth: Authorization header with AWS4-HMAC-SHA256
+        //   2. Presigned URLs: X-Amz-Signature in query string
+        //   3. POST signature: multipart/form-data with x-amz-signature
+        //
+        // Signature V2 (AWS2):
+        //   1. Header-based auth: Authorization header with AWS
+        //   2. Presigned URLs: Signature in query string
+        //   3. POST signature: multipart/form-data with signature
+        //
+        // The SignatureContext.check() method:
+        //   - Detects signature type from headers/query parameters
+        //   - Retrieves the secret key for the given access key
+        //   - Calculates expected signature using canonical request
+        //   - Compares with provided signature
+        //   - Handles special cases like:
+        //       * aws-chunked encoding for streaming uploads
+        //       * Content-SHA256 verification
+        //       * Trailing headers for chunked uploads
+        //       * Multipart form data transformations
+        //
+        // If no signature is present and auth is not configured, the request
+        // is treated as anonymous and credentials remain None.
+        //
         let body_changed;
         let transformed_body;
         {
             let mut scx = SignatureContext {
+                // This allows users to customize how access credentials and secret keys are retrieved.
                 auth: ccx.auth,
 
                 req_version: req.version,
@@ -329,6 +549,9 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                 trailing_headers: None,
             };
 
+            // Execute signature verification - this is where authentication happens!
+            // Returns credentials if signature is valid, None for anonymous requests,
+            // or S3Error for invalid/expired signatures
             let credentials = scx.check().await?;
 
             body_changed = scx.transformed_body.is_some() || scx.multipart.is_some();
@@ -369,12 +592,14 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
         debug!(?body_changed, ?decoded_content_length, ?has_multipart);
     }
 
+    // Core Logic: If Route is Custom Route, return Prepare::CustomRoute.
     if let Some(route) = ccx.route {
         if route.is_match(&req.method, &req.uri, &req.headers, &mut req.extensions) {
             return Ok(Prepare::CustomRoute);
         }
     }
 
+    // Core Logic: If Route is S3 Route, resolve the route and determine if the operation needs the full body.
     let (op, needs_full_body) = 'resolve: {
         if let Some(multipart) = &mut req.s3ext.multipart {
             if req.method == Method::POST {
