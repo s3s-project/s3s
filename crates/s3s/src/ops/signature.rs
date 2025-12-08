@@ -76,6 +76,8 @@ pub struct SignatureContext<'a> {
     pub multipart: Option<Multipart>,
 
     pub trailing_headers: Option<TrailingHeaders>,
+    
+    pub post_policy: Option<crate::post_policy::PostPolicy>,
 }
 
 pub struct CredentialsExt {
@@ -172,6 +174,12 @@ impl SignatureContext<'_> {
             return Err(invalid_request!("invalid field: policy"));
         }
 
+        // Parse and validate policy
+        let policy = crate::post_policy::PostPolicy::from_base64(info.policy)?;
+        
+        // Validate policy expiration
+        policy.validate_expiration()?;
+
         if info.x_amz_algorithm != "AWS4-HMAC-SHA256" {
             return Err(s3_error!(
                 NotImplemented,
@@ -203,6 +211,7 @@ impl SignatureContext<'_> {
         let service = service.to_owned();
 
         self.multipart = Some(multipart);
+        self.post_policy = Some(policy);
         Ok(CredentialsExt {
             access_key,
             secret_key,
@@ -521,6 +530,12 @@ impl SignatureContext<'_> {
             return Err(invalid_request!("invalid field: policy"));
         }
 
+        // Parse and validate policy
+        let policy = crate::post_policy::PostPolicy::from_base64(info.policy)?;
+        
+        // Validate policy expiration
+        policy.validate_expiration()?;
+
         let access_key = info.access_key_id.to_owned();
         let secret_key = auth.get_secret_key(&access_key).await?;
 
@@ -535,6 +550,7 @@ impl SignatureContext<'_> {
         }
 
         self.multipart = Some(multipart);
+        self.post_policy = Some(policy);
         Ok(CredentialsExt {
             access_key,
             secret_key,

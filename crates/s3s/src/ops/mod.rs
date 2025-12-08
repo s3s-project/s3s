@@ -327,6 +327,7 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                 multipart: None,
                 transformed_body: None,
                 trailing_headers: None,
+                post_policy: None,
             };
 
             let credentials = scx.check().await?;
@@ -336,6 +337,7 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
 
             req.s3ext.multipart = scx.multipart;
             req.s3ext.trailing_headers = scx.trailing_headers;
+            req.s3ext.post_policy = scx.post_policy;
 
             match credentials {
                 Some(cred) => {
@@ -380,7 +382,7 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
             if req.method == Method::POST {
                 match s3_path {
                     S3Path::Root => return Err(unknown_operation()),
-                    S3Path::Bucket { .. } => {
+                    S3Path::Bucket { bucket } => {
                         // POST object
                         debug!(?multipart);
                         let file_stream = multipart.take_file_stream().expect("missing file stream");
@@ -389,6 +391,15 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                         let vec_bytes = http::aggregate_file_stream_limited(file_stream, http::MAX_POST_OBJECT_FILE_SIZE)
                             .await
                             .map_err(|e| invalid_request!(e, "failed to read file stream"))?;
+                        
+                        // Calculate file size for policy validation
+                        let file_size: u64 = vec_bytes.iter().map(|b| b.len() as u64).sum();
+                        
+                        // Validate policy conditions if present
+                        if let Some(ref policy) = req.s3ext.post_policy {
+                            policy.validate_conditions(multipart, bucket, file_size)?;
+                        }
+                        
                         let vec_stream = crate::stream::VecByteStream::new(vec_bytes);
                         req.s3ext.vec_stream = Some(vec_stream);
                         break 'resolve (&PutObject as &'static dyn Operation, false);

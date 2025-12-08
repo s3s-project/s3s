@@ -18,6 +18,7 @@ mod error;
 
 mod http;
 mod ops;
+mod post_policy;
 mod protocol;
 mod s3_op;
 mod s3_trait;
