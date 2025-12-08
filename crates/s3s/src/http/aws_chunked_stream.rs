@@ -425,6 +425,13 @@ impl AwsChunkedStream {
             if let Some(idx) = memchr(b'\n', bytes.as_ref()) {
                 let len = idx.wrapping_add(1); // assume: idx < bytes.len()
                 let leading = bytes.split_to(len);
+                // Check size limit before extending buffer
+                if buf.len().saturating_add(leading.len()) > MAX_CHUNK_META_SIZE {
+                    return Err(Box::new(AwsChunkedStreamError::ChunkMetaTooLarge(
+                        buf.len().saturating_add(leading.len()),
+                        MAX_CHUNK_META_SIZE,
+                    )));
+                }
                 buf.extend_from_slice(leading.as_ref());
                 return Ok(Some(bytes));
             }
@@ -975,8 +982,18 @@ mod tests {
         assert_eq!(ans1.unwrap(), chunk1_data.as_slice());
 
         // The limit prevents unbounded memory allocation during trailer parsing
-        // The stream terminates gracefully (errors in async generator don't surface through next())
-        let _ = chunked_stream.next().await;
+        // Consume any remaining stream data (should be None as data is complete)
+        while chunked_stream.next().await.is_some() {
+            // Continue until stream ends
+        }
+
+        // Verify no trailers were stored (parsing failed due to size limit)
+        let handle = chunked_stream.trailing_headers_handle();
+        let trailers = handle.take();
+        assert!(
+            trailers.is_none() || trailers.unwrap().is_empty(),
+            "Trailers should not be stored when they exceed limits"
+        );
     }
 
     #[tokio::test]
@@ -1025,7 +1042,17 @@ mod tests {
         assert_eq!(ans1.unwrap(), chunk1_data.as_slice());
 
         // The limit prevents unbounded memory allocation during trailer parsing
-        // The stream terminates gracefully (errors in async generator don't surface through next())
-        let _ = chunked_stream.next().await;
+        // Consume any remaining stream data (should be None as data is complete)
+        while chunked_stream.next().await.is_some() {
+            // Continue until stream ends
+        }
+
+        // Verify no trailers were stored (parsing failed due to header count limit)
+        let handle = chunked_stream.trailing_headers_handle();
+        let trailers = handle.take();
+        assert!(
+            trailers.is_none() || trailers.unwrap().is_empty(),
+            "Trailers should not be stored when header count exceeds limits"
+        );
     }
 }
