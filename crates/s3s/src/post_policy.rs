@@ -197,9 +197,15 @@ impl PostPolicy {
 
     /// Validate content-length-range condition
     fn validate_content_length_range(file_size: u64, min: u64, max: u64) -> S3Result<()> {
-        if file_size < min || file_size > max {
+        if file_size < min {
             return Err(s3_error!(
                 EntityTooSmall,
+                "Invalid according to Policy: Policy Condition failed: [content-length-range]"
+            ));
+        }
+        if file_size > max {
+            return Err(s3_error!(
+                EntityTooLarge,
                 "Invalid according to Policy: Policy Condition failed: [content-length-range]"
             ));
         }
