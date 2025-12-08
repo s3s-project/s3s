@@ -1,6 +1,6 @@
 [package]
 name = "s3s-proxy"
-version = "0.12.0-rc.4"
+version = "0.12.0-rc.5"
 description = "S3 Proxy"
 readme = "../../README.md"
 keywords = ["s3"]
@@ -27,8 +27,8 @@ hyper-util = { version = "0.1.18", features = [
     "http2",
     "tokio",
 ] }
-s3s = { version = "0.12.0-rc.4", path = "../s3s" }
-s3s-aws = { version = "0.12.0-rc.4", path = "../s3s-aws" }
+s3s = { version = "0.12.0-rc.5", path = "../s3s" }
+s3s-aws = { version = "0.12.0-rc.5", path = "../s3s-aws" }
 tokio = { version = "1.48.0", features = ["full"] }
 tracing = "0.1.43"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter", "time"] }
