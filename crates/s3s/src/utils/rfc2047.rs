@@ -44,13 +44,18 @@ pub fn encode(s: &str) -> Cow<'_, str> {
         return Cow::Owned(format!("{PREFIX}{full_encoded}{SUFFIX}"));
     }
 
-    // Split into multiple encoded-words
+    // Split into multiple encoded-words, respecting UTF-8 character boundaries
     let mut result = String::new();
     let mut i = 0;
-    while i < bytes.len() {
-        let end = usize::min(i + max_input_bytes, bytes.len());
-        let chunk = &bytes[i..end];
-        let encoded = base64_simd::STANDARD.encode_to_string(chunk);
+    while i < s.len() {
+        let mut end = usize::min(i + max_input_bytes, s.len());
+        // Adjust end to the nearest UTF-8 character boundary
+        while end > i && !s.is_char_boundary(end) {
+            end -= 1;
+        }
+        // Safety: we ensured end is at a valid UTF-8 boundary
+        let chunk = &s[i..end];
+        let encoded = base64_simd::STANDARD.encode_to_string(chunk.as_bytes());
         if !result.is_empty() {
             result.push(' ');
         }
@@ -81,13 +86,13 @@ pub fn decode(s: &str) -> Result<Cow<'_, str>, DecodeError> {
         return Ok(Cow::Borrowed(s));
     }
 
-    // Check if there are multiple encoded-words (space-separated)
-    // Per RFC 2047, adjacent encoded-words separated by whitespace should be concatenated
-    if s.contains("?= =?") {
+    // Check if there are multiple encoded-words (whitespace-separated)
+    // Per RFC 2047 Section 6.2, any linear-white-space can appear between encoded-words
+    let has_multiple_words = s.matches("?=").count() > 1;
+    if has_multiple_words {
         let mut result = Vec::new();
-        for part in s.split(' ') {
-            let part = part.trim();
-            if part.is_empty() {
+        for part in s.split_whitespace() {
+            if part.is_empty() || !part.starts_with("=?") || !part.ends_with("?=") {
                 continue;
             }
             let decoded = decode_single_word(part)?;
@@ -343,6 +348,22 @@ mod tests {
     fn test_decode_multiple_encoded_words() {
         // Multiple encoded-words separated by space should be concatenated
         let input = "=?UTF-8?B?5L2g?= =?UTF-8?B?5aW9?=";
+        let decoded = decode(input).unwrap();
+        assert_eq!(decoded, "你好");
+    }
+
+    #[test]
+    fn test_decode_multiple_encoded_words_with_tabs() {
+        // Multiple encoded-words separated by tabs should also be concatenated (RFC 2047 Section 6.2)
+        let input = "=?UTF-8?B?5L2g?=\t=?UTF-8?B?5aW9?=";
+        let decoded = decode(input).unwrap();
+        assert_eq!(decoded, "你好");
+    }
+
+    #[test]
+    fn test_decode_multiple_encoded_words_with_mixed_whitespace() {
+        // Multiple encoded-words separated by mixed whitespace
+        let input = "=?UTF-8?B?5L2g?=  \t  =?UTF-8?B?5aW9?=";
         let decoded = decode(input).unwrap();
         assert_eq!(decoded, "你好");
     }
