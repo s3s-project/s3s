@@ -53,7 +53,8 @@ pub fn encode(s: &str) -> Cow<'_, str> {
         while end > i && !s.is_char_boundary(end) {
             end -= 1;
         }
-        // Safety: we ensured end is at a valid UTF-8 boundary
+        // Ensure we made progress (UTF-8 characters are at most 4 bytes, and max_input_bytes is 45)
+        assert!(end > i, "RFC 2047 encode: failed to find valid UTF-8 character boundary");
         let chunk = &s[i..end];
         let encoded = base64_simd::STANDARD.encode_to_string(chunk.as_bytes());
         if !result.is_empty() {
@@ -97,6 +98,9 @@ pub fn decode(s: &str) -> Result<Cow<'_, str>, DecodeError> {
             }
             let decoded = decode_single_word(part)?;
             result.extend_from_slice(decoded.as_bytes());
+        }
+        if result.is_empty() {
+            return Err(DecodeError::InvalidFormat);
         }
         return String::from_utf8(result)
             .map(Cow::Owned)
@@ -366,6 +370,14 @@ mod tests {
         let input = "=?UTF-8?B?5L2g?=  \t  =?UTF-8?B?5aW9?=";
         let decoded = decode(input).unwrap();
         assert_eq!(decoded, "你好");
+    }
+
+    #[test]
+    fn test_decode_malformed_multiple_words_no_valid_parts() {
+        // Malformed input that looks like multiple encoded-words but has no valid parts
+        let input = "=?test ?= another ?=";
+        let result = decode(input);
+        assert_eq!(result, Err(DecodeError::InvalidFormat));
     }
 
     #[test]
