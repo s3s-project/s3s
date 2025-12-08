@@ -76,7 +76,7 @@ pub struct SignatureContext<'a> {
     pub multipart: Option<Multipart>,
 
     pub trailing_headers: Option<TrailingHeaders>,
-    
+
     pub post_policy: Option<crate::post_policy::PostPolicy>,
 }
 
@@ -176,7 +176,7 @@ impl SignatureContext<'_> {
 
         // Parse and validate policy
         let policy = crate::post_policy::PostPolicy::from_base64(info.policy)?;
-        
+
         // Validate policy expiration
         policy.validate_expiration()?;
 
@@ -532,7 +532,7 @@ impl SignatureContext<'_> {
 
         // Parse and validate policy
         let policy = crate::post_policy::PostPolicy::from_base64(info.policy)?;
-        
+
         // Validate policy expiration
         policy.validate_expiration()?;
 

@@ -24,9 +24,9 @@ pub struct PostPolicy {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Condition {
-    /// Exact match: {"field": "value"}
+    /// Exact match: `{"field": "value"}`
     ExactMatch(HashMap<String, serde_json::Value>),
-    /// Array form: ["eq", "$field", "value"] or ["starts-with", "$field", "prefix"] or ["content-length-range", min, max]
+    /// Array form: `["eq", "$field", "value"]` or `["starts-with", "$field", "prefix"]` or `["content-length-range", min, max]`
     ArrayForm(Vec<serde_json::Value>),
 }
 
@@ -40,11 +40,11 @@ impl PostPolicy {
             .decode_to_vec(policy_b64)
             .map_err(|_| s3_error!(InvalidPolicyDocument, "policy is not valid base64"))?;
 
-        let policy_str = std::str::from_utf8(&policy_bytes)
-            .map_err(|_| s3_error!(InvalidPolicyDocument, "policy is not valid UTF-8"))?;
+        let policy_str =
+            std::str::from_utf8(&policy_bytes).map_err(|_| s3_error!(InvalidPolicyDocument, "policy is not valid UTF-8"))?;
 
-        let policy: PostPolicy = serde_json::from_str(policy_str)
-            .map_err(|e| s3_error!(e, InvalidPolicyDocument, "policy is not valid JSON"))?;
+        let policy: PostPolicy =
+            serde_json::from_str(policy_str).map_err(|e| s3_error!(e, InvalidPolicyDocument, "policy is not valid JSON"))?;
 
         Ok(policy)
     }
@@ -60,10 +60,7 @@ impl PostPolicy {
 
         let now = OffsetDateTime::now_utc();
         if now > expiration {
-            return Err(s3_error!(
-                AccessDenied,
-                "Invalid according to Policy: Policy expired"
-            ));
+            return Err(s3_error!(AccessDenied, "Invalid according to Policy: Policy expired"));
         }
 
         Ok(())
@@ -88,7 +85,7 @@ impl PostPolicy {
             match condition {
                 Condition::ExactMatch(map) => {
                     for (field, value) in map {
-                        self.validate_exact_match(&fields, field, value)?;
+                        Self::validate_exact_match(&fields, field, value)?;
                     }
                 }
                 Condition::ArrayForm(arr) => {
@@ -104,16 +101,13 @@ impl PostPolicy {
                     match operator {
                         "eq" => {
                             if arr.len() != 3 {
-                                return Err(s3_error!(
-                                    InvalidPolicyDocument,
-                                    "eq condition must have exactly 3 elements"
-                                ));
+                                return Err(s3_error!(InvalidPolicyDocument, "eq condition must have exactly 3 elements"));
                             }
                             let field = arr[1]
                                 .as_str()
                                 .ok_or_else(|| s3_error!(InvalidPolicyDocument, "field name must be a string"))?;
                             let value = &arr[2];
-                            self.validate_exact_match(&fields, &Self::normalize_field_name(field), value)?;
+                            Self::validate_exact_match(&fields, &Self::normalize_field_name(field), value)?;
                         }
                         "starts-with" => {
                             if arr.len() != 3 {
@@ -128,7 +122,7 @@ impl PostPolicy {
                             let prefix = arr[2]
                                 .as_str()
                                 .ok_or_else(|| s3_error!(InvalidPolicyDocument, "prefix must be a string"))?;
-                            self.validate_starts_with(&fields, &Self::normalize_field_name(field), prefix)?;
+                            Self::validate_starts_with(&fields, &Self::normalize_field_name(field), prefix)?;
                         }
                         "content-length-range" => {
                             if arr.len() != 3 {
@@ -137,13 +131,13 @@ impl PostPolicy {
                                     "content-length-range condition must have exactly 3 elements"
                                 ));
                             }
-                            let min = arr[1].as_u64().ok_or_else(|| {
-                                s3_error!(InvalidPolicyDocument, "content-length-range min must be a number")
-                            })?;
-                            let max = arr[2].as_u64().ok_or_else(|| {
-                                s3_error!(InvalidPolicyDocument, "content-length-range max must be a number")
-                            })?;
-                            self.validate_content_length_range(file_size, min, max)?;
+                            let min = arr[1]
+                                .as_u64()
+                                .ok_or_else(|| s3_error!(InvalidPolicyDocument, "content-length-range min must be a number"))?;
+                            let max = arr[2]
+                                .as_u64()
+                                .ok_or_else(|| s3_error!(InvalidPolicyDocument, "content-length-range max must be a number"))?;
+                            Self::validate_content_length_range(file_size, min, max)?;
                         }
                         _ => {
                             return Err(s3_error!(InvalidPolicyDocument, "unknown condition operator"));
@@ -166,18 +160,10 @@ impl PostPolicy {
     }
 
     /// Validate exact match condition
-    fn validate_exact_match(
-        &self,
-        fields: &HashMap<String, String>,
-        field: &str,
-        expected_value: &serde_json::Value,
-    ) -> S3Result<()> {
-        let actual_value = fields.get(field).ok_or_else(|| {
-            s3_error!(
-                AccessDenied,
-                "Invalid according to Policy: Policy Condition failed: [missing field]"
-            )
-        })?;
+    fn validate_exact_match(fields: &HashMap<String, String>, field: &str, expected_value: &serde_json::Value) -> S3Result<()> {
+        let actual_value = fields
+            .get(field)
+            .ok_or_else(|| s3_error!(AccessDenied, "Invalid according to Policy: Policy Condition failed: [missing field]"))?;
 
         let expected_str = expected_value
             .as_str()
@@ -194,13 +180,10 @@ impl PostPolicy {
     }
 
     /// Validate starts-with condition
-    fn validate_starts_with(&self, fields: &HashMap<String, String>, field: &str, prefix: &str) -> S3Result<()> {
-        let actual_value = fields.get(field).ok_or_else(|| {
-            s3_error!(
-                AccessDenied,
-                "Invalid according to Policy: Policy Condition failed: [missing field]"
-            )
-        })?;
+    fn validate_starts_with(fields: &HashMap<String, String>, field: &str, prefix: &str) -> S3Result<()> {
+        let actual_value = fields
+            .get(field)
+            .ok_or_else(|| s3_error!(AccessDenied, "Invalid according to Policy: Policy Condition failed: [missing field]"))?;
 
         if !actual_value.starts_with(prefix) {
             return Err(s3_error!(
@@ -213,7 +196,7 @@ impl PostPolicy {
     }
 
     /// Validate content-length-range condition
-    fn validate_content_length_range(&self, file_size: u64, min: u64, max: u64) -> S3Result<()> {
+    fn validate_content_length_range(file_size: u64, min: u64, max: u64) -> S3Result<()> {
         if file_size < min || file_size > max {
             return Err(s3_error!(
                 EntityTooSmall,

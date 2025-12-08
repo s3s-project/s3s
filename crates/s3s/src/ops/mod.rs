@@ -391,15 +391,15 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                         let vec_bytes = http::aggregate_file_stream_limited(file_stream, http::MAX_POST_OBJECT_FILE_SIZE)
                             .await
                             .map_err(|e| invalid_request!(e, "failed to read file stream"))?;
-                        
+
                         // Calculate file size for policy validation
                         let file_size: u64 = vec_bytes.iter().map(|b| b.len() as u64).sum();
-                        
+
                         // Validate policy conditions if present
                         if let Some(ref policy) = req.s3ext.post_policy {
                             policy.validate_conditions(multipart, bucket, file_size)?;
                         }
-                        
+
                         let vec_stream = crate::stream::VecByteStream::new(vec_bytes);
                         req.s3ext.vec_stream = Some(vec_stream);
                         break 'resolve (&PutObject as &'static dyn Operation, false);

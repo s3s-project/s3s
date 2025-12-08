@@ -1,3 +1,7 @@
+//! POST Policy E2E tests
+
+#![allow(clippy::uninlined_format_args)]
+
 use crate::case;
 use crate::utils::*;
 
@@ -29,11 +33,7 @@ struct PostPolicy {
 impl TestSuite for PostPolicy {
     async fn setup() -> Result<Self> {
         let sdk_conf = aws_config::from_env().load().await;
-        let s3 = aws_sdk_s3::Client::from_conf(
-            aws_sdk_s3::config::Builder::from(&sdk_conf)
-                .force_path_style(true)
-                .build(),
-        );
+        let s3 = aws_sdk_s3::Client::from_conf(aws_sdk_s3::config::Builder::from(&sdk_conf).force_path_style(true).build());
 
         // Extract credentials from SDK config
         let credentials = sdk_conf
@@ -113,13 +113,7 @@ impl Basic {
         let amz_date = format_amz_date(&date);
         let credential = format_credential(&self.credentials, &date);
 
-        let signature = calculate_post_signature_v4(
-            &policy_b64,
-            &self.credentials.secret_access_key(),
-            &date,
-            "us-east-1",
-            "s3",
-        );
+        let signature = calculate_post_signature_v4(&policy_b64, self.credentials.secret_access_key(), &date, "us-east-1", "s3");
 
         // Create multipart form data
         let boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
@@ -147,22 +141,17 @@ impl Basic {
 
         let response = client
             .post(&url)
-            .header("Content-Type", format!("multipart/form-data; boundary={}", boundary))
+            .header("Content-Type", format!("multipart/form-data; boundary={boundary}"))
             .body(body)
             .send()
             .await?;
 
         let status = response.status();
         let body_text = response.text().await?;
-        
+
         debug!(?status, ?body_text, "received response");
 
-        assert!(
-            status.is_success(),
-            "POST object failed: status={}, body={}",
-            status,
-            body_text
-        );
+        assert!(status.is_success(), "POST object failed: status={}, body={}", status, body_text);
 
         // Verify the object was created
         let resp = self.s3.get_object().bucket(&self.bucket).key(key).send().await?;
@@ -203,13 +192,7 @@ impl Basic {
         let amz_date = format_amz_date(&date);
         let credential = format_credential(&self.credentials, &date);
 
-        let signature = calculate_post_signature_v4(
-            &policy_b64,
-            &self.credentials.secret_access_key(),
-            &date,
-            "us-east-1",
-            "s3",
-        );
+        let signature = calculate_post_signature_v4(&policy_b64, self.credentials.secret_access_key(), &date, "us-east-1", "s3");
 
         let boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
         let body = create_multipart_body(
@@ -236,7 +219,7 @@ impl Basic {
 
         let response = client
             .post(&url)
-            .header("Content-Type", format!("multipart/form-data; boundary={}", boundary))
+            .header("Content-Type", format!("multipart/form-data; boundary={boundary}"))
             .body(body)
             .send()
             .await?;
@@ -284,13 +267,7 @@ impl Basic {
         let amz_date = format_amz_date(&date);
         let credential = format_credential(&self.credentials, &date);
 
-        let signature = calculate_post_signature_v4(
-            &policy_b64,
-            &self.credentials.secret_access_key(),
-            &date,
-            "us-east-1",
-            "s3",
-        );
+        let signature = calculate_post_signature_v4(&policy_b64, self.credentials.secret_access_key(), &date, "us-east-1", "s3");
 
         let boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
         let body = create_multipart_body(
@@ -314,7 +291,7 @@ impl Basic {
 
         let response = client
             .post(&url)
-            .header("Content-Type", format!("multipart/form-data; boundary={}", boundary))
+            .header("Content-Type", format!("multipart/form-data; boundary={boundary}"))
             .body(body)
             .send()
             .await?;
@@ -357,13 +334,7 @@ impl Basic {
         let amz_date = format_amz_date(&date);
         let credential = format_credential(&self.credentials, &date);
 
-        let signature = calculate_post_signature_v4(
-            &policy_b64,
-            &self.credentials.secret_access_key(),
-            &date,
-            "us-east-1",
-            "s3",
-        );
+        let signature = calculate_post_signature_v4(&policy_b64, self.credentials.secret_access_key(), &date, "us-east-1", "s3");
 
         let boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
         let body = create_multipart_body(
@@ -388,7 +359,7 @@ impl Basic {
 
         let response = client
             .post(&url)
-            .header("Content-Type", format!("multipart/form-data; boundary={}", boundary))
+            .header("Content-Type", format!("multipart/form-data; boundary={boundary}"))
             .body(body)
             .send()
             .await?;
@@ -396,12 +367,7 @@ impl Basic {
         let status = response.status();
         let body_text = response.text().await?;
 
-        assert!(
-            status.is_success(),
-            "POST with starts-with failed: status={}, body={}",
-            status,
-            body_text
-        );
+        assert!(status.is_success(), "POST with starts-with failed: status={}, body={}", status, body_text);
 
         delete_object_strict(&self.s3, &self.bucket, key).await?;
         Ok(())
@@ -431,13 +397,7 @@ impl Basic {
         let amz_date = format_amz_date(&date);
         let credential = format_credential(&self.credentials, &date);
 
-        let signature = calculate_post_signature_v4(
-            &policy_b64,
-            &self.credentials.secret_access_key(),
-            &date,
-            "us-east-1",
-            "s3",
-        );
+        let signature = calculate_post_signature_v4(&policy_b64, self.credentials.secret_access_key(), &date, "us-east-1", "s3");
 
         let boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
         let body = create_multipart_body(
@@ -461,7 +421,7 @@ impl Basic {
 
         let response = client
             .post(&url)
-            .header("Content-Type", format!("multipart/form-data; boundary={}", boundary))
+            .header("Content-Type", format!("multipart/form-data; boundary={boundary}"))
             .body(body)
             .send()
             .await?;
@@ -508,13 +468,7 @@ impl Basic {
         let amz_date = format_amz_date(&date);
         let credential = format_credential(&self.credentials, &date);
 
-        let signature = calculate_post_signature_v4(
-            &policy_b64,
-            &self.credentials.secret_access_key(),
-            &date,
-            "us-east-1",
-            "s3",
-        );
+        let signature = calculate_post_signature_v4(&policy_b64, self.credentials.secret_access_key(), &date, "us-east-1", "s3");
 
         let boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
         let body = create_multipart_body(
@@ -538,7 +492,7 @@ impl Basic {
 
         let response = client
             .post(&url)
-            .header("Content-Type", format!("multipart/form-data; boundary={}", boundary))
+            .header("Content-Type", format!("multipart/form-data; boundary={boundary}"))
             .body(body)
             .send()
             .await?;
@@ -579,11 +533,8 @@ fn format_credential(credentials: &aws_credential_types::Credentials, date: &tim
     let date_str = date
         .format(&time::macros::format_description!("[year][month][day]"))
         .expect("failed to format date");
-    format!(
-        "{}/{}/us-east-1/s3/aws4_request",
-        credentials.access_key_id(),
-        date_str
-    )
+    let access_key = credentials.access_key_id();
+    format!("{access_key}/{date_str}/us-east-1/s3/aws4_request")
 }
 
 fn calculate_post_signature_v4(
@@ -603,7 +554,7 @@ fn calculate_post_signature_v4(
         .expect("failed to format date");
 
     // Create signing key
-    let k_secret = format!("AWS4{}", secret_key);
+    let k_secret = format!("AWS4{secret_key}");
     let mut mac = HmacSha256::new_from_slice(k_secret.as_bytes()).expect("HMAC can take key of any size");
     mac.update(date_str.as_bytes());
     let k_date = mac.finalize().into_bytes();
@@ -640,27 +591,23 @@ fn create_multipart_body(
 
     // Add form fields
     for (name, value) in fields {
-        body.extend_from_slice(format!("--{}\r\n", boundary).as_bytes());
-        body.extend_from_slice(format!("Content-Disposition: form-data; name=\"{}\"\r\n\r\n", name).as_bytes());
+        body.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
+        body.extend_from_slice(format!("Content-Disposition: form-data; name=\"{name}\"\r\n\r\n").as_bytes());
         body.extend_from_slice(value.as_bytes());
         body.extend_from_slice(b"\r\n");
     }
 
     // Add file field
-    body.extend_from_slice(format!("--{}\r\n", boundary).as_bytes());
+    body.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
     body.extend_from_slice(
-        format!(
-            "Content-Disposition: form-data; name=\"{}\"; filename=\"{}\"\r\n",
-            file_field_name, filename
-        )
-        .as_bytes(),
+        format!("Content-Disposition: form-data; name=\"{file_field_name}\"; filename=\"{filename}\"\r\n").as_bytes(),
     );
-    body.extend_from_slice(format!("Content-Type: {}\r\n\r\n", content_type).as_bytes());
+    body.extend_from_slice(format!("Content-Type: {content_type}\r\n\r\n").as_bytes());
     body.extend_from_slice(file_content);
     body.extend_from_slice(b"\r\n");
 
     // End boundary
-    body.extend_from_slice(format!("--{}--\r\n", boundary).as_bytes());
+    body.extend_from_slice(format!("--{boundary}--\r\n").as_bytes());
 
     body
 }
