@@ -878,4 +878,59 @@ mod tests {
         assert_eq!(multipart.fields().len(), field_count);
         assert!(multipart.file.stream.is_some());
     }
+
+    #[tokio::test]
+    async fn test_boundary_buffer_too_large() {
+        // Create a scenario where the boundary pattern spans many chunks, causing
+        // the buffer in state 3 to accumulate more than MAX_BOUNDARY_BUFFER_SIZE
+        let boundary = b"boundary123";
+
+        // Create file content that will trigger state 3 (boundary matching across chunks)
+        // by having a partial boundary pattern that keeps accumulating
+        let mut file_content = Vec::new();
+
+        // Add some normal content first
+        file_content.extend_from_slice(b"normal content here\r");
+
+        // Create a long sequence that starts like the boundary pattern "\r\n--boundary123"
+        // but never completes, forcing the buffer to keep accumulating in state 3
+        // The pattern is "\r\n--" which matches the start of the boundary pattern
+        file_content.extend_from_slice(b"\n-"); // This will trigger state 3
+
+        // Now send many chunks that continue to look like they might be the boundary
+        // but never complete it, causing the buffer to grow beyond MAX_BOUNDARY_BUFFER_SIZE
+        let large_chunk = vec![b'-'; MAX_BOUNDARY_BUFFER_SIZE + 1000];
+
+        let body_bytes = vec![
+            Bytes::from(b"--boundary123\r\n".to_vec()),
+            Bytes::from(b"Content-Disposition: form-data; name=\"file\"; filename=\"test.txt\"\r\n\r\n".to_vec()),
+            Bytes::from(file_content),
+            // Send the large chunk that will exceed the buffer limit
+            Bytes::from(large_chunk),
+        ];
+
+        let body_stream = futures::stream::iter(body_bytes.into_iter().map(Ok::<_, StdError>));
+
+        let result = transform_multipart(body_stream, boundary).await;
+
+        // The multipart parsing will succeed, but when we try to read the file stream,
+        // it should error with BoundaryBufferTooLarge
+        assert!(result.is_ok(), "Multipart parsing should succeed");
+
+        let mut multipart = result.unwrap();
+        let mut file_stream = multipart.take_file_stream().expect("File stream should exist");
+
+        // Try to read from the file stream, which should trigger the boundary buffer error
+        let mut errored = false;
+        while let Some(chunk_result) = file_stream.next().await {
+            if let Err(FileStreamError::BoundaryBufferTooLarge(size, limit)) = chunk_result {
+                assert_eq!(limit, MAX_BOUNDARY_BUFFER_SIZE);
+                assert!(size > MAX_BOUNDARY_BUFFER_SIZE);
+                errored = true;
+                break;
+            }
+        }
+
+        assert!(errored, "Should have received BoundaryBufferTooLarge error");
+    }
 }

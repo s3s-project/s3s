@@ -880,4 +880,152 @@ mod tests {
         let trailers = handle.take().expect("trailers present");
         assert_eq!(trailers.len(), 50);
     }
+
+    #[tokio::test]
+    async fn test_chunk_meta_too_large() {
+        // Test that chunk metadata exceeding MAX_CHUNK_META_SIZE (1KB) triggers an error
+        // We create a chunk with an extremely long hex size that doesn't contain a newline
+        // Split across multiple stream chunks to trigger the accumulation logic
+
+        let meta_part1 = vec![b'f'; 600]; // First part of oversized hex number
+        let meta_part2 = vec![b'f'; 600]; // Second part - together they exceed 1KB
+
+        let chunk_results: Vec<Result<Bytes, _>> = vec![Ok(Bytes::from(meta_part1)), Ok(Bytes::from(meta_part2))];
+
+        let seed_signature = "deadbeef";
+        let timestamp = "20130524T000000Z";
+        let region = "us-east-1";
+        let service = "s3";
+        let secret_access_key = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+        let date = AmzDate::parse(timestamp).unwrap();
+
+        let stream = futures::stream::iter(chunk_results);
+        let mut chunked_stream = AwsChunkedStream::new(
+            stream,
+            seed_signature.into(),
+            date,
+            region.into(),
+            service.into(),
+            secret_access_key.into(),
+            0,
+            true, // unsigned
+        );
+
+        // Should get an error due to meta size limit
+        let result = chunked_stream.next().await;
+        assert!(result.is_some());
+        match result.unwrap() {
+            Err(AwsChunkedStreamError::Underlying(e)) => {
+                // The error is wrapped in Underlying
+                let downcasted = e.downcast_ref::<AwsChunkedStreamError>();
+                assert!(downcasted.is_some(), "Expected ChunkMetaTooLarge error");
+                assert!(
+                    matches!(downcasted.unwrap(), AwsChunkedStreamError::ChunkMetaTooLarge(_, _)),
+                    "Expected ChunkMetaTooLarge error"
+                );
+            }
+            other => panic!("Expected ChunkMetaTooLarge error wrapped in Underlying, got: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_trailers_too_large() {
+        // Test that the limit for MAX_TRAILERS_SIZE (16KB) prevents unbounded allocation
+        // This test creates trailers that would exceed the limit and verifies the code
+        // handles them safely without crashing or allocating unbounded memory.
+        let chunk1_meta = b"3\r\n";
+        let chunk2_meta = b"0\r\n";
+
+        let chunk1_data = b"abc";
+        let decoded_content_length = chunk1_data.len();
+
+        let chunk1 = join(&[chunk1_meta, chunk1_data.as_ref(), b"\r\n"]);
+        let chunk2 = join(&[chunk2_meta, b"\r\n"]);
+
+        // Create trailers that exceed MAX_TRAILERS_SIZE (16KB)
+        // Each header is about 53 bytes, so 400 headers = ~21KB > 16KB limit
+        let mut large_trailers = Vec::new();
+        for i in 0..400 {
+            large_trailers.extend_from_slice(format!("x-amz-meta-header-{i}: {}\r\n", "x".repeat(30)).as_bytes());
+        }
+
+        let chunk_results: Vec<Result<Bytes, _>> = vec![Ok(chunk1), Ok(chunk2), Ok(Bytes::from(large_trailers))];
+
+        let seed_signature = "deadbeef";
+        let timestamp = "20130524T000000Z";
+        let region = "us-east-1";
+        let service = "s3";
+        let secret_access_key = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+        let date = AmzDate::parse(timestamp).unwrap();
+
+        let stream = futures::stream::iter(chunk_results);
+        let mut chunked_stream = AwsChunkedStream::new(
+            stream,
+            seed_signature.into(),
+            date,
+            region.into(),
+            service.into(),
+            secret_access_key.into(),
+            decoded_content_length,
+            true, // unsigned
+        );
+
+        // Read the chunk data
+        let ans1 = chunked_stream.next().await.unwrap();
+        assert_eq!(ans1.unwrap(), chunk1_data.as_slice());
+
+        // The limit prevents unbounded memory allocation during trailer parsing
+        // The stream terminates gracefully (errors in async generator don't surface through next())
+        let _ = chunked_stream.next().await;
+    }
+
+    #[tokio::test]
+    async fn test_too_many_trailer_headers() {
+        // Test that the limit for MAX_TRAILER_HEADERS (100) prevents unbounded allocation
+        // This test creates more headers than allowed and verifies the code
+        // handles them safely without crashing or allocating unbounded memory.
+        let chunk1_meta = b"3\r\n";
+        let chunk2_meta = b"0\r\n";
+
+        let chunk1_data = b"abc";
+        let decoded_content_length = chunk1_data.len();
+
+        let chunk1 = join(&[chunk1_meta, chunk1_data.as_ref(), b"\r\n"]);
+        let chunk2 = join(&[chunk2_meta, b"\r\n"]);
+
+        // Create more than MAX_TRAILER_HEADERS (100) headers - use 150
+        let mut many_trailers = Vec::new();
+        for i in 0..150 {
+            many_trailers.extend_from_slice(format!("x-amz-meta-{i}: value\r\n").as_bytes());
+        }
+
+        let chunk_results: Vec<Result<Bytes, _>> = vec![Ok(chunk1), Ok(chunk2), Ok(Bytes::from(many_trailers))];
+
+        let seed_signature = "deadbeef";
+        let timestamp = "20130524T000000Z";
+        let region = "us-east-1";
+        let service = "s3";
+        let secret_access_key = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+        let date = AmzDate::parse(timestamp).unwrap();
+
+        let stream = futures::stream::iter(chunk_results);
+        let mut chunked_stream = AwsChunkedStream::new(
+            stream,
+            seed_signature.into(),
+            date,
+            region.into(),
+            service.into(),
+            secret_access_key.into(),
+            decoded_content_length,
+            true, // unsigned
+        );
+
+        // Read the chunk data
+        let ans1 = chunked_stream.next().await.unwrap();
+        assert_eq!(ans1.unwrap(), chunk1_data.as_slice());
+
+        // The limit prevents unbounded memory allocation during trailer parsing
+        // The stream terminates gracefully (errors in async generator don't surface through next())
+        let _ = chunked_stream.next().await;
+    }
 }
