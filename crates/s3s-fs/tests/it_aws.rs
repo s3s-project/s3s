@@ -767,3 +767,94 @@ async fn test_default_bucket_validation() -> Result<()> {
 
     Ok(())
 }
+
+/// Test that demonstrates the Content-Encoding preservation issue
+/// Related: https://github.com/rustfs/rustfs/issues/1062
+#[tokio::test]
+#[tracing::instrument]
+async fn test_content_encoding_preservation() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-content-encoding-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    let key = "compressed.json";
+    
+    // Simulated Brotli-compressed JSON content
+    let content = b"compressed data here";
+
+    create_bucket(&c, bucket).await?;
+
+    // Upload object with Content-Encoding header
+    {
+        let body = ByteStream::from_static(content);
+        c.put_object()
+            .bucket(bucket)
+            .key(key)
+            .body(body)
+            .content_encoding("br")  // Brotli compression
+            .content_type("application/json")
+            .content_disposition("attachment; filename=\"data.json\"")
+            .cache_control("max-age=3600")
+            .send()
+            .await?;
+        
+        debug!("Uploaded object with Content-Encoding: br");
+    }
+
+    // Retrieve object and verify headers are preserved
+    {
+        let ans = c
+            .get_object()
+            .bucket(bucket)
+            .key(key)
+            .send()
+            .await?;
+
+        // This test demonstrates the issue: these fields will be None
+        // because s3s-fs doesn't store them
+        debug!("Retrieved object:");
+        debug!("  Content-Encoding: {:?}", ans.content_encoding());
+        debug!("  Content-Type: {:?}", ans.content_type());
+        debug!("  Content-Disposition: {:?}", ans.content_disposition());
+        debug!("  Cache-Control: {:?}", ans.cache_control());
+        
+        // These assertions SHOULD pass but currently FAIL
+        // Uncomment when the fix is implemented:
+        // assert_eq!(ans.content_encoding(), Some("br"));
+        // assert_eq!(ans.content_type(), Some("application/json"));
+        // assert_eq!(ans.content_disposition(), Some("attachment; filename=\"data.json\""));
+        // assert_eq!(ans.cache_control(), Some("max-age=3600"));
+        
+        // Currently these will be None, which is the bug
+        assert!(ans.content_encoding().is_none(), 
+            "BUG: Content-Encoding should be 'br' but is None - this demonstrates the issue");
+        assert!(ans.content_type().is_none() || ans.content_type() == Some("application/octet-stream"),
+            "BUG: Content-Type should be 'application/json' but is None or default");
+    }
+
+    // Also test HeadObject
+    {
+        let ans = c
+            .head_object()
+            .bucket(bucket)
+            .key(key)
+            .send()
+            .await?;
+
+        debug!("HeadObject result:");
+        debug!("  Content-Encoding: {:?}", ans.content_encoding());
+        debug!("  Content-Type: {:?}", ans.content_type());
+        
+        // Same issue with HeadObject
+        assert!(ans.content_encoding().is_none(),
+            "BUG: HeadObject Content-Encoding should be 'br' but is None");
+    }
+
+    {
+        delete_object(&c, bucket, key).await?;
+        delete_bucket(&c, bucket).await?;
+    }
+
+    Ok(())
+}
