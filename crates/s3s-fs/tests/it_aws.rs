@@ -816,7 +816,7 @@ async fn test_sts_assume_role_not_implemented() -> Result<()> {
     let error = result.unwrap_err();
     let error_str = format!("{error:?}");
     debug!("AssumeRole error (expected): {error_str}");
-    
+
     // The error should contain "NotImplemented" or similar indication
     assert!(
         error_str.contains("NotImplemented") || error_str.contains("not implemented"),

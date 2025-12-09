@@ -13,6 +13,7 @@ use crate::sig_v4::AmzDate;
 use crate::sig_v4::UploadStream;
 use crate::sig_v4::{AuthorizationV4, CredentialV4, PostSignatureV4, PresignedUrlV4};
 use crate::stream::ByteStream as _;
+use crate::utils::crypto::hex_sha256;
 use crate::utils::is_base64_encoded;
 
 use std::mem;
@@ -391,15 +392,23 @@ impl SignatureContext<'_> {
                         // STS requests require computing the payload hash from the body
                         // Read the body (it's small for STS requests like AssumeRole)
                         const MAX_STS_BODY_SIZE: usize = 8192; // 8KB should be enough for STS requests
-                        let body_bytes = self.req_body.store_all_limited(MAX_STS_BODY_SIZE).await
+                        let body_bytes = self
+                            .req_body
+                            .store_all_limited(MAX_STS_BODY_SIZE)
+                            .await
                             .map_err(|_| invalid_request!("failed to read STS request body"))?;
-                        
+
                         // Compute SHA256 hash and convert to hex
-                        use crate::utils::crypto::hex_sha256;
                         let hash = hex_sha256(&body_bytes, str::to_owned);
-                        
+
                         // Create canonical request with the computed hash
-                        sig_v4::create_canonical_request(method, uri_path, query_strings, &headers, sig_v4::Payload::SingleChunk(&hash))
+                        sig_v4::create_canonical_request(
+                            method,
+                            uri_path,
+                            query_strings,
+                            &headers,
+                            sig_v4::Payload::SingleChunk(&hash),
+                        )
                     } else {
                         // According to AWS S3 protocol, x-amz-content-sha256 header is required for
                         // all S3 requests authenticated with Signature V4. Reject if missing.
