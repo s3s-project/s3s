@@ -1,26 +1,48 @@
 //! HTTPS server example for s3s
 //!
 //! This example demonstrates how to run an S3 service over HTTPS using TLS.
-//! It uses tokio-rustls for TLS support and generates a self-signed certificate for testing.
+//! It uses tokio-rustls for TLS support and loads certificates from PEM files.
+//!
+//! # Generating Test Certificates
+//!
+//! You can generate self-signed certificates for testing using OpenSSL:
+//!
+//! ```bash
+//! # Generate a private key
+//! openssl genrsa -out key.pem 2048
+//!
+//! # Generate a self-signed certificate
+//! openssl req -new -x509 -key key.pem -out cert.pem -days 365 \
+//!     -subj "/CN=localhost"
+//! ```
+//!
+//! Or use a single command to generate both:
+//!
+//! ```bash
+//! openssl req -x509 -newkey rsa:2048 -nodes -keyout key.pem -out cert.pem \
+//!     -days 365 -subj "/CN=localhost"
+//! ```
 //!
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example https
+//! # Generate test certificates first (see above)
+//! cargo run --example https -- --cert cert.pem --key key.pem
 //! ```
 //!
-//! Then you can access the server at <https://localhost:8014> (note: you'll need to accept
-//! the self-signed certificate warning in your browser or S3 client).
+//! Then you can access the server at <https://localhost:8014>. You'll need to accept
+//! the self-signed certificate warning in your browser or S3 client.
 //!
-//! For production use, replace the self-signed certificate with a proper certificate
-//! from a trusted certificate authority.
+//! For production use, use certificates from a trusted certificate authority.
 
 use s3s::auth::SimpleAuth;
 use s3s::dto::{GetObjectInput, GetObjectOutput};
 use s3s::service::S3ServiceBuilder;
 use s3s::{S3, S3Request, S3Response, S3Result};
 
-use std::io;
+use std::fs::File;
+use std::io::{self, BufReader};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use tokio::net::TcpListener;
@@ -31,6 +53,8 @@ use tokio_rustls::rustls::pki_types::{CertificateDer, PrivateKeyDer};
 
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::server::conn::auto::Builder as ConnBuilder;
+
+use clap::Parser;
 
 /// A minimal S3 implementation for demonstration purposes
 #[derive(Debug, Clone)]
@@ -43,31 +67,51 @@ impl S3 for DummyS3 {
     }
 }
 
-/// Generate a self-signed certificate for testing purposes
-fn generate_self_signed_cert() -> io::Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>)> {
-    use rcgen::{CertificateParams, KeyPair};
-
-    // Generate a new key pair
-    let key_pair = KeyPair::generate().map_err(io::Error::other)?;
-
-    // Create certificate parameters
-    let mut params = CertificateParams::new(vec!["localhost".to_string()]).map_err(io::Error::other)?;
-
-    params.distinguished_name.push(rcgen::DnType::CommonName, "localhost");
-
-    // Generate the certificate
-    let cert = params.self_signed(&key_pair).map_err(io::Error::other)?;
-
-    // Convert to DER format
-    let cert_der = CertificateDer::from(cert.der().to_vec());
-    let key_der = PrivateKeyDer::try_from(key_pair.serialize_der()).map_err(io::Error::other)?;
-
-    Ok((vec![cert_der], key_der))
+/// Load certificates from a PEM file
+fn load_certs(path: &PathBuf) -> io::Result<Vec<CertificateDer<'static>>> {
+    let file = File::open(path)?;
+    let mut reader = BufReader::new(file);
+    let certs = rustls_pemfile::certs(&mut reader).collect::<Result<Vec<_>, _>>()?;
+    Ok(certs)
 }
 
-/// Create TLS server configuration
-fn create_tls_config() -> io::Result<ServerConfig> {
-    let (certs, key) = generate_self_signed_cert()?;
+/// Load private key from a PEM file
+fn load_private_key(path: &PathBuf) -> io::Result<PrivateKeyDer<'static>> {
+    let file = File::open(path)?;
+    let mut reader = BufReader::new(file);
+
+    // Try reading as PKCS8 first, then RSA, then EC
+    let mut keys = rustls_pemfile::pkcs8_private_keys(&mut reader).collect::<Result<Vec<_>, _>>()?;
+
+    if !keys.is_empty() {
+        return Ok(PrivateKeyDer::Pkcs8(keys.remove(0)));
+    }
+
+    // Reset reader
+    let file = File::open(path)?;
+    let mut reader = BufReader::new(file);
+    let mut keys = rustls_pemfile::rsa_private_keys(&mut reader).collect::<Result<Vec<_>, _>>()?;
+
+    if !keys.is_empty() {
+        return Ok(PrivateKeyDer::Pkcs1(keys.remove(0)));
+    }
+
+    // Reset reader
+    let file = File::open(path)?;
+    let mut reader = BufReader::new(file);
+    let mut keys = rustls_pemfile::ec_private_keys(&mut reader).collect::<Result<Vec<_>, _>>()?;
+
+    if !keys.is_empty() {
+        return Ok(PrivateKeyDer::Sec1(keys.remove(0)));
+    }
+
+    Err(io::Error::new(io::ErrorKind::InvalidInput, "No valid private key found in file"))
+}
+
+/// Create TLS server configuration from certificate and key files
+fn create_tls_config(cert_path: &PathBuf, key_path: &PathBuf) -> io::Result<ServerConfig> {
+    let certs = load_certs(cert_path)?;
+    let key = load_private_key(key_path)?;
 
     let mut config = ServerConfig::builder()
         .with_no_client_auth()
@@ -80,10 +124,34 @@ fn create_tls_config() -> io::Result<ServerConfig> {
     Ok(config)
 }
 
+#[derive(clap::Parser)]
+#[command(name = "https-example")]
+#[command(about = "HTTPS server example for s3s", long_about = None)]
+struct Args {
+    /// Path to the TLS certificate file (PEM format)
+    #[arg(long)]
+    cert: PathBuf,
+
+    /// Path to the TLS private key file (PEM format)
+    #[arg(long)]
+    key: PathBuf,
+
+    /// Host to listen on
+    #[arg(long, default_value = "127.0.0.1")]
+    host: String,
+
+    /// Port to listen on
+    #[arg(long, default_value = "8014")]
+    port: u16,
+}
+
 #[tokio::main]
 async fn main() -> io::Result<()> {
     // Install the default crypto provider (required for rustls)
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+
+    // Parse command line arguments
+    let args = Args::parse();
 
     // Setup tracing
     tracing_subscriber::fmt()
@@ -100,16 +168,17 @@ async fn main() -> io::Result<()> {
         builder.build()
     };
 
-    // Create TLS configuration
-    let tls_config = create_tls_config()?;
+    // Create TLS configuration from certificate files
+    let tls_config = create_tls_config(&args.cert, &args.key)?;
     let tls_acceptor = TlsAcceptor::from(Arc::new(tls_config));
 
     // Bind to address
-    let addr = "127.0.0.1:8014";
-    let listener = TcpListener::bind(addr).await?;
+    let addr = format!("{}:{}", args.host, args.port);
+    let listener = TcpListener::bind(&addr).await?;
 
     tracing::info!("HTTPS server listening on https://{}", addr);
-    tracing::info!("Using self-signed certificate - you'll need to accept the certificate warning");
+    tracing::info!("Using certificate from: {:?}", args.cert);
+    tracing::info!("Using private key from: {:?}", args.key);
     tracing::info!("Press Ctrl+C to stop");
 
     let http_server = ConnBuilder::new(TokioExecutor::new());
