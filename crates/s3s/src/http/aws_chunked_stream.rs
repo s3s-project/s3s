@@ -21,6 +21,8 @@ use futures::stream::{Stream, StreamExt};
 use hyper::body::{Buf, Bytes};
 use memchr::memchr;
 
+/// Maximum size for chunk metadata
+/// Prevents `DoS` via oversized chunk size declarations
 const MAX_CHUNK_META_SIZE: usize = 1024;
 
 /// Maximum size for trailers
