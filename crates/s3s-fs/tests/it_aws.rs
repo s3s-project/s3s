@@ -779,7 +779,7 @@ async fn test_content_encoding_preservation() -> Result<()> {
     let bucket = format!("test-content-encoding-{}", Uuid::new_v4());
     let bucket = bucket.as_str();
     let key = "compressed.json";
-    
+
     // Simulated Brotli-compressed JSON content
     let content = b"compressed data here";
 
@@ -792,24 +792,19 @@ async fn test_content_encoding_preservation() -> Result<()> {
             .bucket(bucket)
             .key(key)
             .body(body)
-            .content_encoding("br")  // Brotli compression
+            .content_encoding("br") // Brotli compression
             .content_type("application/json")
             .content_disposition("attachment; filename=\"data.json\"")
             .cache_control("max-age=3600")
             .send()
             .await?;
-        
+
         debug!("Uploaded object with Content-Encoding: br");
     }
 
     // Retrieve object and verify headers are preserved
     {
-        let ans = c
-            .get_object()
-            .bucket(bucket)
-            .key(key)
-            .send()
-            .await?;
+        let ans = c.get_object().bucket(bucket).key(key).send().await?;
 
         // This test demonstrates the issue: these fields will be None
         // because s3s-fs doesn't store them
@@ -818,40 +813,25 @@ async fn test_content_encoding_preservation() -> Result<()> {
         debug!("  Content-Type: {:?}", ans.content_type());
         debug!("  Content-Disposition: {:?}", ans.content_disposition());
         debug!("  Cache-Control: {:?}", ans.cache_control());
-        
-        // These assertions SHOULD pass but currently FAIL
-        // Uncomment when the fix is implemented:
-        // assert_eq!(ans.content_encoding(), Some("br"));
-        // assert_eq!(ans.content_type(), Some("application/json"));
-        // assert_eq!(ans.content_disposition(), Some("attachment; filename=\"data.json\""));
-        // assert_eq!(ans.cache_control(), Some("max-age=3600"));
-        
-        // Currently these fields are None, demonstrating the bug
-        assert!(ans.content_encoding().is_none(), 
-            "Content-Encoding is not preserved (expected 'br')");
-        
-        let content_type = ans.content_type();
-        let is_missing_or_default = content_type.is_none() || content_type == Some("application/octet-stream");
-        assert!(is_missing_or_default,
-            "Content-Type is not preserved (expected 'application/json', got {:?})", content_type);
+
+        // Verify that the fix works - headers should now be preserved
+        assert_eq!(ans.content_encoding(), Some("br"));
+        assert_eq!(ans.content_type(), Some("application/json"));
+        assert_eq!(ans.content_disposition(), Some("attachment; filename=\"data.json\""));
+        assert_eq!(ans.cache_control(), Some("max-age=3600"));
     }
 
     // Also test HeadObject
     {
-        let ans = c
-            .head_object()
-            .bucket(bucket)
-            .key(key)
-            .send()
-            .await?;
+        let ans = c.head_object().bucket(bucket).key(key).send().await?;
 
         debug!("HeadObject result:");
         debug!("  Content-Encoding: {:?}", ans.content_encoding());
         debug!("  Content-Type: {:?}", ans.content_type());
-        
-        // Same issue with HeadObject
-        assert!(ans.content_encoding().is_none(),
-            "Content-Encoding is not preserved in HeadObject (expected 'br')");
+
+        // Verify HeadObject also returns the stored attributes
+        assert_eq!(ans.content_encoding(), Some("br"));
+        assert_eq!(ans.content_type(), Some("application/json"));
     }
 
     {

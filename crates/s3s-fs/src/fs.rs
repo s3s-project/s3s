@@ -27,6 +27,48 @@ pub struct FileSystem {
 
 pub(crate) type InternalInfo = serde_json::Map<String, serde_json::Value>;
 
+/// Stores standard object attributes alongside user metadata
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub(crate) struct ObjectAttributes {
+    /// User-defined metadata (x-amz-meta-*)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_metadata: Option<dto::Metadata>,
+
+    /// Standard object attributes
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content_encoding: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content_disposition: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content_language: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_control: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expires: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub website_redirect_location: Option<String>,
+}
+
+impl ObjectAttributes {
+    /// Convert expires Timestamp to String for storage
+    pub fn set_expires_timestamp(&mut self, expires: Option<dto::Timestamp>) {
+        self.expires = expires.map(|ts| {
+            let mut buf = Vec::new();
+            ts.format(dto::TimestampFormat::DateTime, &mut buf).ok();
+            String::from_utf8_lossy(&buf).into_owned()
+        });
+    }
+
+    /// Parse expires String back to Timestamp
+    pub fn get_expires_timestamp(&self) -> Option<dto::Timestamp> {
+        self.expires
+            .as_ref()
+            .and_then(|s| dto::Timestamp::parse(dto::TimestampFormat::DateTime, s).ok())
+    }
+}
+
 fn clean_old_tmp_files(root: &Path) -> std::io::Result<()> {
     let entries = match std::fs::read_dir(root) {
         Ok(entries) => Ok(entries),
@@ -88,18 +130,59 @@ impl FileSystem {
         self.resolve_abs_path(file_path)
     }
 
-    /// load metadata from fs
-    pub(crate) async fn load_metadata(&self, bucket: &str, key: &str, upload_id: Option<Uuid>) -> Result<Option<dto::Metadata>> {
+    /// load object attributes from fs (with backward compatibility)
+    pub(crate) async fn load_object_attributes(
+        &self,
+        bucket: &str,
+        key: &str,
+        upload_id: Option<Uuid>,
+    ) -> Result<Option<ObjectAttributes>> {
         let path = self.get_metadata_path(bucket, key, upload_id)?;
         if path.exists().not() {
             return Ok(None);
         }
         let content = fs::read(&path).await?;
-        let map = serde_json::from_slice(&content)?;
-        Ok(Some(map))
+
+        // Try to deserialize as ObjectAttributes first (new format)
+        if let Ok(attrs) = serde_json::from_slice::<ObjectAttributes>(&content) {
+            return Ok(Some(attrs));
+        }
+
+        // Fall back to old format (just user metadata)
+        if let Ok(user_metadata) = serde_json::from_slice::<dto::Metadata>(&content) {
+            return Ok(Some(ObjectAttributes {
+                user_metadata: Some(user_metadata),
+                ..Default::default()
+            }));
+        }
+
+        Ok(None)
     }
 
-    /// save metadata to fs
+    /// save object attributes to fs
+    pub(crate) async fn save_object_attributes(
+        &self,
+        bucket: &str,
+        key: &str,
+        attrs: &ObjectAttributes,
+        upload_id: Option<Uuid>,
+    ) -> Result<()> {
+        let path = self.get_metadata_path(bucket, key, upload_id)?;
+        let content = serde_json::to_vec(attrs)?;
+        let mut file_writer = self.prepare_file_write(&path).await?;
+        file_writer.writer().write_all(&content).await?;
+        file_writer.writer().flush().await?;
+        file_writer.done().await?;
+        Ok(())
+    }
+
+    /// load metadata from fs (deprecated - use `load_object_attributes`)
+    pub(crate) async fn load_metadata(&self, bucket: &str, key: &str, upload_id: Option<Uuid>) -> Result<Option<dto::Metadata>> {
+        let attrs = self.load_object_attributes(bucket, key, upload_id).await?;
+        Ok(attrs.and_then(|a| a.user_metadata))
+    }
+
+    /// save metadata to fs (deprecated - use `save_object_attributes`)
     pub(crate) async fn save_metadata(
         &self,
         bucket: &str,
@@ -107,13 +190,11 @@ impl FileSystem {
         metadata: &dto::Metadata,
         upload_id: Option<Uuid>,
     ) -> Result<()> {
-        let path = self.get_metadata_path(bucket, key, upload_id)?;
-        let content = serde_json::to_vec(metadata)?;
-        let mut file_writer = self.prepare_file_write(&path).await?;
-        file_writer.writer().write_all(&content).await?;
-        file_writer.writer().flush().await?;
-        file_writer.done().await?;
-        Ok(())
+        let attrs = ObjectAttributes {
+            user_metadata: Some(metadata.clone()),
+            ..Default::default()
+        };
+        self.save_object_attributes(bucket, key, &attrs, upload_id).await
     }
 
     /// remove metadata from fs

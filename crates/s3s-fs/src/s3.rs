@@ -232,7 +232,7 @@ impl S3 for FileSystem {
 
         let body = bytes_stream(ReaderStream::with_capacity(file, 4096), content_length_usize);
 
-        let object_metadata = self.load_metadata(&input.bucket, &input.key, None).await?;
+        let obj_attrs = self.load_object_attributes(&input.bucket, &input.key, None).await?;
 
         let md5_sum = self.get_md5_sum(&input.bucket, &input.key).await?;
 
@@ -249,7 +249,16 @@ impl S3 for FileSystem {
             content_length: Some(content_length_i64),
             content_range,
             last_modified: Some(last_modified),
-            metadata: object_metadata,
+            metadata: obj_attrs.as_ref().and_then(|a| a.user_metadata.clone()),
+            content_encoding: obj_attrs.as_ref().and_then(|a| a.content_encoding.clone()),
+            content_type: obj_attrs.as_ref().and_then(|a| a.content_type.clone()),
+            content_disposition: obj_attrs.as_ref().and_then(|a| a.content_disposition.clone()),
+            content_language: obj_attrs.as_ref().and_then(|a| a.content_language.clone()),
+            cache_control: obj_attrs.as_ref().and_then(|a| a.cache_control.clone()),
+            expires: obj_attrs
+                .as_ref()
+                .and_then(crate::fs::ObjectAttributes::get_expires_timestamp),
+            website_redirect_location: obj_attrs.as_ref().and_then(|a| a.website_redirect_location.clone()),
             e_tag: Some(ETag::Strong(md5_sum)),
             checksum_crc32: checksum.checksum_crc32,
             checksum_crc32c: checksum.checksum_crc32c,
@@ -286,16 +295,21 @@ impl S3 for FileSystem {
         let last_modified = Timestamp::from(try_!(file_metadata.modified()));
         let file_len = file_metadata.len();
 
-        let object_metadata = self.load_metadata(&input.bucket, &input.key, None).await?;
-
-        // TODO: detect content type
-        let content_type = ContentType::from("application/octet-stream");
+        let obj_attrs = self.load_object_attributes(&input.bucket, &input.key, None).await?;
 
         let output = HeadObjectOutput {
             content_length: Some(try_!(i64::try_from(file_len))),
-            content_type: Some(content_type),
+            content_type: obj_attrs.as_ref().and_then(|a| a.content_type.clone()),
+            content_encoding: obj_attrs.as_ref().and_then(|a| a.content_encoding.clone()),
+            content_disposition: obj_attrs.as_ref().and_then(|a| a.content_disposition.clone()),
+            content_language: obj_attrs.as_ref().and_then(|a| a.content_language.clone()),
+            cache_control: obj_attrs.as_ref().and_then(|a| a.cache_control.clone()),
+            expires: obj_attrs
+                .as_ref()
+                .and_then(crate::fs::ObjectAttributes::get_expires_timestamp),
+            website_redirect_location: obj_attrs.as_ref().and_then(|a| a.website_redirect_location.clone()),
             last_modified: Some(last_modified),
-            metadata: object_metadata,
+            metadata: obj_attrs.as_ref().and_then(|a| a.user_metadata.clone()),
             ..Default::default()
         };
         Ok(S3Response::new(output))
@@ -459,6 +473,8 @@ impl S3 for FileSystem {
 
     #[tracing::instrument]
     async fn put_object(&self, req: S3Request<PutObjectInput>) -> S3Result<S3Response<PutObjectOutput>> {
+        use crate::fs::ObjectAttributes;
+
         let mut input = req.input;
         if let Some(ref storage_class) = input.storage_class {
             let is_valid = ["STANDARD", "REDUCED_REDUNDANCY"].contains(&storage_class.as_str());
@@ -474,6 +490,13 @@ impl S3 for FileSystem {
             metadata,
             content_length,
             content_md5,
+            content_encoding,
+            content_type,
+            content_disposition,
+            content_language,
+            cache_control,
+            expires,
+            website_redirect_location,
             ..
         } = input;
 
@@ -587,9 +610,19 @@ impl S3 for FileSystem {
 
         debug!(path = %object_path.display(), ?size, %md5_sum, ?checksum, "write file");
 
-        if let Some(ref metadata) = metadata {
-            self.save_metadata(&bucket, &key, metadata, None).await?;
-        }
+        // Save object attributes (including user metadata and standard attributes)
+        let mut obj_attrs = ObjectAttributes {
+            user_metadata: metadata,
+            content_encoding,
+            content_type,
+            content_disposition,
+            content_language,
+            cache_control,
+            expires: None,
+            website_redirect_location,
+        };
+        obj_attrs.set_expires_timestamp(expires);
+        self.save_object_attributes(&bucket, &key, &obj_attrs, None).await?;
 
         let mut info: InternalInfo = default();
         crate::checksum::modify_internal_info(&mut info, &checksum);
@@ -612,13 +645,25 @@ impl S3 for FileSystem {
         &self,
         req: S3Request<CreateMultipartUploadInput>,
     ) -> S3Result<S3Response<CreateMultipartUploadOutput>> {
+        use crate::fs::ObjectAttributes;
+
         let input = req.input;
         let upload_id = self.create_upload_id(req.credentials.as_ref()).await?;
 
-        if let Some(ref metadata) = input.metadata {
-            self.save_metadata(&input.bucket, &input.key, metadata, Some(upload_id))
-                .await?;
-        }
+        // Save object attributes (including user metadata and standard attributes)
+        let mut obj_attrs = ObjectAttributes {
+            user_metadata: input.metadata,
+            content_encoding: input.content_encoding,
+            content_type: input.content_type,
+            content_disposition: input.content_disposition,
+            content_language: input.content_language,
+            cache_control: input.cache_control,
+            expires: None,
+            website_redirect_location: input.website_redirect_location,
+        };
+        obj_attrs.set_expires_timestamp(input.expires);
+        self.save_object_attributes(&input.bucket, &input.key, &obj_attrs, Some(upload_id))
+            .await?;
 
         let output = CreateMultipartUploadOutput {
             bucket: Some(input.bucket),
@@ -810,8 +855,8 @@ impl S3 for FileSystem {
 
         self.delete_upload_id(&upload_id).await?;
 
-        if let Ok(Some(metadata)) = self.load_metadata(&bucket, &key, Some(upload_id)).await {
-            self.save_metadata(&bucket, &key, &metadata, None).await?;
+        if let Ok(Some(attrs)) = self.load_object_attributes(&bucket, &key, Some(upload_id)).await {
+            self.save_object_attributes(&bucket, &key, &attrs, None).await?;
             let _ = self.delete_metadata(&bucket, &key, Some(upload_id));
         }
 
