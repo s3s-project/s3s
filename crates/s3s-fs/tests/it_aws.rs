@@ -826,11 +826,14 @@ async fn test_content_encoding_preservation() -> Result<()> {
         // assert_eq!(ans.content_disposition(), Some("attachment; filename=\"data.json\""));
         // assert_eq!(ans.cache_control(), Some("max-age=3600"));
         
-        // Currently these will be None, which is the bug
+        // Currently these fields are None, demonstrating the bug
         assert!(ans.content_encoding().is_none(), 
-            "BUG: Content-Encoding should be 'br' but is None - this demonstrates the issue");
-        assert!(ans.content_type().is_none() || ans.content_type() == Some("application/octet-stream"),
-            "BUG: Content-Type should be 'application/json' but is None or default");
+            "Content-Encoding is not preserved (expected 'br')");
+        
+        let content_type = ans.content_type();
+        let is_missing_or_default = content_type.is_none() || content_type == Some("application/octet-stream");
+        assert!(is_missing_or_default,
+            "Content-Type is not preserved (expected 'application/json', got {:?})", content_type);
     }
 
     // Also test HeadObject
@@ -848,7 +851,7 @@ async fn test_content_encoding_preservation() -> Result<()> {
         
         // Same issue with HeadObject
         assert!(ans.content_encoding().is_none(),
-            "BUG: HeadObject Content-Encoding should be 'br' but is None");
+            "Content-Encoding is not preserved in HeadObject (expected 'br')");
     }
 
     {

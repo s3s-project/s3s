@@ -35,7 +35,7 @@ The response **does not include** the original `Content-Encoding`, `Content-Type
 The s3s core library **correctly handles** all standard HTTP headers:
 
 1. **PutObject deserialization** (`crates/s3s/src/ops/generated.rs`):
-   - Line ~5327: Parses `Content-Encoding` from the HTTP `Content-Encoding` header
+   - Line 5335: Parses `Content-Encoding` from the HTTP `Content-Encoding` header
    - Populates the `PutObjectInput.content_encoding` field
    - Similarly handles content_type, content_disposition, cache_control, expires, etc.
 
@@ -58,7 +58,7 @@ The s3s-fs implementation **only persists user metadata**, not standard object a
    async fn put_object(&self, req: S3Request<PutObjectInput>) -> ... {
        // ... file writing logic ...
        
-       // Line 590-592: ONLY saves user metadata
+       // Lines 590-591: ONLY saves user metadata
        if let Some(ref metadata) = metadata {
            self.save_metadata(&bucket, &key, metadata, None).await?;
        }
