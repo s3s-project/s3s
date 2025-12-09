@@ -25,7 +25,7 @@ use hyper::Uri;
 use mime::Mime;
 use tracing::debug;
 
-/// Maximum allowed size for STS request body (8KB should be enough for operations like AssumeRole)
+/// Maximum allowed size for STS request body (8KB should be enough for operations like `AssumeRole`)
 const MAX_STS_BODY_SIZE: usize = 8192;
 
 fn extract_amz_content_sha256<'a>(hs: &'_ OrderedHeaders<'a>) -> S3Result<Option<AmzContentSha256<'a>>> {
@@ -390,7 +390,7 @@ impl SignatureContext<'_> {
                 }
                 None => {
                     // For STS requests, x-amz-content-sha256 header is not required
-                    // For S3 requests, this case should have been caught earlier (see lines 322-324)
+                    // For S3 requests, this case should have been caught earlier (see lines 325-327)
                     if service == "sts" {
                         // STS requests require computing the payload hash from the body
                         // Read the body (it's small for STS requests like AssumeRole)

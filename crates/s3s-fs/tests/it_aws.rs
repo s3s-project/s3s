@@ -1,4 +1,5 @@
 use s3s::auth::SimpleAuth;
+use s3s::header::CONTENT_TYPE;
 use s3s::host::SingleDomain;
 use s3s::service::S3ServiceBuilder;
 use s3s::validation::NameValidation;
@@ -38,7 +39,7 @@ struct AssumeRoleRoute;
 impl s3s::route::S3Route for AssumeRoleRoute {
     fn is_match(&self, method: &Method, uri: &hyper::Uri, headers: &hyper::HeaderMap, _: &mut hyper::http::Extensions) -> bool {
         if method == Method::POST && uri.path() == "/" {
-            if let Some(val) = headers.get("content-type") {
+            if let Some(val) = headers.get(CONTENT_TYPE) {
                 if val.as_bytes() == b"application/x-www-form-urlencoded" {
                     return true;
                 }
