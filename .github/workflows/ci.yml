@@ -8,6 +8,8 @@ on:
     branches:
       - main
       - 'feat/**'
+  merge_group:
+    types: [checks_requested]
   schedule:
     - cron: '0 0 * * 0' # at midnight of each sunday
   workflow_dispatch:
