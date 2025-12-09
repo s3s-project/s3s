@@ -758,4 +758,244 @@ mod tests {
         assert_eq!(trailers.get("x-amz-meta-a").unwrap(), &HeaderValue::from_static("1"));
         assert_eq!(trailers.get("x-amz-meta-b").unwrap(), &HeaderValue::from_static("2"));
     }
+
+    #[tokio::test]
+    async fn test_format_error_invalid_chunk_size() {
+        // Test FormatError when chunk size is not valid hex
+        let chunk_meta = b"ZZZZ\r\n"; // Invalid hex
+        let chunk_results: Vec<Result<Bytes, _>> = vec![Ok(Bytes::from_static(chunk_meta))];
+
+        let seed_signature = "test";
+        let timestamp = "20130524T000000Z";
+        let date = AmzDate::parse(timestamp).unwrap();
+
+        let stream = futures::stream::iter(chunk_results);
+        let mut chunked_stream = AwsChunkedStream::new(
+            stream,
+            seed_signature.into(),
+            date,
+            "us-east-1".into(),
+            "s3".into(),
+            "test-key".into(),
+            0,
+            true, // unsigned
+        );
+
+        let result = chunked_stream.next().await.unwrap();
+        assert!(matches!(result, Err(AwsChunkedStreamError::FormatError)));
+    }
+
+    #[tokio::test]
+    async fn test_format_error_missing_crlf() {
+        // Test FormatError when chunk metadata doesn't end with CRLF
+        let chunk_meta = b"10"; // Missing \r\n
+        let chunk_results: Vec<Result<Bytes, _>> = vec![Ok(Bytes::from_static(chunk_meta))];
+
+        let seed_signature = "test";
+        let timestamp = "20130524T000000Z";
+        let date = AmzDate::parse(timestamp).unwrap();
+
+        let stream = futures::stream::iter(chunk_results);
+        let mut chunked_stream = AwsChunkedStream::new(
+            stream,
+            seed_signature.into(),
+            date,
+            "us-east-1".into(),
+            "s3".into(),
+            "test-key".into(),
+            16,
+            true,
+        );
+
+        // Stream ends without proper chunk metadata
+        let result = chunked_stream.next().await;
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_signature_mismatch() {
+        // Test SignatureMismatch when chunk signature is wrong
+        let chunk_meta = b"5;chunk-signature=0000000000000000000000000000000000000000000000000000000000000000\r\n";
+        let chunk_data = b"hello";
+        let chunk1 = join(&[chunk_meta, chunk_data, b"\r\n"]);
+        let chunk_results: Vec<Result<Bytes, _>> = vec![Ok(chunk1)];
+
+        let seed_signature = "test";
+        let timestamp = "20130524T000000Z";
+        let date = AmzDate::parse(timestamp).unwrap();
+
+        let stream = futures::stream::iter(chunk_results);
+        let mut chunked_stream = AwsChunkedStream::new(
+            stream,
+            seed_signature.into(),
+            date,
+            "us-east-1".into(),
+            "s3".into(),
+            "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".into(),
+            5,
+            false, // signed mode
+        );
+
+        let result = chunked_stream.next().await.unwrap();
+        assert!(matches!(result, Err(AwsChunkedStreamError::SignatureMismatch)));
+    }
+
+    #[tokio::test]
+    async fn test_incomplete_stream() {
+        // Test Incomplete when stream ends before all data is received
+        let chunk_meta = b"100\r\n"; // Expects 256 bytes
+        let chunk_data = b"short"; // But only sends 5 bytes
+        let chunk1 = join(&[chunk_meta, chunk_data]); // No closing \r\n, stream will end
+
+        let chunk_results: Vec<Result<Bytes, _>> = vec![Ok(chunk1)];
+
+        let seed_signature = "test";
+        let timestamp = "20130524T000000Z";
+        let date = AmzDate::parse(timestamp).unwrap();
+
+        let stream = futures::stream::iter(chunk_results);
+        let mut chunked_stream = AwsChunkedStream::new(
+            stream,
+            seed_signature.into(),
+            date,
+            "us-east-1".into(),
+            "s3".into(),
+            "test-key".into(),
+            256,
+            true,
+        );
+
+        let result = chunked_stream.next().await;
+        // Should fail because stream ends unexpectedly
+        assert!(matches!(result, Some(Err(AwsChunkedStreamError::Incomplete))));
+    }
+
+    #[tokio::test]
+    async fn test_underlying_error() {
+        // Test Underlying error propagation
+        use std::io;
+        let err: Result<Bytes, StdError> = Err(Box::new(io::Error::other("network error")));
+        let chunk_results: Vec<Result<Bytes, _>> = vec![err];
+
+        let seed_signature = "test";
+        let timestamp = "20130524T000000Z";
+        let date = AmzDate::parse(timestamp).unwrap();
+
+        let stream = futures::stream::iter(chunk_results);
+        let mut chunked_stream = AwsChunkedStream::new(
+            stream,
+            seed_signature.into(),
+            date,
+            "us-east-1".into(),
+            "s3".into(),
+            "test-key".into(),
+            0,
+            true,
+        );
+
+        let result = chunked_stream.next().await.unwrap();
+        assert!(matches!(result, Err(AwsChunkedStreamError::Underlying(_))));
+    }
+
+    #[tokio::test]
+    async fn test_signed_mode_requires_signature() {
+        // Test that signed mode (unsigned=false) requires chunk signatures
+        let chunk_meta = b"5\r\n"; // No signature extension
+        let chunk_data = b"hello";
+        let chunk1 = join(&[chunk_meta, chunk_data, b"\r\n"]);
+        let chunk_results: Vec<Result<Bytes, _>> = vec![Ok(chunk1)];
+
+        let seed_signature = "test";
+        let timestamp = "20130524T000000Z";
+        let date = AmzDate::parse(timestamp).unwrap();
+
+        let stream = futures::stream::iter(chunk_results);
+        let mut chunked_stream = AwsChunkedStream::new(
+            stream,
+            seed_signature.into(),
+            date,
+            "us-east-1".into(),
+            "s3".into(),
+            "test-key".into(),
+            5,
+            false, // signed mode - should require signatures
+        );
+
+        let result = chunked_stream.next().await.unwrap();
+        assert!(matches!(result, Err(AwsChunkedStreamError::FormatError)));
+    }
+
+    #[tokio::test]
+    async fn test_trailer_signature_mismatch() {
+        // Test trailer signature verification failure
+        let chunk_meta = b"3\r\n";
+        let chunk_data = b"abc";
+        let final_chunk = b"0\r\n\r\n";
+        let trailers_block = b"x-amz-checksum-crc32c:test\r\nx-amz-trailer-signature:0000000000000000000000000000000000000000000000000000000000000000";
+
+        let chunk1 = join(&[chunk_meta, chunk_data, b"\r\n"]);
+        let chunk2 = join(&[final_chunk, trailers_block]);
+
+        let chunk_results: Vec<Result<Bytes, _>> = vec![Ok(chunk1), Ok(chunk2)];
+
+        let seed_signature = "test";
+        let timestamp = "20130524T000000Z";
+        let date = AmzDate::parse(timestamp).unwrap();
+
+        let stream = futures::stream::iter(chunk_results);
+        let mut chunked_stream = AwsChunkedStream::new(
+            stream,
+            seed_signature.into(),
+            date,
+            "us-east-1".into(),
+            "s3".into(),
+            "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".into(),
+            3,
+            true, // unsigned chunks but signed trailer
+        );
+
+        let ans1 = chunked_stream.next().await.unwrap();
+        assert_eq!(ans1.unwrap().as_ref(), chunk_data);
+
+        let result = chunked_stream.next().await;
+        // Should fail with signature mismatch in trailer
+        assert!(matches!(result, Some(Err(AwsChunkedStreamError::SignatureMismatch))));
+    }
+
+    #[tokio::test]
+    async fn test_trailer_format_error_invalid_header() {
+        // Test FormatError when trailer headers are malformed
+        let chunk_meta = b"3\r\n";
+        let chunk_data = b"abc";
+        let final_chunk = b"0\r\n\r\n";
+        let trailers_block = b"invalid-header-without-colon\r\n"; // Malformed header
+
+        let chunk1 = join(&[chunk_meta, chunk_data, b"\r\n"]);
+        let chunk2 = join(&[final_chunk, trailers_block]);
+
+        let chunk_results: Vec<Result<Bytes, _>> = vec![Ok(chunk1), Ok(chunk2)];
+
+        let seed_signature = "test";
+        let timestamp = "20130524T000000Z";
+        let date = AmzDate::parse(timestamp).unwrap();
+
+        let stream = futures::stream::iter(chunk_results);
+        let mut chunked_stream = AwsChunkedStream::new(
+            stream,
+            seed_signature.into(),
+            date,
+            "us-east-1".into(),
+            "s3".into(),
+            "test-key".into(),
+            3,
+            true,
+        );
+
+        let ans1 = chunked_stream.next().await.unwrap();
+        assert_eq!(ans1.unwrap().as_ref(), chunk_data);
+
+        let result = chunked_stream.next().await;
+        // Should fail with format error
+        assert!(matches!(result, Some(Err(AwsChunkedStreamError::FormatError))));
+    }
 }
