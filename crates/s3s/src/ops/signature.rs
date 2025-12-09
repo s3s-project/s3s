@@ -385,9 +385,26 @@ impl SignatureContext<'_> {
                     return Err(s3_error!(NotImplemented, "AWS4-ECDSA-P256-SHA256 signing method is not implemented yet"));
                 }
                 None => {
-                    // According to AWS S3 protocol, x-amz-content-sha256 header is required for
-                    // all requests authenticated with Signature V4. Reject if missing.
-                    return Err(invalid_request!("missing header: x-amz-content-sha256"));
+                    // For STS requests, x-amz-content-sha256 header is not required
+                    // For S3 requests, this case should have been caught earlier (line 321)
+                    if service == "sts" {
+                        // STS requests require computing the payload hash from the body
+                        // Read the body (it's small for STS requests like AssumeRole)
+                        const MAX_STS_BODY_SIZE: usize = 8192; // 8KB should be enough for STS requests
+                        let body_bytes = self.req_body.store_all_limited(MAX_STS_BODY_SIZE).await
+                            .map_err(|_| invalid_request!("failed to read STS request body"))?;
+                        
+                        // Compute SHA256 hash and convert to hex
+                        use crate::utils::crypto::hex_sha256;
+                        let hash = hex_sha256(&body_bytes, str::to_owned);
+                        
+                        // Create canonical request with the computed hash
+                        sig_v4::create_canonical_request(method, uri_path, query_strings, &headers, sig_v4::Payload::SingleChunk(&hash))
+                    } else {
+                        // According to AWS S3 protocol, x-amz-content-sha256 header is required for
+                        // all S3 requests authenticated with Signature V4. Reject if missing.
+                        return Err(invalid_request!("missing header: x-amz-content-sha256"));
+                    }
                 }
             };
             let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, region, service);
