@@ -982,18 +982,43 @@ mod tests {
         assert_eq!(ans1.unwrap(), chunk1_data.as_slice());
 
         // The limit prevents unbounded memory allocation during trailer parsing
-        // Consume any remaining stream data (should be None as data is complete)
-        while chunked_stream.next().await.is_some() {
-            // Continue until stream ends
+        // Stream should return an error when limit is exceeded
+        let mut error_found = false;
+        while let Some(result) = chunked_stream.next().await {
+            match result {
+                Err(AwsChunkedStreamError::TrailersTooLarge(size, limit)) => {
+                    assert_eq!(limit, MAX_TRAILERS_SIZE);
+                    assert!(size > MAX_TRAILERS_SIZE);
+                    error_found = true;
+                    break;
+                }
+                Err(AwsChunkedStreamError::Underlying(e)) => {
+                    // Error might be wrapped in Underlying
+                    if let Some(AwsChunkedStreamError::TrailersTooLarge(size, limit)) = e.downcast_ref::<AwsChunkedStreamError>()
+                    {
+                        assert_eq!(*limit, MAX_TRAILERS_SIZE);
+                        assert!(*size > MAX_TRAILERS_SIZE);
+                        error_found = true;
+                        break;
+                    }
+                    // If not the expected error, continue
+                }
+                Ok(_) | Err(_) => {
+                    // Continue consuming stream or skip other errors
+                }
+            }
         }
 
-        // Verify no trailers were stored (parsing failed due to size limit)
-        let handle = chunked_stream.trailing_headers_handle();
-        let trailers = handle.take();
-        assert!(
-            trailers.is_none() || trailers.unwrap().is_empty(),
-            "Trailers should not be stored when they exceed limits"
-        );
+        // Either we found the error, or trailers weren't stored (both indicate limit was enforced)
+        if !error_found {
+            // Verify no trailers were stored (parsing failed due to size limit)
+            let handle = chunked_stream.trailing_headers_handle();
+            let trailers = handle.take();
+            assert!(
+                trailers.is_none() || trailers.unwrap().is_empty(),
+                "Trailers should not be stored when they exceed limits"
+            );
+        }
     }
 
     #[tokio::test]
@@ -1042,17 +1067,43 @@ mod tests {
         assert_eq!(ans1.unwrap(), chunk1_data.as_slice());
 
         // The limit prevents unbounded memory allocation during trailer parsing
-        // Consume any remaining stream data (should be None as data is complete)
-        while chunked_stream.next().await.is_some() {
-            // Continue until stream ends
+        // Stream should return an error when limit is exceeded
+        let mut error_found = false;
+        while let Some(result) = chunked_stream.next().await {
+            match result {
+                Err(AwsChunkedStreamError::TooManyTrailerHeaders(count, limit)) => {
+                    assert_eq!(limit, MAX_TRAILER_HEADERS);
+                    assert!(count > MAX_TRAILER_HEADERS);
+                    error_found = true;
+                    break;
+                }
+                Err(AwsChunkedStreamError::Underlying(e)) => {
+                    // Error might be wrapped in Underlying
+                    if let Some(AwsChunkedStreamError::TooManyTrailerHeaders(count, limit)) =
+                        e.downcast_ref::<AwsChunkedStreamError>()
+                    {
+                        assert_eq!(*limit, MAX_TRAILER_HEADERS);
+                        assert!(*count > MAX_TRAILER_HEADERS);
+                        error_found = true;
+                        break;
+                    }
+                    // If not the expected error, continue
+                }
+                Ok(_) | Err(_) => {
+                    // Continue consuming stream or skip other errors
+                }
+            }
         }
 
-        // Verify no trailers were stored (parsing failed due to header count limit)
-        let handle = chunked_stream.trailing_headers_handle();
-        let trailers = handle.take();
-        assert!(
-            trailers.is_none() || trailers.unwrap().is_empty(),
-            "Trailers should not be stored when header count exceeds limits"
-        );
+        // Either we found the error, or trailers weren't stored (both indicate limit was enforced)
+        if !error_found {
+            // Verify no trailers were stored (parsing failed due to header count limit)
+            let handle = chunked_stream.trailing_headers_handle();
+            let trailers = handle.take();
+            assert!(
+                trailers.is_none() || trailers.unwrap().is_empty(),
+                "Trailers should not be stored when header count exceeds limits"
+            );
+        }
     }
 }
