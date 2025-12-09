@@ -42,7 +42,7 @@ use s3s::{S3, S3Request, S3Response, S3Result};
 
 use std::fs::File;
 use std::io::{self, BufReader};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use tokio::net::TcpListener;
@@ -68,7 +68,7 @@ impl S3 for DummyS3 {
 }
 
 /// Load certificates from a PEM file
-fn load_certs(path: &PathBuf) -> io::Result<Vec<CertificateDer<'static>>> {
+fn load_certs(path: &Path) -> io::Result<Vec<CertificateDer<'static>>> {
     let file = File::open(path)?;
     let mut reader = BufReader::new(file);
     let certs = rustls_pemfile::certs(&mut reader).collect::<Result<Vec<_>, _>>()?;
@@ -76,40 +76,33 @@ fn load_certs(path: &PathBuf) -> io::Result<Vec<CertificateDer<'static>>> {
 }
 
 /// Load private key from a PEM file
-fn load_private_key(path: &PathBuf) -> io::Result<PrivateKeyDer<'static>> {
+fn load_private_key(path: &Path) -> io::Result<PrivateKeyDer<'static>> {
+    use rustls_pemfile::Item;
+
     let file = File::open(path)?;
     let mut reader = BufReader::new(file);
 
-    // Try reading as PKCS8 first, then RSA, then EC
-    let mut keys = rustls_pemfile::pkcs8_private_keys(&mut reader).collect::<Result<Vec<_>, _>>()?;
-
-    if !keys.is_empty() {
-        return Ok(PrivateKeyDer::Pkcs8(keys.remove(0)));
-    }
-
-    // Reset reader
-    let file = File::open(path)?;
-    let mut reader = BufReader::new(file);
-    let mut keys = rustls_pemfile::rsa_private_keys(&mut reader).collect::<Result<Vec<_>, _>>()?;
-
-    if !keys.is_empty() {
-        return Ok(PrivateKeyDer::Pkcs1(keys.remove(0)));
-    }
-
-    // Reset reader
-    let file = File::open(path)?;
-    let mut reader = BufReader::new(file);
-    let mut keys = rustls_pemfile::ec_private_keys(&mut reader).collect::<Result<Vec<_>, _>>()?;
-
-    if !keys.is_empty() {
-        return Ok(PrivateKeyDer::Sec1(keys.remove(0)));
+    loop {
+        match rustls_pemfile::read_one(&mut reader)? {
+            Some(Item::Pkcs8Key(key)) => {
+                return Ok(PrivateKeyDer::Pkcs8(key));
+            }
+            Some(Item::Pkcs1Key(key)) => {
+                return Ok(PrivateKeyDer::Pkcs1(key));
+            }
+            Some(Item::Sec1Key(key)) => {
+                return Ok(PrivateKeyDer::Sec1(key));
+            }
+            Some(_) => {}
+            None => break,
+        }
     }
 
     Err(io::Error::new(io::ErrorKind::InvalidInput, "No valid private key found in file"))
 }
 
 /// Create TLS server configuration from certificate and key files
-fn create_tls_config(cert_path: &PathBuf, key_path: &PathBuf) -> io::Result<ServerConfig> {
+fn create_tls_config(cert_path: &Path, key_path: &Path) -> io::Result<ServerConfig> {
     let certs = load_certs(cert_path)?;
     let key = load_private_key(key_path)?;
 
