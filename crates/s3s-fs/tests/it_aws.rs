@@ -21,6 +21,7 @@ use aws_sdk_s3::types::CompletedPart;
 use aws_sdk_s3::types::CreateBucketConfiguration;
 
 use anyhow::Result;
+use hyper::Method;
 use tokio::sync::Mutex;
 use tokio::sync::MutexGuard;
 use tracing::{debug, error};
@@ -29,6 +30,28 @@ use uuid::Uuid;
 const FS_ROOT: &str = concat!(env!("CARGO_TARGET_TMPDIR"), "/s3s-fs-tests-aws");
 const DOMAIN_NAME: &str = "localhost:8014";
 const REGION: &str = "us-west-2";
+
+// STS AssumeRole route that returns NotImplemented
+struct AssumeRoleRoute;
+
+#[async_trait::async_trait]
+impl s3s::route::S3Route for AssumeRoleRoute {
+    fn is_match(&self, method: &Method, uri: &hyper::Uri, headers: &hyper::HeaderMap, _: &mut hyper::http::Extensions) -> bool {
+        if method == Method::POST && uri.path() == "/" {
+            if let Some(val) = headers.get("content-type") {
+                if val.as_bytes() == b"application/x-www-form-urlencoded" {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    async fn call(&self, _req: s3s::S3Request<s3s::Body>) -> s3s::S3Result<s3s::S3Response<s3s::Body>> {
+        debug!("AssumeRole called - returning NotImplemented");
+        Err(s3s::s3_error!(NotImplemented, "STS operations are not supported by s3s-fs"))
+    }
+}
 
 fn setup_tracing() {
     use tracing_subscriber::EnvFilter;
@@ -62,6 +85,7 @@ fn config() -> &'static SdkConfig {
             let mut b = S3ServiceBuilder::new(fs);
             b.set_auth(SimpleAuth::from_single(cred.access_key_id(), cred.secret_access_key()));
             b.set_host(SingleDomain::new(DOMAIN_NAME).unwrap());
+            b.set_route(AssumeRoleRoute);
             b.build()
         };
 
@@ -764,6 +788,40 @@ async fn test_default_bucket_validation() -> Result<()> {
         let error_str = format!("{:?}", result.unwrap_err());
         debug!("Default validation rejected bucket name {bucket_name}: {error_str}");
     }
+
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
+async fn test_sts_assume_role_not_implemented() -> Result<()> {
+    let _guard = serial().await;
+
+    // Create STS client using the same config as S3
+    let sdk_config = config();
+    let sts_client = aws_sdk_sts::Client::new(sdk_config);
+
+    // Attempt to call AssumeRole - should fail with NotImplemented
+    let result = sts_client
+        .assume_role()
+        .role_arn("arn:aws:iam::123456789012:role/test-role")
+        .role_session_name("test-session")
+        .send()
+        .await;
+
+    // Verify the operation returned an error
+    assert!(result.is_err(), "Expected AssumeRole to fail with NotImplemented error");
+
+    // Check that the error is NotImplemented
+    let error = result.unwrap_err();
+    let error_str = format!("{error:?}");
+    debug!("AssumeRole error (expected): {error_str}");
+    
+    // The error should contain "NotImplemented" or similar indication
+    assert!(
+        error_str.contains("NotImplemented") || error_str.contains("not implemented"),
+        "Expected NotImplemented error, got: {error_str}"
+    );
 
     Ok(())
 }
