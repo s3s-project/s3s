@@ -255,19 +255,40 @@ impl fmt::Debug for Body {
     }
 }
 
+/// Maximum size for XML body payloads (20 MB).
+/// This limit prevents unbounded memory allocation for operations that require
+/// the full body in memory (e.g., XML parsing).
+pub const MAX_XML_BODY_SIZE: usize = 20 * 1024 * 1024;
+
+/// Error returned when body size exceeds the limit.
+#[derive(Debug, Clone, thiserror::Error)]
+#[error("body size {size} exceeds limit {limit}")]
+pub struct BodySizeLimitExceeded {
+    /// The actual body size.
+    pub size: usize,
+    /// The maximum allowed size.
+    pub limit: usize,
+}
+
 impl Body {
-    /// Stores all bytes in memory.
-    ///
-    /// WARNING: This function may cause **unbounded memory allocation**.
+    /// Stores all bytes in memory with a size limit.
     ///
     /// # Errors
-    /// Returns an error if `hyper` fails to read the body.
-    pub async fn store_all_unlimited(&mut self) -> Result<Bytes, StdError> {
+    /// Returns an error if the body exceeds `limit` bytes or if reading fails.
+    pub async fn store_all_limited(&mut self, limit: usize) -> Result<Bytes, StdError> {
         if let Some(bytes) = self.bytes() {
+            if bytes.len() > limit {
+                return Err(Box::new(BodySizeLimitExceeded {
+                    size: bytes.len(),
+                    limit,
+                }));
+            }
             return Ok(bytes);
         }
         let body = mem::take(self);
-        let bytes = http_body_util::BodyExt::collect(body).await?.to_bytes();
+        let limited = http_body_util::Limited::new(body, limit);
+        let bytes: Bytes = http_body_util::BodyExt::collect(limited).await?.to_bytes();
+        // Store bytes in self (Bytes::clone is O(1) due to reference counting)
         *self = Self::from(bytes.clone());
         Ok(bytes)
     }
@@ -286,5 +307,35 @@ impl Body {
             Kind::Once { inner } => Some(inner),
             _ => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_store_all_limited_success() {
+        let data = b"hello world";
+        let mut body = Body::from(Bytes::from_static(data));
+        let result = body.store_all_limited(20).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().as_ref(), data);
+    }
+
+    #[tokio::test]
+    async fn test_store_all_limited_exceeds() {
+        let data = b"hello world";
+        let mut body = Body::from(Bytes::from_static(data));
+        let result = body.store_all_limited(5).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_store_all_limited_empty() {
+        let mut body = Body::empty();
+        let result = body.store_all_limited(10).await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
     }
 }
