@@ -34,6 +34,8 @@ The response **does not include** the original `Content-Encoding`, `Content-Type
 
 The s3s core library **correctly handles** all standard HTTP headers:
 
+**Note**: Line numbers below are from the current version (v0.12.0-rc.5) and may change in future versions.
+
 1. **PutObject deserialization** (`crates/s3s/src/ops/generated.rs`):
    - Line 5335: Parses `Content-Encoding` from the HTTP `Content-Encoding` header
    - Populates the `PutObjectInput.content_encoding` field
