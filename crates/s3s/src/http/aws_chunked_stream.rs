@@ -20,21 +20,19 @@ use futures::pin_mut;
 use futures::stream::{Stream, StreamExt};
 use hyper::body::{Buf, Bytes};
 use memchr::memchr;
-use transform_stream::AsyncTryStream;
 
-/// Maximum size for chunk metadata line (chunk-size + optional signature)
-/// Format: "{hex-size};chunk-signature={64-hex-chars}\r\n"
-/// Conservative limit: 1KB should be plenty for any valid chunk metadata
 const MAX_CHUNK_META_SIZE: usize = 1024;
 
-/// Maximum size for trailing headers block
-/// S3 trailing headers are typically checksums and metadata
-/// Conservative limit: 16KB for all trailing headers
+/// Maximum size for trailers
+/// Conservative limit: 16KB should be more than enough for any reasonable trailers
 const MAX_TRAILERS_SIZE: usize = 16 * 1024;
 
 /// Maximum number of trailing headers
 /// Prevents `DoS` via excessive header count
 const MAX_TRAILER_HEADERS: usize = 100;
+
+
+use transform_stream::AsyncTryStream;
 
 /// Aws chunked stream
 pub struct AwsChunkedStream {
@@ -279,9 +277,9 @@ impl AwsChunkedStream {
     where
         S: Stream<Item = Result<Bytes, StdError>> + Send + 'static,
     {
-        // Accumulate all remaining bytes until EOF, with size limit.
+        // Accumulate all remaining bytes until EOF with size limit
         let mut buf: Vec<u8> = Vec::new();
-        let mut total_size: usize = 0;
+        let mut total_size: usize;
 
         if !prev_bytes.is_empty() {
             total_size = prev_bytes.len();
@@ -289,6 +287,8 @@ impl AwsChunkedStream {
                 return Some(Err(AwsChunkedStreamError::TrailersTooLarge(total_size, MAX_TRAILERS_SIZE)));
             }
             buf.extend_from_slice(prev_bytes.as_ref());
+        } else {
+            total_size = 0;
         }
 
         // Read to end with size limit
@@ -359,8 +359,8 @@ impl AwsChunkedStream {
                     continue;
                 }
 
-                // Check header count limit
-                header_count += 1;
+                // Check header count limit (before parsing)
+                header_count = header_count.saturating_add(1);
                 if header_count > MAX_TRAILER_HEADERS {
                     return Err(AwsChunkedStreamError::TooManyTrailerHeaders(header_count, MAX_TRAILER_HEADERS));
                 }
@@ -394,11 +394,11 @@ impl AwsChunkedStream {
         // Sort by header name to canonicalize deterministically
         entries.sort_by(|a, b| a.0.cmp(&b.0));
 
-        // Build canonical bytes: name:value\n
-        // Check canonical buffer size as we build it
+        // Build canonical bytes: name:value\n with size limit
         let mut canonical: Vec<u8> = Vec::new();
         for (n, v) in &entries {
-            let entry_size = n.len() + 1 + v.len() + 1; // name + ':' + value + '\n'
+            // Check size before adding entry
+            let entry_size = n.len().saturating_add(v.len()).saturating_add(2); // name:value\n
             if canonical.len().saturating_add(entry_size) > MAX_TRAILERS_SIZE {
                 return Err(AwsChunkedStreamError::TrailersTooLarge(
                     canonical.len().saturating_add(entry_size),
@@ -826,6 +826,246 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_format_error_invalid_chunk_size() {
+        // Test FormatError when chunk size is not valid hex
+        let chunk_meta = b"ZZZZ\r\n"; // Invalid hex
+        let chunk_results: Vec<Result<Bytes, _>> = vec![Ok(Bytes::from_static(chunk_meta))];
+
+        let seed_signature = "test";
+        let timestamp = "20130524T000000Z";
+        let date = AmzDate::parse(timestamp).unwrap();
+
+        let stream = futures::stream::iter(chunk_results);
+        let mut chunked_stream = AwsChunkedStream::new(
+            stream,
+            seed_signature.into(),
+            date,
+            "us-east-1".into(),
+            "s3".into(),
+            "test-key".into(),
+            0,
+            true, // unsigned
+        );
+
+        let result = chunked_stream.next().await.unwrap();
+        assert!(matches!(result, Err(AwsChunkedStreamError::FormatError)));
+    }
+
+    #[tokio::test]
+    async fn test_format_error_missing_crlf() {
+        // Test FormatError when chunk metadata doesn't end with CRLF
+        let chunk_meta = b"10"; // Missing \r\n
+        let chunk_results: Vec<Result<Bytes, _>> = vec![Ok(Bytes::from_static(chunk_meta))];
+
+        let seed_signature = "test";
+        let timestamp = "20130524T000000Z";
+        let date = AmzDate::parse(timestamp).unwrap();
+
+        let stream = futures::stream::iter(chunk_results);
+        let mut chunked_stream = AwsChunkedStream::new(
+            stream,
+            seed_signature.into(),
+            date,
+            "us-east-1".into(),
+            "s3".into(),
+            "test-key".into(),
+            16,
+            true,
+        );
+
+        // Stream ends without proper chunk metadata
+        let result = chunked_stream.next().await;
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_signature_mismatch() {
+        // Test SignatureMismatch when chunk signature is wrong
+        let chunk_meta = b"5;chunk-signature=0000000000000000000000000000000000000000000000000000000000000000\r\n";
+        let chunk_data = b"hello";
+        let chunk1 = join(&[chunk_meta, chunk_data, b"\r\n"]);
+        let chunk_results: Vec<Result<Bytes, _>> = vec![Ok(chunk1)];
+
+        let seed_signature = "test";
+        let timestamp = "20130524T000000Z";
+        let date = AmzDate::parse(timestamp).unwrap();
+
+        let stream = futures::stream::iter(chunk_results);
+        let mut chunked_stream = AwsChunkedStream::new(
+            stream,
+            seed_signature.into(),
+            date,
+            "us-east-1".into(),
+            "s3".into(),
+            "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".into(),
+            5,
+            false, // signed mode
+        );
+
+        let result = chunked_stream.next().await.unwrap();
+        assert!(matches!(result, Err(AwsChunkedStreamError::SignatureMismatch)));
+    }
+
+    #[tokio::test]
+    async fn test_incomplete_stream() {
+        // Test Incomplete when stream ends before all data is received
+        let chunk_meta = b"100\r\n"; // Expects 256 bytes
+        let chunk_data = b"short"; // But only sends 5 bytes
+        let chunk1 = join(&[chunk_meta, chunk_data]); // No closing \r\n, stream will end
+
+        let chunk_results: Vec<Result<Bytes, _>> = vec![Ok(chunk1)];
+
+        let seed_signature = "test";
+        let timestamp = "20130524T000000Z";
+        let date = AmzDate::parse(timestamp).unwrap();
+
+        let stream = futures::stream::iter(chunk_results);
+        let mut chunked_stream = AwsChunkedStream::new(
+            stream,
+            seed_signature.into(),
+            date,
+            "us-east-1".into(),
+            "s3".into(),
+            "test-key".into(),
+            256,
+            true,
+        );
+
+        let result = chunked_stream.next().await;
+        // Should fail because stream ends unexpectedly
+        assert!(matches!(result, Some(Err(AwsChunkedStreamError::Incomplete))));
+    }
+
+    #[tokio::test]
+    async fn test_underlying_error() {
+        // Test Underlying error propagation
+        use std::io;
+        let err: Result<Bytes, StdError> = Err(Box::new(io::Error::other("network error")));
+        let chunk_results: Vec<Result<Bytes, _>> = vec![err];
+
+        let seed_signature = "test";
+        let timestamp = "20130524T000000Z";
+        let date = AmzDate::parse(timestamp).unwrap();
+
+        let stream = futures::stream::iter(chunk_results);
+        let mut chunked_stream = AwsChunkedStream::new(
+            stream,
+            seed_signature.into(),
+            date,
+            "us-east-1".into(),
+            "s3".into(),
+            "test-key".into(),
+            0,
+            true,
+        );
+
+        let result = chunked_stream.next().await.unwrap();
+        assert!(matches!(result, Err(AwsChunkedStreamError::Underlying(_))));
+    }
+
+    #[tokio::test]
+    async fn test_signed_mode_requires_signature() {
+        // Test that signed mode (unsigned=false) requires chunk signatures
+        let chunk_meta = b"5\r\n"; // No signature extension
+        let chunk_data = b"hello";
+        let chunk1 = join(&[chunk_meta, chunk_data, b"\r\n"]);
+        let chunk_results: Vec<Result<Bytes, _>> = vec![Ok(chunk1)];
+
+        let seed_signature = "test";
+        let timestamp = "20130524T000000Z";
+        let date = AmzDate::parse(timestamp).unwrap();
+
+        let stream = futures::stream::iter(chunk_results);
+        let mut chunked_stream = AwsChunkedStream::new(
+            stream,
+            seed_signature.into(),
+            date,
+            "us-east-1".into(),
+            "s3".into(),
+            "test-key".into(),
+            5,
+            false, // signed mode - should require signatures
+        );
+
+        let result = chunked_stream.next().await.unwrap();
+        assert!(matches!(result, Err(AwsChunkedStreamError::FormatError)));
+    }
+
+    #[tokio::test]
+    async fn test_trailer_signature_mismatch() {
+        // Test trailer signature verification failure
+        let chunk_meta = b"3\r\n";
+        let chunk_data = b"abc";
+        let final_chunk = b"0\r\n\r\n";
+        let trailers_block = b"x-amz-checksum-crc32c:test\r\nx-amz-trailer-signature:0000000000000000000000000000000000000000000000000000000000000000";
+
+        let chunk1 = join(&[chunk_meta, chunk_data, b"\r\n"]);
+        let chunk2 = join(&[final_chunk, trailers_block]);
+
+        let chunk_results: Vec<Result<Bytes, _>> = vec![Ok(chunk1), Ok(chunk2)];
+
+        let seed_signature = "test";
+        let timestamp = "20130524T000000Z";
+        let date = AmzDate::parse(timestamp).unwrap();
+
+        let stream = futures::stream::iter(chunk_results);
+        let mut chunked_stream = AwsChunkedStream::new(
+            stream,
+            seed_signature.into(),
+            date,
+            "us-east-1".into(),
+            "s3".into(),
+            "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".into(),
+            3,
+            true, // unsigned chunks but signed trailer
+        );
+
+        let ans1 = chunked_stream.next().await.unwrap();
+        assert_eq!(ans1.unwrap().as_ref(), chunk_data);
+
+        let result = chunked_stream.next().await;
+        // Should fail with signature mismatch in trailer
+        assert!(matches!(result, Some(Err(AwsChunkedStreamError::SignatureMismatch))));
+    }
+
+    #[tokio::test]
+    async fn test_trailer_format_error_invalid_header() {
+        // Test FormatError when trailer headers are malformed
+        let chunk_meta = b"3\r\n";
+        let chunk_data = b"abc";
+        let final_chunk = b"0\r\n\r\n";
+        let trailers_block = b"invalid-header-without-colon\r\n"; // Malformed header
+
+        let chunk1 = join(&[chunk_meta, chunk_data, b"\r\n"]);
+        let chunk2 = join(&[final_chunk, trailers_block]);
+
+        let chunk_results: Vec<Result<Bytes, _>> = vec![Ok(chunk1), Ok(chunk2)];
+
+        let seed_signature = "test";
+        let timestamp = "20130524T000000Z";
+        let date = AmzDate::parse(timestamp).unwrap();
+
+        let stream = futures::stream::iter(chunk_results);
+        let mut chunked_stream = AwsChunkedStream::new(
+            stream,
+            seed_signature.into(),
+            date,
+            "us-east-1".into(),
+            "s3".into(),
+            "test-key".into(),
+            3,
+            true,
+        );
+
+        let ans1 = chunked_stream.next().await.unwrap();
+        assert_eq!(ans1.unwrap().as_ref(), chunk_data);
+
+        let result = chunked_stream.next().await;
+        // Should fail with format error
+        assert!(matches!(result, Some(Err(AwsChunkedStreamError::FormatError))));
+    }
+
+    #[tokio::test]
     #[allow(clippy::assertions_on_constants)]
     async fn test_limits_constants_exist() {
         // This test verifies that the limit constants are defined and have reasonable values
@@ -994,7 +1234,8 @@ mod tests {
                 }
                 Err(AwsChunkedStreamError::Underlying(e)) => {
                     // Error might be wrapped in Underlying
-                    if let Some(AwsChunkedStreamError::TrailersTooLarge(size, limit)) = e.downcast_ref::<AwsChunkedStreamError>()
+                    if let Some(AwsChunkedStreamError::TrailersTooLarge(size, limit)) =
+                        e.downcast_ref::<AwsChunkedStreamError>()
                     {
                         assert_eq!(*limit, MAX_TRAILERS_SIZE);
                         assert!(*size > MAX_TRAILERS_SIZE);
