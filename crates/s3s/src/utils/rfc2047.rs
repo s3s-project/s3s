@@ -6,15 +6,22 @@
 
 use std::borrow::Cow;
 
-/// Checks if a string contains only ASCII characters that are valid in HTTP header values.
-fn is_ascii_header_safe(s: &str) -> bool {
-    s.bytes().all(|b| b.is_ascii() && b >= 0x20 && b != 0x7f)
-}
+// Character constants
+const MIN_PRINTABLE_ASCII: u8 = 0x20; // Space character
+const DEL_CHARACTER: u8 = 0x7f; // DEL character
 
 // RFC 2047: encoded-word must not be longer than 75 characters, including delimiters.
 const MAX_ENCODED_WORD_LEN: usize = 75;
 const PREFIX: &str = "=?UTF-8?B?";
 const SUFFIX: &str = "?=";
+
+// Maximum input length to prevent DoS attacks (1 MB)
+const MAX_INPUT_LEN: usize = 1024 * 1024;
+
+/// Checks if a string contains only ASCII characters that are valid in HTTP header values.
+fn is_ascii_header_safe(s: &str) -> bool {
+    s.bytes().all(|b| b.is_ascii() && b >= MIN_PRINTABLE_ASCII && b != DEL_CHARACTER)
+}
 
 /// Encodes a string using RFC 2047 Base64 encoding if it contains non-ASCII
 /// or control characters. Returns the original string if it only contains
@@ -22,9 +29,19 @@ const SUFFIX: &str = "?=";
 ///
 /// Per RFC 2047 Section 2, an encoded-word must not be longer than 75 characters.
 /// For longer inputs, multiple encoded-words are produced, separated by spaces.
-pub fn encode(s: &str) -> Cow<'_, str> {
+///
+/// # Errors
+///
+/// Returns `EncodeError::InputTooLarge` if the input exceeds `MAX_INPUT_LEN` (1 MB).
+/// Returns `EncodeError::InvalidUtf8Boundary` if UTF-8 boundary finding fails.
+pub fn encode(s: &str) -> Result<Cow<'_, str>, EncodeError> {
+    // Input size validation to prevent DoS
+    if s.len() > MAX_INPUT_LEN {
+        return Err(EncodeError::InputTooLarge);
+    }
+
     if is_ascii_header_safe(s) {
-        return Cow::Borrowed(s);
+        return Ok(Cow::Borrowed(s));
     }
 
     // Calculate max length for encoded_text portion
@@ -38,14 +55,18 @@ pub fn encode(s: &str) -> Cow<'_, str> {
 
     let bytes = s.as_bytes();
 
-    // Check if it fits in a single encoded-word
-    let full_encoded = base64_simd::STANDARD.encode_to_string(bytes);
-    if full_encoded.len() + overhead <= MAX_ENCODED_WORD_LEN {
-        return Cow::Owned(format!("{PREFIX}{full_encoded}{SUFFIX}"));
+    // Estimate if it fits in a single encoded-word (each byte becomes ~1.33 base64 chars)
+    let estimated_encoded_len = (bytes.len() * 4).div_ceil(3);
+    if estimated_encoded_len + overhead <= MAX_ENCODED_WORD_LEN {
+        let full_encoded = base64_simd::STANDARD.encode_to_string(bytes);
+        return Ok(Cow::Owned(format!("{PREFIX}{full_encoded}{SUFFIX}")));
     }
 
     // Split into multiple encoded-words, respecting UTF-8 character boundaries
-    let mut result = String::new();
+    // Pre-allocate result string to avoid repeated reallocations
+    let num_chunks = s.len().div_ceil(max_input_bytes);
+    let estimated_capacity = s.len() + (overhead + 1) * num_chunks; // +1 for spaces
+    let mut result = String::with_capacity(estimated_capacity);
     let mut i = 0;
     while i < s.len() {
         let mut end = usize::min(i + max_input_bytes, s.len());
@@ -54,7 +75,9 @@ pub fn encode(s: &str) -> Cow<'_, str> {
             end -= 1;
         }
         // Ensure we made progress (UTF-8 characters are at most 4 bytes, and max_input_bytes is 45)
-        assert!(end > i, "RFC 2047 encode: failed to find valid UTF-8 character boundary");
+        if end <= i {
+            return Err(EncodeError::InvalidUtf8Boundary);
+        }
         let chunk = &s[i..end];
         let encoded = base64_simd::STANDARD.encode_to_string(chunk.as_bytes());
         if !result.is_empty() {
@@ -65,13 +88,18 @@ pub fn encode(s: &str) -> Cow<'_, str> {
         result.push_str(SUFFIX);
         i = end;
     }
-    Cow::Owned(result)
+    Ok(Cow::Owned(result))
 }
 
 /// Decodes an RFC 2047 encoded-word string.
 /// If the string is not RFC 2047 encoded, returns it unchanged.
 /// Supports both Base64 (B) and Quoted-Printable (Q) encodings.
 /// Handles multiple space-separated encoded-words per RFC 2047 Section 2.
+///
+/// # Input Constraints
+/// - Maximum input length: 1 MB (enforced by caller)
+/// - Maximum number of encoded-words: No explicit limit, but bounded by input length
+/// - Maximum decoded output size: Bounded by input length
 ///
 /// # Charset Handling
 /// This implementation primarily supports UTF-8 charset. For other charsets,
@@ -87,9 +115,11 @@ pub fn decode(s: &str) -> Result<Cow<'_, str>, DecodeError> {
         return Ok(Cow::Borrowed(s));
     }
 
-    // Check if there are multiple encoded-words (whitespace-separated)
-    // Per RFC 2047 Section 6.2, any linear-white-space can appear between encoded-words
-    let has_multiple_words = s.matches("?=").count() > 1;
+    // Count actual encoded-word patterns, not just "?=" occurrences
+    let encoded_word_count = s.split_whitespace()
+        .filter(|p| p.starts_with("=?") && p.ends_with("?="))
+        .count();
+    let has_multiple_words = encoded_word_count > 1;
     if has_multiple_words {
         let mut result = Vec::new();
         for part in s.split_whitespace() {
@@ -180,6 +210,17 @@ fn decode_quoted_printable(s: &str) -> Result<Vec<u8>, DecodeError> {
     Ok(result)
 }
 
+/// Errors that can occur during RFC 2047 encoding.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum EncodeError {
+    /// The input string is too large (exceeds `MAX_INPUT_LEN`).
+    #[error("input string too large (max {MAX_INPUT_LEN} bytes)")]
+    InputTooLarge,
+    /// Failed to find a valid UTF-8 character boundary.
+    #[error("failed to find valid UTF-8 character boundary")]
+    InvalidUtf8Boundary,
+}
+
 /// Errors that can occur during RFC 2047 decoding.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum DecodeError {
@@ -209,14 +250,14 @@ mod tests {
     #[test]
     fn test_encode_ascii() {
         let input = "hello world";
-        let encoded = encode(input);
+        let encoded = encode(input).unwrap();
         assert_eq!(encoded, "hello world");
     }
 
     #[test]
     fn test_encode_non_ascii() {
         let input = "你好世界";
-        let encoded = encode(input);
+        let encoded = encode(input).unwrap();
         assert!(encoded.starts_with("=?UTF-8?B?"));
         assert!(encoded.ends_with("?="));
     }
@@ -225,7 +266,7 @@ mod tests {
     fn test_encode_control_characters() {
         // Control characters (< 0x20) should be encoded
         let input = "hello\x00world";
-        let encoded = encode(input);
+        let encoded = encode(input).unwrap();
         assert!(encoded.starts_with("=?UTF-8?B?"));
     }
 
@@ -233,14 +274,14 @@ mod tests {
     fn test_encode_del_character() {
         // DEL character (0x7f) should be encoded
         let input = "hello\x7fworld";
-        let encoded = encode(input);
+        let encoded = encode(input).unwrap();
         assert!(encoded.starts_with("=?UTF-8?B?"));
     }
 
     #[test]
     fn test_encode_empty_string() {
         let input = "";
-        let encoded = encode(input);
+        let encoded = encode(input).unwrap();
         assert_eq!(encoded, "");
     }
 
@@ -248,7 +289,7 @@ mod tests {
     fn test_encode_mixed_content() {
         // Mixed ASCII and non-ASCII should trigger encoding
         let input = "Hello 世界";
-        let encoded = encode(input);
+        let encoded = encode(input).unwrap();
         assert!(encoded.starts_with("=?UTF-8?B?"));
     }
 
@@ -256,7 +297,7 @@ mod tests {
     fn test_encode_respects_75_char_limit() {
         // A long string that requires splitting into multiple encoded-words
         let input = "这是一个非常长的中文字符串，用于测试RFC2047的75字符限制功能是否正常工作";
-        let encoded = encode(input);
+        let encoded = encode(input).unwrap();
 
         // Each encoded-word should be <= 75 characters
         for word in encoded.split(' ') {
@@ -268,7 +309,7 @@ mod tests {
     fn test_encode_short_string_single_word() {
         // A short non-ASCII string should fit in a single encoded-word
         let input = "你好";
-        let encoded = encode(input);
+        let encoded = encode(input).unwrap();
         assert!(!encoded.contains(' ')); // No space means single word
         assert!(encoded.len() <= 75);
     }
@@ -277,7 +318,7 @@ mod tests {
     fn test_encode_long_string_multiple_words() {
         // A very long string should be split into multiple words
         let input = "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん";
-        let encoded = encode(input);
+        let encoded = encode(input).unwrap();
 
         // Should contain multiple encoded-words separated by spaces
         let word_count = encoded.split(' ').count();
@@ -295,9 +336,25 @@ mod tests {
     fn test_roundtrip_long_string() {
         // Test that long strings can be encoded and decoded correctly
         let original = "这是一个非常长的中文字符串，用于测试RFC2047的75字符限制功能是否正常工作，包括多个编码字的拆分和合并";
-        let encoded = encode(original);
+        let encoded = encode(original).unwrap();
         let decoded = decode(&encoded).unwrap();
         assert_eq!(decoded, original);
+    }
+
+    #[test]
+    fn test_encode_ascii_returns_borrowed() {
+        // Verify zero-allocation optimization for ASCII strings
+        let input = "hello world";
+        let encoded = encode(input).unwrap();
+        assert!(matches!(encoded, Cow::Borrowed(_)));
+    }
+
+    #[test]
+    fn test_encode_input_too_large() {
+        // Test that very large inputs are rejected
+        let large_input = "a".repeat(MAX_INPUT_LEN + 1);
+        let result = encode(&large_input);
+        assert_eq!(result, Err(EncodeError::InputTooLarge));
     }
 
     // ==================== Decoding Tests ====================
@@ -307,6 +364,23 @@ mod tests {
         let input = "hello world";
         let decoded = decode(input).unwrap();
         assert_eq!(decoded, "hello world");
+    }
+
+    #[test]
+    fn test_decode_plain_returns_borrowed() {
+        // Verify zero-allocation optimization for plain text
+        let input = "hello world";
+        let decoded = decode(input).unwrap();
+        assert!(matches!(decoded, Cow::Borrowed(_)));
+    }
+
+    #[test]
+    fn test_decode_single_word_with_question_equals_in_content() {
+        // Base64 content that happens to contain "?=" substring
+        // This should be treated as a single encoded-word, not multiple
+        let input = "=?UTF-8?B?dGVzdD89dGVzdA==?="; // "test?=test" in Base64
+        let decoded = decode(input).unwrap();
+        assert_eq!(decoded, "test?=test");
     }
 
     #[test]
@@ -410,7 +484,7 @@ mod tests {
     #[test]
     fn test_roundtrip() {
         let original = "Hello 世界 🌍";
-        let encoded = encode(original);
+        let encoded = encode(original).unwrap();
         let decoded = decode(&encoded).unwrap();
         assert_eq!(decoded, original);
     }
@@ -418,7 +492,7 @@ mod tests {
     #[test]
     fn test_roundtrip_ascii() {
         let original = "plain ascii text";
-        let encoded = encode(original);
+        let encoded = encode(original).unwrap();
         let decoded = decode(&encoded).unwrap();
         assert_eq!(decoded, original);
     }
@@ -426,7 +500,7 @@ mod tests {
     #[test]
     fn test_roundtrip_emoji() {
         let original = "🎉🎊🎁";
-        let encoded = encode(original);
+        let encoded = encode(original).unwrap();
         let decoded = decode(&encoded).unwrap();
         assert_eq!(decoded, original);
     }
