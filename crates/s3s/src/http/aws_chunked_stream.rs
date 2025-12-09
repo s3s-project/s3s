@@ -31,7 +31,6 @@ const MAX_TRAILERS_SIZE: usize = 16 * 1024;
 /// Prevents `DoS` via excessive header count
 const MAX_TRAILER_HEADERS: usize = 100;
 
-
 use transform_stream::AsyncTryStream;
 
 /// Aws chunked stream
@@ -281,14 +280,14 @@ impl AwsChunkedStream {
         let mut buf: Vec<u8> = Vec::new();
         let mut total_size: usize;
 
-        if !prev_bytes.is_empty() {
+        if prev_bytes.is_empty() {
+            total_size = 0;
+        } else {
             total_size = prev_bytes.len();
             if total_size > MAX_TRAILERS_SIZE {
                 return Some(Err(AwsChunkedStreamError::TrailersTooLarge(total_size, MAX_TRAILERS_SIZE)));
             }
             buf.extend_from_slice(prev_bytes.as_ref());
-        } else {
-            total_size = 0;
         }
 
         // Read to end with size limit
@@ -1234,8 +1233,7 @@ mod tests {
                 }
                 Err(AwsChunkedStreamError::Underlying(e)) => {
                     // Error might be wrapped in Underlying
-                    if let Some(AwsChunkedStreamError::TrailersTooLarge(size, limit)) =
-                        e.downcast_ref::<AwsChunkedStreamError>()
+                    if let Some(AwsChunkedStreamError::TrailersTooLarge(size, limit)) = e.downcast_ref::<AwsChunkedStreamError>()
                     {
                         assert_eq!(*limit, MAX_TRAILERS_SIZE);
                         assert!(*size > MAX_TRAILERS_SIZE);
