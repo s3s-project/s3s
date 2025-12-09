@@ -97,7 +97,7 @@ pub fn encode(s: &str) -> Result<Cow<'_, str>, EncodeError> {
 /// Handles multiple space-separated encoded-words per RFC 2047 Section 2.
 ///
 /// # Input Constraints
-/// - Maximum input length: 1 MB (enforced by caller)
+/// - Maximum input length: 1 MB
 /// - Maximum number of encoded-words: No explicit limit, but bounded by input length
 /// - Maximum decoded output size: Bounded by input length
 ///
@@ -106,7 +106,16 @@ pub fn encode(s: &str) -> Result<Cow<'_, str>, EncodeError> {
 /// it attempts to decode the bytes as UTF-8, which may fail if the original
 /// encoding used a different character set. A full implementation would need
 /// to support additional charsets like ISO-8859-1, etc.
+///
+/// # Errors
+///
+/// Returns `DecodeError::InputTooLarge` if the input exceeds `MAX_INPUT_LEN` (1 MB).
 pub fn decode(s: &str) -> Result<Cow<'_, str>, DecodeError> {
+    // Input size validation to prevent DoS
+    if s.len() > MAX_INPUT_LEN {
+        return Err(DecodeError::InputTooLarge);
+    }
+
     let s = s.trim();
 
     // Check if this looks like an RFC 2047 encoded word
@@ -121,7 +130,7 @@ pub fn decode(s: &str) -> Result<Cow<'_, str>, DecodeError> {
         .count();
     let has_multiple_words = encoded_word_count > 1;
     if has_multiple_words {
-        let mut result = Vec::new();
+        let mut result = Vec::with_capacity(s.len());
         for part in s.split_whitespace() {
             if part.is_empty() || !part.starts_with("=?") || !part.ends_with("?=") {
                 continue;
@@ -174,7 +183,8 @@ fn decode_single_word(s: &str) -> Result<String, DecodeError> {
 /// According to RFC 2047, only ASCII printable characters should appear
 /// directly in Q-encoded text, with non-ASCII bytes encoded as =XX.
 fn decode_quoted_printable(s: &str) -> Result<Vec<u8>, DecodeError> {
-    let mut result = Vec::with_capacity(s.len());
+    // Use a small initial capacity to avoid large pre-allocation
+    let mut result = Vec::with_capacity(std::cmp::min(64, s.len()));
     let mut chars = s.chars().peekable();
 
     while let Some(c) = chars.next() {
@@ -224,6 +234,9 @@ pub enum EncodeError {
 /// Errors that can occur during RFC 2047 decoding.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum DecodeError {
+    /// The input string is too large (exceeds `MAX_INPUT_LEN`).
+    #[error("input string too large (max {MAX_INPUT_LEN} bytes)")]
+    InputTooLarge,
     /// The encoded word format is invalid.
     #[error("invalid RFC 2047 encoded-word format")]
     InvalidFormat,
@@ -364,6 +377,14 @@ mod tests {
         let input = "hello world";
         let decoded = decode(input).unwrap();
         assert_eq!(decoded, "hello world");
+    }
+
+    #[test]
+    fn test_decode_input_too_large() {
+        // Test that very large inputs are rejected
+        let large_input = "a".repeat(MAX_INPUT_LEN + 1);
+        let result = decode(&large_input);
+        assert_eq!(result, Err(DecodeError::InputTooLarge));
     }
 
     #[test]
@@ -627,6 +648,12 @@ mod tests {
         assert_eq!(err.to_string(), "unsupported encoding type");
     }
 
+    #[test]
+    fn test_decode_error_display_input_too_large() {
+        let err = DecodeError::InputTooLarge;
+        assert_eq!(err.to_string(), "input string too large (max 1048576 bytes)");
+    }
+
     // ==================== DecodeError Trait Tests ====================
 
     #[test]
@@ -652,5 +679,46 @@ mod tests {
     fn test_decode_error_eq() {
         assert_eq!(DecodeError::InvalidFormat, DecodeError::InvalidFormat);
         assert_ne!(DecodeError::InvalidFormat, DecodeError::Base64Error);
+    }
+
+    // ==================== EncodeError Display Tests ====================
+
+    #[test]
+    fn test_encode_error_display_input_too_large() {
+        let err = EncodeError::InputTooLarge;
+        assert_eq!(err.to_string(), "input string too large (max 1048576 bytes)");
+    }
+
+    #[test]
+    fn test_encode_error_display_invalid_utf8_boundary() {
+        let err = EncodeError::InvalidUtf8Boundary;
+        assert_eq!(err.to_string(), "failed to find valid UTF-8 character boundary");
+    }
+
+    // ==================== EncodeError Trait Tests ====================
+
+    #[test]
+    fn test_encode_error_is_error() {
+        let err: &dyn std::error::Error = &EncodeError::InputTooLarge;
+        assert!(err.source().is_none());
+    }
+
+    #[test]
+    fn test_encode_error_debug() {
+        let err = EncodeError::InputTooLarge;
+        assert_eq!(format!("{err:?}"), "InputTooLarge");
+    }
+
+    #[test]
+    fn test_encode_error_clone() {
+        let err = EncodeError::InvalidUtf8Boundary;
+        let cloned = err.clone();
+        assert_eq!(err, cloned);
+    }
+
+    #[test]
+    fn test_encode_error_eq() {
+        assert_eq!(EncodeError::InputTooLarge, EncodeError::InputTooLarge);
+        assert_ne!(EncodeError::InputTooLarge, EncodeError::InvalidUtf8Boundary);
     }
 }
