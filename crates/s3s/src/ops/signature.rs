@@ -13,7 +13,6 @@ use crate::sig_v4::AmzDate;
 use crate::sig_v4::UploadStream;
 use crate::sig_v4::{AuthorizationV4, CredentialV4, PostSignatureV4, PresignedUrlV4};
 use crate::stream::ByteStream as _;
-use crate::utils::crypto::hex_sha256_string;
 use crate::utils::is_base64_encoded;
 
 use std::mem;
@@ -386,23 +385,9 @@ impl SignatureContext<'_> {
                     return Err(s3_error!(NotImplemented, "AWS4-ECDSA-P256-SHA256 signing method is not implemented yet"));
                 }
                 None => {
-                    if matches!(*self.req_method, Method::GET | Method::HEAD) {
-                        sig_v4::create_canonical_request(method, uri_path, query_strings, &headers, sig_v4::Payload::Empty)
-                    } else {
-                        let bytes = super::extract_full_body(self.content_length, self.req_body).await?;
-                        if bytes.is_empty() {
-                            sig_v4::create_canonical_request(method, uri_path, query_strings, &headers, sig_v4::Payload::Empty)
-                        } else {
-                            let payload_checksum = hex_sha256_string(&bytes);
-                            sig_v4::create_canonical_request(
-                                method,
-                                uri_path,
-                                query_strings,
-                                &headers,
-                                sig_v4::Payload::SingleChunk(&payload_checksum),
-                            )
-                        }
-                    }
+                    // According to AWS S3 protocol, x-amz-content-sha256 header is required for
+                    // all requests authenticated with Signature V4. Reject if missing.
+                    return Err(invalid_request!("missing header: x-amz-content-sha256"));
                 }
             };
             let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, region, service);
@@ -592,5 +577,46 @@ impl SignatureContext<'_> {
             region: None,
             service: Some("s3".into()),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_amz_content_sha256_missing() {
+        // Test that extract_amz_content_sha256 returns None when header is missing
+        let headers =
+            OrderedHeaders::from_slice_unchecked(&[("host", "example.s3.amazonaws.com"), ("x-amz-date", "20130524T000000Z")]);
+        let result = extract_amz_content_sha256(&headers).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_extract_amz_content_sha256_present() {
+        // Test that extract_amz_content_sha256 returns Some when header is present
+        let headers = OrderedHeaders::from_slice_unchecked(&[
+            ("host", "example.s3.amazonaws.com"),
+            ("x-amz-content-sha256", "UNSIGNED-PAYLOAD"),
+            ("x-amz-date", "20130524T000000Z"),
+        ]);
+        let result = extract_amz_content_sha256(&headers).unwrap();
+        assert!(result.is_some());
+        assert!(matches!(result.unwrap(), AmzContentSha256::UnsignedPayload));
+    }
+
+    #[test]
+    fn test_extract_amz_content_sha256_invalid() {
+        // Test that extract_amz_content_sha256 returns error for invalid header value
+        let headers = OrderedHeaders::from_slice_unchecked(&[
+            ("host", "example.s3.amazonaws.com"),
+            ("x-amz-content-sha256", "INVALID-VALUE"),
+            ("x-amz-date", "20130524T000000Z"),
+        ]);
+        let result = extract_amz_content_sha256(&headers);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.message().unwrap().contains("x-amz-content-sha256"));
     }
 }

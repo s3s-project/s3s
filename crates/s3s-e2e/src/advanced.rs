@@ -1,6 +1,5 @@
 use crate::case;
 
-use aws_sdk_s3::types::ChecksumAlgorithm;
 use s3s_test::Result;
 use s3s_test::TestFixture;
 use s3s_test::TestSuite;
@@ -8,8 +7,12 @@ use s3s_test::tcx::TestContext;
 
 use std::ops::Not;
 use std::sync::Arc;
+use std::time::Duration;
 
+use aws_sdk_s3::presigning::PresigningConfig;
 use aws_sdk_s3::primitives::ByteStream;
+use aws_sdk_s3::types::ChecksumAlgorithm;
+
 use tracing::debug;
 
 pub fn register(tcx: &mut TestContext) {
@@ -17,6 +20,8 @@ pub fn register(tcx: &mut TestContext) {
     case!(tcx, Advanced, Multipart, test_multipart_upload);
     case!(tcx, Advanced, Tagging, test_object_tagging);
     case!(tcx, Advanced, ListPagination, test_list_objects_with_pagination);
+    case!(tcx, Advanced, PresignedUrl, test_put_presigned_url);
+    case!(tcx, Advanced, PresignedUrl, test_get_presigned_url);
 }
 
 struct Advanced {
@@ -367,6 +372,114 @@ impl ListPagination {
         for obj in objects {
             assert!(obj.key().unwrap().starts_with("file-0"));
         }
+
+        Ok(())
+    }
+}
+
+struct PresignedUrl {
+    s3: aws_sdk_s3::Client,
+    bucket: String,
+    key: String,
+}
+
+impl TestFixture<Advanced> for PresignedUrl {
+    async fn setup(suite: Arc<Advanced>) -> Result<Self> {
+        use crate::utils::*;
+
+        let s3 = &suite.s3;
+        let bucket = "test-presigned-url";
+        let key = "presigned-file";
+
+        delete_object_loose(s3, bucket, key).await?;
+        delete_bucket_loose(s3, bucket).await?;
+        create_bucket(s3, bucket).await?;
+
+        Ok(Self {
+            s3: suite.s3.clone(),
+            bucket: bucket.to_owned(),
+            key: key.to_owned(),
+        })
+    }
+
+    async fn teardown(self) -> Result {
+        use crate::utils::*;
+
+        let Self { s3, bucket, key } = &self;
+        delete_object_loose(s3, bucket, key).await?;
+        delete_bucket_loose(s3, bucket).await?;
+        Ok(())
+    }
+}
+
+impl PresignedUrl {
+    /// Test PUT presigned URL - upload an object using a presigned URL
+    async fn test_put_presigned_url(self: Arc<Self>) -> Result<()> {
+        let s3 = &self.s3;
+        let bucket = self.bucket.as_str();
+        let key = self.key.as_str();
+
+        let content = "Hello from PUT presigned URL!";
+
+        // Create a presigned PUT URL
+        let presigning_config = PresigningConfig::expires_in(Duration::from_secs(3600))?;
+        let presigned_request = s3.put_object().bucket(bucket).key(key).presigned(presigning_config).await?;
+
+        debug!(uri = %presigned_request.uri(), "PUT presigned URL created");
+
+        // Use reqwest to upload content via the presigned URL
+        let client = reqwest::Client::new();
+        let response = client.put(presigned_request.uri()).body(content).send().await?;
+
+        assert!(
+            response.status().is_success(),
+            "PUT presigned URL request failed: {:?}",
+            response.status()
+        );
+
+        // Verify the object was uploaded correctly by reading it back
+        let resp = s3.get_object().bucket(bucket).key(key).send().await?;
+        let body = resp.body.collect().await?;
+        let body = String::from_utf8(body.to_vec())?;
+        assert_eq!(body, content);
+
+        Ok(())
+    }
+
+    /// Test GET presigned URL - download an object using a presigned URL
+    async fn test_get_presigned_url(self: Arc<Self>) -> Result<()> {
+        let s3 = &self.s3;
+        let bucket = self.bucket.as_str();
+        let key = self.key.as_str();
+
+        let content = "Hello from GET presigned URL!";
+
+        // First, upload an object using the regular SDK
+        s3.put_object()
+            .bucket(bucket)
+            .key(key)
+            .body(ByteStream::from_static(content.as_bytes()))
+            .send()
+            .await?;
+
+        // Create a presigned GET URL
+        let presigning_config = PresigningConfig::expires_in(Duration::from_secs(3600))?;
+        let presigned_request = s3.get_object().bucket(bucket).key(key).presigned(presigning_config).await?;
+
+        debug!(uri = %presigned_request.uri(), "GET presigned URL created");
+
+        // Use reqwest to download content via the presigned URL
+        let client = reqwest::Client::new();
+        let response = client.get(presigned_request.uri()).send().await?;
+
+        assert!(
+            response.status().is_success(),
+            "GET presigned URL request failed: {:?}",
+            response.status()
+        );
+
+        let body = response.text().await?;
+        assert_eq!(body, content);
 
         Ok(())
     }
