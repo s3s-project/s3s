@@ -5445,7 +5445,8 @@ impl PutObject {
 
         // Extract success_action_status and success_action_redirect for POST object
         if let Some(status_str) = m.find_field_value("success_action_status") {
-            let status = status_str.parse::<u16>()
+            let status = status_str
+                .parse::<u16>()
                 .map_err(|_| invalid_request!("invalid success_action_status"))?;
             // AWS only accepts 200, 201, or 204
             if status != 200 && status != 201 && status != 204 {
@@ -5633,17 +5634,17 @@ impl super::Operation for PutObject {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
-        
+
         // Extract success_action fields before building s3_req (which may move some values from req)
         let success_action_redirect = req.s3ext.success_action_redirect.take();
         let success_action_status = req.s3ext.success_action_status.take();
-        
+
         let mut s3_req = super::build_s3_request(input, req);
-        
+
         // Extract bucket and key for success_action response before s3_req is consumed
         let bucket_for_response = s3_req.input.bucket.clone();
         let key_for_response = s3_req.input.key.clone();
-        
+
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
             access.put_object(&mut s3_req).await?;
@@ -5656,113 +5657,143 @@ impl super::Operation for PutObject {
         let mut resp = Self::serialize_http(s3_resp.output)?;
         resp.headers.extend(s3_resp.headers);
         resp.extensions.extend(s3_resp.extensions);
-        
+
         // Handle POST object success_action_redirect and success_action_status
         if let Some(redirect_url) = success_action_redirect {
             // success_action_redirect takes precedence over success_action_status
             // Build redirect URL with query parameters: bucket, key, etag
             use hyper::StatusCode;
-            
+
             let bucket = bucket_for_response.as_str();
             let key = key_for_response.as_str();
-            let etag = resp.headers.get(hyper::header::ETAG)
+            let etag = resp
+                .headers
+                .get(hyper::header::ETAG)
                 .and_then(|v| v.to_str().ok())
                 .unwrap_or("");
-            
+
             // Build redirect URL with query parameters
             let redirect_with_params = if redirect_url.contains('?') {
-                format!("{}&bucket={}&key={}&etag={}", redirect_url, 
+                format!(
+                    "{}&bucket={}&key={}&etag={}",
+                    redirect_url,
                     urlencoding::encode(bucket),
                     urlencoding::encode(key),
-                    urlencoding::encode(etag))
+                    urlencoding::encode(etag)
+                )
             } else {
-                format!("{}?bucket={}&key={}&etag={}", redirect_url,
+                format!(
+                    "{}?bucket={}&key={}&etag={}",
+                    redirect_url,
                     urlencoding::encode(bucket),
                     urlencoding::encode(key),
-                    urlencoding::encode(etag))
+                    urlencoding::encode(etag)
+                )
             };
-            
+
             resp.status = StatusCode::SEE_OTHER; // 303
-            resp.headers.insert(hyper::header::LOCATION, redirect_with_params.parse()
-                .map_err(|e| invalid_request!(e, "invalid redirect URL"))?);
+            resp.headers.insert(
+                hyper::header::LOCATION,
+                redirect_with_params
+                    .parse()
+                    .map_err(|e| invalid_request!(e, "invalid redirect URL"))?,
+            );
             resp.body = http::Body::empty();
         } else if let Some(status) = success_action_status {
             // Handle success_action_status (200, 201, or 204)
             use hyper::StatusCode;
             use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
             use quick_xml::writer::Writer;
-            
+
             let status_code = match status {
                 200 => StatusCode::OK,
                 201 => StatusCode::CREATED,
                 _ => StatusCode::NO_CONTENT, // 204 or any other value (should not happen due to validation)
             };
             resp.status = status_code;
-            
+
             // For 200 and 201, return XML body with POST response information
             if status == 200 || status == 201 {
                 let bucket = bucket_for_response.as_str();
                 let key = key_for_response.as_str();
-                let etag = resp.headers.get(hyper::header::ETAG)
+                let etag = resp
+                    .headers
+                    .get(hyper::header::ETAG)
                     .and_then(|v| v.to_str().ok())
                     .unwrap_or("");
-                
+
                 // Build location URL
                 let location = format!("/{bucket}/{key}");
-                
+
                 // Create XML response body using quick-xml to handle escaping
                 let mut xml_buf = Vec::new();
                 let mut writer = Writer::new(&mut xml_buf);
-                
+
                 // Write XML declaration
-                writer.write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)))
+                writer
+                    .write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)))
                     .map_err(|e| s3_error!(e, InternalError, "failed to write XML declaration"))?;
-                
+
                 // Write PostResponse element
-                writer.write_event(Event::Start(BytesStart::new("PostResponse")))
+                writer
+                    .write_event(Event::Start(BytesStart::new("PostResponse")))
                     .map_err(|e| s3_error!(e, InternalError, "failed to write XML"))?;
-                
+
                 // Write Location
-                writer.write_event(Event::Start(BytesStart::new("Location")))
+                writer
+                    .write_event(Event::Start(BytesStart::new("Location")))
                     .map_err(|e| s3_error!(e, InternalError, "failed to write XML"))?;
-                writer.write_event(Event::Text(BytesText::new(&location)))
+                writer
+                    .write_event(Event::Text(BytesText::new(&location)))
                     .map_err(|e| s3_error!(e, InternalError, "failed to write XML"))?;
-                writer.write_event(Event::End(BytesEnd::new("Location")))
+                writer
+                    .write_event(Event::End(BytesEnd::new("Location")))
                     .map_err(|e| s3_error!(e, InternalError, "failed to write XML"))?;
-                
+
                 // Write Bucket
-                writer.write_event(Event::Start(BytesStart::new("Bucket")))
+                writer
+                    .write_event(Event::Start(BytesStart::new("Bucket")))
                     .map_err(|e| s3_error!(e, InternalError, "failed to write XML"))?;
-                writer.write_event(Event::Text(BytesText::new(bucket)))
+                writer
+                    .write_event(Event::Text(BytesText::new(bucket)))
                     .map_err(|e| s3_error!(e, InternalError, "failed to write XML"))?;
-                writer.write_event(Event::End(BytesEnd::new("Bucket")))
+                writer
+                    .write_event(Event::End(BytesEnd::new("Bucket")))
                     .map_err(|e| s3_error!(e, InternalError, "failed to write XML"))?;
-                
+
                 // Write Key
-                writer.write_event(Event::Start(BytesStart::new("Key")))
+                writer
+                    .write_event(Event::Start(BytesStart::new("Key")))
                     .map_err(|e| s3_error!(e, InternalError, "failed to write XML"))?;
-                writer.write_event(Event::Text(BytesText::new(key)))
+                writer
+                    .write_event(Event::Text(BytesText::new(key)))
                     .map_err(|e| s3_error!(e, InternalError, "failed to write XML"))?;
-                writer.write_event(Event::End(BytesEnd::new("Key")))
+                writer
+                    .write_event(Event::End(BytesEnd::new("Key")))
                     .map_err(|e| s3_error!(e, InternalError, "failed to write XML"))?;
-                
+
                 // Write ETag
-                writer.write_event(Event::Start(BytesStart::new("ETag")))
+                writer
+                    .write_event(Event::Start(BytesStart::new("ETag")))
                     .map_err(|e| s3_error!(e, InternalError, "failed to write XML"))?;
-                writer.write_event(Event::Text(BytesText::new(etag)))
+                writer
+                    .write_event(Event::Text(BytesText::new(etag)))
                     .map_err(|e| s3_error!(e, InternalError, "failed to write XML"))?;
-                writer.write_event(Event::End(BytesEnd::new("ETag")))
+                writer
+                    .write_event(Event::End(BytesEnd::new("ETag")))
                     .map_err(|e| s3_error!(e, InternalError, "failed to write XML"))?;
-                
+
                 // Close PostResponse
-                writer.write_event(Event::End(BytesEnd::new("PostResponse")))
+                writer
+                    .write_event(Event::End(BytesEnd::new("PostResponse")))
                     .map_err(|e| s3_error!(e, InternalError, "failed to write XML"))?;
-                
+
                 resp.body = http::Body::from(xml_buf);
-                resp.headers.insert(hyper::header::CONTENT_TYPE, "application/xml".parse().unwrap());
+                resp.headers
+                    .insert(hyper::header::CONTENT_TYPE, "application/xml".parse().unwrap());
             }
         }
-        
+
         Ok(resp)
     }
 }
