@@ -21,7 +21,7 @@ pub type AbortDate = Timestamp;
 /// wait before permanently removing all parts of the upload. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/mpuoverview.html#mpu-abort-incomplete-mpu-lifecycle-config">
 /// Aborting Incomplete Multipart Uploads Using a Bucket Lifecycle Configuration</a> in
 /// the <i>Amazon S3 User Guide</i>.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct AbortIncompleteMultipartUpload {
     /// <p>Specifies the number of days after which Amazon S3 aborts an incomplete multipart
     /// upload.</p>
@@ -122,7 +122,7 @@ pub type AbortRuleId = String;
 /// <p>Configures the transfer acceleration state for an Amazon S3 bucket. For more information, see
 /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/transfer-acceleration.html">Amazon S3
 /// Transfer Acceleration</a> in the <i>Amazon S3 User Guide</i>.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct AccelerateConfiguration {
     /// <p>Specifies the transfer acceleration status of the bucket.</p>
     pub status: Option<BucketAccelerateStatus>,
@@ -141,7 +141,7 @@ impl fmt::Debug for AccelerateConfiguration {
 pub type AcceptRanges = String;
 
 /// <p>Contains the elements that set the ACL permissions for an object per grantee.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct AccessControlPolicy {
     /// <p>A list of grants.</p>
     pub grants: Option<Grants>,
@@ -163,7 +163,7 @@ impl fmt::Debug for AccessControlPolicy {
 }
 
 /// <p>A container for information about access control for replicas.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct AccessControlTranslation {
     /// <p>Specifies the replica ownership. For default and valid values, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/RESTBucketPUTreplication.html">PUT bucket
     /// replication</a> in the <i>Amazon S3 API Reference</i>.</p>
@@ -207,7 +207,7 @@ pub type AllowedOrigins = List<AllowedOrigin>;
 /// <p>A conjunction (logical AND) of predicates, which is used in evaluating a metrics filter.
 /// The operator must have at least two predicates in any combination, and an object must match
 /// all of the predicates for the filter to apply.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct AnalyticsAndOperator {
     /// <p>The prefix to use when evaluating an AND predicate: The prefix that an object must have
     /// to be included in the metrics results.</p>
@@ -231,7 +231,7 @@ impl fmt::Debug for AnalyticsAndOperator {
 
 /// <p>Specifies the configuration and any analyses for the analytics filter of an Amazon S3
 /// bucket.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct AnalyticsConfiguration {
     /// <p>The filter used to describe a set of objects for analyses. A filter must have exactly
     /// one prefix, one tag, or one conjunction (AnalyticsAndOperator). If no filter is provided,
@@ -259,7 +259,7 @@ impl fmt::Debug for AnalyticsConfiguration {
 pub type AnalyticsConfigurationList = List<AnalyticsConfiguration>;
 
 /// <p>Where to publish the analytics results.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct AnalyticsExportDestination {
     /// <p>A destination signifying output to an S3 bucket.</p>
     pub s3_bucket_destination: AnalyticsS3BucketDestination,
@@ -276,8 +276,9 @@ impl fmt::Debug for AnalyticsExportDestination {
 /// <p>The filter used to describe a set of objects for analyses. A filter must have exactly
 /// one prefix, one tag, or one conjunction (AnalyticsAndOperator). If no filter is provided,
 /// all objects will be considered in any analysis.</p>
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
+#[serde(rename_all = "PascalCase")]
 pub enum AnalyticsFilter {
     /// <p>A conjunction (logical AND) of predicates, which is used in evaluating an analytics
     /// filter. The operator must have at least two predicates.</p>
@@ -291,7 +292,7 @@ pub enum AnalyticsFilter {
 pub type AnalyticsId = String;
 
 /// <p>Contains information about where to publish the analytics results.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct AnalyticsS3BucketDestination {
     /// <p>The Amazon Resource Name (ARN) of the bucket to which data is exported.</p>
     pub bucket: BucketName,
@@ -323,7 +324,7 @@ impl fmt::Debug for AnalyticsS3BucketDestination {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AnalyticsS3ExportFileFormat(Cow<'static, str>);
 
 impl AnalyticsS3ExportFileFormat {
@@ -359,7 +360,7 @@ impl FromStr for AnalyticsS3ExportFileFormat {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ArchiveStatus(Cow<'static, str>);
 
 impl ArchiveStatus {
@@ -401,7 +402,7 @@ pub type ArnType = String;
 
 /// <p>Contains the response to a successful <a>AssumeRole</a> request, including
 /// temporary Amazon Web Services credentials that can be used to make Amazon Web Services requests. </p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct AssumeRoleOutput {
     /// <p>The Amazon Resource Name (ARN) and the assumed role ID, which are identifiers that you
     /// can use to refer to the resulting temporary security credentials. For example, you can
@@ -459,7 +460,7 @@ pub type AssumedRoleIdType = String;
 
 /// <p>The identifiers for the temporary security credentials that the operation
 /// returns.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct AssumedRoleUser {
     /// <p>The ARN of the temporary security credentials that are returned from the <a>AssumeRole</a> action. For more information about ARNs and how to use them in
     /// policies, see <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_identifiers.html">IAM Identifiers</a> in the
@@ -480,7 +481,7 @@ impl fmt::Debug for AssumedRoleUser {
 }
 
 /// <p> In terms of implementation, a Bucket is a resource. </p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Bucket {
     /// <p>
     /// <code>BucketRegion</code> indicates the Amazon Web Services region where the bucket is located. If the
@@ -509,7 +510,7 @@ impl fmt::Debug for Bucket {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BucketAccelerateStatus(Cow<'static, str>);
 
 impl BucketAccelerateStatus {
@@ -549,7 +550,7 @@ impl FromStr for BucketAccelerateStatus {
 
 /// <p>The requested bucket name is not available. The bucket namespace is shared by all users
 /// of the system. Select a different name and try again.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct BucketAlreadyExists {}
 
 impl fmt::Debug for BucketAlreadyExists {
@@ -563,7 +564,7 @@ impl fmt::Debug for BucketAlreadyExists {
 /// in all Amazon Web Services Regions except in the North Virginia Region. For legacy compatibility, if you
 /// re-create an existing bucket that you already own in the North Virginia Region, Amazon S3
 /// returns 200 OK and resets the bucket access control lists (ACLs).</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct BucketAlreadyOwnedByYou {}
 
 impl fmt::Debug for BucketAlreadyOwnedByYou {
@@ -573,7 +574,7 @@ impl fmt::Debug for BucketAlreadyOwnedByYou {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BucketCannedACL(Cow<'static, str>);
 
 impl BucketCannedACL {
@@ -620,7 +621,7 @@ impl FromStr for BucketCannedACL {
 /// <note>
 /// <p>This functionality is only supported by directory buckets.</p>
 /// </note>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct BucketInfo {
     /// <p>The number of Zone (Availability Zone or Local Zone) that's used for redundancy for the bucket.</p>
     pub data_redundancy: Option<DataRedundancy>,
@@ -646,7 +647,7 @@ pub type BucketKeyEnabled = bool;
 /// <p>Specifies the lifecycle configuration for objects in an Amazon S3 bucket. For more
 /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lifecycle-mgmt.html">Object Lifecycle Management</a>
 /// in the <i>Amazon S3 User Guide</i>.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct BucketLifecycleConfiguration {
     /// <p>A lifecycle rule for individual objects in an Amazon S3 bucket.</p>
     pub rules: LifecycleRules,
@@ -660,7 +661,7 @@ impl fmt::Debug for BucketLifecycleConfiguration {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BucketLocationConstraint(Cow<'static, str>);
 
 impl BucketLocationConstraint {
@@ -763,7 +764,7 @@ impl FromStr for BucketLocationConstraint {
 pub type BucketLocationName = String;
 
 /// <p>Container for logging status information.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct BucketLoggingStatus {
     pub logging_enabled: Option<LoggingEnabled>,
 }
@@ -778,7 +779,7 @@ impl fmt::Debug for BucketLoggingStatus {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BucketLogsPermission(Cow<'static, str>);
 
 impl BucketLogsPermission {
@@ -822,7 +823,7 @@ pub type BucketName = String;
 
 pub type BucketRegion = String;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BucketType(Cow<'static, str>);
 
 impl BucketType {
@@ -858,7 +859,7 @@ impl FromStr for BucketType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BucketVersioningStatus(Cow<'static, str>);
 
 impl BucketVersioningStatus {
@@ -910,7 +911,7 @@ pub type BytesScanned = i64;
 /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/cors.html">Enabling
 /// Cross-Origin Resource Sharing</a> in the
 /// <i>Amazon S3 User Guide</i>.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct CORSConfiguration {
     /// <p>A set of origins and methods (cross-origin access that you want to allow). You can add
     /// up to 100 rules to the configuration.</p>
@@ -926,7 +927,7 @@ impl fmt::Debug for CORSConfiguration {
 }
 
 /// <p>Specifies a cross-origin access rule for an Amazon S3 bucket.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct CORSRule {
     /// <p>Headers that are specified in the <code>Access-Control-Request-Headers</code> header.
     /// These headers are allowed in a preflight OPTIONS request. In response to any preflight
@@ -973,7 +974,7 @@ pub type CORSRules = List<CORSRule>;
 
 /// <p>Describes how an uncompressed comma-separated values (CSV)-formatted input object is
 /// formatted.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct CSVInput {
     /// <p>Specifies that CSV field values may contain quoted record delimiters and such records
     /// should be allowed. Default value is FALSE. Setting this value to TRUE may lower
@@ -1055,7 +1056,7 @@ impl fmt::Debug for CSVInput {
 
 /// <p>Describes how uncompressed comma-separated values (CSV)-formatted results are
 /// formatted.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct CSVOutput {
     /// <p>The value used to separate individual fields in a record. You can specify an arbitrary
     /// delimiter.</p>
@@ -1109,7 +1110,7 @@ impl fmt::Debug for CSVOutput {
 pub type CacheControl = String;
 
 /// <p>Contains all the possible checksum or digest values for an object.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Checksum {
     /// <p>The Base64 encoded, 32-bit <code>CRC32 checksum</code> of the object. This checksum is only be present if the checksum was uploaded
     /// with the object. When you use an API operation on an object that was uploaded using multipart uploads, this value may not be a direct checksum value of the full object. Instead, it's a calculation based on the checksum values of each individual part. For more information about how checksums are calculated
@@ -1165,7 +1166,7 @@ impl fmt::Debug for Checksum {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChecksumAlgorithm(Cow<'static, str>);
 
 impl ChecksumAlgorithm {
@@ -1217,7 +1218,7 @@ pub type ChecksumCRC32C = String;
 
 pub type ChecksumCRC64NVME = String;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChecksumMode(Cow<'static, str>);
 
 impl ChecksumMode {
@@ -1257,7 +1258,7 @@ pub type ChecksumSHA1 = String;
 
 pub type ChecksumSHA256 = String;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChecksumType(Cow<'static, str>);
 
 impl ChecksumType {
@@ -1303,7 +1304,7 @@ pub type Comments = String;
 /// string specified by a delimiter. CommonPrefixes lists keys that act like subdirectories in
 /// the directory specified by Prefix. For example, if the prefix is notes/ and the delimiter
 /// is a slash (/) as in notes/summer/july, the common prefix is notes/summer/. </p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct CommonPrefix {
     /// <p>Container for the specified common prefix.</p>
     pub prefix: Option<Prefix>,
@@ -1632,7 +1633,7 @@ impl fmt::Debug for CompleteMultipartUploadOutput {
 }
 
 /// <p>The container for the completed multipart upload details.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct CompletedMultipartUpload {
     /// <p>Array of CompletedPart data types.</p>
     /// <p>If you do not supply a valid <code>Part</code> with your request, the service sends back
@@ -1651,7 +1652,7 @@ impl fmt::Debug for CompletedMultipartUpload {
 }
 
 /// <p>Details of the parts that were uploaded.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct CompletedPart {
     /// <p>The Base64 encoded, 32-bit <code>CRC32</code> checksum of the part. This checksum is present
     /// if the multipart upload request was created with the <code>CRC32</code> checksum algorithm. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
@@ -1726,7 +1727,7 @@ impl fmt::Debug for CompletedPart {
 
 pub type CompletedPartList = List<CompletedPart>;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CompressionType(Cow<'static, str>);
 
 impl CompressionType {
@@ -1770,7 +1771,7 @@ impl FromStr for CompressionType {
 /// apply. For example, 1. If request is for pages in the <code>/docs</code> folder, redirect
 /// to the <code>/documents</code> folder. 2. If request results in HTTP error 4xx, redirect
 /// request to another host where you might process the error.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Condition {
     /// <p>The HTTP error code when the redirect is applied. In the event of an error, if the error
     /// code equals this value, then the specified redirect is applied. Required when parent
@@ -1822,7 +1823,7 @@ pub type ContentMD5 = String;
 pub type ContentRange = String;
 
 /// <p></p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ContinuationEvent {}
 
 impl fmt::Debug for ContinuationEvent {
@@ -2640,7 +2641,7 @@ impl fmt::Debug for CopyObjectOutput {
 }
 
 /// <p>Container for all response elements.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct CopyObjectResult {
     /// <p>The Base64 encoded, 32-bit <code>CRC32</code> checksum of the object. This checksum is only present if the object was uploaded
     /// with the object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">
@@ -2704,7 +2705,7 @@ impl fmt::Debug for CopyObjectResult {
 }
 
 /// <p>Container for all response elements.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct CopyPartResult {
     /// <p>This header can be used as a data integrity check to verify that the data received is the same data that was originally sent.
     /// This header specifies the Base64 encoded, 32-bit <code>CRC32</code> checksum of the part. For more information, see
@@ -2782,7 +2783,7 @@ pub type CopySourceSSECustomerKeyMD5 = String;
 pub type CopySourceVersionId = String;
 
 /// <p>The configuration information for the bucket.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct CreateBucketConfiguration {
     /// <p>Specifies the information about the bucket that will be created.</p>
     /// <note>
@@ -3706,7 +3707,7 @@ impl fmt::Debug for CreateMultipartUploadOutput {
 pub type CreationDate = Timestamp;
 
 /// <p>Amazon Web Services credentials for API authentication.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct Credentials {
     /// <p>The access key ID that identifies the temporary security credentials.</p>
     pub access_key_id: AccessKeyIdType,
@@ -3730,7 +3731,7 @@ impl fmt::Debug for Credentials {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DataRedundancy(Cow<'static, str>);
 
 impl DataRedundancy {
@@ -3791,7 +3792,7 @@ pub type DaysAfterInitiation = i32;
 /// </li>
 /// </ul>
 /// </note>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct DefaultRetention {
     /// <p>The number of days that you want to specify for the default retention period. Must be
     /// used with <code>Mode</code>.</p>
@@ -3821,7 +3822,7 @@ impl fmt::Debug for DefaultRetention {
 }
 
 /// <p>Container for the objects to delete.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Delete {
     /// <p>The object to delete.</p>
     /// <note>
@@ -4407,7 +4408,7 @@ impl fmt::Debug for DeleteBucketWebsiteOutput {
 pub type DeleteMarker = bool;
 
 /// <p>Information about the delete marker.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct DeleteMarkerEntry {
     /// <p>Specifies whether the object is (true) or is not (false) the latest version of an
     /// object. </p>
@@ -4456,7 +4457,7 @@ impl fmt::Debug for DeleteMarkerEntry {
 /// <p>If you are using an earlier version of the replication configuration, Amazon S3 handles
 /// replication of delete markers differently. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/replication-add-config.html#replication-backward-compat-considerations">Backward Compatibility</a>.</p>
 /// </note>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct DeleteMarkerReplication {
     /// <p>Indicates whether to replicate delete markers.</p>
     /// <note>
@@ -4475,7 +4476,7 @@ impl fmt::Debug for DeleteMarkerReplication {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeleteMarkerReplicationStatus(Cow<'static, str>);
 
 impl DeleteMarkerReplicationStatus {
@@ -4909,7 +4910,7 @@ impl fmt::Debug for DeletePublicAccessBlockOutput {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct DeleteReplication {
     pub status: DeleteReplicationStatus,
 }
@@ -4922,7 +4923,7 @@ impl fmt::Debug for DeleteReplication {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeleteReplicationStatus(Cow<'static, str>);
 
 impl DeleteReplicationStatus {
@@ -4961,7 +4962,7 @@ impl FromStr for DeleteReplicationStatus {
 }
 
 /// <p>Information about the deleted object.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct DeletedObject {
     /// <p>Indicates whether the specified object version that was permanently deleted was (true)
     /// or was not (false) a delete marker before deletion. In a simple DELETE, this header
@@ -5014,7 +5015,7 @@ pub type Description = String;
 
 /// <p>Specifies information about where to publish analysis or configuration results for an
 /// Amazon S3 bucket and S3 Replication Time Control (S3 RTC).</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct Destination {
     /// <p>Specify this only in a cross-account scenario (where source and destination bucket
     /// owners are not the same), and you want to change replica ownership to the Amazon Web Services account
@@ -5097,7 +5098,7 @@ pub type EnableRequestProgress = bool;
 /// <code>test_file(3).png</code> will appear as
 /// <code>test_file%283%29.png</code>.</p>
 /// </note>
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EncodingType(Cow<'static, str>);
 
 impl EncodingType {
@@ -5134,7 +5135,7 @@ impl FromStr for EncodingType {
 }
 
 /// <p>Contains the type of server-side encryption used.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct Encryption {
     /// <p>The server-side encryption algorithm used when storing job results in Amazon S3 (for example,
     /// AES256, <code>aws:kms</code>).</p>
@@ -5171,7 +5172,7 @@ impl fmt::Debug for Encryption {
 /// key within the requester’s account. This behavior can result in data that's encrypted
 /// with a KMS key that belongs to the requester, and not the bucket owner.</p>
 /// </note>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct EncryptionConfiguration {
     /// <p>Specifies the ID (Key ARN or Alias ARN) of the customer managed Amazon Web Services KMS key stored in
     /// Amazon Web Services Key Management Service (KMS) for the destination bucket. Amazon S3 uses this key to
@@ -5197,7 +5198,7 @@ impl fmt::Debug for EncryptionConfiguration {
 /// Subsequent write requests must include the appropriate encryption
 /// parameters in the request or while creating the session.
 /// </p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct EncryptionTypeMismatch {}
 
 impl fmt::Debug for EncryptionTypeMismatch {
@@ -5212,7 +5213,7 @@ pub type End = i64;
 /// <p>A message that indicates the request is complete and no more messages will be sent. You
 /// should not assume that the request is complete until the client receives an
 /// <code>EndEvent</code>.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct EndEvent {}
 
 impl fmt::Debug for EndEvent {
@@ -5223,7 +5224,7 @@ impl fmt::Debug for EndEvent {
 }
 
 /// <p>Container for all error elements.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Error {
     /// <p>The error code is a string that uniquely identifies an error condition. It is meant to
     /// be read and understood by programs that detect and handle errors by type. The following is
@@ -7130,7 +7131,7 @@ pub type ErrorCode = String;
 /// If the <code>CreateBucketMetadataTableConfiguration</code> request succeeds, but S3 Metadata was
 /// unable to create the table, this structure contains the error code and error message.
 /// </p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ErrorDetails {
     /// <p>
     /// If the <code>CreateBucketMetadataTableConfiguration</code> request succeeds, but S3 Metadata was
@@ -7250,7 +7251,7 @@ impl fmt::Debug for ErrorDetails {
 }
 
 /// <p>The error information.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct ErrorDocument {
     /// <p>The object key name to use when a 4XX class error occurs.</p>
     /// <important>
@@ -7274,7 +7275,7 @@ pub type ErrorMessage = String;
 pub type Errors = List<Error>;
 
 /// <p>A container for specifying the configuration for Amazon EventBridge.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct EventBridgeConfiguration {}
 
 impl fmt::Debug for EventBridgeConfiguration {
@@ -7288,7 +7289,7 @@ pub type EventList = List<Event>;
 
 pub type ExcludeFolders = bool;
 
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ExcludedPrefix {
     pub prefix: Option<Prefix>,
 }
@@ -7310,7 +7311,7 @@ pub type ExcludedPrefixes = List<ExcludedPrefix>;
 /// <p>This parameter is no longer supported. To replicate existing objects, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-batch-replication-batch.html">Replicating existing objects with S3 Batch Replication</a> in the
 /// <i>Amazon S3 User Guide</i>.</p>
 /// </note>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct ExistingObjectReplication {
     /// <p>Specifies whether Amazon S3 replicates existing source bucket objects. </p>
     pub status: ExistingObjectReplicationStatus,
@@ -7324,7 +7325,7 @@ impl fmt::Debug for ExistingObjectReplication {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExistingObjectReplicationStatus(Cow<'static, str>);
 
 impl ExistingObjectReplicationStatus {
@@ -7364,7 +7365,7 @@ impl FromStr for ExistingObjectReplicationStatus {
 
 pub type Expiration = String;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExpirationStatus(Cow<'static, str>);
 
 impl ExpirationStatus {
@@ -7412,7 +7413,7 @@ pub type ExposeHeaders = List<ExposeHeader>;
 
 pub type Expression = String;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExpressionType(Cow<'static, str>);
 
 impl ExpressionType {
@@ -7452,7 +7453,7 @@ pub type FetchOwner = bool;
 
 pub type FieldDelimiter = String;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FileHeaderInfo(Cow<'static, str>);
 
 impl FileHeaderInfo {
@@ -7500,7 +7501,7 @@ impl FromStr for FileHeaderInfo {
 /// <code>engineering/</code>. Then, you can use <code>FilterRule</code> to find objects in
 /// a bucket with key names that have the same prefix. A suffix is similar to a prefix, but it
 /// is at the end of the object key name instead of at the beginning.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct FilterRule {
     /// <p>The object key name prefix or suffix identifying one or more objects to which the
     /// filtering rule applies. The maximum length is 1,024 characters. Overlapping prefixes and
@@ -7528,7 +7529,7 @@ impl fmt::Debug for FilterRule {
 /// rule.</p>
 pub type FilterRuleList = List<FilterRule>;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FilterRuleName(Cow<'static, str>);
 
 impl FilterRuleName {
@@ -8117,7 +8118,7 @@ impl fmt::Debug for GetBucketMetadataTableConfigurationOutput {
 /// <p>
 /// The metadata table configuration for a general purpose bucket.
 /// </p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct GetBucketMetadataTableConfigurationResult {
     /// <p>
     /// If the <code>CreateBucketMetadataTableConfiguration</code> request succeeds, but S3 Metadata was
@@ -8899,7 +8900,7 @@ impl fmt::Debug for GetObjectAttributesOutput {
 }
 
 /// <p>A collection of parts associated with a multipart upload.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct GetObjectAttributesParts {
     /// <p>Indicates whether the returned list of parts is truncated. A value of <code>true</code>
     /// indicates that the list was truncated. A list can be truncated if the number of parts
@@ -9865,7 +9866,7 @@ impl fmt::Debug for GetPublicAccessBlockOutput {
 }
 
 /// <p>Container for S3 Glacier job parameters.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct GlacierJobParameters {
     /// <p>Retrieval tier at which the restore will be processed.</p>
     pub tier: Tier,
@@ -9880,7 +9881,7 @@ impl fmt::Debug for GlacierJobParameters {
 }
 
 /// <p>Container for grant information.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Grant {
     /// <p>The person being granted permissions.</p>
     pub grantee: Option<Grantee>,
@@ -9912,7 +9913,7 @@ pub type GrantWrite = String;
 pub type GrantWriteACP = String;
 
 /// <p>Container for the person being granted permissions.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct Grantee {
     /// <p>Screen name of the grantee.</p>
     pub display_name: Option<DisplayName>,
@@ -10654,7 +10655,7 @@ pub type IfNoneMatch = ETag;
 pub type IfUnmodifiedSince = Timestamp;
 
 /// <p>Container for the <code>Suffix</code> element.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct IndexDocument {
     /// <p>A suffix that is appended to a request that is for a directory on the website endpoint.
     /// (For example, if the suffix is <code>index.html</code> and you make a request to
@@ -10680,7 +10681,7 @@ impl fmt::Debug for IndexDocument {
 pub type Initiated = Timestamp;
 
 /// <p>Container element that identifies who initiated the multipart upload. </p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Initiator {
     /// <p>Name of the Principal.</p>
     /// <note>
@@ -10712,7 +10713,7 @@ impl fmt::Debug for Initiator {
 }
 
 /// <p>Describes the serialization format of the object.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct InputSerialization {
     /// <p>Describes the serialization of a CSV-encoded object.</p>
     pub csv: Option<CSVInput>,
@@ -10744,7 +10745,7 @@ impl fmt::Debug for InputSerialization {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IntelligentTieringAccessTier(Cow<'static, str>);
 
 impl IntelligentTieringAccessTier {
@@ -10784,7 +10785,7 @@ impl FromStr for IntelligentTieringAccessTier {
 
 /// <p>A container for specifying S3 Intelligent-Tiering filters. The filters determine the
 /// subset of objects to which the rule applies.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct IntelligentTieringAndOperator {
     /// <p>An object key name prefix that identifies the subset of objects to which the
     /// configuration applies.</p>
@@ -10811,7 +10812,7 @@ impl fmt::Debug for IntelligentTieringAndOperator {
 /// <p>For information about the S3 Intelligent-Tiering storage class, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/storage-class-intro.html#sc-dynamic-data-access">Storage class
 /// for automatically optimizing frequently and infrequently accessed
 /// objects</a>.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct IntelligentTieringConfiguration {
     /// <p>Specifies a bucket filter. The configuration only includes objects that meet the
     /// filter's criteria.</p>
@@ -10843,7 +10844,7 @@ pub type IntelligentTieringDays = i32;
 
 /// <p>The <code>Filter</code> is used to identify objects that the S3 Intelligent-Tiering
 /// configuration applies to.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct IntelligentTieringFilter {
     /// <p>A conjunction (logical AND) of predicates, which is used in evaluating a metrics filter.
     /// The operator must have at least two predicates, and an object must match all of the
@@ -10878,7 +10879,7 @@ impl fmt::Debug for IntelligentTieringFilter {
 
 pub type IntelligentTieringId = String;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IntelligentTieringStatus(Cow<'static, str>);
 
 impl IntelligentTieringStatus {
@@ -10924,7 +10925,7 @@ impl FromStr for IntelligentTieringStatus {
 /// operation returns an <code>InvalidObjectState</code> error. For information about restoring
 /// archived objects, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/restoring-objects.html">Restoring Archived Objects</a> in
 /// the <i>Amazon S3 User Guide</i>.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct InvalidObjectState {
     pub access_tier: Option<IntelligentTieringAccessTier>,
     pub storage_class: Option<StorageClass>,
@@ -10955,7 +10956,7 @@ impl fmt::Debug for InvalidObjectState {
 /// <p>Request body cannot be empty when 'write offset' is specified.</p>
 /// </li>
 /// </ul>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct InvalidRequest {}
 
 impl fmt::Debug for InvalidRequest {
@@ -10968,7 +10969,7 @@ impl fmt::Debug for InvalidRequest {
 /// <p>
 /// The write offset value that you specified does not match the current object size.
 /// </p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct InvalidWriteOffset {}
 
 impl fmt::Debug for InvalidWriteOffset {
@@ -10980,7 +10981,7 @@ impl fmt::Debug for InvalidWriteOffset {
 
 /// <p>Specifies the inventory configuration for an Amazon S3 bucket. For more information, see
 /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/RESTBucketGETInventoryConfig.html">GET Bucket inventory</a> in the <i>Amazon S3 API Reference</i>. </p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct InventoryConfiguration {
     /// <p>Contains information about where to publish the inventory results.</p>
     pub destination: InventoryDestination,
@@ -11026,7 +11027,7 @@ impl fmt::Debug for InventoryConfiguration {
 pub type InventoryConfigurationList = List<InventoryConfiguration>;
 
 /// <p>Specifies the inventory configuration for an Amazon S3 bucket.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct InventoryDestination {
     /// <p>Contains the bucket name, file format, bucket owner (optional), and prefix (optional)
     /// where inventory results are published.</p>
@@ -11043,7 +11044,7 @@ impl fmt::Debug for InventoryDestination {
 
 /// <p>Contains the type of server-side encryption used to encrypt the inventory
 /// results.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct InventoryEncryption {
     /// <p>Specifies the use of SSE-KMS to encrypt delivered inventory reports.</p>
     pub ssekms: Option<SSEKMS>,
@@ -11066,7 +11067,7 @@ impl fmt::Debug for InventoryEncryption {
 
 /// <p>Specifies an inventory filter. The inventory only includes objects that meet the
 /// filter's criteria.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct InventoryFilter {
     /// <p>The prefix that an object must have to be included in the inventory results.</p>
     pub prefix: Prefix,
@@ -11080,7 +11081,7 @@ impl fmt::Debug for InventoryFilter {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InventoryFormat(Cow<'static, str>);
 
 impl InventoryFormat {
@@ -11120,7 +11121,7 @@ impl FromStr for InventoryFormat {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InventoryFrequency(Cow<'static, str>);
 
 impl InventoryFrequency {
@@ -11160,7 +11161,7 @@ impl FromStr for InventoryFrequency {
 
 pub type InventoryId = String;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InventoryIncludedObjectVersions(Cow<'static, str>);
 
 impl InventoryIncludedObjectVersions {
@@ -11198,7 +11199,7 @@ impl FromStr for InventoryIncludedObjectVersions {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InventoryOptionalField(Cow<'static, str>);
 
 impl InventoryOptionalField {
@@ -11266,7 +11267,7 @@ pub type InventoryOptionalFields = List<InventoryOptionalField>;
 
 /// <p>Contains the bucket name, file format, bucket owner (optional), and prefix (optional)
 /// where inventory results are published.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct InventoryS3BucketDestination {
     /// <p>The account ID that owns the destination S3 bucket. If no account ID is provided, the
     /// owner is not validated before exporting data. </p>
@@ -11306,7 +11307,7 @@ impl fmt::Debug for InventoryS3BucketDestination {
 }
 
 /// <p>Specifies the schedule for generating inventory results.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct InventorySchedule {
     /// <p>Specifies how frequently inventory results are produced.</p>
     pub frequency: InventoryFrequency,
@@ -11331,7 +11332,7 @@ pub type IsRestoreInProgress = bool;
 pub type IsTruncated = bool;
 
 /// <p>Specifies JSON as object's input serialization format.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct JSONInput {
     /// <p>The type of JSON. Valid values: Document, Lines.</p>
     pub type_: Option<JSONType>,
@@ -11348,7 +11349,7 @@ impl fmt::Debug for JSONInput {
 }
 
 /// <p>Specifies JSON as request's output serialization format.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct JSONOutput {
     /// <p>The value used to separate individual records in the output. If no value is specified,
     /// Amazon S3 uses a newline character ('\n').</p>
@@ -11365,7 +11366,7 @@ impl fmt::Debug for JSONOutput {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct JSONType(Cow<'static, str>);
 
 impl JSONType {
@@ -11414,7 +11415,7 @@ pub type KeyPrefixEquals = String;
 pub type LambdaFunctionArn = String;
 
 /// <p>A container for specifying the configuration for Lambda notifications.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct LambdaFunctionConfiguration {
     /// <p>The Amazon S3 bucket event for which to invoke the Lambda function. For more information,
     /// see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/NotificationHowTo.html">Supported
@@ -11451,7 +11452,7 @@ pub type LastModifiedTime = Timestamp;
 /// <p>Container for the expiration for the lifecycle of the object.</p>
 /// <p>For more information see, <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-lifecycle-mgmt.html">Managing your storage
 /// lifecycle</a> in the <i>Amazon S3 User Guide</i>.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct LifecycleExpiration {
     /// <p>Indicates at what date the object is to be moved or deleted. The date value must conform
     /// to the ISO 8601 format. The time is always midnight UTC.</p>
@@ -11492,7 +11493,7 @@ impl fmt::Debug for LifecycleExpiration {
 /// <p>A lifecycle rule for individual objects in an Amazon S3 bucket.</p>
 /// <p>For more information see, <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-lifecycle-mgmt.html">Managing your storage
 /// lifecycle</a> in the <i>Amazon S3 User Guide</i>.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct LifecycleRule {
     pub abort_incomplete_multipart_upload: Option<AbortIncompleteMultipartUpload>,
     /// <p>Specifies the expiration for the lifecycle of the object in the form of date, days and,
@@ -11574,7 +11575,7 @@ impl fmt::Debug for LifecycleRule {
 /// <p>This is used in a Lifecycle Rule Filter to apply a logical AND to two or more
 /// predicates. The Lifecycle Rule will apply to any object matching all of the predicates
 /// configured inside the And operator.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct LifecycleRuleAndOperator {
     /// <p>Minimum object size to which the rule applies.</p>
     pub object_size_greater_than: Option<ObjectSizeGreaterThanBytes>,
@@ -13200,7 +13201,7 @@ pub type Location = String;
 /// <note>
 /// <p>This functionality is only supported by directory buckets.</p>
 /// </note>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct LocationInfo {
     /// <p>The name of the location where the bucket will be created.</p>
     /// <p>For directory buckets, the name of the location is the Zone ID of the Availability Zone (AZ) or Local Zone (LZ) where the bucket will be created. An example AZ ID value is <code>usw2-az1</code>.</p>
@@ -13226,7 +13227,7 @@ pub type LocationNameAsString = String;
 
 pub type LocationPrefix = String;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LocationType(Cow<'static, str>);
 
 impl LocationType {
@@ -13267,7 +13268,7 @@ impl FromStr for LocationType {
 /// <p>Describes where logs are stored and the prefix that Amazon S3 assigns to all log object keys
 /// for a bucket. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/RESTBucketPUTlogging.html">PUT Bucket logging</a> in the
 /// <i>Amazon S3 API Reference</i>.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct LoggingEnabled {
     /// <p>Specifies the bucket where you want Amazon S3 to store server access logs. You can have your
     /// logs delivered to any bucket that you own, including the same bucket that is being logged.
@@ -13305,7 +13306,7 @@ impl fmt::Debug for LoggingEnabled {
 
 pub type MFA = String;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MFADelete(Cow<'static, str>);
 
 impl MFADelete {
@@ -13343,7 +13344,7 @@ impl FromStr for MFADelete {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MFADeleteStatus(Cow<'static, str>);
 
 impl MFADeleteStatus {
@@ -13399,7 +13400,7 @@ pub type Message = String;
 
 pub type Metadata = Map<MetadataKey, MetadataValue>;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MetadataDirective(Cow<'static, str>);
 
 impl MetadataDirective {
@@ -13438,7 +13439,7 @@ impl FromStr for MetadataDirective {
 }
 
 /// <p>A metadata key-value pair to store with an object.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct MetadataEntry {
     /// <p>Name of the object.</p>
     pub name: Option<MetadataKey>,
@@ -13464,7 +13465,7 @@ pub type MetadataKey = String;
 /// <p>
 /// The metadata table configuration for a general purpose bucket.
 /// </p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct MetadataTableConfiguration {
     /// <p>
     /// The destination information for the metadata table configuration. The destination table bucket
@@ -13489,7 +13490,7 @@ impl fmt::Debug for MetadataTableConfiguration {
 /// table name must be unique within the <code>aws_s3_metadata</code> namespace in the destination
 /// table bucket.
 /// </p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct MetadataTableConfigurationResult {
     /// <p>
     /// The destination information for the metadata table configuration. The destination table bucket
@@ -13514,7 +13515,7 @@ pub type MetadataValue = String;
 
 /// <p> A container specifying replication metrics-related settings enabling replication
 /// metrics and events.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct Metrics {
     /// <p> A container specifying the time threshold for emitting the
     /// <code>s3:Replication:OperationMissedThreshold</code> event. </p>
@@ -13537,7 +13538,7 @@ impl fmt::Debug for Metrics {
 /// <p>A conjunction (logical AND) of predicates, which is used in evaluating a metrics filter.
 /// The operator must have at least two predicates, and an object must match all of the
 /// predicates in order for the filter to apply.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct MetricsAndOperator {
     /// <p>The access point ARN used when evaluating an <code>AND</code> predicate.</p>
     pub access_point_arn: Option<AccessPointArn>,
@@ -13568,7 +13569,7 @@ impl fmt::Debug for MetricsAndOperator {
 /// configuration, note that this is a full replacement of the existing metrics configuration.
 /// If you don't include the elements you want to keep, they are erased. For more information,
 /// see <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/RESTBucketPUTMetricConfiguration.html">PutBucketMetricsConfiguration</a>.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct MetricsConfiguration {
     /// <p>Specifies a metrics configuration filter. The metrics configuration will only include
     /// objects that meet the filter's criteria. A filter must be a prefix, an object tag, an
@@ -13595,8 +13596,9 @@ pub type MetricsConfigurationList = List<MetricsConfiguration>;
 /// <p>Specifies a metrics configuration filter. The metrics configuration only includes
 /// objects that meet the filter's criteria. A filter must be a prefix, an object tag, an
 /// access point ARN, or a conjunction (MetricsAndOperator). For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketMetricsConfiguration.html">PutBucketMetricsConfiguration</a>.</p>
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
+#[serde(rename_all = "PascalCase")]
 pub enum MetricsFilter {
     /// <p>The access point ARN used when evaluating a metrics filter.</p>
     AccessPointArn(AccessPointArn),
@@ -13612,7 +13614,7 @@ pub enum MetricsFilter {
 
 pub type MetricsId = String;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MetricsStatus(Cow<'static, str>);
 
 impl MetricsStatus {
@@ -13657,7 +13659,7 @@ pub type MissingMeta = i32;
 pub type MpuObjectSize = i64;
 
 /// <p>Container for the <code>MultipartUpload</code> for the Amazon S3 object.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct MultipartUpload {
     /// <p>The algorithm that was used to create a checksum of the object.</p>
     pub checksum_algorithm: Option<ChecksumAlgorithm>,
@@ -13736,7 +13738,7 @@ pub type NextUploadIdMarker = String;
 pub type NextVersionIdMarker = String;
 
 /// <p>The specified bucket does not exist.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct NoSuchBucket {}
 
 impl fmt::Debug for NoSuchBucket {
@@ -13747,7 +13749,7 @@ impl fmt::Debug for NoSuchBucket {
 }
 
 /// <p>The specified key does not exist.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct NoSuchKey {}
 
 impl fmt::Debug for NoSuchKey {
@@ -13758,7 +13760,7 @@ impl fmt::Debug for NoSuchKey {
 }
 
 /// <p>The specified multipart upload does not exist.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct NoSuchUpload {}
 
 impl fmt::Debug for NoSuchUpload {
@@ -13778,7 +13780,7 @@ pub type NonNegativeIntegerType = i32;
 /// <p>This parameter applies to general purpose buckets only. It is not supported for
 /// directory bucket lifecycle configurations.</p>
 /// </note>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct NoncurrentVersionExpiration {
     /// <p>Specifies how many noncurrent versions Amazon S3 will retain. You can specify up to 100
     /// noncurrent versions to retain. Amazon S3 will permanently delete any additional noncurrent
@@ -13823,7 +13825,7 @@ impl fmt::Debug for NoncurrentVersionExpiration {
 /// <code>STANDARD_IA</code>, <code>ONEZONE_IA</code>, <code>INTELLIGENT_TIERING</code>,
 /// <code>GLACIER_IR</code>, <code>GLACIER</code>, or <code>DEEP_ARCHIVE</code> storage
 /// class at a specific period in the object's lifetime.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct NoncurrentVersionTransition {
     /// <p>Specifies how many noncurrent versions Amazon S3 will retain in the same storage class before
     /// transitioning objects. You can specify up to 100 noncurrent versions to retain. Amazon S3 will
@@ -13859,7 +13861,7 @@ impl fmt::Debug for NoncurrentVersionTransition {
 pub type NoncurrentVersionTransitionList = List<NoncurrentVersionTransition>;
 
 /// <p>The specified content does not exist.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct NotFound {}
 
 impl fmt::Debug for NotFound {
@@ -13871,7 +13873,7 @@ impl fmt::Debug for NotFound {
 
 /// <p>A container for specifying the notification configuration of the bucket. If this element
 /// is empty, notifications are turned off for the bucket.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct NotificationConfiguration {
     /// <p>Enables delivery of events to Amazon EventBridge.</p>
     pub event_bridge_configuration: Option<EventBridgeConfiguration>,
@@ -13909,7 +13911,7 @@ impl fmt::Debug for NotificationConfiguration {
 /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/notification-how-to-filtering.html">Configuring event
 /// notifications using object key name filtering</a> in the
 /// <i>Amazon S3 User Guide</i>.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct NotificationConfigurationFilter {
     pub key: Option<S3KeyFilter>,
 }
@@ -13929,7 +13931,7 @@ impl fmt::Debug for NotificationConfigurationFilter {
 pub type NotificationId = String;
 
 /// <p>An object consists of data and its descriptive metadata.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Object {
     /// <p>The algorithm that was used to create a checksum of the object.</p>
     pub checksum_algorithm: Option<ChecksumAlgorithmList>,
@@ -14030,7 +14032,7 @@ impl fmt::Debug for Object {
 }
 
 /// <p>This action is not allowed against this storage tier.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ObjectAlreadyInActiveTierError {}
 
 impl fmt::Debug for ObjectAlreadyInActiveTierError {
@@ -14040,7 +14042,7 @@ impl fmt::Debug for ObjectAlreadyInActiveTierError {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ObjectAttributes(Cow<'static, str>);
 
 impl ObjectAttributes {
@@ -14086,7 +14088,7 @@ impl FromStr for ObjectAttributes {
 
 pub type ObjectAttributesList = List<ObjectAttributes>;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ObjectCannedACL(Cow<'static, str>);
 
 impl ObjectCannedACL {
@@ -14135,7 +14137,7 @@ impl FromStr for ObjectCannedACL {
 }
 
 /// <p>Object Identifier is unique value to identify objects.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct ObjectIdentifier {
     /// <p>An entity tag (ETag) is an identifier assigned by a web server to a specific version of a resource found at a URL.
     /// This header field makes the request method conditional on <code>ETags</code>. </p>
@@ -14195,7 +14197,7 @@ pub type ObjectKey = String;
 pub type ObjectList = List<Object>;
 
 /// <p>The container element for Object Lock configuration parameters.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ObjectLockConfiguration {
     /// <p>Indicates whether this bucket has an Object Lock configuration enabled. Enable
     /// <code>ObjectLockEnabled</code> when you apply <code>ObjectLockConfiguration</code> to a
@@ -14222,7 +14224,7 @@ impl fmt::Debug for ObjectLockConfiguration {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ObjectLockEnabled(Cow<'static, str>);
 
 impl ObjectLockEnabled {
@@ -14261,7 +14263,7 @@ impl FromStr for ObjectLockEnabled {
 pub type ObjectLockEnabledForBucket = bool;
 
 /// <p>A legal hold configuration for an object.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ObjectLockLegalHold {
     /// <p>Indicates whether the specified object has a legal hold in place.</p>
     pub status: Option<ObjectLockLegalHoldStatus>,
@@ -14277,7 +14279,7 @@ impl fmt::Debug for ObjectLockLegalHold {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ObjectLockLegalHoldStatus(Cow<'static, str>);
 
 impl ObjectLockLegalHoldStatus {
@@ -14315,7 +14317,7 @@ impl FromStr for ObjectLockLegalHoldStatus {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ObjectLockMode(Cow<'static, str>);
 
 impl ObjectLockMode {
@@ -14356,7 +14358,7 @@ impl FromStr for ObjectLockMode {
 pub type ObjectLockRetainUntilDate = Timestamp;
 
 /// <p>A Retention configuration for an object.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ObjectLockRetention {
     /// <p>Indicates the Retention mode for the specified object.</p>
     pub mode: Option<ObjectLockRetentionMode>,
@@ -14377,7 +14379,7 @@ impl fmt::Debug for ObjectLockRetention {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ObjectLockRetentionMode(Cow<'static, str>);
 
 impl ObjectLockRetentionMode {
@@ -14416,7 +14418,7 @@ impl FromStr for ObjectLockRetentionMode {
 }
 
 /// <p>The container element for an Object Lock rule.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ObjectLockRule {
     /// <p>The default Object Lock retention mode and period that you want to apply to new objects
     /// placed in the specified bucket. Bucket settings require both a mode and a period. The
@@ -14439,7 +14441,7 @@ pub type ObjectLockToken = String;
 
 /// <p>The source object of the COPY action is not in the active tier and is only stored in
 /// Amazon S3 Glacier.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ObjectNotInActiveTierError {}
 
 impl fmt::Debug for ObjectNotInActiveTierError {
@@ -14473,7 +14475,7 @@ impl fmt::Debug for ObjectNotInActiveTierError {
 /// <note>
 /// <p>This functionality is not supported for directory buckets. Directory buckets use the bucket owner enforced setting for S3 Object Ownership.</p>
 /// </note>
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ObjectOwnership(Cow<'static, str>);
 
 impl ObjectOwnership {
@@ -14514,7 +14516,7 @@ impl FromStr for ObjectOwnership {
 }
 
 /// <p>A container for elements related to an individual part.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ObjectPart {
     /// <p>The Base64 encoded, 32-bit <code>CRC32</code> checksum of the part. This checksum is present
     /// if the multipart upload request was created with the <code>CRC32</code> checksum algorithm. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
@@ -14573,7 +14575,7 @@ pub type ObjectSizeGreaterThanBytes = i64;
 
 pub type ObjectSizeLessThanBytes = i64;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ObjectStorageClass(Cow<'static, str>);
 
 impl ObjectStorageClass {
@@ -14630,7 +14632,7 @@ impl FromStr for ObjectStorageClass {
 }
 
 /// <p>The version of an object.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ObjectVersion {
     /// <p>The algorithm that was used to create a checksum of the object.</p>
     pub checksum_algorithm: Option<ChecksumAlgorithmList>,
@@ -14705,7 +14707,7 @@ pub type ObjectVersionId = String;
 
 pub type ObjectVersionList = List<ObjectVersion>;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ObjectVersionStorageClass(Cow<'static, str>);
 
 impl ObjectVersionStorageClass {
@@ -14741,7 +14743,7 @@ impl FromStr for ObjectVersionStorageClass {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OptionalObjectAttributes(Cow<'static, str>);
 
 impl OptionalObjectAttributes {
@@ -14780,7 +14782,7 @@ impl FromStr for OptionalObjectAttributes {
 pub type OptionalObjectAttributesList = List<OptionalObjectAttributes>;
 
 /// <p>Describes the location where the restore job's output is stored.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct OutputLocation {
     /// <p>Describes an S3 location that will receive the results of the restore request.</p>
     pub s3: Option<S3Location>,
@@ -14797,7 +14799,7 @@ impl fmt::Debug for OutputLocation {
 }
 
 /// <p>Describes how results of the Select job are serialized.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct OutputSerialization {
     /// <p>Describes the serialization of CSV-encoded Select results.</p>
     pub csv: Option<CSVOutput>,
@@ -14819,7 +14821,7 @@ impl fmt::Debug for OutputSerialization {
 }
 
 /// <p>Container for the owner's display name and ID.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Owner {
     /// <p>Container for the display name of the owner. This value is only supported in the
     /// following Amazon Web Services Regions:</p>
@@ -14870,7 +14872,7 @@ impl fmt::Debug for Owner {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OwnerOverride(Cow<'static, str>);
 
 impl OwnerOverride {
@@ -14907,7 +14909,7 @@ impl FromStr for OwnerOverride {
 }
 
 /// <p>The container element for a bucket's ownership controls.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct OwnershipControls {
     /// <p>The container element for an ownership control rule.</p>
     pub rules: OwnershipControlsRules,
@@ -14922,7 +14924,7 @@ impl fmt::Debug for OwnershipControls {
 }
 
 /// <p>The container element for an ownership control rule.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct OwnershipControlsRule {
     pub object_ownership: ObjectOwnership,
 }
@@ -14938,7 +14940,7 @@ impl fmt::Debug for OwnershipControlsRule {
 pub type OwnershipControlsRules = List<OwnershipControlsRule>;
 
 /// <p>Container for Parquet.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ParquetInput {}
 
 impl fmt::Debug for ParquetInput {
@@ -14949,7 +14951,7 @@ impl fmt::Debug for ParquetInput {
 }
 
 /// <p>Container for elements related to a part.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Part {
     /// <p>The Base64 encoded, 32-bit <code>CRC32</code> checksum of the part. This checksum is present
     /// if the object was uploaded with the <code>CRC32</code> checksum algorithm. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
@@ -15016,7 +15018,7 @@ pub type PartNumber = i32;
 
 pub type PartNumberMarker = i32;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PartitionDateSource(Cow<'static, str>);
 
 impl PartitionDateSource {
@@ -15060,7 +15062,7 @@ impl FromStr for PartitionDateSource {
 /// </p>
 /// <p>PartitionedPrefix defaults to EventTime delivery when server access logs are
 /// delivered.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct PartitionedPrefix {
     /// <p>Specifies the partition date source for the partitioned prefix.
     /// <code>PartitionDateSource</code> can be <code>EventTime</code> or
@@ -15089,7 +15091,7 @@ pub type PartsCount = i32;
 
 pub type PartsList = List<ObjectPart>;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Payer(Cow<'static, str>);
 
 impl Payer {
@@ -15127,7 +15129,7 @@ impl FromStr for Payer {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Permission(Cow<'static, str>);
 
 impl Permission {
@@ -15174,7 +15176,7 @@ impl FromStr for Permission {
 pub type Policy = String;
 
 /// <p>The container element for a bucket's policy status.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct PolicyStatus {
     /// <p>The policy status for this bucket. <code>TRUE</code> indicates that this bucket is
     /// public. <code>FALSE</code> indicates that the bucket is not public.</p>
@@ -15196,7 +15198,7 @@ pub type Prefix = String;
 pub type Priority = i32;
 
 /// <p>This data type contains information about progress of an operation.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Progress {
     /// <p>The current number of uncompressed object bytes processed.</p>
     pub bytes_processed: Option<BytesProcessed>,
@@ -15223,7 +15225,7 @@ impl fmt::Debug for Progress {
 }
 
 /// <p>This data type contains information about the progress event of an operation.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ProgressEvent {
     /// <p>The Progress event details.</p>
     pub details: Option<Progress>,
@@ -15239,7 +15241,7 @@ impl fmt::Debug for ProgressEvent {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Protocol(Cow<'static, str>);
 
 impl Protocol {
@@ -15280,7 +15282,7 @@ impl FromStr for Protocol {
 /// <p>The PublicAccessBlock configuration that you want to apply to this Amazon S3 bucket. You can
 /// enable the configuration options in any combination. For more information about when Amazon S3
 /// considers a bucket or object public, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/access-control-block-public-access.html#access-control-block-public-access-policy-status">The Meaning of "Public"</a> in the <i>Amazon S3 User Guide</i>. </p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct PublicAccessBlockConfiguration {
     /// <p>Specifies whether Amazon S3 should block public access control lists (ACLs) for this bucket
     /// and objects in this bucket. Setting this element to <code>TRUE</code> causes the following
@@ -17659,7 +17661,7 @@ pub type QueueArn = String;
 
 /// <p>Specifies the configuration for publishing messages to an Amazon Simple Queue Service
 /// (Amazon SQS) queue when Amazon S3 detects specified events.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct QueueConfiguration {
     /// <p>A collection of bucket events for which to send notifications</p>
     pub events: EventList,
@@ -17693,7 +17695,7 @@ pub type QuoteCharacter = String;
 
 pub type QuoteEscapeCharacter = String;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QuoteFields(Cow<'static, str>);
 
 impl QuoteFields {
@@ -17757,7 +17759,7 @@ impl fmt::Debug for RecordsEvent {
 
 /// <p>Specifies how requests are redirected. In the event of an error, you can specify a
 /// different error code to return.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Redirect {
     /// <p>The host name to use in the redirect request.</p>
     pub host_name: Option<HostName>,
@@ -17814,7 +17816,7 @@ impl fmt::Debug for Redirect {
 
 /// <p>Specifies the redirect behavior of all requests to a website endpoint of an Amazon S3
 /// bucket.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct RedirectAllRequestsTo {
     /// <p>Name of the host where requests are redirected.</p>
     pub host_name: HostName,
@@ -17851,7 +17853,7 @@ pub type ReplicaKmsKeyID = String;
 /// replication configuration is the earlier version, V1. In the earlier version, this
 /// element is not allowed.</p>
 /// </note>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct ReplicaModifications {
     /// <p>Specifies whether Amazon S3 replicates modifications on replicas.</p>
     pub status: ReplicaModificationsStatus,
@@ -17865,7 +17867,7 @@ impl fmt::Debug for ReplicaModifications {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReplicaModificationsStatus(Cow<'static, str>);
 
 impl ReplicaModificationsStatus {
@@ -17905,7 +17907,7 @@ impl FromStr for ReplicaModificationsStatus {
 
 /// <p>A container for replication rules. You can add up to 1,000 rules. The maximum size of a
 /// replication configuration is 2 MB.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct ReplicationConfiguration {
     /// <p>The Amazon Resource Name (ARN) of the Identity and Access Management (IAM) role that Amazon S3 assumes when
     /// replicating objects. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/replication-how-setup.html">How to Set Up Replication</a>
@@ -17926,7 +17928,7 @@ impl fmt::Debug for ReplicationConfiguration {
 }
 
 /// <p>Specifies which Amazon S3 objects to replicate and where to store the replicas.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct ReplicationRule {
     pub delete_marker_replication: Option<DeleteMarkerReplication>,
     pub delete_replication: Option<DeleteReplication>,
@@ -18015,7 +18017,7 @@ impl fmt::Debug for ReplicationRule {
 /// in an <code>And</code> tag.</p>
 /// </li>
 /// </ul>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ReplicationRuleAndOperator {
     /// <p>An object key name prefix that identifies the subset of objects to which the rule
     /// applies.</p>
@@ -18113,7 +18115,7 @@ impl PartialEq for ReplicationRuleFilter {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReplicationRuleStatus(Cow<'static, str>);
 
 impl ReplicationRuleStatus {
@@ -18153,7 +18155,7 @@ impl FromStr for ReplicationRuleStatus {
 
 pub type ReplicationRules = List<ReplicationRule>;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReplicationStatus(Cow<'static, str>);
 
 impl ReplicationStatus {
@@ -18200,7 +18202,7 @@ impl FromStr for ReplicationStatus {
 /// <p> A container specifying S3 Replication Time Control (S3 RTC) related information, including whether S3 RTC is
 /// enabled and the time when all objects and operations on objects must be replicated. Must be
 /// specified together with a <code>Metrics</code> block. </p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct ReplicationTime {
     /// <p> Specifies whether the replication time is enabled. </p>
     pub status: ReplicationTimeStatus,
@@ -18218,7 +18220,7 @@ impl fmt::Debug for ReplicationTime {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReplicationTimeStatus(Cow<'static, str>);
 
 impl ReplicationTimeStatus {
@@ -18258,7 +18260,7 @@ impl FromStr for ReplicationTimeStatus {
 
 /// <p> A container specifying the time value for S3 Replication Time Control (S3 RTC) and replication metrics
 /// <code>EventThreshold</code>. </p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ReplicationTimeValue {
     /// <p> Contains an integer specifying time in minutes. </p>
     /// <p> Valid value: 15</p>
@@ -18280,7 +18282,7 @@ impl fmt::Debug for ReplicationTimeValue {
 /// <note>
 /// <p>This functionality is not supported for directory buckets.</p>
 /// </note>
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RequestCharged(Cow<'static, str>);
 
 impl RequestCharged {
@@ -18325,7 +18327,7 @@ impl FromStr for RequestCharged {
 /// <note>
 /// <p>This functionality is not supported for directory buckets.</p>
 /// </note>
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RequestPayer(Cow<'static, str>);
 
 impl RequestPayer {
@@ -18362,7 +18364,7 @@ impl FromStr for RequestPayer {
 }
 
 /// <p>Container for Payer.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct RequestPaymentConfiguration {
     /// <p>Specifies who pays for the download and request fees.</p>
     pub payer: Payer,
@@ -18378,7 +18380,7 @@ impl fmt::Debug for RequestPaymentConfiguration {
 
 /// <p>Container for specifying if periodic <code>QueryProgress</code> messages should be
 /// sent.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct RequestProgress {
     /// <p>Specifies whether periodic QueryProgress frames should be sent. Valid values: TRUE,
     /// FALSE. Default value: FALSE.</p>
@@ -18498,7 +18500,7 @@ impl fmt::Debug for RestoreObjectOutput {
 pub type RestoreOutputPath = String;
 
 /// <p>Container for restore job parameters.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct RestoreRequest {
     /// <p>Lifetime of the active copy in days. Do not use with restores that specify
     /// <code>OutputLocation</code>.</p>
@@ -18556,7 +18558,7 @@ impl fmt::Debug for RestoreRequest {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RestoreRequestType(Cow<'static, str>);
 
 impl RestoreRequestType {
@@ -18600,7 +18602,7 @@ impl FromStr for RestoreRequestType {
 /// <p>This functionality is not supported for directory buckets.
 /// Only the S3 Express One Zone storage class is supported by directory buckets to store objects.</p>
 /// </note>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct RestoreStatus {
     /// <p>Specifies whether the object is currently being restored. If the object restoration is
     /// in progress, the header returns the value <code>TRUE</code>. For example:</p>
@@ -18642,7 +18644,7 @@ pub type Role = String;
 /// <p>Specifies the redirect behavior and when a redirect is applied. For more information
 /// about routing rules, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/how-to-page-redirect.html#advanced-conditional-redirects">Configuring advanced conditional redirects</a> in the
 /// <i>Amazon S3 User Guide</i>.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct RoutingRule {
     /// <p>A container for describing a condition that must be met for the specified redirect to
     /// apply. For example, 1. If request is for pages in the <code>/docs</code> folder, redirect
@@ -18669,7 +18671,7 @@ impl fmt::Debug for RoutingRule {
 pub type RoutingRules = List<RoutingRule>;
 
 /// <p>A container for object key name prefix and suffix filtering rules.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct S3KeyFilter {
     pub filter_rules: Option<FilterRuleList>,
 }
@@ -18685,7 +18687,7 @@ impl fmt::Debug for S3KeyFilter {
 }
 
 /// <p>Describes an Amazon S3 location that will receive the results of the restore request.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct S3Location {
     /// <p>A list of grants that control access to the staged results.</p>
     pub access_control_list: Option<Grants>,
@@ -18741,7 +18743,7 @@ pub type S3TablesBucketArn = String;
 /// table name must be unique within the <code>aws_s3_metadata</code> namespace in the destination
 /// table bucket.
 /// </p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct S3TablesDestination {
     /// <p>
     /// The Amazon Resource Name (ARN) for the table bucket that's specified as the
@@ -18772,7 +18774,7 @@ impl fmt::Debug for S3TablesDestination {
 /// table name must be unique within the <code>aws_s3_metadata</code> namespace in the destination
 /// table bucket.
 /// </p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct S3TablesDestinationResult {
     /// <p>
     /// The Amazon Resource Name (ARN) for the metadata table in the metadata table configuration. The
@@ -18821,7 +18823,7 @@ pub type SSECustomerKey = String;
 pub type SSECustomerKeyMD5 = String;
 
 /// <p>Specifies the use of SSE-KMS to encrypt delivered inventory reports.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct SSEKMS {
     /// <p>Specifies the ID of the Key Management Service (KMS) symmetric encryption customer managed key to use for
     /// encrypting inventory reports.</p>
@@ -18841,7 +18843,7 @@ pub type SSEKMSEncryptionContext = String;
 pub type SSEKMSKeyId = String;
 
 /// <p>Specifies the use of SSE-S3 to encrypt delivered inventory reports.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct SSES3 {}
 
 impl fmt::Debug for SSES3 {
@@ -18855,7 +18857,7 @@ impl fmt::Debug for SSES3 {
 /// when its first byte is contained by the range. This parameter is optional, but when
 /// specified, it must not be empty. See RFC 2616, Section 14.35.1 about how to specify the
 /// start and end of the range.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ScanRange {
     /// <p>Specifies the end of the byte range. This parameter is optional. Valid values:
     /// non-negative integers. The default value is one less than the size of the object being
@@ -18992,7 +18994,7 @@ impl fmt::Debug for SelectObjectContentOutput {
 /// into records. It returns only records that match the specified SQL expression. You must
 /// also specify the data serialization format for the response. For more information, see
 /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectSELECTContent.html">S3Select API Documentation</a>.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct SelectObjectContentRequest {
     /// <p>The expression that is used to query the object.</p>
     pub expression: Expression,
@@ -19055,7 +19057,7 @@ impl fmt::Debug for SelectObjectContentRequest {
 /// <p>Describes the parameters for Select job types.</p>
 /// <p>Learn <a href="http://aws.amazon.com/blogs/storage/how-to-optimize-querying-your-data-in-amazon-s3/">How to optimize querying your data in Amazon S3</a>  using
 /// <a href="https://docs.aws.amazon.com/athena/latest/ug/what-is.html">Amazon Athena</a>, <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/transforming-objects.html">S3 Object Lambda</a>, or client-side filtering.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct SelectParameters {
     /// <important>
     /// <p>Amazon S3 Select is no longer available to new customers. Existing customers of Amazon S3 Select can continue to use the feature as usual. <a href="http://aws.amazon.com/blogs/storage/how-to-optimize-querying-your-data-in-amazon-s3/">Learn more</a>
@@ -19082,7 +19084,7 @@ impl fmt::Debug for SelectParameters {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ServerSideEncryption(Cow<'static, str>);
 
 impl ServerSideEncryption {
@@ -19149,7 +19151,7 @@ impl FromStr for ServerSideEncryption {
 /// </li>
 /// </ul>
 /// </note>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct ServerSideEncryptionByDefault {
     /// <p>Amazon Web Services Key Management Service (KMS) customer managed key ID to use for the default
     /// encryption. </p>
@@ -19231,7 +19233,7 @@ impl fmt::Debug for ServerSideEncryptionByDefault {
 }
 
 /// <p>Specifies the default server-side-encryption configuration.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ServerSideEncryptionConfiguration {
     /// <p>Container for information about a particular server-side encryption configuration
     /// rule.</p>
@@ -19264,7 +19266,7 @@ impl fmt::Debug for ServerSideEncryptionConfiguration {
 /// </li>
 /// </ul>
 /// </note>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ServerSideEncryptionRule {
     /// <p>Specifies the default server-side encryption to apply to new objects in the bucket. If a
     /// PUT Object request doesn't specify any server-side encryption, this default encryption will
@@ -19318,7 +19320,7 @@ pub type SessionCredentialValue = String;
 /// credentials are only supported for the authentication and authorization of Zonal endpoint API operations
 /// on directory buckets.</p>
 /// </note>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionCredentials {
     /// <p>A unique identifier that's associated with a secret access key. The access key ID and
     /// the secret access key are used together to sign programmatic Amazon Web Services requests
@@ -19353,7 +19355,7 @@ impl fmt::Debug for SessionCredentials {
 
 pub type SessionExpiration = Timestamp;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SessionMode(Cow<'static, str>);
 
 impl SessionMode {
@@ -19398,7 +19400,7 @@ pub type Setting = bool;
 /// <p>
 /// <code>[DestinationPrefix][YYYY]-[MM]-[DD]-[hh]-[mm]-[ss]-[UniqueString]</code>
 /// </p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct SimplePrefix {}
 
 impl fmt::Debug for SimplePrefix {
@@ -19419,7 +19421,7 @@ pub type SourceIdentityType = String;
 /// objects. Currently, Amazon S3 supports only the filter that you can specify for objects created
 /// with server-side encryption using a customer managed key stored in Amazon Web Services Key Management Service
 /// (SSE-KMS).</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct SourceSelectionCriteria {
     /// <p>A filter that you can specify for selections for modifications on replicas. Amazon S3 doesn't
     /// replicate replica modifications by default. In the latest version of replication
@@ -19452,7 +19454,7 @@ impl fmt::Debug for SourceSelectionCriteria {
 
 /// <p>A container for filter information for the selection of S3 objects encrypted with Amazon Web Services
 /// KMS.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct SseKmsEncryptedObjects {
     /// <p>Specifies whether Amazon S3 replicates objects created with server-side encryption using an
     /// Amazon Web Services KMS key stored in Amazon Web Services Key Management Service.</p>
@@ -19467,7 +19469,7 @@ impl fmt::Debug for SseKmsEncryptedObjects {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SseKmsEncryptedObjectsStatus(Cow<'static, str>);
 
 impl SseKmsEncryptedObjectsStatus {
@@ -19510,7 +19512,7 @@ pub type Start = i64;
 pub type StartAfter = String;
 
 /// <p>Container for the stats details.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Stats {
     /// <p>The total number of uncompressed object bytes processed.</p>
     pub bytes_processed: Option<BytesProcessed>,
@@ -19537,7 +19539,7 @@ impl fmt::Debug for Stats {
 }
 
 /// <p>Container for the Stats Event.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct StatsEvent {
     /// <p>The Stats event details.</p>
     pub details: Option<Stats>,
@@ -19553,7 +19555,7 @@ impl fmt::Debug for StatsEvent {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StorageClass(Cow<'static, str>);
 
 impl StorageClass {
@@ -19611,7 +19613,7 @@ impl FromStr for StorageClass {
 
 /// <p>Specifies data related to access patterns to be collected and made available to analyze
 /// the tradeoffs between different storage classes for an Amazon S3 bucket.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct StorageClassAnalysis {
     /// <p>Specifies how data related to the storage class analysis for an Amazon S3 bucket should be
     /// exported.</p>
@@ -19630,7 +19632,7 @@ impl fmt::Debug for StorageClassAnalysis {
 
 /// <p>Container for data related to the storage class analysis for an Amazon S3 bucket for
 /// export.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct StorageClassAnalysisDataExport {
     /// <p>The place to store the data for an analysis.</p>
     pub destination: AnalyticsExportDestination,
@@ -19648,7 +19650,7 @@ impl fmt::Debug for StorageClassAnalysisDataExport {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StorageClassAnalysisSchemaVersion(Cow<'static, str>);
 
 impl StorageClassAnalysisSchemaVersion {
@@ -19727,7 +19729,7 @@ impl fmt::Debug for Tagging {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TaggingDirective(Cow<'static, str>);
 
 impl TaggingDirective {
@@ -19773,7 +19775,7 @@ pub type TargetBucket = String;
 /// <p>Buckets that use the bucket owner enforced setting for Object Ownership don't support
 /// target grants. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/enable-server-access-logging.html#grant-log-delivery-permissions-general">Permissions server access log delivery</a> in the
 /// <i>Amazon S3 User Guide</i>.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct TargetGrant {
     /// <p>Container for the person being granted permissions.</p>
     pub grantee: Option<Grantee>,
@@ -19798,7 +19800,7 @@ pub type TargetGrants = List<TargetGrant>;
 
 /// <p>Amazon S3 key format for log objects. Only one format, PartitionedPrefix or
 /// SimplePrefix, is allowed.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct TargetObjectKeyFormat {
     /// <p>Partitioned S3 key for log objects.</p>
     pub partitioned_prefix: Option<PartitionedPrefix>,
@@ -19822,7 +19824,7 @@ impl fmt::Debug for TargetObjectKeyFormat {
 
 pub type TargetPrefix = String;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Tier(Cow<'static, str>);
 
 impl Tier {
@@ -19865,7 +19867,7 @@ impl FromStr for Tier {
 /// <p>The S3 Intelligent-Tiering storage class is designed to optimize storage costs by
 /// automatically moving data to the most cost-effective storage access tier, without
 /// additional operational overhead.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct Tiering {
     /// <p>S3 Intelligent-Tiering access tier. See <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/storage-class-intro.html#sc-dynamic-data-access">Storage class
     /// for automatically optimizing frequently and infrequently accessed objects</a> for a
@@ -19898,7 +19900,7 @@ pub type TokenType = String;
 /// that are allowed for this object. You can use the CopyObject operation
 /// to copy this object to another and then add more data to the newly copied object.
 /// </p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct TooManyParts {}
 
 impl fmt::Debug for TooManyParts {
@@ -19912,7 +19914,7 @@ pub type TopicArn = String;
 
 /// <p>A container for specifying the configuration for publication of messages to an Amazon
 /// Simple Notification Service (Amazon SNS) topic when Amazon S3 detects specified events.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct TopicConfiguration {
     /// <p>The Amazon S3 bucket event about which to send notifications. For more information, see
     /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/NotificationHowTo.html">Supported
@@ -19945,7 +19947,7 @@ pub type TopicConfigurationList = List<TopicConfiguration>;
 /// <p>Specifies when an object transitions to a specified storage class. For more information
 /// about Amazon S3 lifecycle configuration rules, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/lifecycle-transition-general-considerations.html">Transitioning
 /// Objects Using Amazon S3 Lifecycle</a> in the <i>Amazon S3 User Guide</i>.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Transition {
     /// <p>Indicates when objects are transitioned to the specified storage class. The date value
     /// must be in ISO 8601 format. The time is always midnight UTC.</p>
@@ -19981,7 +19983,7 @@ impl fmt::Debug for Transition {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TransitionDefaultMinimumObjectSize(Cow<'static, str>);
 
 impl TransitionDefaultMinimumObjectSize {
@@ -20021,7 +20023,7 @@ impl FromStr for TransitionDefaultMinimumObjectSize {
 
 pub type TransitionList = List<Transition>;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TransitionStorageClass(Cow<'static, str>);
 
 impl TransitionStorageClass {
@@ -20067,7 +20069,7 @@ impl FromStr for TransitionStorageClass {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Type(Cow<'static, str>);
 
 impl Type {
@@ -20680,7 +20682,7 @@ pub type VersionIdMarker = String;
 
 /// <p>Describes the versioning state of an Amazon S3 bucket. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/RESTBucketPUTVersioningStatus.html">PUT
 /// Bucket versioning</a> in the <i>Amazon S3 API Reference</i>.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct VersioningConfiguration {
     pub exclude_folders: Option<ExcludeFolders>,
     pub excluded_prefixes: Option<ExcludedPrefixes>,
@@ -20712,7 +20714,7 @@ impl fmt::Debug for VersioningConfiguration {
 }
 
 /// <p>Specifies website configuration parameters for an Amazon S3 bucket.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct WebsiteConfiguration {
     /// <p>The name of the error document for the website.</p>
     pub error_document: Option<ErrorDocument>,

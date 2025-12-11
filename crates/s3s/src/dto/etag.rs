@@ -11,7 +11,7 @@ use stdx::str::StrExt;
 /// See RFC 9110 §8.8.3 and MDN:
 /// + <https://www.rfc-editor.org/rfc/rfc9110#section-8.8.3>
 /// + <https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/ETag>
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ETag {
     /// Strong validator: "value"
     Strong(String),
