@@ -636,10 +636,8 @@ fn codegen_struct_enum(ty: &rust::StructEnum, rust_types: &RustTypes) {
     // Check if all variants can be serialized
     let can_serde = ty.variants.iter().all(|v| {
         // Check for known non-serializable types
-        if matches!(
-            v.type_.as_str(),
-            "Body" | "StreamingBlob" | "SelectObjectContentEventStream" | "CachedTags"
-        ) {
+        // Note: CachedTags is now serializable with custom implementation
+        if matches!(v.type_.as_str(), "Body" | "StreamingBlob" | "SelectObjectContentEventStream") {
             return false;
         }
 
@@ -717,26 +715,19 @@ fn struct_derives(ty: &rust::Struct, rust_types: &RustTypes, ops: &Operations) -
 }
 
 fn can_derive_serde(ty: &rust::Struct, rust_types: &RustTypes) -> bool {
-    // Don't add serde to MinIO custom extensions (they may have CachedTags or other non-serializable fields)
-    if ty.is_custom_extension {
-        return false;
-    }
-
     ty.fields.iter().all(|field| {
         if field.position == "sealed" {
-            return false;
+            // Allow sealed CachedTags fields since they have custom Serialize/Deserialize implementation
+            if field.type_ != "CachedTags" {
+                return false;
+            }
         }
         if field.position == "s3s" {
             return false;
         }
-        if field.is_custom_extension {
-            return false;
-        }
-        // Body, StreamingBlob, CachedTags, and event streams can't be serialized with regular serde
-        if matches!(
-            field.type_.as_str(),
-            "Body" | "StreamingBlob" | "SelectObjectContentEventStream" | "CachedTags"
-        ) {
+        // Body, StreamingBlob, and event streams can't be serialized with regular serde
+        // Note: CachedTags is now serializable with custom implementation
+        if matches!(field.type_.as_str(), "Body" | "StreamingBlob" | "SelectObjectContentEventStream") {
             return false;
         }
 
@@ -766,6 +757,7 @@ fn can_derive_serde(ty: &rust::Struct, rust_types: &RustTypes) -> bool {
 
 fn can_derive_clone(ty: &rust::Struct, _rust_types: &RustTypes) -> bool {
     ty.fields.iter().all(|field| {
+        // Sealed fields need custom Clone implementation
         if field.position == "sealed" {
             return false;
         }
@@ -781,6 +773,7 @@ fn can_derive_clone(ty: &rust::Struct, _rust_types: &RustTypes) -> bool {
 
 fn can_derive_partial_eq(ty: &rust::Struct, _rust_types: &RustTypes) -> bool {
     ty.fields.iter().all(|field| {
+        // Sealed fields need custom PartialEq implementation
         if field.position == "sealed" {
             return false;
         }

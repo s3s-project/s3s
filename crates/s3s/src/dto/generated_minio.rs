@@ -647,7 +647,7 @@ pub type BucketKeyEnabled = bool;
 /// <p>Specifies the lifecycle configuration for objects in an Amazon S3 bucket. For more
 /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lifecycle-mgmt.html">Object Lifecycle Management</a>
 /// in the <i>Amazon S3 User Guide</i>.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct BucketLifecycleConfiguration {
     /// <p>A lifecycle rule for individual objects in an Amazon S3 bucket.</p>
     pub rules: LifecycleRules,
@@ -4910,7 +4910,7 @@ impl fmt::Debug for DeletePublicAccessBlockOutput {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct DeleteReplication {
     pub status: DeleteReplicationStatus,
 }
@@ -7289,7 +7289,7 @@ pub type EventList = List<Event>;
 
 pub type ExcludeFolders = bool;
 
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ExcludedPrefix {
     pub prefix: Option<Prefix>,
 }
@@ -11493,7 +11493,7 @@ impl fmt::Debug for LifecycleExpiration {
 /// <p>A lifecycle rule for individual objects in an Amazon S3 bucket.</p>
 /// <p>For more information see, <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-lifecycle-mgmt.html">Managing your storage
 /// lifecycle</a> in the <i>Amazon S3 User Guide</i>.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct LifecycleRule {
     pub abort_incomplete_multipart_upload: Option<AbortIncompleteMultipartUpload>,
     /// <p>Specifies the expiration for the lifecycle of the object in the form of date, days and,
@@ -11612,7 +11612,7 @@ impl fmt::Debug for LifecycleRuleAndOperator {
 /// <code>ObjectSizeGreaterThan</code>, <code>ObjectSizeLessThan</code>, or <code>And</code>
 /// specified. If the <code>Filter</code> element is left empty, the Lifecycle Rule applies to
 /// all objects in the bucket.</p>
-#[derive(Default)]
+#[derive(Default, Serialize, Deserialize)]
 pub struct LifecycleRuleFilter {
     pub and: Option<LifecycleRuleAndOperator>,
     pub cached_tags: CachedTags,
@@ -17907,7 +17907,7 @@ impl FromStr for ReplicaModificationsStatus {
 
 /// <p>A container for replication rules. You can add up to 1,000 rules. The maximum size of a
 /// replication configuration is 2 MB.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct ReplicationConfiguration {
     /// <p>The Amazon Resource Name (ARN) of the Identity and Access Management (IAM) role that Amazon S3 assumes when
     /// replicating objects. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/replication-how-setup.html">How to Set Up Replication</a>
@@ -17928,7 +17928,7 @@ impl fmt::Debug for ReplicationConfiguration {
 }
 
 /// <p>Specifies which Amazon S3 objects to replicate and where to store the replicas.</p>
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct ReplicationRule {
     pub delete_marker_replication: Option<DeleteMarkerReplication>,
     pub delete_replication: Option<DeleteReplication>,
@@ -18042,7 +18042,7 @@ impl fmt::Debug for ReplicationRuleAndOperator {
 /// <p>A filter that identifies the subset of objects to which the replication rule applies. A
 /// <code>Filter</code> must specify exactly one <code>Prefix</code>, <code>Tag</code>, or
 /// an <code>And</code> child element.</p>
-#[derive(Default)]
+#[derive(Default, Serialize, Deserialize)]
 pub struct ReplicationRuleFilter {
     /// <p>A container for specifying rule filters. The filters determine the subset of objects to
     /// which the rule applies. This element is required only if you specify more than one filter.
@@ -20682,7 +20682,7 @@ pub type VersionIdMarker = String;
 
 /// <p>Describes the versioning state of an Amazon S3 bucket. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/RESTBucketPUTVersioningStatus.html">PUT
 /// Bucket versioning</a> in the <i>Amazon S3 API Reference</i>.</p>
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct VersioningConfiguration {
     pub exclude_folders: Option<ExcludeFolders>,
     pub excluded_prefixes: Option<ExcludedPrefixes>,
@@ -35946,6 +35946,62 @@ impl DtoExt for WriteGetObjectResponseInput {
 
 #[derive(Debug, Default)]
 pub struct CachedTags(std::sync::OnceLock<Map<ObjectKey, Value>>);
+
+impl Clone for CachedTags {
+    fn clone(&self) -> Self {
+        // CachedTags is a cache, so we create a new empty cache when cloning
+        Self::default()
+    }
+}
+
+impl PartialEq for CachedTags {
+    fn eq(&self, _other: &Self) -> bool {
+        // CachedTags is a cache, consider all instances equal for comparison purposes
+        true
+    }
+}
+
+impl serde::Serialize for CachedTags {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        // CachedTags is just a cache, serialize as empty map
+        use serde::ser::SerializeMap;
+        let map = serializer.serialize_map(Some(0))?;
+        map.end()
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for CachedTags {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        // Deserialize and ignore the data, return default (empty cache)
+        use serde::de::{MapAccess, Visitor};
+        struct CachedTagsVisitor;
+
+        impl<'de> Visitor<'de> for CachedTagsVisitor {
+            type Value = CachedTags;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a map")
+            }
+
+            fn visit_map<M>(self, mut access: M) -> Result<Self::Value, M::Error>
+            where
+                M: MapAccess<'de>,
+            {
+                // Consume and discard all map entries
+                while access.next_entry::<String, String>()?.is_some() {}
+                Ok(CachedTags::default())
+            }
+        }
+
+        deserializer.deserialize_map(CachedTagsVisitor)
+    }
+}
 
 impl CachedTags {
     pub fn reset(&mut self) {
