@@ -635,10 +635,20 @@ fn codegen_struct_enum(ty: &rust::StructEnum, rust_types: &RustTypes) {
 
     // Check if all variants can be serialized
     let can_serde = ty.variants.iter().all(|v| {
+        // Check for known non-serializable types
+        if matches!(
+            v.type_.as_str(),
+            "Body" | "StreamingBlob" | "SelectObjectContentEventStream" | "CachedTags"
+        ) {
+            return false;
+        }
+
         // Check if the variant type can be serialized
         match rust_types.get(&v.type_) {
             Some(rust::Type::Struct(s)) => can_derive_serde(s, rust_types),
-            _ => true, // Assume other types can be serialized
+            // Other types (primitives, aliases, enums) are assumed to be serializable
+            // This is safe because non-serializable types are explicitly checked above
+            _ => true,
         }
     });
 
