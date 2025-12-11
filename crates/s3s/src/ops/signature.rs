@@ -34,7 +34,11 @@ fn extract_amz_content_sha256<'a>(hs: &'_ OrderedHeaders<'a>) -> S3Result<Option
         Ok(x) => Ok(Some(x)),
         Err(e) => {
             // https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-troubleshooting.html
-            let mut err: S3Error = S3ErrorCode::Custom(ByteString::from_static("SignatureDoesNotMatch")).into();
+            // XAmzContentSHA256Mismatch: returned when the custom header x-amz-content-sha256 does not match
+            // the computed hash of the request payload. This is distinct from SignatureDoesNotMatch, which is
+            // returned when the signature value in the HTTP request does not match the one calculated by the
+            // S3 service.
+            let mut err: S3Error = S3ErrorCode::Custom(ByteString::from_static("XAmzContentSHA256Mismatch")).into();
             err.set_message("invalid header: x-amz-content-sha256");
             err.set_source(Box::new(e));
             Err(err)
