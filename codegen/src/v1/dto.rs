@@ -706,7 +706,12 @@ fn struct_derives(ty: &rust::Struct, rust_types: &RustTypes, ops: &Operations) -
     derives
 }
 
-fn can_derive_serde(ty: &rust::Struct, _rust_types: &RustTypes) -> bool {
+fn can_derive_serde(ty: &rust::Struct, rust_types: &RustTypes) -> bool {
+    // Don't add serde to MinIO custom extensions (they may have CachedTags or other non-serializable fields)
+    if ty.is_custom_extension {
+        return false;
+    }
+
     ty.fields.iter().all(|field| {
         if field.position == "sealed" {
             return false;
@@ -714,10 +719,37 @@ fn can_derive_serde(ty: &rust::Struct, _rust_types: &RustTypes) -> bool {
         if field.position == "s3s" {
             return false;
         }
-        // Body, StreamingBlob, and event streams can't be serialized with regular serde
-        if matches!(field.type_.as_str(), "Body" | "StreamingBlob" | "SelectObjectContentEventStream") {
+        if field.is_custom_extension {
             return false;
         }
+        // Body, StreamingBlob, CachedTags, and event streams can't be serialized with regular serde
+        if matches!(
+            field.type_.as_str(),
+            "Body" | "StreamingBlob" | "SelectObjectContentEventStream" | "CachedTags"
+        ) {
+            return false;
+        }
+
+        // Check if the field's type can be serialized recursively
+        if let Some(field_ty) = rust_types.get(&field.type_) {
+            match field_ty {
+                rust::Type::Struct(s) => {
+                    if !can_derive_serde(s, rust_types) {
+                        return false;
+                    }
+                }
+                rust::Type::List(list) => {
+                    // Check if the list element type can be serialized
+                    if let Some(rust::Type::Struct(s)) = rust_types.get(&list.member.type_) {
+                        if !can_derive_serde(s, rust_types) {
+                            return false;
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
         true
     })
 }

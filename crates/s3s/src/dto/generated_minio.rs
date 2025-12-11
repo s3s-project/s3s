@@ -647,7 +647,7 @@ pub type BucketKeyEnabled = bool;
 /// <p>Specifies the lifecycle configuration for objects in an Amazon S3 bucket. For more
 /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lifecycle-mgmt.html">Object Lifecycle Management</a>
 /// in the <i>Amazon S3 User Guide</i>.</p>
-#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Default, PartialEq)]
 pub struct BucketLifecycleConfiguration {
     /// <p>A lifecycle rule for individual objects in an Amazon S3 bucket.</p>
     pub rules: LifecycleRules,
@@ -4910,7 +4910,7 @@ impl fmt::Debug for DeletePublicAccessBlockOutput {
     }
 }
 
-#[derive(Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq)]
 pub struct DeleteReplication {
     pub status: DeleteReplicationStatus,
 }
@@ -7289,7 +7289,7 @@ pub type EventList = List<Event>;
 
 pub type ExcludeFolders = bool;
 
-#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Default, PartialEq)]
 pub struct ExcludedPrefix {
     pub prefix: Option<Prefix>,
 }
@@ -11493,7 +11493,7 @@ impl fmt::Debug for LifecycleExpiration {
 /// <p>A lifecycle rule for individual objects in an Amazon S3 bucket.</p>
 /// <p>For more information see, <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-lifecycle-mgmt.html">Managing your storage
 /// lifecycle</a> in the <i>Amazon S3 User Guide</i>.</p>
-#[derive(Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq)]
 pub struct LifecycleRule {
     pub abort_incomplete_multipart_upload: Option<AbortIncompleteMultipartUpload>,
     /// <p>Specifies the expiration for the lifecycle of the object in the form of date, days and,
@@ -17907,7 +17907,7 @@ impl FromStr for ReplicaModificationsStatus {
 
 /// <p>A container for replication rules. You can add up to 1,000 rules. The maximum size of a
 /// replication configuration is 2 MB.</p>
-#[derive(Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq)]
 pub struct ReplicationConfiguration {
     /// <p>The Amazon Resource Name (ARN) of the Identity and Access Management (IAM) role that Amazon S3 assumes when
     /// replicating objects. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/replication-how-setup.html">How to Set Up Replication</a>
@@ -17928,7 +17928,7 @@ impl fmt::Debug for ReplicationConfiguration {
 }
 
 /// <p>Specifies which Amazon S3 objects to replicate and where to store the replicas.</p>
-#[derive(Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq)]
 pub struct ReplicationRule {
     pub delete_marker_replication: Option<DeleteMarkerReplication>,
     pub delete_replication: Option<DeleteReplication>,
@@ -20682,7 +20682,7 @@ pub type VersionIdMarker = String;
 
 /// <p>Describes the versioning state of an Amazon S3 bucket. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/RESTBucketPUTVersioningStatus.html">PUT
 /// Bucket versioning</a> in the <i>Amazon S3 API Reference</i>.</p>
-#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Default, PartialEq)]
 pub struct VersioningConfiguration {
     pub exclude_folders: Option<ExcludeFolders>,
     pub excluded_prefixes: Option<ExcludedPrefixes>,
