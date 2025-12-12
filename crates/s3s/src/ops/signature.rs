@@ -19,7 +19,6 @@ use crate::utils::is_base64_encoded;
 use std::mem;
 use std::ops::Not;
 
-use bytestring::ByteString;
 use hyper::Method;
 use hyper::Uri;
 use mime::Mime;
@@ -34,7 +33,7 @@ fn extract_amz_content_sha256<'a>(hs: &'_ OrderedHeaders<'a>) -> S3Result<Option
         Ok(x) => Ok(Some(x)),
         Err(e) => {
             // https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-troubleshooting.html
-            let mut err: S3Error = S3ErrorCode::Custom(ByteString::from_static("SignatureDoesNotMatch")).into();
+            let mut err = S3Error::new(S3ErrorCode::SignatureDoesNotMatch);
             err.set_message("invalid header: x-amz-content-sha256");
             err.set_source(Box::new(e));
             Err(err)
