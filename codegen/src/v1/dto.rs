@@ -1,5 +1,5 @@
 use super::o;
-use super::ops::{Operations, SKIPPED_OPS, is_op_input};
+use super::ops::{Operations, SKIPPED_OPS, is_op_input, is_op_output};
 use super::rust::codegen_doc;
 use super::smithy::SmithyTraitsExt;
 use super::{rust, smithy};
@@ -490,7 +490,7 @@ fn codegen_struct(ty: &rust::Struct, rust_types: &RustTypes, ops: &Operations) {
     codegen_doc(ty.doc.as_deref());
 
     {
-        let derives = struct_derives(ty, rust_types);
+        let derives = struct_derives(ty, rust_types, ops);
         if !derives.is_empty() {
             g!("#[derive({})]", derives.join(", "));
         }
@@ -577,7 +577,7 @@ fn codegen_struct(ty: &rust::Struct, rust_types: &RustTypes, ops: &Operations) {
 
 fn codegen_str_enum(ty: &rust::StrEnum, _rust_types: &RustTypes) {
     codegen_doc(ty.doc.as_deref());
-    g!("#[derive(Debug, Clone, PartialEq, Eq)]");
+    g!("#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]");
     g!("pub struct {}(Cow<'static, str>);", ty.name);
     g!();
 
@@ -630,10 +630,35 @@ fn codegen_str_enum(ty: &rust::StrEnum, _rust_types: &RustTypes) {
     g!("}}");
 }
 
-fn codegen_struct_enum(ty: &rust::StructEnum, _rust_types: &RustTypes) {
+fn codegen_struct_enum(ty: &rust::StructEnum, rust_types: &RustTypes) {
     codegen_doc(ty.doc.as_deref());
-    g!("#[derive(Debug, Clone, PartialEq)]");
-    g!("#[non_exhaustive]");
+
+    // Check if all variants can be serialized
+    let can_serde = ty.variants.iter().all(|v| {
+        // Check for known non-serializable types
+        // Note: CachedTags is now serializable with custom implementation
+        if matches!(v.type_.as_str(), "Body" | "StreamingBlob" | "SelectObjectContentEventStream") {
+            return false;
+        }
+
+        // Check if the variant type can be serialized
+        match rust_types.get(&v.type_) {
+            Some(rust::Type::Struct(s)) => can_derive_serde(s, rust_types),
+            // Other types (primitives, aliases, enums) are assumed to be serializable
+            // This is safe because non-serializable types are explicitly checked above
+            _ => true,
+        }
+    });
+
+    if can_serde {
+        g!("#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]");
+        g!("#[non_exhaustive]");
+        g!("#[serde(rename_all = \"PascalCase\")]");
+    } else {
+        g!("#[derive(Debug, Clone, PartialEq)]");
+        g!("#[non_exhaustive]");
+    }
+
     g!("pub enum {} {{", ty.name);
 
     for variant in &ty.variants {
@@ -666,9 +691,10 @@ fn codegen_tests(ops: &Operations) {
     g!("}}");
 }
 
-fn struct_derives(ty: &rust::Struct, rust_types: &RustTypes) -> Vec<&'static str> {
+fn struct_derives(ty: &rust::Struct, rust_types: &RustTypes, ops: &Operations) -> Vec<&'static str> {
     let mut derives = Vec::new();
-    if can_derive_clone(ty, rust_types) {
+    let can_clone = can_derive_clone(ty, rust_types);
+    if can_clone {
         derives.push("Clone");
     }
     if can_derive_default(ty, rust_types) {
@@ -677,16 +703,61 @@ fn struct_derives(ty: &rust::Struct, rust_types: &RustTypes) -> Vec<&'static str
     if can_derive_partial_eq(ty, rust_types) {
         derives.push("PartialEq");
     }
-    // What to do with other types?
-    if ty.name == "Tagging" || ty.name == "Tag" {
+
+    // Add Serialize and Deserialize to all struct types except operation inputs/outputs
+    // and types that can't be serialized (have Body, streaming blobs, sealed fields, etc.)
+    let is_operation = is_op_input(&ty.name, ops) || is_op_output(&ty.name, ops);
+    if can_derive_serde(ty, rust_types) && !is_operation {
         derives.push("Serialize");
         derives.push("Deserialize");
     }
     derives
 }
 
+fn can_derive_serde(ty: &rust::Struct, rust_types: &RustTypes) -> bool {
+    ty.fields.iter().all(|field| {
+        if field.position == "sealed" {
+            // Allow sealed CachedTags fields since they have custom Serialize/Deserialize implementation
+            if field.type_ != "CachedTags" {
+                return false;
+            }
+        }
+        if field.position == "s3s" {
+            return false;
+        }
+        // Body, StreamingBlob, and event streams can't be serialized with regular serde
+        // Note: CachedTags is now serializable with custom implementation
+        if matches!(field.type_.as_str(), "Body" | "StreamingBlob" | "SelectObjectContentEventStream") {
+            return false;
+        }
+
+        // Check if the field's type can be serialized recursively
+        if let Some(field_ty) = rust_types.get(&field.type_) {
+            match field_ty {
+                rust::Type::Struct(s) => {
+                    if !can_derive_serde(s, rust_types) {
+                        return false;
+                    }
+                }
+                rust::Type::List(list) => {
+                    // Check if the list element type can be serialized
+                    if let Some(rust::Type::Struct(s)) = rust_types.get(&list.member.type_) {
+                        if !can_derive_serde(s, rust_types) {
+                            return false;
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        true
+    })
+}
+
 fn can_derive_clone(ty: &rust::Struct, _rust_types: &RustTypes) -> bool {
     ty.fields.iter().all(|field| {
+        // Sealed fields need custom Clone implementation
         if field.position == "sealed" {
             return false;
         }
@@ -702,6 +773,7 @@ fn can_derive_clone(ty: &rust::Struct, _rust_types: &RustTypes) -> bool {
 
 fn can_derive_partial_eq(ty: &rust::Struct, _rust_types: &RustTypes) -> bool {
     ty.fields.iter().all(|field| {
+        // Sealed fields need custom PartialEq implementation
         if field.position == "sealed" {
             return false;
         }

@@ -31,6 +31,62 @@ pub fn codegen_in_dto() {
 #[derive(Debug, Default)]
 pub struct CachedTags(std::sync::OnceLock<Map<ObjectKey, Value>>);
 
+impl Clone for CachedTags {
+    fn clone(&self) -> Self {
+        // CachedTags is a cache, so we create a new empty cache when cloning
+        Self::default()
+    }
+}
+
+impl PartialEq for CachedTags {
+    fn eq(&self, _other: &Self) -> bool {
+        // CachedTags is a cache, consider all instances equal for comparison purposes
+        true
+    }
+}
+
+impl serde::Serialize for CachedTags {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        // CachedTags is just a cache, serialize as empty map
+        use serde::ser::SerializeMap;
+        let map = serializer.serialize_map(Some(0))?;
+        map.end()
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for CachedTags {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        // Deserialize and ignore the data, return default (empty cache)
+        use serde::de::{Visitor, MapAccess};
+        struct CachedTagsVisitor;
+        
+        impl<'de> Visitor<'de> for CachedTagsVisitor {
+            type Value = CachedTags;
+            
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a map")
+            }
+            
+            fn visit_map<M>(self, mut access: M) -> Result<Self::Value, M::Error>
+            where
+                M: MapAccess<'de>,
+            {
+                // Consume and discard all map entries
+                while access.next_entry::<String, String>()?.is_some() {}
+                Ok(CachedTags::default())
+            }
+        }
+        
+        deserializer.deserialize_map(CachedTagsVisitor)
+    }
+}
+
 impl CachedTags {
     pub fn reset(&mut self) {
         self.0.take();
