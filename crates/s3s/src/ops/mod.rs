@@ -106,7 +106,21 @@ fn unknown_operation() -> S3Error {
 
 fn extract_host(req: &Request) -> S3Result<Option<String>> {
     if let Some(host) = req.uri.host() {
-        return Ok(Some(host.to_string()));
+        // If the URI has a port and it's not the default for the scheme, include it.
+        let port = req.uri.port_u16();
+        let scheme = req.uri.scheme_str();
+        let is_default_port = match (scheme, port) {
+            (Some("http"), Some(80)) => true,
+            (Some("https"), Some(443)) => true,
+            (_, None) => true,
+            _ => false,
+        };
+        let host_str = if !is_default_port {
+            format!("{}:{}", host, port.unwrap())
+        } else {
+            host.to_string()
+        };
+        return Ok(Some(host_str));
     }
     let Some(val) = req.headers.get(crate::header::HOST) else { return Ok(None) };
     let on_err = |e| s3_error!(e, InvalidRequest, "invalid header: Host: {val:?}");
