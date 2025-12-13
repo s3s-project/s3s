@@ -86,7 +86,7 @@ fn extract_host_from_uri() {
 
     req.version = http_crate::Version::HTTP_3;
     let host = extract_host(&req).unwrap();
-    assert_eq!(host, None);
+    assert_eq!(host, Some("test.example.com:9001".to_string()));
 
     let mut req = Request::from(
         hyper::Request::builder()
@@ -105,7 +105,7 @@ fn extract_host_from_uri() {
 
     req.version = http_crate::Version::HTTP_3;
     let host = extract_host(&req).unwrap();
-    assert_eq!(host, None);
+    assert_eq!(host, Some("another.example.org".to_string()));
 
     let req = Request::from(
         hyper::Request::builder()
