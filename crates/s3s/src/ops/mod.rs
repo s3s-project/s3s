@@ -38,6 +38,7 @@ use std::net::{IpAddr, SocketAddr};
 use std::ops::Not;
 use std::sync::Arc;
 
+use crate::http_crate;
 use bytes::Bytes;
 use hyper::HeaderMap;
 use hyper::Method;
@@ -111,9 +112,7 @@ fn extract_host(req: &Request) -> S3Result<Option<String>> {
         let host = val.to_str().map_err(on_err)?;
         return Ok(Some(host.into()));
     }
-    // If no HOST header, try uri.host()
-    if let Some(host) = req.uri.host() {
-        // If the URI has a port and it's not the default for the scheme, include it.
+    if let (Some(host), http_crate::Version::HTTP_2) = (req.uri.host(), req.version) {
         let port = req.uri.port_u16();
         let scheme = req.uri.scheme_str();
         let is_default_port = matches!((scheme, port), (Some("http"), Some(80)) | (Some("https"), Some(443)) | (_, None));
