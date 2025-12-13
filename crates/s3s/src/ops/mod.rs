@@ -105,6 +105,9 @@ fn unknown_operation() -> S3Error {
 }
 
 fn extract_host(req: &Request) -> S3Result<Option<String>> {
+    if let Some(host) = req.uri.host() {
+        return Ok(Some(host.to_string()));
+    }
     let Some(val) = req.headers.get(crate::header::HOST) else { return Ok(None) };
     let on_err = |e| s3_error!(e, InvalidRequest, "invalid header: Host: {val:?}");
     let host = val.to_str().map_err(on_err)?;

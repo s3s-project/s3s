@@ -62,3 +62,51 @@ fn error_custom_headers() {
         )
     );
 }
+
+#[test]
+fn extract_host_from_uri() {
+    use crate::http::Request;
+    use crate::ops::extract_host;
+
+    let req = Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri("https://test.example.com:9001/%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%E5%92%8C%E7%AE%97%E6%B3%95_rust.pdf?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20251213T084305Z&X-Amz-SignedHeaders=host&X-Amz-Credential=rustfsadmin%2F20251213%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Expires=3600&X-Amz-Signature=57133ee54dab71c00a10106c33cde2615b301bd2cf00e2439f3ddb4bc999ec66")
+            .body(Body::empty())
+            .unwrap(),
+    );
+
+    let host = extract_host(&req).unwrap();
+    assert_eq!(host, Some("test.example.com".to_string()));
+
+    let req = Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri("http://another.example.org/resource")
+            .body(Body::empty())
+            .unwrap(),
+    );
+    let host = extract_host(&req).unwrap();
+    assert_eq!(host, Some("another.example.org".to_string()));
+
+    let req = Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri("/no/host/header")
+            .header("Host", "header.example.com:8080")
+            .body(Body::empty())
+            .unwrap(),
+    );
+    let host = extract_host(&req).unwrap();
+    assert_eq!(host, Some("header.example.com:8080".to_string()));
+
+    let req = Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri("/no/host/header")
+            .body(Body::empty())
+            .unwrap(),
+    );
+    let host = extract_host(&req).unwrap();
+    assert_eq!(host, None);
+}
