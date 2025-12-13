@@ -119,8 +119,10 @@ fn extract_host(req: &Request) -> S3Result<Option<String>> {
             let is_default_port = matches!((scheme, port), (Some("http"), Some(80)) | (Some("https"), Some(443)) | (_, None));
             let host_str = if is_default_port {
                 host.to_string()
+            } else if let Some(p) = port {
+                format!("{host}:{p}")
             } else {
-                format!("{}:{}", host, port.unwrap())
+                host.to_string()
             };
             return Ok(Some(host_str));
         }
