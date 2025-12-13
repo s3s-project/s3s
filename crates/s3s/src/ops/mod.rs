@@ -23,8 +23,8 @@ use crate::auth::{Credentials, S3Auth};
 use crate::error::*;
 use crate::header;
 use crate::host::S3Host;
-use crate::http;
 use crate::http::Body;
+use crate::http::{self, BodySizeLimitExceeded};
 use crate::http::{OrderedHeaders, OrderedQs};
 use crate::http::{Request, Response};
 use crate::path::{ParseS3PathError, S3Path};
@@ -187,10 +187,13 @@ async fn extract_full_body(content_length: Option<u64>, body: &mut Body) -> S3Re
         return Ok(bytes);
     }
 
-    let bytes = body
-        .store_all_unlimited()
-        .await
-        .map_err(|e| S3Error::with_source(S3ErrorCode::InternalError, e))?;
+    let bytes = body.store_all_limited(http::MAX_XML_BODY_SIZE).await.map_err(|e| {
+        if e.is::<BodySizeLimitExceeded>() {
+            S3Error::with_source(S3ErrorCode::MaxMessageLengthExceeded, e)
+        } else {
+            S3Error::with_source(S3ErrorCode::InternalError, e)
+        }
+    })?;
 
     if bytes.is_empty().not() {
         let content_length = content_length.ok_or(S3ErrorCode::MissingContentLength)?;

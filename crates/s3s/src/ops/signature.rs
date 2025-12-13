@@ -13,17 +13,19 @@ use crate::sig_v4::AmzDate;
 use crate::sig_v4::UploadStream;
 use crate::sig_v4::{AuthorizationV4, CredentialV4, PostSignatureV4, PresignedUrlV4};
 use crate::stream::ByteStream as _;
-use crate::utils::crypto::hex_sha256_string;
+use crate::utils::crypto::hex_sha256;
 use crate::utils::is_base64_encoded;
 
 use std::mem;
 use std::ops::Not;
 
-use bytestring::ByteString;
 use hyper::Method;
 use hyper::Uri;
 use mime::Mime;
 use tracing::debug;
+
+/// Maximum allowed size for STS request body (8KB should be enough for operations like `AssumeRole`)
+const MAX_STS_BODY_SIZE: usize = 8192;
 
 fn extract_amz_content_sha256<'a>(hs: &'_ OrderedHeaders<'a>) -> S3Result<Option<AmzContentSha256<'a>>> {
     let Some(val) = hs.get_unique(crate::header::X_AMZ_CONTENT_SHA256) else { return Ok(None) };
@@ -31,7 +33,7 @@ fn extract_amz_content_sha256<'a>(hs: &'_ OrderedHeaders<'a>) -> S3Result<Option
         Ok(x) => Ok(Some(x)),
         Err(e) => {
             // https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-troubleshooting.html
-            let mut err: S3Error = S3ErrorCode::Custom(ByteString::from_static("SignatureDoesNotMatch")).into();
+            let mut err = S3Error::new(S3ErrorCode::SignatureDoesNotMatch);
             err.set_message("invalid header: x-amz-content-sha256");
             err.set_source(Box::new(e));
             Err(err)
@@ -386,22 +388,32 @@ impl SignatureContext<'_> {
                     return Err(s3_error!(NotImplemented, "AWS4-ECDSA-P256-SHA256 signing method is not implemented yet"));
                 }
                 None => {
-                    if matches!(*self.req_method, Method::GET | Method::HEAD) {
-                        sig_v4::create_canonical_request(method, uri_path, query_strings, &headers, sig_v4::Payload::Empty)
+                    // For STS requests, x-amz-content-sha256 header is not required
+                    // For S3 requests, this case should have been caught earlier (see lines 325-327)
+                    if service == "sts" {
+                        // STS requests require computing the payload hash from the body
+                        // Read the body (it's small for STS requests like AssumeRole)
+                        let body_bytes = self
+                            .req_body
+                            .store_all_limited(MAX_STS_BODY_SIZE)
+                            .await
+                            .map_err(|e| invalid_request!("failed to read STS request body: {}", e))?;
+
+                        // Compute SHA256 hash and convert to hex
+                        let hash = hex_sha256(&body_bytes, str::to_owned);
+
+                        // Create canonical request with the computed hash
+                        sig_v4::create_canonical_request(
+                            method,
+                            uri_path,
+                            query_strings,
+                            &headers,
+                            sig_v4::Payload::SingleChunk(&hash),
+                        )
                     } else {
-                        let bytes = super::extract_full_body(self.content_length, self.req_body).await?;
-                        if bytes.is_empty() {
-                            sig_v4::create_canonical_request(method, uri_path, query_strings, &headers, sig_v4::Payload::Empty)
-                        } else {
-                            let payload_checksum = hex_sha256_string(&bytes);
-                            sig_v4::create_canonical_request(
-                                method,
-                                uri_path,
-                                query_strings,
-                                &headers,
-                                sig_v4::Payload::SingleChunk(&payload_checksum),
-                            )
-                        }
+                        // According to AWS S3 protocol, x-amz-content-sha256 header is required for
+                        // all S3 requests authenticated with Signature V4. Reject if missing.
+                        return Err(invalid_request!("missing header: x-amz-content-sha256"));
                     }
                 }
             };
@@ -592,5 +604,108 @@ impl SignatureContext<'_> {
             region: None,
             service: Some("s3".into()),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_amz_content_sha256_missing() {
+        // Test that extract_amz_content_sha256 returns None when header is missing
+        let headers =
+            OrderedHeaders::from_slice_unchecked(&[("host", "example.s3.amazonaws.com"), ("x-amz-date", "20130524T000000Z")]);
+        let result = extract_amz_content_sha256(&headers).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_extract_amz_content_sha256_present() {
+        // Test that extract_amz_content_sha256 returns Some when header is present
+        let headers = OrderedHeaders::from_slice_unchecked(&[
+            ("host", "example.s3.amazonaws.com"),
+            ("x-amz-content-sha256", "UNSIGNED-PAYLOAD"),
+            ("x-amz-date", "20130524T000000Z"),
+        ]);
+        let result = extract_amz_content_sha256(&headers).unwrap();
+        assert!(result.is_some());
+        assert!(matches!(result.unwrap(), AmzContentSha256::UnsignedPayload));
+    }
+
+    #[test]
+    fn test_extract_amz_content_sha256_invalid() {
+        // Test that extract_amz_content_sha256 returns error for invalid header value
+        let headers = OrderedHeaders::from_slice_unchecked(&[
+            ("host", "example.s3.amazonaws.com"),
+            ("x-amz-content-sha256", "INVALID-VALUE"),
+            ("x-amz-date", "20130524T000000Z"),
+        ]);
+        let result = extract_amz_content_sha256(&headers);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.message().unwrap().contains("x-amz-content-sha256"));
+    }
+
+    #[tokio::test]
+    async fn test_sts_body_hash_computation() {
+        // Test that STS request body hash is computed correctly
+        use crate::utils::crypto::hex_sha256;
+
+        // Typical STS AssumeRole request body
+        let body_content = b"Action=AssumeRole&RoleArn=arn:aws:iam::123456789012:role/test-role&RoleSessionName=test-session";
+
+        // Compute hash
+        let hash = hex_sha256(body_content, str::to_owned);
+
+        // Verify hash is a valid hex string of correct length (64 chars for SHA256)
+        assert_eq!(hash.len(), 64);
+        assert!(hash.chars().all(|c| c.is_ascii_hexdigit()));
+
+        // Verify hash is deterministic
+        let hash2 = hex_sha256(body_content, str::to_owned);
+        assert_eq!(hash, hash2);
+    }
+
+    #[tokio::test]
+    async fn test_sts_body_size_limit_enforced() {
+        // Test that body size limit is enforced for STS requests
+        use bytes::Bytes;
+
+        // Create a body that exceeds MAX_STS_BODY_SIZE
+        let large_body = vec![b'x'; MAX_STS_BODY_SIZE + 1];
+        let mut body = Body::from(Bytes::from(large_body));
+
+        // Try to read with limit
+        let result = body.store_all_limited(MAX_STS_BODY_SIZE).await;
+
+        // Should fail due to size limit
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_sts_body_within_limit() {
+        // Test that body reading succeeds when within limit
+        use bytes::Bytes;
+
+        // Create a body within the limit
+        let small_body = b"Action=AssumeRole&RoleArn=test&RoleSessionName=session";
+        let mut body = Body::from(Bytes::from(&small_body[..]));
+
+        // Try to read with limit
+        let result = body.store_all_limited(MAX_STS_BODY_SIZE).await;
+
+        // Should succeed
+        assert!(result.is_ok());
+        let bytes = result.unwrap();
+        assert_eq!(&bytes[..], &small_body[..]);
+    }
+
+    #[test]
+    fn test_sts_max_body_size_constant() {
+        // Verify the constant is set to a reasonable value
+        assert_eq!(MAX_STS_BODY_SIZE, 8192);
+        // STS requests are typically small (under 2KB for AssumeRole)
+        // 8KB provides a good safety margin
     }
 }
