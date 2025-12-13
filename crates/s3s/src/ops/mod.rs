@@ -105,27 +105,26 @@ fn unknown_operation() -> S3Error {
 }
 
 fn extract_host(req: &Request) -> S3Result<Option<String>> {
+    // First try to get from header::HOST
+    if let Some(val) = req.headers.get(crate::header::HOST) {
+        let on_err = |e| s3_error!(e, InvalidRequest, "invalid header: Host: {val:?}");
+        let host = val.to_str().map_err(on_err)?;
+        return Ok(Some(host.into()));
+    }
+    // If no HOST header, try uri.host()
     if let Some(host) = req.uri.host() {
         // If the URI has a port and it's not the default for the scheme, include it.
         let port = req.uri.port_u16();
         let scheme = req.uri.scheme_str();
-        let is_default_port = match (scheme, port) {
-            (Some("http"), Some(80)) => true,
-            (Some("https"), Some(443)) => true,
-            (_, None) => true,
-            _ => false,
-        };
-        let host_str = if !is_default_port {
-            format!("{}:{}", host, port.unwrap())
-        } else {
+        let is_default_port = matches!((scheme, port), (Some("http"), Some(80)) | (Some("https"), Some(443)) | (_, None));
+        let host_str = if is_default_port {
             host.to_string()
+        } else {
+            format!("{}:{}", host, port.unwrap())
         };
         return Ok(Some(host_str));
     }
-    let Some(val) = req.headers.get(crate::header::HOST) else { return Ok(None) };
-    let on_err = |e| s3_error!(e, InvalidRequest, "invalid header: Host: {val:?}");
-    let host = val.to_str().map_err(on_err)?;
-    Ok(Some(host.into()))
+    Ok(None)
 }
 
 fn is_socket_addr_or_ip_addr(host: &str) -> bool {
