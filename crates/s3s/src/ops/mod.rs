@@ -38,6 +38,7 @@ use std::net::{IpAddr, SocketAddr};
 use std::ops::Not;
 use std::sync::Arc;
 
+use crate::http_crate;
 use bytes::Bytes;
 use hyper::HeaderMap;
 use hyper::Method;
@@ -105,10 +106,24 @@ fn unknown_operation() -> S3Error {
 }
 
 fn extract_host(req: &Request) -> S3Result<Option<String>> {
-    let Some(val) = req.headers.get(crate::header::HOST) else { return Ok(None) };
-    let on_err = |e| s3_error!(e, InvalidRequest, "invalid header: Host: {val:?}");
-    let host = val.to_str().map_err(on_err)?;
-    Ok(Some(host.into()))
+    // First try to get from header::HOST
+    if let Some(val) = req.headers.get(crate::header::HOST) {
+        let on_err = |e| s3_error!(e, InvalidRequest, "invalid header: Host: {val:?}");
+        let host = val.to_str().map_err(on_err)?;
+        return Ok(Some(host.into()));
+    }
+    if let Some(host) = req.uri.host() {
+        if matches!(req.version, http_crate::Version::HTTP_2 | http_crate::Version::HTTP_3) {
+            let port = req.uri.port_u16();
+            let host_str = if let Some(port) = port {
+                format!("{host}:{port}")
+            } else {
+                host.to_string()
+            };
+            return Ok(Some(host_str));
+        }
+    }
+    Ok(None)
 }
 
 fn is_socket_addr_or_ip_addr(host: &str) -> bool {
