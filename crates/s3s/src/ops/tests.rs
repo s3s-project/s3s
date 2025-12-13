@@ -77,7 +77,7 @@ fn extract_host_from_uri() {
     );
 
     let host = extract_host(&req).unwrap();
-    assert_eq!(host, Some("test.example.com".to_string()));
+    assert_eq!(host, Some("test.example.com:9001".to_string()));
 
     let req = Request::from(
         hyper::Request::builder()
