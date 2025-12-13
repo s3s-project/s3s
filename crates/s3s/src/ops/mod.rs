@@ -112,16 +112,18 @@ fn extract_host(req: &Request) -> S3Result<Option<String>> {
         let host = val.to_str().map_err(on_err)?;
         return Ok(Some(host.into()));
     }
-    if let (Some(host), http_crate::Version::HTTP_2) = (req.uri.host(), req.version) {
-        let port = req.uri.port_u16();
-        let scheme = req.uri.scheme_str();
-        let is_default_port = matches!((scheme, port), (Some("http"), Some(80)) | (Some("https"), Some(443)) | (_, None));
-        let host_str = if is_default_port {
-            host.to_string()
-        } else {
-            format!("{}:{}", host, port.unwrap())
-        };
-        return Ok(Some(host_str));
+    if let Some(host) = req.uri.host() {
+        if matches!(req.version, http_crate::Version::HTTP_2 | http_crate::Version::HTTP_3) {
+            let port = req.uri.port_u16();
+            let scheme = req.uri.scheme_str();
+            let is_default_port = matches!((scheme, port), (Some("http"), Some(80)) | (Some("https"), Some(443)) | (_, None));
+            let host_str = if is_default_port {
+                host.to_string()
+            } else {
+                format!("{}:{}", host, port.unwrap())
+            };
+            return Ok(Some(host_str));
+        }
     }
     Ok(None)
 }
