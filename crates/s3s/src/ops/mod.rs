@@ -115,12 +115,8 @@ fn extract_host(req: &Request) -> S3Result<Option<String>> {
     if let Some(host) = req.uri.host() {
         if matches!(req.version, http_crate::Version::HTTP_2 | http_crate::Version::HTTP_3) {
             let port = req.uri.port_u16();
-            let scheme = req.uri.scheme_str();
-            let is_default_port = matches!((scheme, port), (Some("http"), Some(80)) | (Some("https"), Some(443)) | (_, None));
-            let host_str = if is_default_port {
-                host.to_string()
-            } else if let Some(p) = port {
-                format!("{host}:{p}")
+            let host_str = if let Some(port) = port {
+                format!("{host}:{port}")
             } else {
                 host.to_string()
             };
