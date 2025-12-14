@@ -35,6 +35,9 @@ pub use self::event_stream::*;
 mod etag;
 pub use self::etag::*;
 
+mod post_response;
+pub use self::post_response::*;
+
 pub type List<T> = Vec<T>;
 pub type Map<K, V> = std::collections::HashMap<K, V>;
 

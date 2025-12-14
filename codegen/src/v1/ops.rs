@@ -607,6 +607,20 @@ fn codegen_op_http_de_multipart(op: &Operation, rust_types: &RustTypes) {
         "let bucket = http::unwrap_bucket(req);",
         "let key = http::parse_field_value(&m, \"key\")?.ok_or_else(|| invalid_request!(\"missing key\"))?;",
         "",
+        "// Extract success_action_status and success_action_redirect for POST object",
+        "if let Some(status_str) = m.find_field_value(\"success_action_status\") {",
+        "    let status = status_str.parse::<u16>()",
+        "        .map_err(|_| invalid_request!(\"invalid success_action_status\"))?;",
+        "    // AWS only accepts 200, 201, or 204",
+        "    if status != 200 && status != 201 && status != 204 {",
+        "        return Err(invalid_request!(\"success_action_status must be 200, 201, or 204\"));",
+        "    }",
+        "    req.s3ext.success_action_status = Some(status);",
+        "}",
+        "if let Some(redirect) = m.find_field_value(\"success_action_redirect\") {",
+        "    req.s3ext.success_action_redirect = Some(redirect.to_owned());",
+        "}",
+        "",
         "let vec_stream = req.s3ext.vec_stream.take().expect(\"missing vec stream\");",
         "",
         "let content_length = i64::try_from(vec_stream.exact_remaining_length())",
@@ -707,7 +721,25 @@ fn codegen_op_http_call(op: &Operation) {
     let method = op.name.to_snake_case();
 
     g!("let input = Self::deserialize_http(req)?;");
+
+    if op.name == "PutObject" {
+        g!();
+        g!("// Extract success_action fields before building s3_req (which may move some values from req)");
+        g!("let success_action_redirect = req.s3ext.success_action_redirect.take();");
+        g!("let success_action_status = req.s3ext.success_action_status.take();");
+        g!();
+    }
+
     g!("let mut s3_req = super::build_s3_request(input, req);");
+
+    if op.name == "PutObject" {
+        g!();
+        g!("// Extract bucket and key for success_action response before s3_req is consumed");
+        g!("let bucket_for_response = s3_req.input.bucket.clone();");
+        g!("let key_for_response = s3_req.input.key.clone();");
+        g!();
+    }
+
     g!("let s3 = ccx.s3;");
 
     g!("if let Some(access) = ccx.access {{");
@@ -737,6 +769,20 @@ fn codegen_op_http_call(op: &Operation) {
     }
 
     g!("resp.extensions.extend(s3_resp.extensions);");
+
+    if op.name == "PutObject" {
+        g!();
+        g!("// Handle POST object success_action_redirect and success_action_status");
+        g!("if let Some(redirect_url) = success_action_redirect {{");
+        g!(
+            "    resp = super::post_object::handle_success_action_redirect(resp, &bucket_for_response, &key_for_response, &redirect_url)?;"
+        );
+        g!("}} else if let Some(status) = success_action_status {{");
+        g!(
+            "    resp = super::post_object::handle_success_action_status(resp, &bucket_for_response, &key_for_response, status)?;"
+        );
+        g!("}}");
+    }
 
     g!("Ok(resp)");
 
