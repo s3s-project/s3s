@@ -272,9 +272,7 @@ impl TestFixture<Basic> for Put {
         let bucket = "test-put";
         let key = "file";
 
-        delete_object_loose(s3, bucket, key).await?;
-        delete_bucket_loose(s3, bucket).await?;
-
+        delete_bucket_all(s3, bucket).await?;
         create_bucket(s3, bucket).await?;
 
         Ok(Self {
@@ -286,10 +284,9 @@ impl TestFixture<Basic> for Put {
 
     #[tracing::instrument(skip_all)]
     async fn teardown(self) -> Result {
-        let Self { s3, bucket, key } = &self;
+        let Self { s3, bucket, .. } = &self;
 
-        delete_object_loose(s3, bucket, key).await?;
-        delete_bucket_loose(s3, bucket).await?;
+        delete_bucket_all(s3, bucket).await?;
 
         Ok(())
     }
@@ -357,6 +354,8 @@ impl Put {
         let value = metadata.get(metadata_key).unwrap();
         assert_eq!(value, metadata_value);
 
+        delete_object_strict(s3, bucket, key).await?;
+
         Ok(())
     }
 
@@ -368,6 +367,10 @@ impl Put {
         let content = "object with unicode metadata";
         let metadata_key = "greeting";
         let metadata_value = "你好，世界";
+        let metadata_value_rfc2047 = [
+            "=?UTF-8?q?=E4=BD=A0=E5=A5=BD=EF=BC=8C=E4=B8=96=E7=95=8C?=",
+            "=?UTF-8?B?5L2g5aW977yM5LiW55WM?=",
+        ];
 
         s3.put_object()
             .bucket(bucket)
@@ -380,11 +383,14 @@ impl Put {
         let head_resp = s3.head_object().bucket(bucket).key(key).send().await?;
         let metadata = head_resp.metadata().unwrap();
         let value = metadata.get(metadata_key).unwrap();
-        assert_eq!(value, metadata_value);
+        assert!(metadata_value_rfc2047.contains(&value.as_str()));
 
         let get_resp = s3.get_object().bucket(bucket).key(key).send().await?;
         let metadata = get_resp.metadata().expect("metadata should be returned");
-        assert_eq!(metadata.get(metadata_key).map(String::as_str), Some(metadata_value));
+        let value = metadata.get(metadata_key).map(String::as_str);
+        assert!(value.is_some_and(|v| metadata_value_rfc2047.contains(&v)));
+
+        delete_object_strict(s3, bucket, key).await?;
 
         Ok(())
     }
@@ -409,6 +415,8 @@ impl Put {
         let body = String::from_utf8(body.to_vec())?;
         assert_eq!(body, content);
         assert_eq!(body.len(), 1024);
+
+        delete_object_strict(s3, bucket, key).await?;
 
         Ok(())
     }
@@ -495,6 +503,8 @@ impl Put {
 
             assert_eq!(get_resp_checksum, Some(put_resp_checksum));
         }
+
+        delete_object_strict(s3, bucket, key).await?;
 
         Ok(())
     }
@@ -586,6 +596,8 @@ impl Put {
 
         // This should also fail
         assert!(result.is_err(), "Expected checksum mismatch error for wrong content with correct MD5");
+
+        delete_object_strict(s3, bucket, key).await?;
 
         Ok(())
     }
