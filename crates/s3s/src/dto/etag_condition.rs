@@ -8,7 +8,7 @@ use super::etag::{ETag, ParseETagError};
 /// Condition value for `If-Match`, `If-None-Match` and related headers.
 ///
 /// According to RFC 9110, these headers can contain either:
-/// - An ETag value (strong or weak): `"value"` or `W/"value"`
+/// - An `ETag` value (strong or weak): `"value"` or `W/"value"`
 /// - A wildcard: `*` (matches any existing entity)
 ///
 /// The wildcard is commonly used for conditional requests like:
@@ -20,7 +20,7 @@ use super::etag::{ETag, ParseETagError};
 /// + <https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/If-None-Match>
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ETagCondition {
-    /// An ETag value (strong or weak)
+    /// An `ETag` value (strong or weak)
     ETag(ETag),
     /// The wildcard `*` that matches any existing entity
     Any,
@@ -74,7 +74,7 @@ impl ETagCondition {
         }
     }
 
-    /// Returns the ETag if this is an `ETagCondition::ETag`, otherwise `None`.
+    /// Returns the `ETag` if this is an `ETagCondition::ETag`, otherwise `None`.
     #[must_use]
     pub fn as_etag(&self) -> Option<&ETag> {
         match self {
@@ -83,7 +83,7 @@ impl ETagCondition {
         }
     }
 
-    /// Consumes self and returns the ETag if this is an `ETagCondition::ETag`, otherwise `None`.
+    /// Consumes self and returns the `ETag` if this is an `ETagCondition::ETag`, otherwise `None`.
     #[must_use]
     pub fn into_etag(self) -> Option<ETag> {
         match self {
