@@ -354,8 +354,6 @@ impl Put {
         let value = metadata.get(metadata_key).unwrap();
         assert_eq!(value, metadata_value);
 
-        delete_object_strict(s3, bucket, key).await?;
-
         Ok(())
     }
 
@@ -390,8 +388,6 @@ impl Put {
         let value = metadata.get(metadata_key).map(String::as_str);
         assert!(value.is_some_and(|v| metadata_value_rfc2047.contains(&v)));
 
-        delete_object_strict(s3, bucket, key).await?;
-
         Ok(())
     }
 
@@ -415,8 +411,6 @@ impl Put {
         let body = String::from_utf8(body.to_vec())?;
         assert_eq!(body, content);
         assert_eq!(body.len(), 1024);
-
-        delete_object_strict(s3, bucket, key).await?;
 
         Ok(())
     }
@@ -503,8 +497,6 @@ impl Put {
 
             assert_eq!(get_resp_checksum, Some(put_resp_checksum));
         }
-
-        delete_object_strict(s3, bucket, key).await?;
 
         Ok(())
     }
@@ -596,8 +588,6 @@ impl Put {
 
         // This should also fail
         assert!(result.is_err(), "Expected checksum mismatch error for wrong content with correct MD5");
-
-        delete_object_strict(s3, bucket, key).await?;
 
         Ok(())
     }
