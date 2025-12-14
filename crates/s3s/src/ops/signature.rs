@@ -268,7 +268,7 @@ impl SignatureContext<'_> {
                 // HTTP/2 replaces `host` header with `:authority`
                 // but `:authority` is not in the request headers
                 // so we need to add it back if `host` is in the signed headers
-                if name == "host" && self.req_version == ::http::Version::HTTP_2 {
+                if name == "host" && matches!(self.req_version, ::http::Version::HTTP_2 | ::http::Version::HTTP_3) {
                     if let Some(authority) = self.req_uri.authority() {
                         return Some(authority.as_str());
                     }
