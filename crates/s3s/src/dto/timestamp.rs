@@ -11,6 +11,30 @@ use time::macros::format_description;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Timestamp(time::OffsetDateTime);
 
+impl serde::Serialize for Timestamp {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::Error;
+        let mut buf = Vec::new();
+        self.format(TimestampFormat::DateTime, &mut buf).map_err(S::Error::custom)?;
+        let s = std::str::from_utf8(&buf).map_err(S::Error::custom)?;
+        serializer.serialize_str(s)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Timestamp {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::Error;
+        let s = String::deserialize(deserializer)?;
+        Self::parse(TimestampFormat::DateTime, &s).map_err(D::Error::custom)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TimestampFormat {
     DateTime,

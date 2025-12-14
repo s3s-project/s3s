@@ -8,7 +8,7 @@ use crate::declare_codegen;
 use crate::v1::Patch;
 
 use std::borrow::Cow;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Not;
 
 use heck::{ToShoutySnakeCase, ToSnakeCase};
@@ -424,8 +424,57 @@ fn unify_operation_types(ops: &Operations, space: &mut RustTypes) {
     }
 }
 
+fn collect_types_needing_serde(rust_types: &RustTypes) -> BTreeSet<String> {
+    let mut types_needing_serde = BTreeSet::new();
+
+    // Start with Configuration types and special types
+    for name in rust_types.keys() {
+        if name.ends_with("Configuration") || name == "Tag" || name == "Tagging" {
+            collect_type_dependencies(name, rust_types, &mut types_needing_serde);
+        }
+    }
+
+    types_needing_serde
+}
+
+fn collect_type_dependencies(type_name: &str, rust_types: &RustTypes, result: &mut BTreeSet<String>) {
+    // Avoid infinite recursion
+    if result.contains(type_name) {
+        return;
+    }
+
+    result.insert(type_name.to_owned());
+
+    // Get the type and recursively add dependencies
+    if let Some(rust_type) = rust_types.get(type_name) {
+        match rust_type {
+            rust::Type::Struct(s) => {
+                for field in &s.fields {
+                    // Skip non-serializable fields
+                    if matches!(field.type_.as_str(), "Body" | "StreamingBlob" | "SelectObjectContentEventStream") {
+                        continue;
+                    }
+                    collect_type_dependencies(&field.type_, rust_types, result);
+                }
+            }
+            rust::Type::List(list) => {
+                collect_type_dependencies(&list.member.type_, rust_types, result);
+            }
+            rust::Type::StructEnum(e) => {
+                for variant in &e.variants {
+                    collect_type_dependencies(&variant.type_, rust_types, result);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
 pub fn codegen(rust_types: &RustTypes, ops: &Operations, patch: Option<Patch>) {
     declare_codegen!();
+
+    // Collect types that need serde derives (Configuration types and their dependencies)
+    let types_needing_serde = collect_types_needing_serde(rust_types);
 
     g([
         "#![allow(clippy::empty_structs_with_brackets)]",
@@ -461,13 +510,16 @@ pub fn codegen(rust_types: &RustTypes, ops: &Operations, patch: Option<Patch>) {
                 g!("pub type {} = Map<{}, {}>;", ty.name, ty.key_type, ty.value_type);
             }
             rust::Type::StrEnum(ty) => {
-                codegen_str_enum(ty, rust_types);
+                let needs_serde = types_needing_serde.contains(&ty.name);
+                codegen_str_enum(ty, rust_types, needs_serde);
             }
             rust::Type::Struct(ty) => {
-                codegen_struct(ty, rust_types, ops);
+                let needs_serde = types_needing_serde.contains(&ty.name);
+                codegen_struct(ty, rust_types, ops, needs_serde);
             }
             rust::Type::StructEnum(ty) => {
-                codegen_struct_enum(ty, rust_types);
+                let needs_serde = types_needing_serde.contains(&ty.name);
+                codegen_struct_enum(ty, rust_types, needs_serde);
             }
             rust::Type::Timestamp(ty) => {
                 codegen_doc(ty.doc.as_deref());
@@ -487,11 +539,11 @@ pub fn codegen(rust_types: &RustTypes, ops: &Operations, patch: Option<Patch>) {
     }
 }
 
-fn codegen_struct(ty: &rust::Struct, rust_types: &RustTypes, ops: &Operations) {
+fn codegen_struct(ty: &rust::Struct, rust_types: &RustTypes, ops: &Operations, needs_serde: bool) {
     codegen_doc(ty.doc.as_deref());
 
     {
-        let derives = struct_derives(ty, rust_types);
+        let derives = struct_derives(ty, rust_types, ops, needs_serde);
         if !derives.is_empty() {
             g!("#[derive({})]", derives.join(", "));
         }
@@ -576,9 +628,13 @@ fn codegen_struct(ty: &rust::Struct, rust_types: &RustTypes, ops: &Operations) {
     }
 }
 
-fn codegen_str_enum(ty: &rust::StrEnum, _rust_types: &RustTypes) {
+fn codegen_str_enum(ty: &rust::StrEnum, _rust_types: &RustTypes, needs_serde: bool) {
     codegen_doc(ty.doc.as_deref());
-    g!("#[derive(Debug, Clone, PartialEq, Eq)]");
+    if needs_serde {
+        g!("#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]");
+    } else {
+        g!("#[derive(Debug, Clone, PartialEq, Eq)]");
+    }
     g!("pub struct {}(Cow<'static, str>);", ty.name);
     g!();
 
@@ -631,10 +687,37 @@ fn codegen_str_enum(ty: &rust::StrEnum, _rust_types: &RustTypes) {
     g!("}}");
 }
 
-fn codegen_struct_enum(ty: &rust::StructEnum, _rust_types: &RustTypes) {
+fn codegen_struct_enum(ty: &rust::StructEnum, rust_types: &RustTypes, needs_serde: bool) {
     codegen_doc(ty.doc.as_deref());
-    g!("#[derive(Debug, Clone, PartialEq)]");
-    g!("#[non_exhaustive]");
+
+    if needs_serde {
+        // Check if all variants can be serialized
+        let can_serde = ty.variants.iter().all(|v| {
+            // Check for known non-serializable types
+            if matches!(v.type_.as_str(), "Body" | "StreamingBlob" | "SelectObjectContentEventStream") {
+                return false;
+            }
+
+            // Check if the variant type can be serialized
+            match rust_types.get(&v.type_) {
+                Some(rust::Type::Struct(s)) => can_derive_serde(s, rust_types),
+                _ => true,
+            }
+        });
+
+        if can_serde {
+            g!("#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]");
+            g!("#[non_exhaustive]");
+            g!("#[serde(rename_all = \"PascalCase\")]");
+        } else {
+            g!("#[derive(Debug, Clone, PartialEq)]");
+            g!("#[non_exhaustive]");
+        }
+    } else {
+        g!("#[derive(Debug, Clone, PartialEq)]");
+        g!("#[non_exhaustive]");
+    }
+
     g!("pub enum {} {{", ty.name);
 
     for variant in &ty.variants {
@@ -667,9 +750,10 @@ fn codegen_tests(ops: &Operations) {
     g!("}}");
 }
 
-fn struct_derives(ty: &rust::Struct, rust_types: &RustTypes) -> Vec<&'static str> {
+fn struct_derives(ty: &rust::Struct, rust_types: &RustTypes, _ops: &Operations, needs_serde: bool) -> Vec<&'static str> {
     let mut derives = Vec::new();
-    if can_derive_clone(ty, rust_types) {
+    let can_clone = can_derive_clone(ty, rust_types);
+    if can_clone {
         derives.push("Clone");
     }
     if can_derive_default(ty, rust_types) {
@@ -678,16 +762,59 @@ fn struct_derives(ty: &rust::Struct, rust_types: &RustTypes) -> Vec<&'static str
     if can_derive_partial_eq(ty, rust_types) {
         derives.push("PartialEq");
     }
-    // What to do with other types?
-    if ty.name == "Tagging" || ty.name == "Tag" {
+
+    // Add Serialize and Deserialize only to types that are needed for Configuration serialization
+    if needs_serde && can_derive_serde(ty, rust_types) {
         derives.push("Serialize");
         derives.push("Deserialize");
     }
     derives
 }
 
+fn can_derive_serde(ty: &rust::Struct, rust_types: &RustTypes) -> bool {
+    ty.fields.iter().all(|field| {
+        if field.position == "sealed" {
+            // Allow sealed CachedTags fields since they have custom Serialize/Deserialize implementation
+            if field.type_ != "CachedTags" {
+                return false;
+            }
+        }
+        if field.position == "s3s" {
+            return false;
+        }
+        // Body, StreamingBlob, and event streams can't be serialized with regular serde
+        // Note: CachedTags is now serializable with custom implementation
+        if matches!(field.type_.as_str(), "Body" | "StreamingBlob" | "SelectObjectContentEventStream") {
+            return false;
+        }
+
+        // Check if the field's type can be serialized recursively
+        if let Some(field_ty) = rust_types.get(&field.type_) {
+            match field_ty {
+                rust::Type::Struct(s) => {
+                    if !can_derive_serde(s, rust_types) {
+                        return false;
+                    }
+                }
+                rust::Type::List(list) => {
+                    // Check if the list element type can be serialized
+                    if let Some(rust::Type::Struct(s)) = rust_types.get(&list.member.type_) {
+                        if !can_derive_serde(s, rust_types) {
+                            return false;
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        true
+    })
+}
+
 fn can_derive_clone(ty: &rust::Struct, _rust_types: &RustTypes) -> bool {
     ty.fields.iter().all(|field| {
+        // Sealed fields need custom Clone implementation
         if field.position == "sealed" {
             return false;
         }
@@ -703,6 +830,7 @@ fn can_derive_clone(ty: &rust::Struct, _rust_types: &RustTypes) -> bool {
 
 fn can_derive_partial_eq(ty: &rust::Struct, _rust_types: &RustTypes) -> bool {
     ty.fields.iter().all(|field| {
+        // Sealed fields need custom PartialEq implementation
         if field.position == "sealed" {
             return false;
         }
