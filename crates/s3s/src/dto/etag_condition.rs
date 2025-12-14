@@ -180,12 +180,21 @@ mod tests {
     #[test]
     fn parse_invalid() {
         let err = ETagCondition::parse_http_header(b"**").unwrap_err();
-        assert!(matches!(err, ParseETagConditionError::InvalidFormat | ParseETagConditionError::ETagError(_)));
+        assert!(matches!(
+            err,
+            ParseETagConditionError::InvalidFormat | ParseETagConditionError::ETagError(_)
+        ));
 
         let err = ETagCondition::parse_http_header(b"* ").unwrap_err();
-        assert!(matches!(err, ParseETagConditionError::InvalidFormat | ParseETagConditionError::ETagError(_)));
+        assert!(matches!(
+            err,
+            ParseETagConditionError::InvalidFormat | ParseETagConditionError::ETagError(_)
+        ));
 
         let err = ETagCondition::parse_http_header(b"\"unclosed").unwrap_err();
-        assert!(matches!(err, ParseETagConditionError::InvalidFormat | ParseETagConditionError::ETagError(_)));
+        assert!(matches!(
+            err,
+            ParseETagConditionError::InvalidFormat | ParseETagConditionError::ETagError(_)
+        ));
     }
 }

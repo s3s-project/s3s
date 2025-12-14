@@ -845,7 +845,14 @@ async fn test_if_none_match_wildcard() -> Result<()> {
     debug!("Test 1: PUT with If-None-Match: * on non-existent object");
     {
         let body = ByteStream::from_static(content1.as_bytes());
-        let result = c.put_object().bucket(bucket).key(key).body(body).if_none_match("*").send().await;
+        let result = c
+            .put_object()
+            .bucket(bucket)
+            .key(key)
+            .body(body)
+            .if_none_match("*")
+            .send()
+            .await;
 
         match result {
             Ok(_) => debug!("✓ Successfully created object with If-None-Match: *"),
@@ -865,7 +872,14 @@ async fn test_if_none_match_wildcard() -> Result<()> {
     debug!("Test 2: PUT with If-None-Match: * on existing object");
     {
         let body = ByteStream::from_static(content2.as_bytes());
-        let result = c.put_object().bucket(bucket).key(key).body(body).if_none_match("*").send().await;
+        let result = c
+            .put_object()
+            .bucket(bucket)
+            .key(key)
+            .body(body)
+            .if_none_match("*")
+            .send()
+            .await;
 
         match result {
             Ok(_) => panic!("Expected PUT with If-None-Match: * to fail when object exists, but it succeeded"),
