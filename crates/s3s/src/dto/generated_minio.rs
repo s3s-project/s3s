@@ -260,7 +260,7 @@ impl Default for AnalyticsConfiguration {
     fn default() -> Self {
         Self {
             filter: None,
-            id: String::new(),
+            id: default(),
             storage_class_analysis: default(),
         }
     }
@@ -10852,7 +10852,7 @@ impl Default for IntelligentTieringConfiguration {
     fn default() -> Self {
         Self {
             filter: None,
-            id: String::new(),
+            id: default(),
             status: String::new().into(),
             tierings: default(),
         }
@@ -11050,9 +11050,9 @@ impl Default for InventoryConfiguration {
         Self {
             destination: default(),
             filter: None,
-            id: String::new(),
+            id: default(),
             included_object_versions: String::new().into(),
-            is_enabled: false,
+            is_enabled: default(),
             optional_fields: None,
             schedule: default(),
         }
@@ -11353,7 +11353,7 @@ impl Default for InventoryS3BucketDestination {
     fn default() -> Self {
         Self {
             account_id: None,
-            bucket: String::new(),
+            bucket: default(),
             encryption: None,
             format: String::new().into(),
             prefix: None,

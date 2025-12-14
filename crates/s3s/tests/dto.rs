@@ -1,4 +1,8 @@
-use s3s::dto::*;
+use s3s::dto::{
+    AnalyticsConfiguration, BucketLifecycleConfiguration, GetObjectInput, IntelligentTieringConfiguration,
+    InventoryConfiguration, LambdaFunctionConfiguration, MetadataTableConfiguration, MetricsConfiguration, QueueConfiguration,
+    ReplicationConfiguration, RequestPaymentConfiguration, TopicConfiguration,
+};
 
 #[test]
 fn builder() {

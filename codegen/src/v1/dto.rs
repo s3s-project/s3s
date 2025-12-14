@@ -701,18 +701,13 @@ fn codegen_custom_default(ty: &rust::Struct, rust_types: &RustTypes) {
                 rust::Type::List(_) | rust::Type::Map(_) => {
                     g!("{}: default(),", field.name);
                 }
-                rust::Type::Alias(alias_ty) => {
-                    // For type aliases, use Default::default() which works for String, bool, i32, etc.
-                    match alias_ty.type_.as_str() {
-                        "String" => g!("{}: String::new(),", field.name),
-                        "bool" => g!("{}: false,", field.name),
-                        "i32" | "i64" => g!("{}: 0,", field.name),
-                        _ => g!("{}: default(),", field.name),
-                    }
+                rust::Type::Alias(_) => {
+                    // Type aliases to primitives implement Default
+                    g!("{}: default(),", field.name);
                 }
                 rust::Type::StrEnum(_) => {
                     // StrEnum types need a string value, use empty string
-                    g!("{}: {}.into(),", field.name, "String::new()");
+                    g!("{}: String::new().into(),", field.name);
                 }
                 rust::Type::Struct(_) => {
                     // Try to use Default::default() for structs
