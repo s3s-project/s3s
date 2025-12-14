@@ -2979,6 +2979,7 @@ dependencies = [
  "path-absolutize",
  "s3s",
  "s3s-aws",
+ "serde",
  "serde_json",
  "std-next",
  "thiserror",
