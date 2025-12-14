@@ -35,6 +35,10 @@ pub(crate) struct S3Extensions {
     pub region: Option<String>,
     pub service: Option<String>,
     pub trailing_headers: Option<TrailingHeaders>,
+
+    // POST object success action fields
+    pub success_action_status: Option<u16>,
+    pub success_action_redirect: Option<String>,
 }
 
 impl From<HttpRequest> for Request {
