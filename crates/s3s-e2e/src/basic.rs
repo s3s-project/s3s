@@ -24,6 +24,7 @@ pub fn register(tcx: &mut TestContext) {
     case!(tcx, Basic, Essential, test_head_operations);
     case!(tcx, Basic, Put, test_put_object_tiny);
     case!(tcx, Basic, Put, test_put_object_with_metadata);
+    case!(tcx, Basic, Put, test_put_object_with_non_ascii_metadata);
     case!(tcx, Basic, Put, test_put_object_larger);
     case!(tcx, Basic, Put, test_put_object_with_checksum_algorithm);
     case!(tcx, Basic, Put, test_put_object_with_content_checksums);
@@ -355,6 +356,36 @@ impl Put {
         let metadata = head_resp.metadata().unwrap();
         let value = metadata.get(metadata_key).unwrap();
         assert_eq!(value, metadata_value);
+
+        Ok(())
+    }
+
+    async fn test_put_object_with_non_ascii_metadata(self: Arc<Self>) -> Result {
+        let s3 = &self.s3;
+        let bucket = self.bucket.as_str();
+        let key = "file-with-non-ascii-metadata";
+
+        let content = "object with unicode metadata";
+        let metadata_key = "greeting";
+        let metadata_value = "你好，世界";
+
+        s3.put_object()
+            .bucket(bucket)
+            .key(key)
+            .body(ByteStream::from_static(content.as_bytes()))
+            .metadata(metadata_key, metadata_value)
+            .send()
+            .await?;
+
+        let head_resp = s3.head_object().bucket(bucket).key(key).send().await?;
+        let metadata = head_resp.metadata().unwrap();
+        let value = metadata.get(metadata_key).unwrap();
+        assert_eq!(value, metadata_value);
+
+        let get_resp = s3.get_object().bucket(bucket).key(key).send().await?;
+        if let Some(metadata) = get_resp.metadata() {
+            assert_eq!(metadata.get(metadata_key), Some(&metadata_value.to_string()));
+        }
 
         Ok(())
     }

@@ -5,6 +5,7 @@ use crate::error::*;
 use crate::http::{HeaderName, HeaderValue};
 use crate::path::S3Path;
 use crate::xml;
+use crate::utils::rfc2047;
 
 use std::fmt;
 use std::str::FromStr;
@@ -284,8 +285,9 @@ pub fn parse_opt_metadata(req: &Request) -> S3Result<Option<Metadata>> {
         let val = iter.next().unwrap();
         let None = iter.next() else { return Err(duplicate_header(name)) };
 
-        let val = val.to_str().map_err(|err| invalid_header(err, name, val))?;
-        metadata.insert(key.into(), val.into());
+        let raw = std::str::from_utf8(val.as_bytes()).map_err(|err| invalid_header(err, name, val))?;
+        let val = rfc2047::decode(raw).map_err(|err| invalid_header(err, name, val))?;
+        metadata.insert(key.into(), val.into_owned());
     }
     if metadata.is_empty() {
         return Ok(None);
