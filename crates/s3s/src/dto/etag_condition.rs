@@ -18,7 +18,7 @@ use super::etag::{ETag, ParseETagError};
 /// See RFC 9110 §13.1 and MDN:
 /// + <https://www.rfc-editor.org/rfc/rfc9110#section-13.1>
 /// + <https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/If-None-Match>
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ETagCondition {
     /// An `ETag` value (strong or weak)
     ETag(ETag),
@@ -35,15 +35,9 @@ pub enum ParseETagConditionError {
     /// Contains invalid characters.
     #[error("ParseETagConditionError: InvalidChar")]
     InvalidChar,
-}
-
-impl From<ParseETagError> for ParseETagConditionError {
-    fn from(err: ParseETagError) -> Self {
-        match err {
-            ParseETagError::InvalidFormat => ParseETagConditionError::InvalidFormat,
-            ParseETagError::InvalidChar => ParseETagConditionError::InvalidChar,
-        }
-    }
+    /// Error parsing the `ETag` value
+    #[error("ParseETagConditionError: {0}")]
+    ETagError(#[from] ParseETagError),
 }
 
 impl ETagCondition {
@@ -186,12 +180,12 @@ mod tests {
     #[test]
     fn parse_invalid() {
         let err = ETagCondition::parse_http_header(b"**").unwrap_err();
-        assert!(matches!(err, ParseETagConditionError::InvalidFormat));
+        assert!(matches!(err, ParseETagConditionError::InvalidFormat | ParseETagConditionError::ETagError(_)));
 
         let err = ETagCondition::parse_http_header(b"* ").unwrap_err();
-        assert!(matches!(err, ParseETagConditionError::InvalidFormat));
+        assert!(matches!(err, ParseETagConditionError::InvalidFormat | ParseETagConditionError::ETagError(_)));
 
         let err = ETagCondition::parse_http_header(b"\"unclosed").unwrap_err();
-        assert!(matches!(err, ParseETagConditionError::InvalidFormat));
+        assert!(matches!(err, ParseETagConditionError::InvalidFormat | ParseETagConditionError::ETagError(_)));
     }
 }
