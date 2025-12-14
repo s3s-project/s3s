@@ -2,6 +2,7 @@ use std::str::FromStr;
 
 use http::HeaderValue;
 use http::header::InvalidHeaderValue;
+use serde::{Deserialize, Serialize};
 use stdx::str::StrExt;
 
 /// Entity Tag for the HTTP `ETag` header.
@@ -11,7 +12,7 @@ use stdx::str::StrExt;
 /// See RFC 9110 §8.8.3 and MDN:
 /// + <https://www.rfc-editor.org/rfc/rfc9110#section-8.8.3>
 /// + <https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/ETag>
-#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ETag {
     /// Strong validator: "value"
     Strong(String),

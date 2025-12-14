@@ -1,4 +1,6 @@
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Event(String);
 
 impl From<String> for Event {
