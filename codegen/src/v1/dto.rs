@@ -437,6 +437,58 @@ fn collect_types_needing_serde(rust_types: &RustTypes) -> BTreeSet<String> {
     types_needing_serde
 }
 
+fn collect_types_needing_custom_default(rust_types: &RustTypes) -> BTreeSet<String> {
+    let mut types_needing_custom_default = BTreeSet::new();
+
+    // Start with Configuration types that can't derive Default
+    for (name, rust_type) in rust_types {
+        if name.ends_with("Configuration") {
+            if let rust::Type::Struct(ty) = rust_type {
+                if !can_derive_default(ty, rust_types) {
+                    // Add this type and all its struct dependencies
+                    collect_struct_dependencies(name, rust_types, &mut types_needing_custom_default);
+                }
+            }
+        }
+    }
+
+    types_needing_custom_default
+}
+
+fn collect_struct_dependencies(type_name: &str, rust_types: &RustTypes, result: &mut BTreeSet<String>) {
+    // Avoid infinite recursion
+    if result.contains(type_name) {
+        return;
+    }
+
+    // Only add this type if it can't derive Default
+    if let Some(rust::Type::Struct(s)) = rust_types.get(type_name) {
+        if !can_derive_default(s, rust_types) {
+            result.insert(type_name.to_owned());
+
+            // Recursively add struct dependencies that also can't derive Default
+            for field in &s.fields {
+                // Skip optional fields and list/map types (they already have Default)
+                if field.option_type {
+                    continue;
+                }
+
+                if let Some(field_type) = rust_types.get(&field.type_) {
+                    match field_type {
+                        rust::Type::Struct(_) => {
+                            collect_struct_dependencies(&field.type_, rust_types, result);
+                        }
+                        rust::Type::List(_) | rust::Type::Map(_) => {
+                            // Lists and maps already have Default, skip
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+}
+
 fn collect_type_dependencies(type_name: &str, rust_types: &RustTypes, result: &mut BTreeSet<String>) {
     // Avoid infinite recursion
     if result.contains(type_name) {
@@ -475,6 +527,9 @@ pub fn codegen(rust_types: &RustTypes, ops: &Operations, patch: Option<Patch>) {
 
     // Collect types that need serde derives (Configuration types and their dependencies)
     let types_needing_serde = collect_types_needing_serde(rust_types);
+
+    // Collect types that need custom Default implementations
+    let types_needing_custom_default = collect_types_needing_custom_default(rust_types);
 
     g([
         "#![allow(clippy::empty_structs_with_brackets)]",
@@ -515,7 +570,8 @@ pub fn codegen(rust_types: &RustTypes, ops: &Operations, patch: Option<Patch>) {
             }
             rust::Type::Struct(ty) => {
                 let needs_serde = types_needing_serde.contains(&ty.name);
-                codegen_struct(ty, rust_types, ops, needs_serde);
+                let needs_custom_default = types_needing_custom_default.contains(&ty.name);
+                codegen_struct(ty, rust_types, ops, needs_serde, needs_custom_default);
             }
             rust::Type::StructEnum(ty) => {
                 let needs_serde = types_needing_serde.contains(&ty.name);
@@ -539,7 +595,7 @@ pub fn codegen(rust_types: &RustTypes, ops: &Operations, patch: Option<Patch>) {
     }
 }
 
-fn codegen_struct(ty: &rust::Struct, rust_types: &RustTypes, ops: &Operations, needs_serde: bool) {
+fn codegen_struct(ty: &rust::Struct, rust_types: &RustTypes, ops: &Operations, needs_serde: bool, needs_custom_default: bool) {
     codegen_doc(ty.doc.as_deref());
 
     {
@@ -616,6 +672,11 @@ fn codegen_struct(ty: &rust::Struct, rust_types: &RustTypes, ops: &Operations, n
         g!("}}");
     }
 
+    // Add custom Default implementation for types that need it
+    if needs_custom_default {
+        codegen_custom_default(ty, rust_types);
+    }
+
     if is_op_input(&ty.name, ops) {
         g!("impl {} {{", ty.name);
 
@@ -626,6 +687,50 @@ fn codegen_struct(ty: &rust::Struct, rust_types: &RustTypes, ops: &Operations, n
 
         g!("}}");
     }
+}
+
+fn codegen_custom_default(ty: &rust::Struct, rust_types: &RustTypes) {
+    g!("impl Default for {} {{", ty.name);
+    g!("fn default() -> Self {{");
+    g!("Self {{");
+    for field in &ty.fields {
+        if field.option_type {
+            g!("{}: None,", field.name);
+        } else if let Some(rust_type) = rust_types.get(&field.type_) {
+            match rust_type {
+                rust::Type::List(_) | rust::Type::Map(_) => {
+                    g!("{}: default(),", field.name);
+                }
+                rust::Type::Alias(alias_ty) => {
+                    // For type aliases, use Default::default() which works for String, bool, i32, etc.
+                    match alias_ty.type_.as_str() {
+                        "String" => g!("{}: String::new(),", field.name),
+                        "bool" => g!("{}: false,", field.name),
+                        "i32" | "i64" => g!("{}: 0,", field.name),
+                        _ => g!("{}: default(),", field.name),
+                    }
+                }
+                rust::Type::StrEnum(_) => {
+                    // StrEnum types need a string value, use empty string
+                    g!("{}: {}.into(),", field.name, "String::new()");
+                }
+                rust::Type::Struct(_) => {
+                    // Try to use Default::default() for structs
+                    g!("{}: default(),", field.name);
+                }
+                _ => {
+                    g!("{}: default(),", field.name);
+                }
+            }
+        } else {
+            // Unknown type, try Default::default()
+            g!("{}: default(),", field.name);
+        }
+    }
+    g!("}}");
+    g!("}}");
+    g!("}}");
+    g!();
 }
 
 fn codegen_str_enum(ty: &rust::StrEnum, _rust_types: &RustTypes, needs_serde: bool) {
@@ -858,6 +963,12 @@ fn can_derive_default(ty: &rust::Struct, rust_types: &RustTypes) -> bool {
             }
             rust::Type::List(_) => return true,
             rust::Type::Map(_) => return true,
+            rust::Type::Alias(alias_ty) => {
+                // Type aliases to primitive types that have Default
+                if matches!(alias_ty.type_.as_str(), "String" | "bool" | "i32" | "i64" | "f32" | "f64") {
+                    return true;
+                }
+            }
             _ => {}
         }
 
