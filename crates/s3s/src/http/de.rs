@@ -4,8 +4,8 @@ use crate::dto::{List, Metadata, StreamingBlob, Timestamp, TimestampFormat};
 use crate::error::*;
 use crate::http::{HeaderName, HeaderValue};
 use crate::path::S3Path;
-use crate::xml;
 use crate::utils::rfc2047;
+use crate::xml;
 
 use std::fmt;
 use std::str::FromStr;

@@ -383,9 +383,8 @@ impl Put {
         assert_eq!(value, metadata_value);
 
         let get_resp = s3.get_object().bucket(bucket).key(key).send().await?;
-        if let Some(metadata) = get_resp.metadata() {
-            assert_eq!(metadata.get(metadata_key).map(String::as_str), Some(metadata_value));
-        }
+        let metadata = get_resp.metadata().expect("metadata should be returned");
+        assert_eq!(metadata.get(metadata_key).map(String::as_str), Some(metadata_value));
 
         Ok(())
     }

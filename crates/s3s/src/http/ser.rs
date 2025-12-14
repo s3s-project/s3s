@@ -7,8 +7,8 @@ use crate::dto::{Metadata, StreamingBlob, Timestamp, TimestampFormat};
 use crate::error::{S3Error, S3Result};
 use crate::http::KeepAliveBody;
 use crate::http::{HeaderName, HeaderValue};
-use crate::utils::rfc2047;
 use crate::utils::format::fmt_timestamp;
+use crate::utils::rfc2047;
 use crate::xml;
 
 use std::convert::Infallible;
