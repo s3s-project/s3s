@@ -1,5 +1,6 @@
 pub mod crypto;
 pub mod parser;
+pub mod rfc2047;
 
 pub mod format;
 
