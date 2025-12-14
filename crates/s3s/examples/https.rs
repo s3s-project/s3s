@@ -72,6 +72,9 @@ fn load_certs(path: &Path) -> io::Result<Vec<CertificateDer<'static>>> {
     let file = File::open(path)?;
     let mut reader = BufReader::new(file);
     let certs = rustls_pemfile::certs(&mut reader).collect::<Result<Vec<_>, _>>()?;
+    if certs.is_empty() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "No valid certificates found in file"));
+    }
     Ok(certs)
 }
 
