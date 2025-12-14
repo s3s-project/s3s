@@ -10,8 +10,6 @@
     clippy::needless_continue,
 )]
 
-use ::http as http_crate;
-
 #[macro_use]
 mod utils;
 

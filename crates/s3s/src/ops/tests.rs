@@ -71,7 +71,7 @@ fn extract_host_from_uri() {
     let mut req = Request::from(
         hyper::Request::builder()
             .method(Method::GET)
-            .version(http_crate::Version::HTTP_2)
+            .version(::http::Version::HTTP_2)
             .uri("https://test.example.com:9001/rust.pdf?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20251213T084305Z&X-Amz-SignedHeaders=host&X-Amz-Credential=rustfsadmin%2F20251213%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Expires=3600&X-Amz-Signature=57133ee54dab71c00a10106c33cde2615b301bd2cf00e2439f3ddb4bc999ec66")
             .body(Body::empty())
             .unwrap(),
@@ -80,17 +80,17 @@ fn extract_host_from_uri() {
     let host = extract_host(&req).unwrap();
     assert_eq!(host, Some("test.example.com:9001".to_string()));
 
-    req.version = http_crate::Version::HTTP_11;
+    req.version = ::http::Version::HTTP_11;
     let host = extract_host(&req).unwrap();
     assert_eq!(host, None);
 
-    req.version = http_crate::Version::HTTP_3;
+    req.version = ::http::Version::HTTP_3;
     let host = extract_host(&req).unwrap();
     assert_eq!(host, Some("test.example.com:9001".to_string()));
 
     let mut req = Request::from(
         hyper::Request::builder()
-            .version(http_crate::Version::HTTP_10)
+            .version(::http::Version::HTTP_10)
             .method(Method::GET)
             .uri("http://another.example.org/resource")
             .body(Body::empty())
@@ -99,11 +99,11 @@ fn extract_host_from_uri() {
     let host = extract_host(&req).unwrap();
     assert_eq!(host, None);
 
-    req.version = http_crate::Version::HTTP_2;
+    req.version = ::http::Version::HTTP_2;
     let host = extract_host(&req).unwrap();
     assert_eq!(host, Some("another.example.org".to_string()));
 
-    req.version = http_crate::Version::HTTP_3;
+    req.version = ::http::Version::HTTP_3;
     let host = extract_host(&req).unwrap();
     assert_eq!(host, Some("another.example.org".to_string()));
 

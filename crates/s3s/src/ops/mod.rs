@@ -38,7 +38,6 @@ use std::net::{IpAddr, SocketAddr};
 use std::ops::Not;
 use std::sync::Arc;
 
-use crate::http_crate;
 use bytes::Bytes;
 use hyper::HeaderMap;
 use hyper::Method;
@@ -105,24 +104,29 @@ fn unknown_operation() -> S3Error {
     S3Error::with_message(S3ErrorCode::NotImplemented, "Unknown operation")
 }
 
+fn extract_http2_authority(req: &Request) -> Option<&str> {
+    if matches!(req.version, ::http::Version::HTTP_2 | ::http::Version::HTTP_3) {
+        if let Some(authority) = req.uri.authority() {
+            return Some(authority.as_str());
+        }
+    }
+    None
+}
+
 fn extract_host(req: &Request) -> S3Result<Option<String>> {
-    // First try to get from header::HOST
+    // First try to get from Host header.
     if let Some(val) = req.headers.get(crate::header::HOST) {
         let on_err = |e| s3_error!(e, InvalidRequest, "invalid header: Host: {val:?}");
         let host = val.to_str().map_err(on_err)?;
         return Ok(Some(host.into()));
     }
-    if let Some(host) = req.uri.host() {
-        if matches!(req.version, http_crate::Version::HTTP_2 | http_crate::Version::HTTP_3) {
-            let port = req.uri.port_u16();
-            let host_str = if let Some(port) = port {
-                format!("{host}:{port}")
-            } else {
-                host.to_string()
-            };
-            return Ok(Some(host_str));
-        }
+
+    // For HTTP/2 and HTTP/3, the Host header is replaced by :authority pseudo-header.
+    // https://github.com/hyperium/hyper/discussions/2435
+    if let Some(authority) = extract_http2_authority(req) {
+        return Ok(Some(authority.into()));
     }
+
     Ok(None)
 }
 
