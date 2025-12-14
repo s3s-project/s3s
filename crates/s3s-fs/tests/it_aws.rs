@@ -826,3 +826,86 @@ async fn test_sts_assume_role_not_implemented() -> Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+#[tracing::instrument]
+async fn test_if_none_match_wildcard() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("if-none-match-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    let key = "test-file.txt";
+    let content1 = "initial content";
+    let content2 = "updated content";
+
+    create_bucket(&c, bucket).await?;
+
+    // Test 1: PUT with If-None-Match: * should succeed when object doesn't exist
+    debug!("Test 1: PUT with If-None-Match: * on non-existent object");
+    {
+        let body = ByteStream::from_static(content1.as_bytes());
+        let result = c
+            .put_object()
+            .bucket(bucket)
+            .key(key)
+            .body(body)
+            .if_none_match("*")
+            .send()
+            .await;
+
+        match result {
+            Ok(_) => debug!("✓ Successfully created object with If-None-Match: *"),
+            Err(e) => panic!("Expected PUT with If-None-Match: * to succeed when object doesn't exist, but got error: {e:?}"),
+        }
+    }
+
+    // Verify the object was created
+    {
+        let result = c.get_object().bucket(bucket).key(key).send().await?;
+        let body = result.body.collect().await?.into_bytes();
+        assert_eq!(body.as_ref(), content1.as_bytes());
+        debug!("✓ Verified object was created");
+    }
+
+    // Test 2: PUT with If-None-Match: * should fail when object exists
+    debug!("Test 2: PUT with If-None-Match: * on existing object");
+    {
+        let body = ByteStream::from_static(content2.as_bytes());
+        let result = c
+            .put_object()
+            .bucket(bucket)
+            .key(key)
+            .body(body)
+            .if_none_match("*")
+            .send()
+            .await;
+
+        match result {
+            Ok(_) => panic!("Expected PUT with If-None-Match: * to fail when object exists, but it succeeded"),
+            Err(e) => {
+                let error_str = format!("{e:?}");
+                debug!("✓ Expected error when object exists: {error_str}");
+                // The error should be a PreconditionFailed (412)
+                assert!(
+                    error_str.contains("PreconditionFailed") || error_str.contains("412"),
+                    "Expected PreconditionFailed error, got: {error_str}"
+                );
+            }
+        }
+    }
+
+    // Verify the object wasn't overwritten
+    {
+        let result = c.get_object().bucket(bucket).key(key).send().await?;
+        let body = result.body.collect().await?.into_bytes();
+        assert_eq!(body.as_ref(), content1.as_bytes());
+        debug!("✓ Verified object was not overwritten");
+    }
+
+    // Cleanup
+    delete_object(&c, bucket, key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}

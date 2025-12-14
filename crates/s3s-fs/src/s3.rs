@@ -474,10 +474,22 @@ impl S3 for FileSystem {
             metadata,
             content_length,
             content_md5,
+            if_none_match,
             ..
         } = input;
 
         let Some(body) = body else { return Err(s3_error!(IncompleteBody)) };
+
+        // Check If-None-Match condition
+        // If-None-Match: * means "only create if the object doesn't exist"
+        if let Some(ref condition) = if_none_match {
+            if condition.is_any() {
+                let object_path = self.get_object_path(&bucket, &key)?;
+                if object_path.exists() {
+                    return Err(s3_error!(PreconditionFailed, "Object already exists"));
+                }
+            }
+        }
 
         let mut checksum: s3s::checksum::ChecksumHasher = default();
         if input.checksum_crc32.is_some() {
