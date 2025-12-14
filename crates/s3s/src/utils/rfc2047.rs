@@ -2,13 +2,9 @@
 //!
 //! See <https://datatracker.ietf.org/doc/html/rfc2047> for the specification.
 
-#![allow(dead_code)] // Functions will be used when integrating with http/de.rs and http/ser.rs
+#![allow(dead_code)] // TODO: Functions will be used when integrating with http/de.rs and http/ser.rs
 
 use std::borrow::Cow;
-
-// Character constants
-const MIN_PRINTABLE_ASCII: u8 = 0x20; // Space character
-const DEL_CHARACTER: u8 = 0x7f; // DEL character
 
 // RFC 2047: encoded-word must not be longer than 75 characters, including delimiters.
 const MAX_ENCODED_WORD_LEN: usize = 75;
@@ -20,7 +16,7 @@ const MAX_INPUT_LEN: usize = 1024 * 1024;
 
 /// Checks if a string contains only ASCII characters that are valid in HTTP header values.
 fn is_ascii_header_safe(s: &str) -> bool {
-    s.bytes().all(|b| b.is_ascii() && b >= MIN_PRINTABLE_ASCII && b != DEL_CHARACTER)
+    s.bytes().all(|b| b.is_ascii() && b >= 0x20 && b != 0x7f)
 }
 
 /// Encodes a string using RFC 2047 Base64 encoding if it contains non-ASCII
@@ -125,7 +121,8 @@ pub fn decode(s: &str) -> Result<Cow<'_, str>, DecodeError> {
     }
 
     // Count actual encoded-word patterns, not just "?=" occurrences
-    let encoded_word_count = s.split_whitespace()
+    let encoded_word_count = s
+        .split_whitespace()
         .filter(|p| p.starts_with("=?") && p.ends_with("?="))
         .count();
     let has_multiple_words = encoded_word_count > 1;
