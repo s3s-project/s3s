@@ -8,17 +8,6 @@
 //! You can generate self-signed certificates for testing using OpenSSL:
 //!
 //! ```bash
-//! # Generate a private key
-//! openssl genrsa -out key.pem 2048
-//!
-//! # Generate a self-signed certificate
-//! openssl req -new -x509 -key key.pem -out cert.pem -days 365 \
-//!     -subj "/CN=localhost"
-//! ```
-//!
-//! Or use a single command to generate both:
-//!
-//! ```bash
 //! openssl req -x509 -newkey rsa:2048 -nodes -keyout key.pem -out cert.pem \
 //!     -days 365 -subj "/CN=localhost"
 //! ```
@@ -35,7 +24,6 @@
 //!
 //! For production use, use certificates from a trusted certificate authority.
 
-use s3s::auth::SimpleAuth;
 use s3s::dto::{GetObjectInput, GetObjectOutput};
 use s3s::service::S3ServiceBuilder;
 use s3s::{S3, S3Request, S3Response, S3Result};
@@ -156,11 +144,7 @@ async fn main() -> io::Result<()> {
 
     // Create a simple S3 service
     let s3_service = {
-        let mut builder = S3ServiceBuilder::new(DummyS3);
-
-        // Enable authentication (optional)
-        builder.set_auth(SimpleAuth::from_single("AKEXAMPLES3S", "SKEXAMPLES3S"));
-
+        let builder = S3ServiceBuilder::new(DummyS3);
         builder.build()
     };
 
