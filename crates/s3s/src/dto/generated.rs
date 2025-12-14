@@ -2760,11 +2760,11 @@ impl fmt::Debug for CopyPartResult {
     }
 }
 
-pub type CopySourceIfMatch = ETag;
+pub type CopySourceIfMatch = ETagCondition;
 
 pub type CopySourceIfModifiedSince = Timestamp;
 
-pub type CopySourceIfNoneMatch = ETag;
+pub type CopySourceIfNoneMatch = ETagCondition;
 
 pub type CopySourceIfUnmodifiedSince = Timestamp;
 
@@ -10556,7 +10556,7 @@ pub type HttpRedirectCode = String;
 
 pub type ID = String;
 
-pub type IfMatch = ETag;
+pub type IfMatch = ETagCondition;
 
 pub type IfMatchInitiatedTime = Timestamp;
 
@@ -10566,7 +10566,7 @@ pub type IfMatchSize = i64;
 
 pub type IfModifiedSince = Timestamp;
 
-pub type IfNoneMatch = ETag;
+pub type IfNoneMatch = ETagCondition;
 
 pub type IfUnmodifiedSince = Timestamp;
 

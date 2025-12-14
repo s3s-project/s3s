@@ -793,6 +793,178 @@ async fn test_default_bucket_validation() -> Result<()> {
     Ok(())
 }
 
+/// Test that demonstrates the Content-Encoding preservation issue
+/// Related: <https://github.com/rustfs/rustfs/issues/1062>
+#[tokio::test]
+#[tracing::instrument]
+async fn test_content_encoding_preservation() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-content-encoding-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    let key = "compressed.json";
+
+    // Simulated Brotli-compressed JSON content
+    let content = b"compressed data here";
+
+    create_bucket(&c, bucket).await?;
+
+    // Upload object with Content-Encoding header
+    {
+        let body = ByteStream::from_static(content);
+        c.put_object()
+            .bucket(bucket)
+            .key(key)
+            .body(body)
+            .content_encoding("br") // Brotli compression
+            .content_type("application/json")
+            .content_disposition("attachment; filename=\"data.json\"")
+            .cache_control("max-age=3600")
+            .send()
+            .await?;
+
+        debug!("Uploaded object with Content-Encoding: br");
+    }
+
+    // Retrieve object and verify headers are preserved
+    {
+        let ans = c.get_object().bucket(bucket).key(key).send().await?;
+
+        // Verify that standard object attributes are now preserved by s3s-fs
+        debug!("Retrieved object:");
+        debug!("  Content-Encoding: {:?}", ans.content_encoding());
+        debug!("  Content-Type: {:?}", ans.content_type());
+        debug!("  Content-Disposition: {:?}", ans.content_disposition());
+        debug!("  Cache-Control: {:?}", ans.cache_control());
+
+        // All standard attributes should be preserved
+        assert_eq!(ans.content_encoding(), Some("br"));
+        assert_eq!(ans.content_type(), Some("application/json"));
+        assert_eq!(ans.content_disposition(), Some("attachment; filename=\"data.json\""));
+        assert_eq!(ans.cache_control(), Some("max-age=3600"));
+    }
+
+    // Also test HeadObject
+    {
+        let ans = c.head_object().bucket(bucket).key(key).send().await?;
+
+        debug!("HeadObject result:");
+        debug!("  Content-Encoding: {:?}", ans.content_encoding());
+        debug!("  Content-Type: {:?}", ans.content_type());
+
+        // Verify HeadObject also returns the stored attributes
+        assert_eq!(ans.content_encoding(), Some("br"));
+        assert_eq!(ans.content_type(), Some("application/json"));
+    }
+
+    {
+        delete_object(&c, bucket, key).await?;
+        delete_bucket(&c, bucket).await?;
+    }
+
+    Ok(())
+}
+
+/// Test that standard object attributes are preserved through multipart uploads
+#[tokio::test]
+#[tracing::instrument]
+async fn test_multipart_with_attributes() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-multipart-attrs-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    let key = "multipart-with-attrs.json";
+
+    create_bucket(&c, bucket).await?;
+
+    // Create multipart upload with standard attributes
+    let upload_id = {
+        let ans = c
+            .create_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .content_encoding("gzip")
+            .content_type("application/json")
+            .content_disposition("attachment; filename=\"data.json\"")
+            .cache_control("public, max-age=7200")
+            .send()
+            .await?;
+        ans.upload_id.unwrap()
+    };
+    let upload_id = upload_id.as_str();
+
+    // Upload a part
+    let content = b"part1 content";
+    let upload_parts = {
+        let body = ByteStream::from_static(content);
+        let part_number = 1;
+
+        let ans = c
+            .upload_part()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(upload_id)
+            .body(body)
+            .part_number(part_number)
+            .send()
+            .await?;
+
+        let part = CompletedPart::builder()
+            .e_tag(ans.e_tag.unwrap_or_default())
+            .part_number(part_number)
+            .build();
+
+        vec![part]
+    };
+
+    // Complete the multipart upload
+    {
+        let upload = CompletedMultipartUpload::builder().set_parts(Some(upload_parts)).build();
+
+        c.complete_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .multipart_upload(upload)
+            .upload_id(upload_id)
+            .send()
+            .await?;
+    }
+
+    // Verify attributes were preserved after completing multipart upload
+    {
+        let ans = c.get_object().bucket(bucket).key(key).send().await?;
+
+        debug!("Retrieved multipart object:");
+        debug!("  Content-Encoding: {:?}", ans.content_encoding());
+        debug!("  Content-Type: {:?}", ans.content_type());
+        debug!("  Content-Disposition: {:?}", ans.content_disposition());
+        debug!("  Cache-Control: {:?}", ans.cache_control());
+
+        // Verify all attributes are preserved through multipart upload
+        assert_eq!(ans.content_encoding(), Some("gzip"));
+        assert_eq!(ans.content_type(), Some("application/json"));
+        assert_eq!(ans.content_disposition(), Some("attachment; filename=\"data.json\""));
+        assert_eq!(ans.cache_control(), Some("public, max-age=7200"));
+    }
+
+    // Also verify with HeadObject
+    {
+        let ans = c.head_object().bucket(bucket).key(key).send().await?;
+
+        assert_eq!(ans.content_encoding(), Some("gzip"));
+        assert_eq!(ans.content_type(), Some("application/json"));
+    }
+
+    {
+        delete_object(&c, bucket, key).await?;
+        delete_bucket(&c, bucket).await?;
+    }
+
+    Ok(())
+}
+
 #[tokio::test]
 #[tracing::instrument]
 async fn test_sts_assume_role_not_implemented() -> Result<()> {
@@ -823,6 +995,89 @@ async fn test_sts_assume_role_not_implemented() -> Result<()> {
         error_str.contains("NotImplemented") || error_str.contains("not implemented"),
         "Expected NotImplemented error, got: {error_str}"
     );
+
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
+async fn test_if_none_match_wildcard() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("if-none-match-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    let key = "test-file.txt";
+    let content1 = "initial content";
+    let content2 = "updated content";
+
+    create_bucket(&c, bucket).await?;
+
+    // Test 1: PUT with If-None-Match: * should succeed when object doesn't exist
+    debug!("Test 1: PUT with If-None-Match: * on non-existent object");
+    {
+        let body = ByteStream::from_static(content1.as_bytes());
+        let result = c
+            .put_object()
+            .bucket(bucket)
+            .key(key)
+            .body(body)
+            .if_none_match("*")
+            .send()
+            .await;
+
+        match result {
+            Ok(_) => debug!("✓ Successfully created object with If-None-Match: *"),
+            Err(e) => panic!("Expected PUT with If-None-Match: * to succeed when object doesn't exist, but got error: {e:?}"),
+        }
+    }
+
+    // Verify the object was created
+    {
+        let result = c.get_object().bucket(bucket).key(key).send().await?;
+        let body = result.body.collect().await?.into_bytes();
+        assert_eq!(body.as_ref(), content1.as_bytes());
+        debug!("✓ Verified object was created");
+    }
+
+    // Test 2: PUT with If-None-Match: * should fail when object exists
+    debug!("Test 2: PUT with If-None-Match: * on existing object");
+    {
+        let body = ByteStream::from_static(content2.as_bytes());
+        let result = c
+            .put_object()
+            .bucket(bucket)
+            .key(key)
+            .body(body)
+            .if_none_match("*")
+            .send()
+            .await;
+
+        match result {
+            Ok(_) => panic!("Expected PUT with If-None-Match: * to fail when object exists, but it succeeded"),
+            Err(e) => {
+                let error_str = format!("{e:?}");
+                debug!("✓ Expected error when object exists: {error_str}");
+                // The error should be a PreconditionFailed (412)
+                assert!(
+                    error_str.contains("PreconditionFailed") || error_str.contains("412"),
+                    "Expected PreconditionFailed error, got: {error_str}"
+                );
+            }
+        }
+    }
+
+    // Verify the object wasn't overwritten
+    {
+        let result = c.get_object().bucket(bucket).key(key).send().await?;
+        let body = result.body.collect().await?.into_bytes();
+        assert_eq!(body.as_ref(), content1.as_bytes());
+        debug!("✓ Verified object was not overwritten");
+    }
+
+    // Cleanup
+    delete_object(&c, bucket, key).await?;
+    delete_bucket(&c, bucket).await?;
 
     Ok(())
 }

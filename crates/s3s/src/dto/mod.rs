@@ -35,6 +35,9 @@ pub use self::event_stream::*;
 mod etag;
 pub use self::etag::*;
 
+mod etag_condition;
+pub use self::etag_condition::*;
+
 pub type List<T> = Vec<T>;
 pub type Map<K, V> = std::collections::HashMap<K, V>;
 

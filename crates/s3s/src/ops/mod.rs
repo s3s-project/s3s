@@ -104,11 +104,30 @@ fn unknown_operation() -> S3Error {
     S3Error::with_message(S3ErrorCode::NotImplemented, "Unknown operation")
 }
 
+fn extract_http2_authority(req: &Request) -> Option<&str> {
+    if matches!(req.version, ::http::Version::HTTP_2 | ::http::Version::HTTP_3) {
+        if let Some(authority) = req.uri.authority() {
+            return Some(authority.as_str());
+        }
+    }
+    None
+}
+
 fn extract_host(req: &Request) -> S3Result<Option<String>> {
-    let Some(val) = req.headers.get(crate::header::HOST) else { return Ok(None) };
-    let on_err = |e| s3_error!(e, InvalidRequest, "invalid header: Host: {val:?}");
-    let host = val.to_str().map_err(on_err)?;
-    Ok(Some(host.into()))
+    // First try to get from Host header.
+    if let Some(val) = req.headers.get(crate::header::HOST) {
+        let on_err = |e| s3_error!(e, InvalidRequest, "invalid header: Host: {val:?}");
+        let host = val.to_str().map_err(on_err)?;
+        return Ok(Some(host.into()));
+    }
+
+    // For HTTP/2 and HTTP/3, the Host header is replaced by :authority pseudo-header.
+    // https://github.com/hyperium/hyper/discussions/2435
+    if let Some(authority) = extract_http2_authority(req) {
+        return Ok(Some(authority.into()));
+    }
+
+    Ok(None)
 }
 
 fn is_socket_addr_or_ip_addr(host: &str) -> bool {
