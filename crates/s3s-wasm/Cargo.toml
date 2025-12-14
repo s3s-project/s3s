@@ -11,7 +11,7 @@ publish = false
 futures = "0.3.31"
 getrandom = { version = "0.3.4", features = ["wasm_js"] }
 http = "1.4.0"
-s3s = { version = "0.12.0-rc.5", path = "../s3s", default-features = false }
+s3s = { version = "0.12.0-rc.6", path = "../s3s", default-features = false }
 
 [lints]
 workspace = true
