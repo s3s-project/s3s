@@ -24,6 +24,7 @@ pub fn register(tcx: &mut TestContext) {
     case!(tcx, Basic, Essential, test_head_operations);
     case!(tcx, Basic, Put, test_put_object_tiny);
     case!(tcx, Basic, Put, test_put_object_with_metadata);
+    case!(tcx, Basic, Put, test_put_object_with_non_ascii_metadata);
     case!(tcx, Basic, Put, test_put_object_larger);
     case!(tcx, Basic, Put, test_put_object_with_checksum_algorithm);
     case!(tcx, Basic, Put, test_put_object_with_content_checksums);
@@ -271,9 +272,7 @@ impl TestFixture<Basic> for Put {
         let bucket = "test-put";
         let key = "file";
 
-        delete_object_loose(s3, bucket, key).await?;
-        delete_bucket_loose(s3, bucket).await?;
-
+        delete_bucket_all(s3, bucket).await?;
         create_bucket(s3, bucket).await?;
 
         Ok(Self {
@@ -285,10 +284,9 @@ impl TestFixture<Basic> for Put {
 
     #[tracing::instrument(skip_all)]
     async fn teardown(self) -> Result {
-        let Self { s3, bucket, key } = &self;
+        let Self { s3, bucket, .. } = &self;
 
-        delete_object_loose(s3, bucket, key).await?;
-        delete_bucket_loose(s3, bucket).await?;
+        delete_bucket_all(s3, bucket).await?;
 
         Ok(())
     }
@@ -355,6 +353,40 @@ impl Put {
         let metadata = head_resp.metadata().unwrap();
         let value = metadata.get(metadata_key).unwrap();
         assert_eq!(value, metadata_value);
+
+        Ok(())
+    }
+
+    async fn test_put_object_with_non_ascii_metadata(self: Arc<Self>) -> Result {
+        let s3 = &self.s3;
+        let bucket = self.bucket.as_str();
+        let key = "file-with-non-ascii-metadata";
+
+        let content = "object with unicode metadata";
+        let metadata_key = "greeting";
+        let metadata_value = "你好，世界";
+        let metadata_value_rfc2047 = [
+            "=?UTF-8?q?=E4=BD=A0=E5=A5=BD=EF=BC=8C=E4=B8=96=E7=95=8C?=",
+            "=?UTF-8?B?5L2g5aW977yM5LiW55WM?=",
+        ];
+
+        s3.put_object()
+            .bucket(bucket)
+            .key(key)
+            .body(ByteStream::from_static(content.as_bytes()))
+            .metadata(metadata_key, metadata_value)
+            .send()
+            .await?;
+
+        let head_resp = s3.head_object().bucket(bucket).key(key).send().await?;
+        let metadata = head_resp.metadata().unwrap();
+        let value = metadata.get(metadata_key).unwrap();
+        assert!(metadata_value_rfc2047.contains(&value.as_str()));
+
+        let get_resp = s3.get_object().bucket(bucket).key(key).send().await?;
+        let metadata = get_resp.metadata().expect("metadata should be returned");
+        let value = metadata.get(metadata_key).map(String::as_str);
+        assert!(value.is_some_and(|v| metadata_value_rfc2047.contains(&v)));
 
         Ok(())
     }

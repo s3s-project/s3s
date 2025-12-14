@@ -56,6 +56,37 @@ pub async fn delete_bucket_strict(s3: &aws_sdk_s3::Client, bucket: &str) -> Resu
 }
 
 #[tracing::instrument(skip(s3))]
+pub async fn delete_bucket_all(s3: &aws_sdk_s3::Client, bucket: &str) -> Result {
+    let mut continuation_token = None;
+    loop {
+        let result = s3
+            .list_objects_v2()
+            .bucket(bucket)
+            .set_continuation_token(continuation_token)
+            .send()
+            .await;
+        let Some(list_resp) = check(result, &["NoSuchBucket"])? else {
+            return Ok(());
+        };
+
+        for obj in list_resp.contents() {
+            if let Some(key) = obj.key() {
+                s3.delete_object().bucket(bucket).key(key).send().await?;
+            }
+        }
+
+        if list_resp.is_truncated() == Some(true) {
+            continuation_token = list_resp.next_continuation_token().map(String::from);
+        } else {
+            break;
+        }
+    }
+
+    delete_bucket_loose(s3, bucket).await?;
+    Ok(())
+}
+
+#[tracing::instrument(skip(s3))]
 pub async fn delete_object_loose(s3: &aws_sdk_s3::Client, bucket: &str, key: &str) -> Result {
     let result = s3.delete_object().bucket(bucket).key(key).send().await;
     check(result, &["NoSuchKey", "NoSuchBucket"])?;
