@@ -4,7 +4,6 @@
 
 use crate::error::S3Result;
 use crate::http::Multipart;
-use crate::s3_error;
 
 use std::collections::HashMap;
 
