@@ -831,15 +831,14 @@ async fn test_content_encoding_preservation() -> Result<()> {
     {
         let ans = c.get_object().bucket(bucket).key(key).send().await?;
 
-        // This test demonstrates the issue: these fields will be None
-        // because s3s-fs doesn't store them
+        // Verify that standard object attributes are now preserved by s3s-fs
         debug!("Retrieved object:");
         debug!("  Content-Encoding: {:?}", ans.content_encoding());
         debug!("  Content-Type: {:?}", ans.content_type());
         debug!("  Content-Disposition: {:?}", ans.content_disposition());
         debug!("  Cache-Control: {:?}", ans.cache_control());
 
-        // Verify that the fix works - headers should now be preserved
+        // All standard attributes should be preserved
         assert_eq!(ans.content_encoding(), Some("br"));
         assert_eq!(ans.content_type(), Some("application/json"));
         assert_eq!(ans.content_disposition(), Some("attachment; filename=\"data.json\""));
@@ -856,6 +855,105 @@ async fn test_content_encoding_preservation() -> Result<()> {
 
         // Verify HeadObject also returns the stored attributes
         assert_eq!(ans.content_encoding(), Some("br"));
+        assert_eq!(ans.content_type(), Some("application/json"));
+    }
+
+    {
+        delete_object(&c, bucket, key).await?;
+        delete_bucket(&c, bucket).await?;
+    }
+
+    Ok(())
+}
+
+/// Test that standard object attributes are preserved through multipart uploads
+#[tokio::test]
+#[tracing::instrument]
+async fn test_multipart_with_attributes() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-multipart-attrs-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    let key = "multipart-with-attrs.json";
+
+    create_bucket(&c, bucket).await?;
+
+    // Create multipart upload with standard attributes
+    let upload_id = {
+        let ans = c
+            .create_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .content_encoding("gzip")
+            .content_type("application/json")
+            .content_disposition("attachment; filename=\"data.json\"")
+            .cache_control("public, max-age=7200")
+            .send()
+            .await?;
+        ans.upload_id.unwrap()
+    };
+    let upload_id = upload_id.as_str();
+
+    // Upload a part
+    let content = b"part1 content";
+    let upload_parts = {
+        let body = ByteStream::from_static(content);
+        let part_number = 1;
+
+        let ans = c
+            .upload_part()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(upload_id)
+            .body(body)
+            .part_number(part_number)
+            .send()
+            .await?;
+
+        let part = CompletedPart::builder()
+            .e_tag(ans.e_tag.unwrap_or_default())
+            .part_number(part_number)
+            .build();
+
+        vec![part]
+    };
+
+    // Complete the multipart upload
+    {
+        let upload = CompletedMultipartUpload::builder().set_parts(Some(upload_parts)).build();
+
+        c.complete_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .multipart_upload(upload)
+            .upload_id(upload_id)
+            .send()
+            .await?;
+    }
+
+    // Verify attributes were preserved after completing multipart upload
+    {
+        let ans = c.get_object().bucket(bucket).key(key).send().await?;
+
+        debug!("Retrieved multipart object:");
+        debug!("  Content-Encoding: {:?}", ans.content_encoding());
+        debug!("  Content-Type: {:?}", ans.content_type());
+        debug!("  Content-Disposition: {:?}", ans.content_disposition());
+        debug!("  Cache-Control: {:?}", ans.cache_control());
+
+        // Verify all attributes are preserved through multipart upload
+        assert_eq!(ans.content_encoding(), Some("gzip"));
+        assert_eq!(ans.content_type(), Some("application/json"));
+        assert_eq!(ans.content_disposition(), Some("attachment; filename=\"data.json\""));
+        assert_eq!(ans.cache_control(), Some("public, max-age=7200"));
+    }
+
+    // Also verify with HeadObject
+    {
+        let ans = c.head_object().bucket(bucket).key(key).send().await?;
+
+        assert_eq!(ans.content_encoding(), Some("gzip"));
         assert_eq!(ans.content_type(), Some("application/json"));
     }
 

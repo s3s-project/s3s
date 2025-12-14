@@ -244,6 +244,7 @@ impl S3 for FileSystem {
             _ => default(),
         };
 
+        #[allow(clippy::redundant_closure_for_method_calls)]
         let output = GetObjectOutput {
             body: Some(StreamingBlob::wrap(body)),
             content_length: Some(content_length_i64),
@@ -255,9 +256,7 @@ impl S3 for FileSystem {
             content_disposition: obj_attrs.as_ref().and_then(|a| a.content_disposition.clone()),
             content_language: obj_attrs.as_ref().and_then(|a| a.content_language.clone()),
             cache_control: obj_attrs.as_ref().and_then(|a| a.cache_control.clone()),
-            expires: obj_attrs
-                .as_ref()
-                .and_then(crate::fs::ObjectAttributes::get_expires_timestamp),
+            expires: obj_attrs.as_ref().and_then(|a| a.get_expires_timestamp()),
             website_redirect_location: obj_attrs.as_ref().and_then(|a| a.website_redirect_location.clone()),
             e_tag: Some(ETag::Strong(md5_sum)),
             checksum_crc32: checksum.checksum_crc32,
@@ -297,6 +296,7 @@ impl S3 for FileSystem {
 
         let obj_attrs = self.load_object_attributes(&input.bucket, &input.key, None).await?;
 
+        #[allow(clippy::redundant_closure_for_method_calls)]
         let output = HeadObjectOutput {
             content_length: Some(try_!(i64::try_from(file_len))),
             content_type: obj_attrs.as_ref().and_then(|a| a.content_type.clone()),
@@ -304,9 +304,7 @@ impl S3 for FileSystem {
             content_disposition: obj_attrs.as_ref().and_then(|a| a.content_disposition.clone()),
             content_language: obj_attrs.as_ref().and_then(|a| a.content_language.clone()),
             cache_control: obj_attrs.as_ref().and_then(|a| a.cache_control.clone()),
-            expires: obj_attrs
-                .as_ref()
-                .and_then(crate::fs::ObjectAttributes::get_expires_timestamp),
+            expires: obj_attrs.as_ref().and_then(|a| a.get_expires_timestamp()),
             website_redirect_location: obj_attrs.as_ref().and_then(|a| a.website_redirect_location.clone()),
             last_modified: Some(last_modified),
             metadata: obj_attrs.as_ref().and_then(|a| a.user_metadata.clone()),

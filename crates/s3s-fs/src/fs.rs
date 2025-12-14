@@ -54,10 +54,12 @@ pub(crate) struct ObjectAttributes {
 impl ObjectAttributes {
     /// Convert expires Timestamp to String for storage
     pub fn set_expires_timestamp(&mut self, expires: Option<dto::Timestamp>) {
-        self.expires = expires.map(|ts| {
+        self.expires = expires.and_then(|ts| {
             let mut buf = Vec::new();
-            ts.format(dto::TimestampFormat::DateTime, &mut buf).ok();
-            String::from_utf8_lossy(&buf).into_owned()
+            match ts.format(dto::TimestampFormat::DateTime, &mut buf) {
+                Ok(()) => Some(String::from_utf8_lossy(&buf).into_owned()),
+                Err(_) => None,
+            }
         });
     }
 
