@@ -769,7 +769,7 @@ async fn test_default_bucket_validation() -> Result<()> {
 }
 
 /// Test that demonstrates the Content-Encoding preservation issue
-/// Related: https://github.com/rustfs/rustfs/issues/1062
+/// Related: <https://github.com/rustfs/rustfs/issues/1062>
 #[tokio::test]
 #[tracing::instrument]
 async fn test_content_encoding_preservation() -> Result<()> {

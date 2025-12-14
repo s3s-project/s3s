@@ -177,12 +177,14 @@ impl FileSystem {
     }
 
     /// load metadata from fs (deprecated - use `load_object_attributes`)
+    #[allow(dead_code)]
     pub(crate) async fn load_metadata(&self, bucket: &str, key: &str, upload_id: Option<Uuid>) -> Result<Option<dto::Metadata>> {
         let attrs = self.load_object_attributes(bucket, key, upload_id).await?;
         Ok(attrs.and_then(|a| a.user_metadata))
     }
 
     /// save metadata to fs (deprecated - use `save_object_attributes`)
+    #[allow(dead_code)]
     pub(crate) async fn save_metadata(
         &self,
         bucket: &str,
