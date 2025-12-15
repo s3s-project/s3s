@@ -5952,6 +5952,36 @@ pub trait S3: Send + Sync + 'static {
         Err(s3_error!(NotImplemented, "PutObject is not implemented yet"))
     }
 
+    /// <p>The POST operation adds an object to a specified bucket using HTML forms. 
+    /// POST is an alternate form of PUT that enables browser-based uploads as a way of 
+    /// putting objects in buckets. Parameters that are passed to PUT via HTTP Headers are 
+    /// instead passed as form fields to POST in the multipart/form-data encoded message body.</p>
+    /// 
+    /// <p>To use POST, you must provide all the required policy conditions and form fields in the 
+    /// POST policy that you are using for the upload. For more information, see the policy elements in
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-HTTPPOSTConstructPolicy.html">POST policy</a>.</p>
+    /// 
+    /// <p>For more information about using POST to upload objects, see 
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectPOST.html">POST Object</a>
+    /// in the <i>Amazon S3 API Reference</i>.</p>
+    /// 
+    /// <p>The following operations are related to <code>PostObject</code>:</p>
+    /// <ul>
+    /// <li>
+    /// <p>
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObject.html">PutObject</a>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html">GetObject</a>
+    /// </p>
+    /// </li>
+    /// </ul>
+    async fn post_object(&self, _req: S3Request<PostObjectInput>) -> S3Result<S3Response<PostObjectOutput>> {
+        Err(s3_error!(NotImplemented, "PostObject is not implemented yet"))
+    }
+
     /// <note>
     /// <p>This operation is not supported for directory buckets.</p>
     /// </note>
