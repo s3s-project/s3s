@@ -14,9 +14,6 @@ use self::signature::SignatureContext;
 
 mod get_object;
 mod multipart;
-mod post_object;
-
-pub use self::post_object::PostObject;
 
 #[cfg(test)]
 mod tests;

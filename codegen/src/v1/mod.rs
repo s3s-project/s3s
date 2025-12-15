@@ -43,6 +43,12 @@ fn inner_run(code_patch: Option<Patch>) {
         sts::reduce(&mut sts_model);
         s3_model.shapes.append(&mut sts_model.shapes);
 
+        // Add PostObject operation (for all builds)
+        let post_object_patches = smithy::Model::load_json("data/post-object-patches.json").unwrap();
+        for (shape_name, patch) in post_object_patches.shapes {
+            s3_model.shapes.insert(shape_name, patch);
+        }
+
         if matches!(code_patch, Some(Patch::Minio)) {
             minio::patch(&mut s3_model);
         }

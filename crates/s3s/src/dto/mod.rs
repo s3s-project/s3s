@@ -38,9 +38,6 @@ pub use self::etag::*;
 mod etag_condition;
 pub use self::etag_condition::*;
 
-mod post_object;
-pub use self::post_object::*;
-
 pub type List<T> = Vec<T>;
 pub type Map<K, V> = std::collections::HashMap<K, V>;
 

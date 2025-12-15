@@ -21112,6 +21112,7 @@ mod tests {
         require_default::<ListObjectsOutput>();
         require_default::<ListObjectsV2Output>();
         require_default::<ListPartsOutput>();
+        require_default::<PutObjectOutput>();
         require_default::<PutBucketAccelerateConfigurationOutput>();
         require_default::<PutBucketAclOutput>();
         require_default::<PutBucketAnalyticsConfigurationOutput>();
@@ -27242,6 +27243,632 @@ pub mod builders {
         }
     }
 
+    /// A builder for [`PutObjectInput`]
+    #[derive(Default)]
+    pub struct PutObjectInputBuilder {
+        acl: Option<ObjectCannedACL>,
+
+        body: Option<StreamingBlob>,
+
+        bucket: Option<BucketName>,
+
+        bucket_key_enabled: Option<BucketKeyEnabled>,
+
+        cache_control: Option<CacheControl>,
+
+        checksum_algorithm: Option<ChecksumAlgorithm>,
+
+        checksum_crc32: Option<ChecksumCRC32>,
+
+        checksum_crc32c: Option<ChecksumCRC32C>,
+
+        checksum_crc64nvme: Option<ChecksumCRC64NVME>,
+
+        checksum_sha1: Option<ChecksumSHA1>,
+
+        checksum_sha256: Option<ChecksumSHA256>,
+
+        content_disposition: Option<ContentDisposition>,
+
+        content_encoding: Option<ContentEncoding>,
+
+        content_language: Option<ContentLanguage>,
+
+        content_length: Option<ContentLength>,
+
+        content_md5: Option<ContentMD5>,
+
+        content_type: Option<ContentType>,
+
+        expected_bucket_owner: Option<AccountId>,
+
+        expires: Option<Expires>,
+
+        grant_full_control: Option<GrantFullControl>,
+
+        grant_read: Option<GrantRead>,
+
+        grant_read_acp: Option<GrantReadACP>,
+
+        grant_write_acp: Option<GrantWriteACP>,
+
+        if_match: Option<IfMatch>,
+
+        if_none_match: Option<IfNoneMatch>,
+
+        key: Option<ObjectKey>,
+
+        metadata: Option<Metadata>,
+
+        object_lock_legal_hold_status: Option<ObjectLockLegalHoldStatus>,
+
+        object_lock_mode: Option<ObjectLockMode>,
+
+        object_lock_retain_until_date: Option<ObjectLockRetainUntilDate>,
+
+        request_payer: Option<RequestPayer>,
+
+        sse_customer_algorithm: Option<SSECustomerAlgorithm>,
+
+        sse_customer_key: Option<SSECustomerKey>,
+
+        sse_customer_key_md5: Option<SSECustomerKeyMD5>,
+
+        ssekms_encryption_context: Option<SSEKMSEncryptionContext>,
+
+        ssekms_key_id: Option<SSEKMSKeyId>,
+
+        server_side_encryption: Option<ServerSideEncryption>,
+
+        storage_class: Option<StorageClass>,
+
+        tagging: Option<TaggingHeader>,
+
+        website_redirect_location: Option<WebsiteRedirectLocation>,
+
+        write_offset_bytes: Option<WriteOffsetBytes>,
+    }
+
+    impl PutObjectInputBuilder {
+        pub fn set_acl(&mut self, field: Option<ObjectCannedACL>) -> &mut Self {
+            self.acl = field;
+            self
+        }
+
+        pub fn set_body(&mut self, field: Option<StreamingBlob>) -> &mut Self {
+            self.body = field;
+            self
+        }
+
+        pub fn set_bucket(&mut self, field: BucketName) -> &mut Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        pub fn set_bucket_key_enabled(&mut self, field: Option<BucketKeyEnabled>) -> &mut Self {
+            self.bucket_key_enabled = field;
+            self
+        }
+
+        pub fn set_cache_control(&mut self, field: Option<CacheControl>) -> &mut Self {
+            self.cache_control = field;
+            self
+        }
+
+        pub fn set_checksum_algorithm(&mut self, field: Option<ChecksumAlgorithm>) -> &mut Self {
+            self.checksum_algorithm = field;
+            self
+        }
+
+        pub fn set_checksum_crc32(&mut self, field: Option<ChecksumCRC32>) -> &mut Self {
+            self.checksum_crc32 = field;
+            self
+        }
+
+        pub fn set_checksum_crc32c(&mut self, field: Option<ChecksumCRC32C>) -> &mut Self {
+            self.checksum_crc32c = field;
+            self
+        }
+
+        pub fn set_checksum_crc64nvme(&mut self, field: Option<ChecksumCRC64NVME>) -> &mut Self {
+            self.checksum_crc64nvme = field;
+            self
+        }
+
+        pub fn set_checksum_sha1(&mut self, field: Option<ChecksumSHA1>) -> &mut Self {
+            self.checksum_sha1 = field;
+            self
+        }
+
+        pub fn set_checksum_sha256(&mut self, field: Option<ChecksumSHA256>) -> &mut Self {
+            self.checksum_sha256 = field;
+            self
+        }
+
+        pub fn set_content_disposition(&mut self, field: Option<ContentDisposition>) -> &mut Self {
+            self.content_disposition = field;
+            self
+        }
+
+        pub fn set_content_encoding(&mut self, field: Option<ContentEncoding>) -> &mut Self {
+            self.content_encoding = field;
+            self
+        }
+
+        pub fn set_content_language(&mut self, field: Option<ContentLanguage>) -> &mut Self {
+            self.content_language = field;
+            self
+        }
+
+        pub fn set_content_length(&mut self, field: Option<ContentLength>) -> &mut Self {
+            self.content_length = field;
+            self
+        }
+
+        pub fn set_content_md5(&mut self, field: Option<ContentMD5>) -> &mut Self {
+            self.content_md5 = field;
+            self
+        }
+
+        pub fn set_content_type(&mut self, field: Option<ContentType>) -> &mut Self {
+            self.content_type = field;
+            self
+        }
+
+        pub fn set_expected_bucket_owner(&mut self, field: Option<AccountId>) -> &mut Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        pub fn set_expires(&mut self, field: Option<Expires>) -> &mut Self {
+            self.expires = field;
+            self
+        }
+
+        pub fn set_grant_full_control(&mut self, field: Option<GrantFullControl>) -> &mut Self {
+            self.grant_full_control = field;
+            self
+        }
+
+        pub fn set_grant_read(&mut self, field: Option<GrantRead>) -> &mut Self {
+            self.grant_read = field;
+            self
+        }
+
+        pub fn set_grant_read_acp(&mut self, field: Option<GrantReadACP>) -> &mut Self {
+            self.grant_read_acp = field;
+            self
+        }
+
+        pub fn set_grant_write_acp(&mut self, field: Option<GrantWriteACP>) -> &mut Self {
+            self.grant_write_acp = field;
+            self
+        }
+
+        pub fn set_if_match(&mut self, field: Option<IfMatch>) -> &mut Self {
+            self.if_match = field;
+            self
+        }
+
+        pub fn set_if_none_match(&mut self, field: Option<IfNoneMatch>) -> &mut Self {
+            self.if_none_match = field;
+            self
+        }
+
+        pub fn set_key(&mut self, field: ObjectKey) -> &mut Self {
+            self.key = Some(field);
+            self
+        }
+
+        pub fn set_metadata(&mut self, field: Option<Metadata>) -> &mut Self {
+            self.metadata = field;
+            self
+        }
+
+        pub fn set_object_lock_legal_hold_status(&mut self, field: Option<ObjectLockLegalHoldStatus>) -> &mut Self {
+            self.object_lock_legal_hold_status = field;
+            self
+        }
+
+        pub fn set_object_lock_mode(&mut self, field: Option<ObjectLockMode>) -> &mut Self {
+            self.object_lock_mode = field;
+            self
+        }
+
+        pub fn set_object_lock_retain_until_date(&mut self, field: Option<ObjectLockRetainUntilDate>) -> &mut Self {
+            self.object_lock_retain_until_date = field;
+            self
+        }
+
+        pub fn set_request_payer(&mut self, field: Option<RequestPayer>) -> &mut Self {
+            self.request_payer = field;
+            self
+        }
+
+        pub fn set_sse_customer_algorithm(&mut self, field: Option<SSECustomerAlgorithm>) -> &mut Self {
+            self.sse_customer_algorithm = field;
+            self
+        }
+
+        pub fn set_sse_customer_key(&mut self, field: Option<SSECustomerKey>) -> &mut Self {
+            self.sse_customer_key = field;
+            self
+        }
+
+        pub fn set_sse_customer_key_md5(&mut self, field: Option<SSECustomerKeyMD5>) -> &mut Self {
+            self.sse_customer_key_md5 = field;
+            self
+        }
+
+        pub fn set_ssekms_encryption_context(&mut self, field: Option<SSEKMSEncryptionContext>) -> &mut Self {
+            self.ssekms_encryption_context = field;
+            self
+        }
+
+        pub fn set_ssekms_key_id(&mut self, field: Option<SSEKMSKeyId>) -> &mut Self {
+            self.ssekms_key_id = field;
+            self
+        }
+
+        pub fn set_server_side_encryption(&mut self, field: Option<ServerSideEncryption>) -> &mut Self {
+            self.server_side_encryption = field;
+            self
+        }
+
+        pub fn set_storage_class(&mut self, field: Option<StorageClass>) -> &mut Self {
+            self.storage_class = field;
+            self
+        }
+
+        pub fn set_tagging(&mut self, field: Option<TaggingHeader>) -> &mut Self {
+            self.tagging = field;
+            self
+        }
+
+        pub fn set_website_redirect_location(&mut self, field: Option<WebsiteRedirectLocation>) -> &mut Self {
+            self.website_redirect_location = field;
+            self
+        }
+
+        pub fn set_write_offset_bytes(&mut self, field: Option<WriteOffsetBytes>) -> &mut Self {
+            self.write_offset_bytes = field;
+            self
+        }
+
+        #[must_use]
+        pub fn acl(mut self, field: Option<ObjectCannedACL>) -> Self {
+            self.acl = field;
+            self
+        }
+
+        #[must_use]
+        pub fn body(mut self, field: Option<StreamingBlob>) -> Self {
+            self.body = field;
+            self
+        }
+
+        #[must_use]
+        pub fn bucket(mut self, field: BucketName) -> Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn bucket_key_enabled(mut self, field: Option<BucketKeyEnabled>) -> Self {
+            self.bucket_key_enabled = field;
+            self
+        }
+
+        #[must_use]
+        pub fn cache_control(mut self, field: Option<CacheControl>) -> Self {
+            self.cache_control = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_algorithm(mut self, field: Option<ChecksumAlgorithm>) -> Self {
+            self.checksum_algorithm = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_crc32(mut self, field: Option<ChecksumCRC32>) -> Self {
+            self.checksum_crc32 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_crc32c(mut self, field: Option<ChecksumCRC32C>) -> Self {
+            self.checksum_crc32c = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_crc64nvme(mut self, field: Option<ChecksumCRC64NVME>) -> Self {
+            self.checksum_crc64nvme = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_sha1(mut self, field: Option<ChecksumSHA1>) -> Self {
+            self.checksum_sha1 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_sha256(mut self, field: Option<ChecksumSHA256>) -> Self {
+            self.checksum_sha256 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn content_disposition(mut self, field: Option<ContentDisposition>) -> Self {
+            self.content_disposition = field;
+            self
+        }
+
+        #[must_use]
+        pub fn content_encoding(mut self, field: Option<ContentEncoding>) -> Self {
+            self.content_encoding = field;
+            self
+        }
+
+        #[must_use]
+        pub fn content_language(mut self, field: Option<ContentLanguage>) -> Self {
+            self.content_language = field;
+            self
+        }
+
+        #[must_use]
+        pub fn content_length(mut self, field: Option<ContentLength>) -> Self {
+            self.content_length = field;
+            self
+        }
+
+        #[must_use]
+        pub fn content_md5(mut self, field: Option<ContentMD5>) -> Self {
+            self.content_md5 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn content_type(mut self, field: Option<ContentType>) -> Self {
+            self.content_type = field;
+            self
+        }
+
+        #[must_use]
+        pub fn expected_bucket_owner(mut self, field: Option<AccountId>) -> Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        #[must_use]
+        pub fn expires(mut self, field: Option<Expires>) -> Self {
+            self.expires = field;
+            self
+        }
+
+        #[must_use]
+        pub fn grant_full_control(mut self, field: Option<GrantFullControl>) -> Self {
+            self.grant_full_control = field;
+            self
+        }
+
+        #[must_use]
+        pub fn grant_read(mut self, field: Option<GrantRead>) -> Self {
+            self.grant_read = field;
+            self
+        }
+
+        #[must_use]
+        pub fn grant_read_acp(mut self, field: Option<GrantReadACP>) -> Self {
+            self.grant_read_acp = field;
+            self
+        }
+
+        #[must_use]
+        pub fn grant_write_acp(mut self, field: Option<GrantWriteACP>) -> Self {
+            self.grant_write_acp = field;
+            self
+        }
+
+        #[must_use]
+        pub fn if_match(mut self, field: Option<IfMatch>) -> Self {
+            self.if_match = field;
+            self
+        }
+
+        #[must_use]
+        pub fn if_none_match(mut self, field: Option<IfNoneMatch>) -> Self {
+            self.if_none_match = field;
+            self
+        }
+
+        #[must_use]
+        pub fn key(mut self, field: ObjectKey) -> Self {
+            self.key = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn metadata(mut self, field: Option<Metadata>) -> Self {
+            self.metadata = field;
+            self
+        }
+
+        #[must_use]
+        pub fn object_lock_legal_hold_status(mut self, field: Option<ObjectLockLegalHoldStatus>) -> Self {
+            self.object_lock_legal_hold_status = field;
+            self
+        }
+
+        #[must_use]
+        pub fn object_lock_mode(mut self, field: Option<ObjectLockMode>) -> Self {
+            self.object_lock_mode = field;
+            self
+        }
+
+        #[must_use]
+        pub fn object_lock_retain_until_date(mut self, field: Option<ObjectLockRetainUntilDate>) -> Self {
+            self.object_lock_retain_until_date = field;
+            self
+        }
+
+        #[must_use]
+        pub fn request_payer(mut self, field: Option<RequestPayer>) -> Self {
+            self.request_payer = field;
+            self
+        }
+
+        #[must_use]
+        pub fn sse_customer_algorithm(mut self, field: Option<SSECustomerAlgorithm>) -> Self {
+            self.sse_customer_algorithm = field;
+            self
+        }
+
+        #[must_use]
+        pub fn sse_customer_key(mut self, field: Option<SSECustomerKey>) -> Self {
+            self.sse_customer_key = field;
+            self
+        }
+
+        #[must_use]
+        pub fn sse_customer_key_md5(mut self, field: Option<SSECustomerKeyMD5>) -> Self {
+            self.sse_customer_key_md5 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn ssekms_encryption_context(mut self, field: Option<SSEKMSEncryptionContext>) -> Self {
+            self.ssekms_encryption_context = field;
+            self
+        }
+
+        #[must_use]
+        pub fn ssekms_key_id(mut self, field: Option<SSEKMSKeyId>) -> Self {
+            self.ssekms_key_id = field;
+            self
+        }
+
+        #[must_use]
+        pub fn server_side_encryption(mut self, field: Option<ServerSideEncryption>) -> Self {
+            self.server_side_encryption = field;
+            self
+        }
+
+        #[must_use]
+        pub fn storage_class(mut self, field: Option<StorageClass>) -> Self {
+            self.storage_class = field;
+            self
+        }
+
+        #[must_use]
+        pub fn tagging(mut self, field: Option<TaggingHeader>) -> Self {
+            self.tagging = field;
+            self
+        }
+
+        #[must_use]
+        pub fn website_redirect_location(mut self, field: Option<WebsiteRedirectLocation>) -> Self {
+            self.website_redirect_location = field;
+            self
+        }
+
+        #[must_use]
+        pub fn write_offset_bytes(mut self, field: Option<WriteOffsetBytes>) -> Self {
+            self.write_offset_bytes = field;
+            self
+        }
+
+        pub fn build(self) -> Result<PutObjectInput, BuildError> {
+            let acl = self.acl;
+            let body = self.body;
+            let bucket = self.bucket.ok_or_else(|| BuildError::missing_field("bucket"))?;
+            let bucket_key_enabled = self.bucket_key_enabled;
+            let cache_control = self.cache_control;
+            let checksum_algorithm = self.checksum_algorithm;
+            let checksum_crc32 = self.checksum_crc32;
+            let checksum_crc32c = self.checksum_crc32c;
+            let checksum_crc64nvme = self.checksum_crc64nvme;
+            let checksum_sha1 = self.checksum_sha1;
+            let checksum_sha256 = self.checksum_sha256;
+            let content_disposition = self.content_disposition;
+            let content_encoding = self.content_encoding;
+            let content_language = self.content_language;
+            let content_length = self.content_length;
+            let content_md5 = self.content_md5;
+            let content_type = self.content_type;
+            let expected_bucket_owner = self.expected_bucket_owner;
+            let expires = self.expires;
+            let grant_full_control = self.grant_full_control;
+            let grant_read = self.grant_read;
+            let grant_read_acp = self.grant_read_acp;
+            let grant_write_acp = self.grant_write_acp;
+            let if_match = self.if_match;
+            let if_none_match = self.if_none_match;
+            let key = self.key.ok_or_else(|| BuildError::missing_field("key"))?;
+            let metadata = self.metadata;
+            let object_lock_legal_hold_status = self.object_lock_legal_hold_status;
+            let object_lock_mode = self.object_lock_mode;
+            let object_lock_retain_until_date = self.object_lock_retain_until_date;
+            let request_payer = self.request_payer;
+            let sse_customer_algorithm = self.sse_customer_algorithm;
+            let sse_customer_key = self.sse_customer_key;
+            let sse_customer_key_md5 = self.sse_customer_key_md5;
+            let ssekms_encryption_context = self.ssekms_encryption_context;
+            let ssekms_key_id = self.ssekms_key_id;
+            let server_side_encryption = self.server_side_encryption;
+            let storage_class = self.storage_class;
+            let tagging = self.tagging;
+            let website_redirect_location = self.website_redirect_location;
+            let write_offset_bytes = self.write_offset_bytes;
+            Ok(PutObjectInput {
+                acl,
+                body,
+                bucket,
+                bucket_key_enabled,
+                cache_control,
+                checksum_algorithm,
+                checksum_crc32,
+                checksum_crc32c,
+                checksum_crc64nvme,
+                checksum_sha1,
+                checksum_sha256,
+                content_disposition,
+                content_encoding,
+                content_language,
+                content_length,
+                content_md5,
+                content_type,
+                expected_bucket_owner,
+                expires,
+                grant_full_control,
+                grant_read,
+                grant_read_acp,
+                grant_write_acp,
+                if_match,
+                if_none_match,
+                key,
+                metadata,
+                object_lock_legal_hold_status,
+                object_lock_mode,
+                object_lock_retain_until_date,
+                request_payer,
+                sse_customer_algorithm,
+                sse_customer_key,
+                sse_customer_key_md5,
+                ssekms_encryption_context,
+                ssekms_key_id,
+                server_side_encryption,
+                storage_class,
+                tagging,
+                website_redirect_location,
+                write_offset_bytes,
+            })
+        }
+    }
+
     /// A builder for [`PutBucketAccelerateConfigurationInput`]
     #[derive(Default)]
     pub struct PutBucketAccelerateConfigurationInputBuilder {
@@ -28832,632 +29459,6 @@ pub mod builders {
                 content_md5,
                 expected_bucket_owner,
                 website_configuration,
-            })
-        }
-    }
-
-    /// A builder for [`PutObjectInput`]
-    #[derive(Default)]
-    pub struct PutObjectInputBuilder {
-        acl: Option<ObjectCannedACL>,
-
-        body: Option<StreamingBlob>,
-
-        bucket: Option<BucketName>,
-
-        bucket_key_enabled: Option<BucketKeyEnabled>,
-
-        cache_control: Option<CacheControl>,
-
-        checksum_algorithm: Option<ChecksumAlgorithm>,
-
-        checksum_crc32: Option<ChecksumCRC32>,
-
-        checksum_crc32c: Option<ChecksumCRC32C>,
-
-        checksum_crc64nvme: Option<ChecksumCRC64NVME>,
-
-        checksum_sha1: Option<ChecksumSHA1>,
-
-        checksum_sha256: Option<ChecksumSHA256>,
-
-        content_disposition: Option<ContentDisposition>,
-
-        content_encoding: Option<ContentEncoding>,
-
-        content_language: Option<ContentLanguage>,
-
-        content_length: Option<ContentLength>,
-
-        content_md5: Option<ContentMD5>,
-
-        content_type: Option<ContentType>,
-
-        expected_bucket_owner: Option<AccountId>,
-
-        expires: Option<Expires>,
-
-        grant_full_control: Option<GrantFullControl>,
-
-        grant_read: Option<GrantRead>,
-
-        grant_read_acp: Option<GrantReadACP>,
-
-        grant_write_acp: Option<GrantWriteACP>,
-
-        if_match: Option<IfMatch>,
-
-        if_none_match: Option<IfNoneMatch>,
-
-        key: Option<ObjectKey>,
-
-        metadata: Option<Metadata>,
-
-        object_lock_legal_hold_status: Option<ObjectLockLegalHoldStatus>,
-
-        object_lock_mode: Option<ObjectLockMode>,
-
-        object_lock_retain_until_date: Option<ObjectLockRetainUntilDate>,
-
-        request_payer: Option<RequestPayer>,
-
-        sse_customer_algorithm: Option<SSECustomerAlgorithm>,
-
-        sse_customer_key: Option<SSECustomerKey>,
-
-        sse_customer_key_md5: Option<SSECustomerKeyMD5>,
-
-        ssekms_encryption_context: Option<SSEKMSEncryptionContext>,
-
-        ssekms_key_id: Option<SSEKMSKeyId>,
-
-        server_side_encryption: Option<ServerSideEncryption>,
-
-        storage_class: Option<StorageClass>,
-
-        tagging: Option<TaggingHeader>,
-
-        website_redirect_location: Option<WebsiteRedirectLocation>,
-
-        write_offset_bytes: Option<WriteOffsetBytes>,
-    }
-
-    impl PutObjectInputBuilder {
-        pub fn set_acl(&mut self, field: Option<ObjectCannedACL>) -> &mut Self {
-            self.acl = field;
-            self
-        }
-
-        pub fn set_body(&mut self, field: Option<StreamingBlob>) -> &mut Self {
-            self.body = field;
-            self
-        }
-
-        pub fn set_bucket(&mut self, field: BucketName) -> &mut Self {
-            self.bucket = Some(field);
-            self
-        }
-
-        pub fn set_bucket_key_enabled(&mut self, field: Option<BucketKeyEnabled>) -> &mut Self {
-            self.bucket_key_enabled = field;
-            self
-        }
-
-        pub fn set_cache_control(&mut self, field: Option<CacheControl>) -> &mut Self {
-            self.cache_control = field;
-            self
-        }
-
-        pub fn set_checksum_algorithm(&mut self, field: Option<ChecksumAlgorithm>) -> &mut Self {
-            self.checksum_algorithm = field;
-            self
-        }
-
-        pub fn set_checksum_crc32(&mut self, field: Option<ChecksumCRC32>) -> &mut Self {
-            self.checksum_crc32 = field;
-            self
-        }
-
-        pub fn set_checksum_crc32c(&mut self, field: Option<ChecksumCRC32C>) -> &mut Self {
-            self.checksum_crc32c = field;
-            self
-        }
-
-        pub fn set_checksum_crc64nvme(&mut self, field: Option<ChecksumCRC64NVME>) -> &mut Self {
-            self.checksum_crc64nvme = field;
-            self
-        }
-
-        pub fn set_checksum_sha1(&mut self, field: Option<ChecksumSHA1>) -> &mut Self {
-            self.checksum_sha1 = field;
-            self
-        }
-
-        pub fn set_checksum_sha256(&mut self, field: Option<ChecksumSHA256>) -> &mut Self {
-            self.checksum_sha256 = field;
-            self
-        }
-
-        pub fn set_content_disposition(&mut self, field: Option<ContentDisposition>) -> &mut Self {
-            self.content_disposition = field;
-            self
-        }
-
-        pub fn set_content_encoding(&mut self, field: Option<ContentEncoding>) -> &mut Self {
-            self.content_encoding = field;
-            self
-        }
-
-        pub fn set_content_language(&mut self, field: Option<ContentLanguage>) -> &mut Self {
-            self.content_language = field;
-            self
-        }
-
-        pub fn set_content_length(&mut self, field: Option<ContentLength>) -> &mut Self {
-            self.content_length = field;
-            self
-        }
-
-        pub fn set_content_md5(&mut self, field: Option<ContentMD5>) -> &mut Self {
-            self.content_md5 = field;
-            self
-        }
-
-        pub fn set_content_type(&mut self, field: Option<ContentType>) -> &mut Self {
-            self.content_type = field;
-            self
-        }
-
-        pub fn set_expected_bucket_owner(&mut self, field: Option<AccountId>) -> &mut Self {
-            self.expected_bucket_owner = field;
-            self
-        }
-
-        pub fn set_expires(&mut self, field: Option<Expires>) -> &mut Self {
-            self.expires = field;
-            self
-        }
-
-        pub fn set_grant_full_control(&mut self, field: Option<GrantFullControl>) -> &mut Self {
-            self.grant_full_control = field;
-            self
-        }
-
-        pub fn set_grant_read(&mut self, field: Option<GrantRead>) -> &mut Self {
-            self.grant_read = field;
-            self
-        }
-
-        pub fn set_grant_read_acp(&mut self, field: Option<GrantReadACP>) -> &mut Self {
-            self.grant_read_acp = field;
-            self
-        }
-
-        pub fn set_grant_write_acp(&mut self, field: Option<GrantWriteACP>) -> &mut Self {
-            self.grant_write_acp = field;
-            self
-        }
-
-        pub fn set_if_match(&mut self, field: Option<IfMatch>) -> &mut Self {
-            self.if_match = field;
-            self
-        }
-
-        pub fn set_if_none_match(&mut self, field: Option<IfNoneMatch>) -> &mut Self {
-            self.if_none_match = field;
-            self
-        }
-
-        pub fn set_key(&mut self, field: ObjectKey) -> &mut Self {
-            self.key = Some(field);
-            self
-        }
-
-        pub fn set_metadata(&mut self, field: Option<Metadata>) -> &mut Self {
-            self.metadata = field;
-            self
-        }
-
-        pub fn set_object_lock_legal_hold_status(&mut self, field: Option<ObjectLockLegalHoldStatus>) -> &mut Self {
-            self.object_lock_legal_hold_status = field;
-            self
-        }
-
-        pub fn set_object_lock_mode(&mut self, field: Option<ObjectLockMode>) -> &mut Self {
-            self.object_lock_mode = field;
-            self
-        }
-
-        pub fn set_object_lock_retain_until_date(&mut self, field: Option<ObjectLockRetainUntilDate>) -> &mut Self {
-            self.object_lock_retain_until_date = field;
-            self
-        }
-
-        pub fn set_request_payer(&mut self, field: Option<RequestPayer>) -> &mut Self {
-            self.request_payer = field;
-            self
-        }
-
-        pub fn set_sse_customer_algorithm(&mut self, field: Option<SSECustomerAlgorithm>) -> &mut Self {
-            self.sse_customer_algorithm = field;
-            self
-        }
-
-        pub fn set_sse_customer_key(&mut self, field: Option<SSECustomerKey>) -> &mut Self {
-            self.sse_customer_key = field;
-            self
-        }
-
-        pub fn set_sse_customer_key_md5(&mut self, field: Option<SSECustomerKeyMD5>) -> &mut Self {
-            self.sse_customer_key_md5 = field;
-            self
-        }
-
-        pub fn set_ssekms_encryption_context(&mut self, field: Option<SSEKMSEncryptionContext>) -> &mut Self {
-            self.ssekms_encryption_context = field;
-            self
-        }
-
-        pub fn set_ssekms_key_id(&mut self, field: Option<SSEKMSKeyId>) -> &mut Self {
-            self.ssekms_key_id = field;
-            self
-        }
-
-        pub fn set_server_side_encryption(&mut self, field: Option<ServerSideEncryption>) -> &mut Self {
-            self.server_side_encryption = field;
-            self
-        }
-
-        pub fn set_storage_class(&mut self, field: Option<StorageClass>) -> &mut Self {
-            self.storage_class = field;
-            self
-        }
-
-        pub fn set_tagging(&mut self, field: Option<TaggingHeader>) -> &mut Self {
-            self.tagging = field;
-            self
-        }
-
-        pub fn set_website_redirect_location(&mut self, field: Option<WebsiteRedirectLocation>) -> &mut Self {
-            self.website_redirect_location = field;
-            self
-        }
-
-        pub fn set_write_offset_bytes(&mut self, field: Option<WriteOffsetBytes>) -> &mut Self {
-            self.write_offset_bytes = field;
-            self
-        }
-
-        #[must_use]
-        pub fn acl(mut self, field: Option<ObjectCannedACL>) -> Self {
-            self.acl = field;
-            self
-        }
-
-        #[must_use]
-        pub fn body(mut self, field: Option<StreamingBlob>) -> Self {
-            self.body = field;
-            self
-        }
-
-        #[must_use]
-        pub fn bucket(mut self, field: BucketName) -> Self {
-            self.bucket = Some(field);
-            self
-        }
-
-        #[must_use]
-        pub fn bucket_key_enabled(mut self, field: Option<BucketKeyEnabled>) -> Self {
-            self.bucket_key_enabled = field;
-            self
-        }
-
-        #[must_use]
-        pub fn cache_control(mut self, field: Option<CacheControl>) -> Self {
-            self.cache_control = field;
-            self
-        }
-
-        #[must_use]
-        pub fn checksum_algorithm(mut self, field: Option<ChecksumAlgorithm>) -> Self {
-            self.checksum_algorithm = field;
-            self
-        }
-
-        #[must_use]
-        pub fn checksum_crc32(mut self, field: Option<ChecksumCRC32>) -> Self {
-            self.checksum_crc32 = field;
-            self
-        }
-
-        #[must_use]
-        pub fn checksum_crc32c(mut self, field: Option<ChecksumCRC32C>) -> Self {
-            self.checksum_crc32c = field;
-            self
-        }
-
-        #[must_use]
-        pub fn checksum_crc64nvme(mut self, field: Option<ChecksumCRC64NVME>) -> Self {
-            self.checksum_crc64nvme = field;
-            self
-        }
-
-        #[must_use]
-        pub fn checksum_sha1(mut self, field: Option<ChecksumSHA1>) -> Self {
-            self.checksum_sha1 = field;
-            self
-        }
-
-        #[must_use]
-        pub fn checksum_sha256(mut self, field: Option<ChecksumSHA256>) -> Self {
-            self.checksum_sha256 = field;
-            self
-        }
-
-        #[must_use]
-        pub fn content_disposition(mut self, field: Option<ContentDisposition>) -> Self {
-            self.content_disposition = field;
-            self
-        }
-
-        #[must_use]
-        pub fn content_encoding(mut self, field: Option<ContentEncoding>) -> Self {
-            self.content_encoding = field;
-            self
-        }
-
-        #[must_use]
-        pub fn content_language(mut self, field: Option<ContentLanguage>) -> Self {
-            self.content_language = field;
-            self
-        }
-
-        #[must_use]
-        pub fn content_length(mut self, field: Option<ContentLength>) -> Self {
-            self.content_length = field;
-            self
-        }
-
-        #[must_use]
-        pub fn content_md5(mut self, field: Option<ContentMD5>) -> Self {
-            self.content_md5 = field;
-            self
-        }
-
-        #[must_use]
-        pub fn content_type(mut self, field: Option<ContentType>) -> Self {
-            self.content_type = field;
-            self
-        }
-
-        #[must_use]
-        pub fn expected_bucket_owner(mut self, field: Option<AccountId>) -> Self {
-            self.expected_bucket_owner = field;
-            self
-        }
-
-        #[must_use]
-        pub fn expires(mut self, field: Option<Expires>) -> Self {
-            self.expires = field;
-            self
-        }
-
-        #[must_use]
-        pub fn grant_full_control(mut self, field: Option<GrantFullControl>) -> Self {
-            self.grant_full_control = field;
-            self
-        }
-
-        #[must_use]
-        pub fn grant_read(mut self, field: Option<GrantRead>) -> Self {
-            self.grant_read = field;
-            self
-        }
-
-        #[must_use]
-        pub fn grant_read_acp(mut self, field: Option<GrantReadACP>) -> Self {
-            self.grant_read_acp = field;
-            self
-        }
-
-        #[must_use]
-        pub fn grant_write_acp(mut self, field: Option<GrantWriteACP>) -> Self {
-            self.grant_write_acp = field;
-            self
-        }
-
-        #[must_use]
-        pub fn if_match(mut self, field: Option<IfMatch>) -> Self {
-            self.if_match = field;
-            self
-        }
-
-        #[must_use]
-        pub fn if_none_match(mut self, field: Option<IfNoneMatch>) -> Self {
-            self.if_none_match = field;
-            self
-        }
-
-        #[must_use]
-        pub fn key(mut self, field: ObjectKey) -> Self {
-            self.key = Some(field);
-            self
-        }
-
-        #[must_use]
-        pub fn metadata(mut self, field: Option<Metadata>) -> Self {
-            self.metadata = field;
-            self
-        }
-
-        #[must_use]
-        pub fn object_lock_legal_hold_status(mut self, field: Option<ObjectLockLegalHoldStatus>) -> Self {
-            self.object_lock_legal_hold_status = field;
-            self
-        }
-
-        #[must_use]
-        pub fn object_lock_mode(mut self, field: Option<ObjectLockMode>) -> Self {
-            self.object_lock_mode = field;
-            self
-        }
-
-        #[must_use]
-        pub fn object_lock_retain_until_date(mut self, field: Option<ObjectLockRetainUntilDate>) -> Self {
-            self.object_lock_retain_until_date = field;
-            self
-        }
-
-        #[must_use]
-        pub fn request_payer(mut self, field: Option<RequestPayer>) -> Self {
-            self.request_payer = field;
-            self
-        }
-
-        #[must_use]
-        pub fn sse_customer_algorithm(mut self, field: Option<SSECustomerAlgorithm>) -> Self {
-            self.sse_customer_algorithm = field;
-            self
-        }
-
-        #[must_use]
-        pub fn sse_customer_key(mut self, field: Option<SSECustomerKey>) -> Self {
-            self.sse_customer_key = field;
-            self
-        }
-
-        #[must_use]
-        pub fn sse_customer_key_md5(mut self, field: Option<SSECustomerKeyMD5>) -> Self {
-            self.sse_customer_key_md5 = field;
-            self
-        }
-
-        #[must_use]
-        pub fn ssekms_encryption_context(mut self, field: Option<SSEKMSEncryptionContext>) -> Self {
-            self.ssekms_encryption_context = field;
-            self
-        }
-
-        #[must_use]
-        pub fn ssekms_key_id(mut self, field: Option<SSEKMSKeyId>) -> Self {
-            self.ssekms_key_id = field;
-            self
-        }
-
-        #[must_use]
-        pub fn server_side_encryption(mut self, field: Option<ServerSideEncryption>) -> Self {
-            self.server_side_encryption = field;
-            self
-        }
-
-        #[must_use]
-        pub fn storage_class(mut self, field: Option<StorageClass>) -> Self {
-            self.storage_class = field;
-            self
-        }
-
-        #[must_use]
-        pub fn tagging(mut self, field: Option<TaggingHeader>) -> Self {
-            self.tagging = field;
-            self
-        }
-
-        #[must_use]
-        pub fn website_redirect_location(mut self, field: Option<WebsiteRedirectLocation>) -> Self {
-            self.website_redirect_location = field;
-            self
-        }
-
-        #[must_use]
-        pub fn write_offset_bytes(mut self, field: Option<WriteOffsetBytes>) -> Self {
-            self.write_offset_bytes = field;
-            self
-        }
-
-        pub fn build(self) -> Result<PutObjectInput, BuildError> {
-            let acl = self.acl;
-            let body = self.body;
-            let bucket = self.bucket.ok_or_else(|| BuildError::missing_field("bucket"))?;
-            let bucket_key_enabled = self.bucket_key_enabled;
-            let cache_control = self.cache_control;
-            let checksum_algorithm = self.checksum_algorithm;
-            let checksum_crc32 = self.checksum_crc32;
-            let checksum_crc32c = self.checksum_crc32c;
-            let checksum_crc64nvme = self.checksum_crc64nvme;
-            let checksum_sha1 = self.checksum_sha1;
-            let checksum_sha256 = self.checksum_sha256;
-            let content_disposition = self.content_disposition;
-            let content_encoding = self.content_encoding;
-            let content_language = self.content_language;
-            let content_length = self.content_length;
-            let content_md5 = self.content_md5;
-            let content_type = self.content_type;
-            let expected_bucket_owner = self.expected_bucket_owner;
-            let expires = self.expires;
-            let grant_full_control = self.grant_full_control;
-            let grant_read = self.grant_read;
-            let grant_read_acp = self.grant_read_acp;
-            let grant_write_acp = self.grant_write_acp;
-            let if_match = self.if_match;
-            let if_none_match = self.if_none_match;
-            let key = self.key.ok_or_else(|| BuildError::missing_field("key"))?;
-            let metadata = self.metadata;
-            let object_lock_legal_hold_status = self.object_lock_legal_hold_status;
-            let object_lock_mode = self.object_lock_mode;
-            let object_lock_retain_until_date = self.object_lock_retain_until_date;
-            let request_payer = self.request_payer;
-            let sse_customer_algorithm = self.sse_customer_algorithm;
-            let sse_customer_key = self.sse_customer_key;
-            let sse_customer_key_md5 = self.sse_customer_key_md5;
-            let ssekms_encryption_context = self.ssekms_encryption_context;
-            let ssekms_key_id = self.ssekms_key_id;
-            let server_side_encryption = self.server_side_encryption;
-            let storage_class = self.storage_class;
-            let tagging = self.tagging;
-            let website_redirect_location = self.website_redirect_location;
-            let write_offset_bytes = self.write_offset_bytes;
-            Ok(PutObjectInput {
-                acl,
-                body,
-                bucket,
-                bucket_key_enabled,
-                cache_control,
-                checksum_algorithm,
-                checksum_crc32,
-                checksum_crc32c,
-                checksum_crc64nvme,
-                checksum_sha1,
-                checksum_sha256,
-                content_disposition,
-                content_encoding,
-                content_language,
-                content_length,
-                content_md5,
-                content_type,
-                expected_bucket_owner,
-                expires,
-                grant_full_control,
-                grant_read,
-                grant_read_acp,
-                grant_write_acp,
-                if_match,
-                if_none_match,
-                key,
-                metadata,
-                object_lock_legal_hold_status,
-                object_lock_mode,
-                object_lock_retain_until_date,
-                request_payer,
-                sse_customer_algorithm,
-                sse_customer_key,
-                sse_customer_key_md5,
-                ssekms_encryption_context,
-                ssekms_key_id,
-                server_side_encryption,
-                storage_class,
-                tagging,
-                website_redirect_location,
-                write_offset_bytes,
             })
         }
     }

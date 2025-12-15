@@ -66,16 +66,32 @@ pub fn collect_operations(model: &smithy::Model) -> Operations {
 
         let input = {
             if smithy_input != "Unit" {
-                assert_eq!(smithy_input.strip_suffix("Request").unwrap(), op_name);
+                // Special case: PostObject reuses PutObjectRequest
+                if op_name == "PostObject" && smithy_input == "PutObjectRequest" {
+                    // Use PutObject's input type
+                    "PutObjectInput".to_owned()
+                } else {
+                    assert_eq!(smithy_input.strip_suffix("Request").unwrap(), op_name);
+                    f!("{op_name}Input")
+                }
+            } else {
+                f!("{op_name}Input")
             }
-            f!("{op_name}Input")
         };
 
         let output = {
             if smithy_output != "Unit" && smithy_output != "NotificationConfiguration" {
-                assert_eq!(smithy_output.strip_suffix("Output").unwrap(), op_name);
+                // Special case: PostObject reuses PutObjectOutput
+                if op_name == "PostObject" && smithy_output == "PutObjectOutput" {
+                    // Use PutObject's output type
+                    "PutObjectOutput".to_owned()
+                } else {
+                    assert_eq!(smithy_output.strip_suffix("Output").unwrap(), op_name);
+                    f!("{op_name}Output")
+                }
+            } else {
+                f!("{op_name}Output")
             }
-            f!("{op_name}Output")
         };
 
         // See https://github.com/awslabs/smithy-rs/discussions/2308
@@ -389,167 +405,180 @@ fn codegen_op_http_de(op: &Operation, rust_types: &RustTypes) {
                 g!("Ok({input} {{}})");
                 g!("}}");
             } else {
-                g!("pub fn deserialize_http(req: &mut http::Request) -> S3Result<{input}> {{");
-
-                if op.name == "PutObject" {
-                    // POST object
-                    g!("if let Some(m) = req.s3ext.multipart.take() {{");
-                    g!("    return Self::deserialize_http_multipart(req, m);");
+                // PostObject only supports multipart, not regular deserialization
+                if op.name == "PostObject" {
+                    g!("pub fn deserialize_http(req: &mut http::Request) -> S3Result<{input}> {{");
+                    g!("match req.s3ext.multipart.take() {{");
+                    g!("    Some(m) => Self::deserialize_http_multipart(req, m),");
+                    g!("    None => Err(s3_error!(InvalidRequest, \"PostObject requires multipart/form-data\")),");
+                    g!("}}");
                     g!("}}");
                     g!();
-                }
 
-                let path_pattern = PathPattern::parse(op.http_uri.as_str());
-                match path_pattern {
-                    PathPattern::Root => {}
-                    PathPattern::Bucket => {
-                        if op.name != "WriteGetObjectResponse" {
-                            g!("let bucket = http::unwrap_bucket(req);");
+                    codegen_op_http_de_multipart(op, rust_types);
+                } else {
+                    g!("pub fn deserialize_http(req: &mut http::Request) -> S3Result<{input}> {{");
+
+                    if op.name == "PutObject" {
+                        // PutObject with multipart
+                        g!("if let Some(m) = req.s3ext.multipart.take() {{");
+                        g!("    return Self::deserialize_http_multipart(req, m);");
+                        g!("}}");
+                        g!();
+                    }
+
+                    let path_pattern = PathPattern::parse(op.http_uri.as_str());
+                    match path_pattern {
+                        PathPattern::Root => {}
+                        PathPattern::Bucket => {
+                            if op.name != "WriteGetObjectResponse" {
+                                g!("let bucket = http::unwrap_bucket(req);");
+                                g!();
+                            }
+                        }
+                        PathPattern::Object => {
+                            g!("let (bucket, key) = http::unwrap_object(req);");
                             g!();
                         }
                     }
-                    PathPattern::Object => {
-                        g!("let (bucket, key) = http::unwrap_object(req);");
+
+                    for field in &ty.fields {
+                        match field.position.as_str() {
+                            "bucket" => {
+                                assert_eq!(field.name, "bucket");
+                            }
+                            "key" => {
+                                assert_eq!(field.name, "key");
+                            }
+                            "query" => {
+                                codegen_field_de_query(field, rust_types);
+                            }
+                            "header" => {
+                                let header = headers::to_constant_name(field.http_header.as_deref().unwrap());
+                                let field_type = &rust_types[&field.type_];
+
+                                if let rust::Type::List(_) = field_type {
+                                    assert!(field.name == "object_attributes" || field.name == "optional_object_attributes");
+                                    if field.is_required {
+                                        assert!(field.option_type.not());
+                                        g!("let {}: {} = http::parse_list_header(req, &{header})?;", field.name, field.type_,);
+                                    } else {
+                                        assert!(field.option_type);
+                                        g!(
+                                            "let {}: Option<{}> = http::parse_opt_list_header(req, &{header})?;",
+                                            field.name,
+                                            field.type_,
+                                        );
+                                    }
+                                } else if let rust::Type::Timestamp(ts_ty) = field_type {
+                                    assert!(field.option_type);
+                                    let fmt = ts_ty.format.as_deref().unwrap_or("HttpDate");
+                                    g!(
+                                        "let {}: Option<{}> = http::parse_opt_header_timestamp(req, &{}, TimestampFormat::{})?;",
+                                        field.name,
+                                        field.type_,
+                                        header,
+                                        fmt
+                                    );
+                                } else if field.option_type {
+                                    if field.name == "checksum_algorithm" {
+                                        g!(
+                                            "let {}: Option<{}> = http::parse_checksum_algorithm_header(req)?;",
+                                            field.name,
+                                            field.type_,
+                                        );
+                                    } else {
+                                        g!(
+                                            "let {}: Option<{}> = http::parse_opt_header(req, &{})?;",
+                                            field.name,
+                                            field.type_,
+                                            header
+                                        );
+                                    }
+                                } else if let Some(ref default_value) = field.default_value {
+                                    // ASK: content length
+                                    // In S3 smithy model, content-length has a default value (0).
+                                    // Why? Is it correct???
+
+                                    let literal = default_value_literal(default_value);
+                                    g!(
+                                        "let {}: {} = http::parse_opt_header(req, &{})?.unwrap_or({});",
+                                        field.name,
+                                        field.type_,
+                                        header,
+                                        literal,
+                                    );
+                                } else {
+                                    g!("let {}: {} = http::parse_header(req, &{})?;", field.name, field.type_, header);
+                                }
+                            }
+                            "metadata" => {
+                                assert!(field.option_type);
+                                g!("let {}: Option<{}> = http::parse_opt_metadata(req)?;", field.name, field.type_);
+                            }
+                            "payload" => match field.type_.as_str() {
+                                "Policy" => {
+                                    assert!(field.option_type.not());
+                                    g!("let {}: {} = http::take_string_body(req)?;", field.name, field.type_);
+                                }
+                                "StreamingBlob" => {
+                                    assert!(field.option_type);
+                                    g!("let {}: Option<{}> = Some(http::take_stream_body(req));", field.name, field.type_);
+                                }
+                                _ => {
+                                    // AWS S3 returns MalformedXML for empty bodies on these operations,
+                                    // which differs from the default behavior where empty optional XML bodies are accepted.
+                                    // - CompleteMultipartUpload: requires XML body with list of uploaded parts
+                                    // - PutObjectLegalHold: requires XML body with ON/OFF legal hold status
+                                    // - PutObjectRetention: requires XML body with retention mode and date
+                                    let requires_body = matches!(
+                                        (op.name.as_str(), field.name.as_str()),
+                                        ("CompleteMultipartUpload", "multipart_upload")
+                                            | ("PutObjectLegalHold", "legal_hold")
+                                            | ("PutObjectRetention", "retention")
+                                    );
+
+                                    if requires_body {
+                                        // These operations require XML body to match AWS S3 behavior; empty body should return MalformedXML instead of being treated as optional
+                                        assert!(field.option_type);
+                                        g!("let {}: Option<{}> = match http::take_xml_body(req) {{", field.name, field.type_);
+                                        g!("    Ok(body) => Some(body),");
+                                        g!("    Err(e) if *e.code() == crate::S3ErrorCode::MissingRequestBodyError => {{");
+                                        g!("        return Err(crate::S3ErrorCode::MalformedXML.into());");
+                                        g!("    }}");
+                                        g!("    Err(e) => return Err(e),");
+                                        g!("}};");
+                                    } else if field.option_type {
+                                        g!("let {}: Option<{}> = http::take_opt_xml_body(req)?;", field.name, field.type_);
+                                    } else {
+                                        g!("let {}: {} = http::take_xml_body(req)?;", field.name, field.type_);
+                                    }
+                                }
+                            },
+
+                            _ => unimplemented!(),
+                        }
                         g!();
                     }
-                }
 
-                for field in &ty.fields {
-                    match field.position.as_str() {
-                        "bucket" => {
-                            assert_eq!(field.name, "bucket");
-                        }
-                        "key" => {
-                            assert_eq!(field.name, "key");
-                        }
-                        "query" => {
-                            codegen_field_de_query(field, rust_types);
-                        }
-                        "header" => {
-                            let header = headers::to_constant_name(field.http_header.as_deref().unwrap());
-                            let field_type = &rust_types[&field.type_];
-
-                            if let rust::Type::List(_) = field_type {
-                                assert!(field.name == "object_attributes" || field.name == "optional_object_attributes");
-                                if field.is_required {
-                                    assert!(field.option_type.not());
-                                    g!("let {}: {} = http::parse_list_header(req, &{header})?;", field.name, field.type_,);
-                                } else {
-                                    assert!(field.option_type);
-                                    g!(
-                                        "let {}: Option<{}> = http::parse_opt_list_header(req, &{header})?;",
-                                        field.name,
-                                        field.type_,
-                                    );
-                                }
-                            } else if let rust::Type::Timestamp(ts_ty) = field_type {
-                                assert!(field.option_type);
-                                let fmt = ts_ty.format.as_deref().unwrap_or("HttpDate");
-                                g!(
-                                    "let {}: Option<{}> = http::parse_opt_header_timestamp(req, &{}, TimestampFormat::{})?;",
-                                    field.name,
-                                    field.type_,
-                                    header,
-                                    fmt
-                                );
-                            } else if field.option_type {
-                                if field.name == "checksum_algorithm" {
-                                    g!(
-                                        "let {}: Option<{}> = http::parse_checksum_algorithm_header(req)?;",
-                                        field.name,
-                                        field.type_,
-                                    );
-                                } else {
-                                    g!(
-                                        "let {}: Option<{}> = http::parse_opt_header(req, &{})?;",
-                                        field.name,
-                                        field.type_,
-                                        header
-                                    );
-                                }
-                            } else if let Some(ref default_value) = field.default_value {
-                                // ASK: content length
-                                // In S3 smithy model, content-length has a default value (0).
-                                // Why? Is it correct???
-
-                                let literal = default_value_literal(default_value);
-                                g!(
-                                    "let {}: {} = http::parse_opt_header(req, &{})?.unwrap_or({});",
-                                    field.name,
-                                    field.type_,
-                                    header,
-                                    literal,
-                                );
-                            } else {
-                                g!("let {}: {} = http::parse_header(req, &{})?;", field.name, field.type_, header);
+                    g!("Ok({input} {{");
+                    for field in &ty.fields {
+                        match field.position.as_str() {
+                            "bucket" | "key" | "query" | "header" | "metadata" | "payload" => {
+                                g!("{},", field.name);
                             }
+                            _ => unimplemented!(),
                         }
-                        "metadata" => {
-                            assert!(field.option_type);
-                            g!("let {}: Option<{}> = http::parse_opt_metadata(req)?;", field.name, field.type_);
-                        }
-                        "payload" => match field.type_.as_str() {
-                            "Policy" => {
-                                assert!(field.option_type.not());
-                                g!("let {}: {} = http::take_string_body(req)?;", field.name, field.type_);
-                            }
-                            "StreamingBlob" => {
-                                assert!(field.option_type);
-                                g!("let {}: Option<{}> = Some(http::take_stream_body(req));", field.name, field.type_);
-                            }
-                            _ => {
-                                // AWS S3 returns MalformedXML for empty bodies on these operations,
-                                // which differs from the default behavior where empty optional XML bodies are accepted.
-                                // - CompleteMultipartUpload: requires XML body with list of uploaded parts
-                                // - PutObjectLegalHold: requires XML body with ON/OFF legal hold status
-                                // - PutObjectRetention: requires XML body with retention mode and date
-                                let requires_body = matches!(
-                                    (op.name.as_str(), field.name.as_str()),
-                                    ("CompleteMultipartUpload", "multipart_upload")
-                                        | ("PutObjectLegalHold", "legal_hold")
-                                        | ("PutObjectRetention", "retention")
-                                );
-
-                                if requires_body {
-                                    // These operations require XML body to match AWS S3 behavior; empty body should return MalformedXML instead of being treated as optional
-                                    assert!(field.option_type);
-                                    g!("let {}: Option<{}> = match http::take_xml_body(req) {{", field.name, field.type_);
-                                    g!("    Ok(body) => Some(body),");
-                                    g!("    Err(e) if *e.code() == crate::S3ErrorCode::MissingRequestBodyError => {{");
-                                    g!("        return Err(crate::S3ErrorCode::MalformedXML.into());");
-                                    g!("    }}");
-                                    g!("    Err(e) => return Err(e),");
-                                    g!("}};");
-                                } else if field.option_type {
-                                    g!("let {}: Option<{}> = http::take_opt_xml_body(req)?;", field.name, field.type_);
-                                } else {
-                                    g!("let {}: {} = http::take_xml_body(req)?;", field.name, field.type_);
-                                }
-                            }
-                        },
-
-                        _ => unimplemented!(),
                     }
+                    g!("}})");
+
+                    g!("}}");
                     g!();
-                }
 
-                g!("Ok({input} {{");
-                for field in &ty.fields {
-                    match field.position.as_str() {
-                        "bucket" | "key" | "query" | "header" | "metadata" | "payload" => {
-                            g!("{},", field.name);
-                        }
-                        _ => unimplemented!(),
+                    if op.name == "PutObject" {
+                        codegen_op_http_de_multipart(op, rust_types);
                     }
-                }
-                g!("}})");
-
-                g!("}}");
-                g!();
-
-                if op.name == "PutObject" {
-                    codegen_op_http_de_multipart(op, rust_types);
-                }
+                } // end else for non-PostObject
             }
         }
         _ => unimplemented!(),
@@ -596,7 +625,11 @@ fn codegen_field_de_query(field: &rust::StructField, rust_types: &RustTypes) {
 }
 
 fn codegen_op_http_de_multipart(op: &Operation, rust_types: &RustTypes) {
-    assert_eq!(op.name, "PutObject");
+    assert!(
+        op.name == "PutObject" || op.name == "PostObject",
+        "codegen_op_http_de_multipart called for {}",
+        op.name
+    );
 
     g!(
         "pub fn deserialize_http_multipart(req: &mut http::Request, m: http::Multipart) -> S3Result<{}> {{",
