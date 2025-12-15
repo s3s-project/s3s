@@ -654,7 +654,7 @@ impl S3 for FileSystem {
     async fn post_object(&self, req: S3Request<PostObjectInput>) -> S3Result<S3Response<PostObjectOutput>> {
         use crate::fs::ObjectAttributes;
 
-        let mut input = req.input;
+        let input = req.input;
         if let Some(ref storage_class) = input.storage_class {
             let is_valid = ["STANDARD", "REDUCED_REDUNDANCY"].contains(&storage_class.as_str());
             if !is_valid {
@@ -678,7 +678,7 @@ impl S3 for FileSystem {
             ..
         } = input;
 
-        let mut body = body.ok_or(s3_error!(IncompleteBody))?;
+        let body = body.ok_or(s3_error!(IncompleteBody))?;
 
         let mut checksum: s3s::checksum::ChecksumHasher = default();
         if let Some(alg) = checksum_algorithm {
