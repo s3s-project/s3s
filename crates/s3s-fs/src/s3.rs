@@ -230,7 +230,10 @@ impl S3 for FileSystem {
             None => {}
         }
 
-        let body = bytes_stream(ReaderStream::with_capacity(file, 4096), content_length_usize);
+        let reader_stream = ReaderStream::with_capacity(file, 4096);
+        let sized_stream = bytes_stream(reader_stream, content_length_usize);
+        let error_mapped = sized_stream.map_err(|e| Box::new(e) as s3s::StdError);
+        let body = SizedByteStream::new(error_mapped, content_length_usize);
 
         let object_metadata = self.load_metadata(&input.bucket, &input.key, None).await?;
 
@@ -245,7 +248,7 @@ impl S3 for FileSystem {
         };
 
         let output = GetObjectOutput {
-            body: Some(StreamingBlob::wrap(body)),
+            body: Some(StreamingBlob::new(body)),
             content_length: Some(content_length_i64),
             content_range,
             last_modified: Some(last_modified),
@@ -717,7 +720,10 @@ impl S3 for FileSystem {
         let content_length_usize = try_!(usize::try_from(content_length));
 
         let _ = try_!(src_file.seek(io::SeekFrom::Start(start)).await);
-        let body = StreamingBlob::wrap(bytes_stream(ReaderStream::with_capacity(src_file, 4096), content_length_usize));
+        let reader_stream = ReaderStream::with_capacity(src_file, 4096);
+        let sized_stream = bytes_stream(reader_stream, content_length_usize);
+        let error_mapped = sized_stream.map_err(|e| Box::new(e) as s3s::StdError);
+        let body = StreamingBlob::new(SizedByteStream::new(error_mapped, content_length_usize));
 
         let mut md5_hash = Md5::new();
         let stream = body.inspect_ok(|bytes| md5_hash.update(bytes.as_ref()));

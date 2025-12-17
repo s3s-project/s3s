@@ -2959,6 +2959,7 @@ dependencies = [
  "once_cell",
  "opendal",
  "path-absolutize",
+ "pin-project-lite",
  "s3s",
  "s3s-aws",
  "serde_json",
