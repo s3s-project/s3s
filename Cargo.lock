@@ -2845,7 +2845,7 @@ checksum = "28d3b2b1366ec20994f1fd18c3c594f05c5dd4bc44d8bb0c1c632c8d6829481f"
 
 [[package]]
 name = "s3s"
-version = "0.12.0-rc.6"
+version = "0.12.0"
 dependencies = [
  "arrayvec",
  "async-trait",
@@ -2902,7 +2902,7 @@ dependencies = [
 
 [[package]]
 name = "s3s-aws"
-version = "0.12.0-rc.6"
+version = "0.12.0"
 dependencies = [
  "async-trait",
  "aws-sdk-s3",
@@ -2935,7 +2935,7 @@ dependencies = [
 
 [[package]]
 name = "s3s-e2e"
-version = "0.12.0-rc.6"
+version = "0.12.0"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -2954,7 +2954,7 @@ dependencies = [
 
 [[package]]
 name = "s3s-fs"
-version = "0.12.0-rc.6"
+version = "0.12.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2995,7 +2995,7 @@ dependencies = [
 
 [[package]]
 name = "s3s-model"
-version = "0.12.0-rc.6"
+version = "0.12.0"
 dependencies = [
  "anyhow",
  "numeric_cast",
@@ -3005,7 +3005,7 @@ dependencies = [
 
 [[package]]
 name = "s3s-policy"
-version = "0.12.0-rc.6"
+version = "0.12.0"
 dependencies = [
  "indexmap",
  "serde",
@@ -3015,7 +3015,7 @@ dependencies = [
 
 [[package]]
 name = "s3s-proxy"
-version = "0.12.0-rc.6"
+version = "0.12.0"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -3031,7 +3031,7 @@ dependencies = [
 
 [[package]]
 name = "s3s-test"
-version = "0.12.0-rc.6"
+version = "0.12.0"
 dependencies = [
  "backtrace",
  "clap",
