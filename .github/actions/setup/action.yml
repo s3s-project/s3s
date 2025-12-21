@@ -4,8 +4,6 @@ runs:
   using: "composite"
   steps:
     - uses: taiki-e/install-action@just
-    - uses: astral-sh/setup-uv@v5
-      with:
-        enable-cache: true
+    - uses: astral-sh/setup-uv@v7
     - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
