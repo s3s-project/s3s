@@ -44,7 +44,7 @@ jobs:
             runs-on: ubuntu-24.04-arm
             arch: arm64
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           # For scheduled builds, checkout main branch; otherwise use the triggering ref
           ref: ${{ github.event_name == 'schedule' && 'main' || github.ref }}
@@ -89,7 +89,7 @@ jobs:
           touch "${{ runner.temp }}/digests/${digest#sha256:}"
 
       - name: Upload digest
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: digests-${{ env.PLATFORM_PAIR }}
           path: ${{ runner.temp }}/digests/*
@@ -101,7 +101,7 @@ jobs:
     needs: [build, skip-check]
     steps:
       - name: Download digests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           path: ${{ runner.temp }}/digests
           pattern: digests-*

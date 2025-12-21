@@ -31,7 +31,7 @@ jobs:
     if: needs.skip-check.outputs.should_skip != 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: taiki-e/install-action@just
       - uses: astral-sh/setup-uv@v7
       - run: just ci-python
@@ -48,7 +48,7 @@ jobs:
           - stable
           - nightly
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: taiki-e/install-action@just
       - uses: dtolnay/rust-toolchain@master
         with:
@@ -68,7 +68,7 @@ jobs:
           - windows-latest
           - macos-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: taiki-e/install-action@just
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -79,7 +79,7 @@ jobs:
     if: needs.skip-check.outputs.should_skip != 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: taiki-e/install-action@just
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -96,14 +96,14 @@ jobs:
     if: needs.skip-check.outputs.should_skip != 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: ./.github/actions/setup
       - run: docker pull minio/mint:edge
       - run: docker pull minio/minio:latest
       - run: just install s3s-proxy
       - run: ./scripts/e2e-mint.sh
       - run: ./scripts/report-mint.py /tmp/mint/log.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: mint-proxy-minio.logs
           path: ./target/s3s-proxy.log
@@ -114,12 +114,12 @@ jobs:
     if: needs.skip-check.outputs.should_skip != 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: ./.github/actions/setup
       - run: just install s3s-e2e
       - run: just install s3s-fs
       - run: ./scripts/e2e-fs.sh --filter '^Basic'
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: e2e-fs.logs
           path: ./target/s3s-fs.log
@@ -130,7 +130,7 @@ jobs:
     if: needs.skip-check.outputs.should_skip != 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: ./.github/actions/setup
       - run: docker pull minio/minio:latest
       - run: just install s3s-e2e
