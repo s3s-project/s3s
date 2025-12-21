@@ -26,5 +26,5 @@ hyper = "1.8.1"
 s3s = { version = "0.12.0-rc.6", path = "../s3s", default-features = false }
 std-next = "0.1.9"
 sync_wrapper = "1.0.2"
-tracing = "0.1.43"
+tracing = "0.1.44"
 transform-stream = "0.3.1"

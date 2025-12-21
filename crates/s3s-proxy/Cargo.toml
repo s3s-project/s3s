@@ -20,7 +20,7 @@ aws-config = { version = "1.8.7", default-features = false, features = [
 aws-credential-types = "1.2.6"
 aws-sdk-s3 = "1.107.0"
 clap = { version = "4.5.53", features = ["derive"] }
-hyper-util = { version = "0.1.18", features = [
+hyper-util = { version = "0.1.19", features = [
     "server-auto",
     "server-graceful",
     "http1",
@@ -30,5 +30,5 @@ hyper-util = { version = "0.1.18", features = [
 s3s = { version = "0.12.0-rc.6", path = "../s3s" }
 s3s-aws = { version = "0.12.0-rc.6", path = "../s3s-aws" }
 tokio = { version = "1.48.0", features = ["full"] }
-tracing = "0.1.43"
+tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter", "time"] }
