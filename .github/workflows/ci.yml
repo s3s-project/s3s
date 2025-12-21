@@ -33,9 +33,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: taiki-e/install-action@just
-      - uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
+      - uses: astral-sh/setup-uv@v7
       - run: just ci-python
 
   rust:
