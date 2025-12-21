@@ -1,6 +1,6 @@
 [package]
 name = "s3s-policy"
-version = "0.12.0"
+version = "0.13.0-alpha"
 description = "S3 Policy Language"
 readme = "../../README.md"
 keywords = ["s3"]
