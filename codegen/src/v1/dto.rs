@@ -378,6 +378,10 @@ fn unify_operation_types(ops: &Operations, space: &mut RustTypes) {
         if op.name == "SelectObjectContent" {
             continue;
         }
+        // Skip PostObject - it reuses PutObject's input type
+        if op.name == "PostObject" {
+            continue;
+        }
         let input_ty = if op.smithy_input == "Unit" {
             rust::Struct {
                 name: op.input.clone(),
@@ -398,6 +402,10 @@ fn unify_operation_types(ops: &Operations, space: &mut RustTypes) {
 
     // unify operation output type
     for op in ops.values() {
+        // Skip PostObject - it reuses PutObject's output type
+        if op.name == "PostObject" {
+            continue;
+        }
         let output_ty = if op.smithy_output == "Unit" {
             rust::Struct {
                 name: op.output.clone(),
@@ -990,7 +998,12 @@ fn codegen_builders(rust_types: &RustTypes, ops: &Operations) {
         "",
     ]);
 
+    // Deduplicate input types (e.g., PostObject reuses PutObjectInput)
+    let mut seen_inputs = std::collections::HashSet::new();
     for op in ops.values() {
+        if !seen_inputs.insert(&op.input) {
+            continue; // Skip duplicate input types
+        }
         let rust::Type::Struct(ty) = &rust_types[&op.input] else { continue };
         codegen_struct_builder(ty, rust_types);
         g!();
