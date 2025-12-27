@@ -107,6 +107,7 @@ jobs:
           files: lcov.info
           flags: rust
           fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   mint-proxy-minio:
     name: e2e (mint, s3s-proxy, minio)
