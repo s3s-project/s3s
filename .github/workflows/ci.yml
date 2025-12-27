@@ -94,6 +94,10 @@ jobs:
     needs: skip-check
     if: needs.skip-check.outputs.should_skip != 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
@@ -103,11 +107,12 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info
       - uses: codecov/codecov-action@v4
+        if: env.CODECOV_TOKEN != ''
         with:
           files: lcov.info
           flags: rust
           fail_ci_if_error: true
-          token: ${{ secrets.CODECOV_TOKEN }}
+          token: ${{ env.CODECOV_TOKEN }}
 
   mint-proxy-minio:
     name: e2e (mint, s3s-proxy, minio)
