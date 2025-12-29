@@ -1,0 +1,19 @@
+[package]
+name = "s3s-opendal"
+version = "0.13.0-alpha"
+description = "S3 backend powered by OpenDAL"
+readme = "../../README.md"
+keywords = ["s3"]
+categories = ["web-programming", "web-programming::http-server"]
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+opendal = "0.55.0"
+s3s = { version = "0.13.0-alpha", path = "../s3s" }
+

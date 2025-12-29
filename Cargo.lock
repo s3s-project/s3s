@@ -3004,6 +3004,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "s3s-opendal"
+version = "0.13.0-alpha"
+dependencies = [
+ "opendal",
+ "s3s",
+]
+
+[[package]]
 name = "s3s-policy"
 version = "0.13.0-alpha"
 dependencies = [
