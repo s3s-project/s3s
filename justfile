@@ -34,6 +34,9 @@ codegen:
 install name *ARGS:
     uv run ./scripts/install.py {{name}} {{ARGS}}
 
+coverage *ARGS:
+    cargo llvm-cov -p s3s --all-features --html {{ARGS}}
+
 # ------------------------------------------------
 
 sync-version:

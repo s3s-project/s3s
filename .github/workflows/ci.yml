@@ -90,6 +90,24 @@ jobs:
           cd crates/s3s-wasm
           wasm-pack test --node
 
+  coverage:
+    needs: skip-check
+    if: needs.skip-check.outputs.should_skip != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@just
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - run: |
+          cargo llvm-cov -p s3s --all-features --codecov --output-path target/codecov.json
+      - uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: target/codecov.json
+          fail_ci_if_error: true
+
   mint-proxy-minio:
     name: e2e (mint, s3s-proxy, minio)
     needs: skip-check
