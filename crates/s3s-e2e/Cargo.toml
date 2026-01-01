@@ -25,7 +25,7 @@ bytes = "1.11.0"
 http-body = "1.0.1"
 md-5.workspace = true
 base64-simd = "0.8.0"
-reqwest = { version = "0.12.26", default-features = false, features = ["rustls-tls"] }
+reqwest = { version = "0.12.28", default-features = false, features = ["rustls-tls"] }
 
 [dependencies.aws-config]
 version = "1.8.7"
