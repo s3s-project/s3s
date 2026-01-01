@@ -104,7 +104,6 @@ jobs:
           cargo llvm-cov -p s3s --all-features --codecov --output-path target/codecov.json
       - uses: codecov/codecov-action@v5
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
           files: target/codecov.json
           fail_ci_if_error: true
 
