@@ -63,7 +63,7 @@ zeroize = "1.8.2"
 std-next = "0.1.9"
 sync_wrapper = { version = "1.0.2", default-features = false }
 tokio = { version = "1.48.0", features = ["time"] }
-const-str = "0.7.1"
+const-str = "1.0.0"
 http = "1.4.0"
 subtle = "2.6.1"
 cfg-if = "1.0.4"

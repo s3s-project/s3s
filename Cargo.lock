@@ -880,18 +880,18 @@ dependencies = [
 
 [[package]]
 name = "const-str"
-version = "0.7.1"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0664d2867b4a32697dfe655557f5c3b187e9b605b38612a748e5ec99811d160"
+checksum = "93e19f68b180ebff43d6d42005c4b5f046c65fcac28369ba8b3beaad633f9ec0"
 dependencies = [
  "const-str-proc-macro",
 ]
 
 [[package]]
 name = "const-str-proc-macro"
-version = "0.7.1"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c25c2a02ba19f2d4fd9f54d5f239f97c867deb7397763a9771edab63c44a4fa"
+checksum = "1d3e0f24ee268386bd3ab4e04fc60df9a818ad801b5ffe592f388a6acc5053fb"
 dependencies = [
  "proc-macro2",
  "quote",
