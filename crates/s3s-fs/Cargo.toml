@@ -42,6 +42,7 @@ hyper-util = { version = "0.1.19", optional = true, features = [
 mime = "0.3.17"
 std-next = "0.1.9"
 numeric_cast = "0.3.0"
+pin-project-lite = "0.2.16"
 path-absolutize = "3.1.1"
 s3s = { version = "0.13.0-alpha", path = "../s3s" }
 serde = { version = "1.0.228", features = ["derive"] }
