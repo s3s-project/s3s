@@ -159,6 +159,7 @@ impl ETag {
     /// - Weak `ETag`s: `W/"value"` (RFC 9110 compliant)
     ///
     /// # Errors
+    /// + Returns `ParseETagError::InvalidFormat` if the input is empty
     /// + Returns `ParseETagError::InvalidChar` if the value contains invalid characters
     pub fn parse_http_header(src: &[u8]) -> Result<Self, ParseETagError> {
         // FIXME: this impl is not optimal unless `unsafe` is used
@@ -339,21 +340,21 @@ mod tests {
 
     #[test]
     fn parse_invalid_char_cases() {
-        // 含有换行/回车 (quoted)
+        // Contains newline/carriage return (quoted)
         let err = ETag::parse_http_header(b"\"a\nb\"").unwrap_err();
         assert!(matches!(err, ParseETagError::InvalidChar));
 
         let err = ETag::parse_http_header(b"W/\"a\rb\"").unwrap_err();
         assert!(matches!(err, ParseETagError::InvalidChar));
 
-        // 含有 DEL(0x7f) (quoted)
+        // Contains DEL (0x7f) (quoted)
         let err = ETag::parse_http_header(b"\"a\x7fb\"").unwrap_err();
         assert!(matches!(err, ParseETagError::InvalidChar));
 
         let err = ETag::parse_http_header(b"W/\"a\x7fb\"").unwrap_err();
         assert!(matches!(err, ParseETagError::InvalidChar));
 
-        // 含有非 ASCII（触发 from_ascii_simd 错误）(quoted)
+        // Contains non-ASCII (triggers from_ascii_simd error) (quoted)
         let err = ETag::parse_http_header(b"\"a\xc2\xb5b\"").unwrap_err(); // µ
         assert!(matches!(err, ParseETagError::InvalidChar));
 
