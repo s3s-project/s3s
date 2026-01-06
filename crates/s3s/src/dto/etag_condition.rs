@@ -179,22 +179,32 @@ mod tests {
 
     #[test]
     fn parse_invalid() {
-        let err = ETagCondition::parse_http_header(b"**").unwrap_err();
+        // Empty string is the only invalid format now
+        // since unquoted values are accepted as strong ETags for S3 compatibility
+        let err = ETagCondition::parse_http_header(b"").unwrap_err();
         assert!(matches!(
             err,
             ParseETagConditionError::InvalidFormat | ParseETagConditionError::ETagError(_)
         ));
+    }
 
-        let err = ETagCondition::parse_http_header(b"* ").unwrap_err();
-        assert!(matches!(
-            err,
-            ParseETagConditionError::InvalidFormat | ParseETagConditionError::ETagError(_)
-        ));
+    #[test]
+    fn parse_unquoted_values() {
+        // For S3 compatibility, these are now accepted as strong ETags
+        let cond = ETagCondition::parse_http_header(b"**").expect("parse **");
+        assert_eq!(cond.as_etag().unwrap().as_strong(), Some("**"));
 
-        let err = ETagCondition::parse_http_header(b"\"unclosed").unwrap_err();
-        assert!(matches!(
-            err,
-            ParseETagConditionError::InvalidFormat | ParseETagConditionError::ETagError(_)
-        ));
+        let cond = ETagCondition::parse_http_header(b"* ").expect("parse * with space");
+        assert_eq!(cond.as_etag().unwrap().as_strong(), Some("* "));
+
+        let cond = ETagCondition::parse_http_header(b"\"unclosed").expect("parse unclosed quote");
+        assert_eq!(cond.as_etag().unwrap().as_strong(), Some("\"unclosed"));
+
+        // Typical S3 ETag values without quotes
+        let cond = ETagCondition::parse_http_header(b"ABCORZ").expect("parse simple string");
+        assert_eq!(cond.as_etag().unwrap().as_strong(), Some("ABCORZ"));
+
+        let cond = ETagCondition::parse_http_header(b"4fcec74691ff529f6d016ec3629ff11b").expect("parse md5 hash");
+        assert_eq!(cond.as_etag().unwrap().as_strong(), Some("4fcec74691ff529f6d016ec3629ff11b"));
     }
 }
