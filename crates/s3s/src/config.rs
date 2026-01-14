@@ -57,21 +57,21 @@ pub struct S3Config {
 
     /// Maximum size per form field in bytes.
     ///
-    /// This prevents `DoS` attacks via oversized individual fields.
+    /// This prevents denial-of-service attacks via oversized individual fields.
     ///
     /// Default: 1 MB (1024 * 1024)
     pub max_form_field_size: usize,
 
     /// Maximum total size for all form fields combined in bytes.
     ///
-    /// This prevents `DoS` attacks via accumulation of many fields.
+    /// This prevents denial-of-service attacks via accumulation of many fields.
     ///
     /// Default: 20 MB (20 * 1024 * 1024)
     pub max_form_fields_size: usize,
 
     /// Maximum number of parts in multipart form.
     ///
-    /// This prevents `DoS` attacks via excessive part count.
+    /// This prevents denial-of-service attacks via excessive part count.
     ///
     /// Default: 1000
     pub max_form_parts: usize,
