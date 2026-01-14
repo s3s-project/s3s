@@ -101,6 +101,7 @@
 #![allow(clippy::borrow_interior_mutable_const)]
 #![allow(clippy::needless_pass_by_value)]
 #![allow(clippy::too_many_lines)]
+#![allow(clippy::collapsible_if)]
 #![allow(clippy::unnecessary_wraps)]
 
 use crate::dto::*;
