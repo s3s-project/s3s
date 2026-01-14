@@ -124,38 +124,3 @@ mod handlers {
 }
 
 fn main() {}
-
-// Example: Using S3Service within an Axum application
-//
-// This demonstrates how to integrate s3s with Axum's routing system
-// using `SharedS3Service` which accepts any body type implementing `http_body::Body`.
-//
-// ```rust,ignore
-// use axum::Router;
-// use axum::routing::get;
-// use s3s::S3;
-// use s3s::service::{S3ServiceBuilder, SharedS3Service};
-//
-// // Your S3 backend implementation
-// struct MyS3Backend;
-// impl S3 for MyS3Backend {
-//     // ... implement required methods
-// }
-//
-// async fn health_check() -> &'static str {
-//     "OK"
-// }
-//
-// fn create_app() -> Router {
-//     // Create S3 service
-//     let s3_service = S3ServiceBuilder::new(MyS3Backend).build();
-//
-//     // Convert to SharedS3Service for Axum compatibility
-//     let shared_s3_service = SharedS3Service::from(s3_service);
-//
-//     // Build Axum router with both custom routes and S3 service
-//     Router::new()
-//         .route("/health", get(health_check))
-//         .fallback_service(shared_s3_service)
-// }
-// ```
