@@ -1,5 +1,6 @@
 use crate::access::S3Access;
 use crate::auth::S3Auth;
+use crate::config::{S3Config, StaticConfig};
 use crate::host::S3Host;
 use crate::http::{Body, Request};
 use crate::route::S3Route;
@@ -15,6 +16,7 @@ use tracing::{debug, error};
 
 pub struct S3ServiceBuilder {
     s3: Arc<dyn S3>,
+    config: Arc<dyn S3Config>,
     host: Option<Box<dyn S3Host>>,
     auth: Option<Box<dyn S3Auth>>,
     access: Option<Box<dyn S3Access>>,
@@ -27,12 +29,17 @@ impl S3ServiceBuilder {
     pub fn new(s3: impl S3) -> Self {
         Self {
             s3: Arc::new(s3),
+            config: Arc::new(StaticConfig::default()),
             host: None,
             auth: None,
             access: None,
             route: None,
             validation: None,
         }
+    }
+
+    pub fn set_config(&mut self, config: impl S3Config) {
+        self.config = Arc::new(config);
     }
 
     pub fn set_host(&mut self, host: impl S3Host) {
@@ -60,6 +67,7 @@ impl S3ServiceBuilder {
         S3Service {
             inner: Arc::new(Inner {
                 s3: self.s3,
+                config: self.config,
                 host: self.host,
                 auth: self.auth,
                 access: self.access,
@@ -77,6 +85,7 @@ pub struct S3Service {
 
 struct Inner {
     s3: Arc<dyn S3>,
+    config: Arc<dyn S3Config>,
     host: Option<Box<dyn S3Host>>,
     auth: Option<Box<dyn S3Auth>>,
     access: Option<Box<dyn S3Access>>,
@@ -100,6 +109,7 @@ impl S3Service {
 
         let ccx = crate::ops::CallContext {
             s3: &self.inner.s3,
+            config: &self.inner.config,
             host: self.inner.host.as_deref(),
             auth: self.inner.auth.as_deref(),
             access: self.inner.access.as_deref(),
@@ -247,5 +257,51 @@ mod tests {
 
         // Should have default validation when none is set
         assert!(service.inner.validation.is_none()); // None means it will use AwsNameValidation
+    }
+
+    #[test]
+    fn test_service_builder_default_config() {
+        let builder = S3ServiceBuilder::new(MockS3);
+        let service = builder.build();
+
+        // Should have default config values
+        assert_eq!(service.inner.config.max_xml_body_size(), 20 * 1024 * 1024);
+        assert_eq!(service.inner.config.max_post_object_file_size(), 5 * 1024 * 1024 * 1024);
+    }
+
+    #[test]
+    fn test_service_builder_custom_config() {
+        use crate::config::{HotReloadConfig, StaticConfig};
+
+        let custom_config = StaticConfig::new()
+            .with_max_xml_body_size(10 * 1024 * 1024)
+            .with_max_post_object_file_size(2 * 1024 * 1024 * 1024);
+
+        let mut builder = S3ServiceBuilder::new(MockS3);
+        builder.set_config(custom_config);
+        let service = builder.build();
+
+        assert_eq!(service.inner.config.max_xml_body_size(), 10 * 1024 * 1024);
+        assert_eq!(service.inner.config.max_post_object_file_size(), 2 * 1024 * 1024 * 1024);
+    }
+
+    #[test]
+    fn test_service_builder_hot_reload_config() {
+        use crate::config::{HotReloadConfig, StaticConfig};
+
+        let hot_config = HotReloadConfig::new(StaticConfig::default());
+
+        let mut builder = S3ServiceBuilder::new(MockS3);
+        builder.set_config(hot_config.clone());
+        let service = builder.build();
+
+        // Initial value
+        assert_eq!(service.inner.config.max_xml_body_size(), 20 * 1024 * 1024);
+
+        // Update the config
+        hot_config.update(StaticConfig::new().with_max_xml_body_size(30 * 1024 * 1024));
+
+        // Service should see the new value
+        assert_eq!(service.inner.config.max_xml_body_size(), 30 * 1024 * 1024);
     }
 }

@@ -33,11 +33,6 @@ const MAX_FORM_PARTS: usize = 1000;
 /// Conservative limit: 64KB should be more than enough for any reasonable boundary pattern
 const MAX_BOUNDARY_BUFFER_SIZE: usize = 64 * 1024;
 
-/// Maximum file size for POST object (5 GB - S3 limit for single PUT)
-/// This prevents `DoS` attacks via oversized file uploads
-/// Note: S3 has a 5GB limit for single PUT object, so this is a reasonable default
-pub const MAX_POST_OBJECT_FILE_SIZE: u64 = 5 * 1024 * 1024 * 1024;
-
 /// Form file
 #[derive(Debug)]
 pub struct File {

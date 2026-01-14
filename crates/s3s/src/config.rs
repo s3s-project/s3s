@@ -10,23 +10,23 @@
 //!
 //! # Example
 //! ```
-//! use s3s::config::{S3Config, S3ConfigValues, StaticConfig, HotReloadConfig};
+//! use s3s::config::{S3Config, StaticConfig, HotReloadConfig};
 //!
 //! // Using default config values
-//! let values = S3ConfigValues::default();
+//! let config = StaticConfig::default();
 //!
 //! // Using builder pattern
-//! let values = S3ConfigValues::new()
+//! let config = StaticConfig::new()
 //!     .with_max_xml_body_size(10 * 1024 * 1024);
 //!
 //! // Using static config (cheaper clone, immutable)
-//! let static_config = StaticConfig::new(S3ConfigValues::default());
+//! let static_config = StaticConfig::default();
 //! assert_eq!(static_config.max_xml_body_size(), 20 * 1024 * 1024);
 //!
 //! // Using hot-reload config (can be updated at runtime)
-//! let hot_reload_config = HotReloadConfig::new(S3ConfigValues::default());
+//! let hot_reload_config = HotReloadConfig::new(StaticConfig::default());
 //! hot_reload_config.update(
-//!     S3ConfigValues::new().with_max_xml_body_size(10 * 1024 * 1024)
+//!     StaticConfig::new().with_max_xml_body_size(10 * 1024 * 1024)
 //! );
 //! assert_eq!(hot_reload_config.max_xml_body_size(), 10 * 1024 * 1024);
 //! ```
@@ -57,13 +57,27 @@ pub trait S3Config: Send + Sync + 'static {
     fn max_form_parts(&self) -> usize;
 }
 
-/// S3 Service Configuration values.
+/// Static configuration.
 ///
 /// Contains configurable parameters for the S3 service with sensible defaults.
+/// This wrapper provides a cheap clone operation by using `Arc` internally.
+/// The configuration is immutable after creation.
+///
+/// # Example
+/// ```
+/// use s3s::config::{S3Config, StaticConfig};
+///
+/// let config = StaticConfig::new()
+///     .with_max_xml_body_size(10 * 1024 * 1024);
+/// let cloned = config.clone(); // Cheap clone (Arc clone)
+///
+/// // Access configuration via trait methods
+/// let max_size = config.max_xml_body_size();
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 #[non_exhaustive]
-pub struct S3ConfigValues {
+pub struct StaticConfig {
     /// Maximum size for XML body payloads in bytes.
     ///
     /// This limit prevents unbounded memory allocation for operations that require
@@ -101,7 +115,7 @@ pub struct S3ConfigValues {
     pub max_form_parts: usize,
 }
 
-impl Default for S3ConfigValues {
+impl Default for StaticConfig {
     fn default() -> Self {
         Self {
             max_xml_body_size: 20 * 1024 * 1024,               // 20 MB
@@ -113,8 +127,8 @@ impl Default for S3ConfigValues {
     }
 }
 
-impl S3ConfigValues {
-    /// Creates a new `S3ConfigValues` with default values.
+impl StaticConfig {
+    /// Creates a new `StaticConfig` with default values.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
@@ -156,73 +170,25 @@ impl S3ConfigValues {
     }
 }
 
-/// Static configuration wrapper.
-///
-/// This wrapper provides a cheap clone operation by using `Arc` internally.
-/// The configuration is immutable after creation.
-///
-/// # Example
-/// ```
-/// use s3s::config::{S3Config, S3ConfigValues, StaticConfig};
-///
-/// let config = StaticConfig::new(S3ConfigValues::default());
-/// let cloned = config.clone(); // Cheap clone (Arc clone)
-///
-/// // Access configuration via trait methods
-/// let max_size = config.max_xml_body_size();
-/// ```
-#[derive(Debug, Clone)]
-pub struct StaticConfig {
-    inner: Arc<S3ConfigValues>,
-}
-
-impl StaticConfig {
-    /// Creates a new static configuration.
-    #[must_use]
-    pub fn new(config: S3ConfigValues) -> Self {
-        Self {
-            inner: Arc::new(config),
-        }
-    }
-
-    /// Returns a reference to the underlying configuration values.
-    #[must_use]
-    pub fn get(&self) -> &S3ConfigValues {
-        &self.inner
-    }
-}
-
-impl Default for StaticConfig {
-    fn default() -> Self {
-        Self::new(S3ConfigValues::default())
-    }
-}
-
-impl From<S3ConfigValues> for StaticConfig {
-    fn from(config: S3ConfigValues) -> Self {
-        Self::new(config)
-    }
-}
-
 impl S3Config for StaticConfig {
     fn max_xml_body_size(&self) -> usize {
-        self.inner.max_xml_body_size
+        self.max_xml_body_size
     }
 
     fn max_post_object_file_size(&self) -> u64 {
-        self.inner.max_post_object_file_size
+        self.max_post_object_file_size
     }
 
     fn max_form_field_size(&self) -> usize {
-        self.inner.max_form_field_size
+        self.max_form_field_size
     }
 
     fn max_form_fields_size(&self) -> usize {
-        self.inner.max_form_fields_size
+        self.max_form_fields_size
     }
 
     fn max_form_parts(&self) -> usize {
-        self.inner.max_form_parts
+        self.max_form_parts
     }
 }
 
@@ -233,9 +199,9 @@ impl S3Config for StaticConfig {
 ///
 /// # Example
 /// ```
-/// use s3s::config::{S3Config, S3ConfigValues, HotReloadConfig};
+/// use s3s::config::{S3Config, StaticConfig, HotReloadConfig};
 ///
-/// let config = HotReloadConfig::new(S3ConfigValues::default());
+/// let config = HotReloadConfig::new(StaticConfig::default());
 ///
 /// // Read configuration (lock-free)
 /// let max_size = config.max_xml_body_size();
@@ -243,18 +209,18 @@ impl S3Config for StaticConfig {
 ///
 /// // Update configuration at runtime (atomic swap)
 /// config.update(
-///     S3ConfigValues::new().with_max_xml_body_size(10 * 1024 * 1024)
+///     StaticConfig::new().with_max_xml_body_size(10 * 1024 * 1024)
 /// );
 /// ```
 #[derive(Debug, Clone)]
 pub struct HotReloadConfig {
-    inner: Arc<ArcSwap<S3ConfigValues>>,
+    inner: Arc<ArcSwap<StaticConfig>>,
 }
 
 impl HotReloadConfig {
     /// Creates a new hot-reload configuration.
     #[must_use]
-    pub fn new(config: S3ConfigValues) -> Self {
+    pub fn new(config: StaticConfig) -> Self {
         Self {
             inner: Arc::new(ArcSwap::from_pointee(config)),
         }
@@ -265,26 +231,26 @@ impl HotReloadConfig {
     /// This operation is lock-free and returns an `Arc` to the current configuration.
     /// The snapshot is immutable and will not change even if the configuration is updated.
     #[must_use]
-    pub fn snapshot(&self) -> Arc<S3ConfigValues> {
+    pub fn snapshot(&self) -> Arc<StaticConfig> {
         self.inner.load_full()
     }
 
     /// Updates the configuration atomically.
     ///
     /// This operation replaces the entire configuration atomically.
-    pub fn update(&self, config: S3ConfigValues) {
+    pub fn update(&self, config: StaticConfig) {
         self.inner.store(Arc::new(config));
     }
 }
 
 impl Default for HotReloadConfig {
     fn default() -> Self {
-        Self::new(S3ConfigValues::default())
+        Self::new(StaticConfig::default())
     }
 }
 
-impl From<S3ConfigValues> for HotReloadConfig {
-    fn from(config: S3ConfigValues) -> Self {
+impl From<StaticConfig> for HotReloadConfig {
+    fn from(config: StaticConfig) -> Self {
         Self::new(config)
     }
 }
@@ -317,7 +283,7 @@ mod tests {
 
     #[test]
     fn test_default_config() {
-        let config = S3ConfigValues::default();
+        let config = StaticConfig::default();
         assert_eq!(config.max_xml_body_size, 20 * 1024 * 1024);
         assert_eq!(config.max_post_object_file_size, 5 * 1024 * 1024 * 1024);
         assert_eq!(config.max_form_field_size, 1024 * 1024);
@@ -327,19 +293,12 @@ mod tests {
 
     #[test]
     fn test_static_config() {
-        let config = StaticConfig::new(S3ConfigValues {
+        let config = StaticConfig {
             max_xml_body_size: 10 * 1024 * 1024,
             ..Default::default()
-        });
+        };
         assert_eq!(config.max_xml_body_size(), 10 * 1024 * 1024);
-        assert_eq!(config.get().max_xml_body_size, 10 * 1024 * 1024);
-
-        // Test cheap clone
-        let cloned = config.clone();
-        assert_eq!(cloned.max_xml_body_size(), 10 * 1024 * 1024);
-
-        // Test that both point to the same Arc
-        assert!(Arc::ptr_eq(&config.inner, &cloned.inner));
+        assert_eq!(config.max_xml_body_size, 10 * 1024 * 1024);
     }
 
     #[test]
@@ -351,11 +310,11 @@ mod tests {
 
     #[test]
     fn test_hot_reload_config() {
-        let config = HotReloadConfig::new(S3ConfigValues::default());
+        let config = HotReloadConfig::new(StaticConfig::default());
         assert_eq!(config.max_xml_body_size(), 20 * 1024 * 1024);
 
         // Update configuration
-        config.update(S3ConfigValues {
+        config.update(StaticConfig {
             max_xml_body_size: 5 * 1024 * 1024,
             ..Default::default()
         });
@@ -364,11 +323,11 @@ mod tests {
 
     #[test]
     fn test_hot_reload_snapshot_immutable() {
-        let config = HotReloadConfig::new(S3ConfigValues::default());
+        let config = HotReloadConfig::new(StaticConfig::default());
         let snapshot = config.snapshot();
 
         // Update configuration
-        config.update(S3ConfigValues {
+        config.update(StaticConfig {
             max_xml_body_size: 5 * 1024 * 1024,
             ..Default::default()
         });
@@ -382,7 +341,7 @@ mod tests {
 
     #[test]
     fn test_hot_reload_config_clone() {
-        let config = HotReloadConfig::new(S3ConfigValues::default());
+        let config = HotReloadConfig::new(StaticConfig::default());
         let cloned = config.clone();
 
         // Both should read the same value
@@ -390,7 +349,7 @@ mod tests {
         assert_eq!(cloned.max_xml_body_size(), 20 * 1024 * 1024);
 
         // Updating one should update both (they share the same ArcSwap)
-        config.update(S3ConfigValues {
+        config.update(StaticConfig {
             max_xml_body_size: 5 * 1024 * 1024,
             ..Default::default()
         });
@@ -408,7 +367,7 @@ mod tests {
 
     #[test]
     fn test_serde_roundtrip() {
-        let config = S3ConfigValues {
+        let config = StaticConfig {
             max_xml_body_size: 10 * 1024 * 1024,
             max_post_object_file_size: 1024 * 1024 * 1024,
             max_form_field_size: 512 * 1024,
@@ -417,7 +376,7 @@ mod tests {
         };
 
         let json = serde_json::to_string(&config).expect("serialize failed");
-        let deserialized: S3ConfigValues = serde_json::from_str(&json).expect("deserialize failed");
+        let deserialized: StaticConfig = serde_json::from_str(&json).expect("deserialize failed");
 
         assert_eq!(config, deserialized);
     }
@@ -426,7 +385,7 @@ mod tests {
     fn test_serde_default_values() {
         // Test that missing fields use default values
         let json = r#"{"max_xml_body_size": 1024}"#;
-        let config: S3ConfigValues = serde_json::from_str(json).expect("deserialize failed");
+        let config: StaticConfig = serde_json::from_str(json).expect("deserialize failed");
 
         assert_eq!(config.max_xml_body_size, 1024);
         // Other fields should have defaults
@@ -436,12 +395,23 @@ mod tests {
 
     #[test]
     fn test_from_impl() {
-        let config = S3ConfigValues::default();
-
-        let static_config: StaticConfig = config.clone().into();
-        assert_eq!(static_config.get(), &config);
-
+        let config = StaticConfig::default();
         let hot_reload_config: HotReloadConfig = config.clone().into();
         assert_eq!(*hot_reload_config.snapshot(), config);
+    }
+
+    #[test]
+    fn test_hot_reload_in_service_layer() {
+        // Test simulating how config would be used in service layer
+        let config = HotReloadConfig::new(StaticConfig::default());
+
+        // Simulate processing requests with initial config
+        assert_eq!(config.max_xml_body_size(), 20 * 1024 * 1024);
+
+        // Simulate config reload (e.g., from config file change)
+        config.update(StaticConfig::new().with_max_xml_body_size(30 * 1024 * 1024));
+
+        // New requests should see updated config
+        assert_eq!(config.max_xml_body_size(), 30 * 1024 * 1024);
     }
 }

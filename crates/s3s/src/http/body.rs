@@ -255,11 +255,6 @@ impl fmt::Debug for Body {
     }
 }
 
-/// Maximum size for XML body payloads (20 MB).
-/// This limit prevents unbounded memory allocation for operations that require
-/// the full body in memory (e.g., XML parsing).
-pub const MAX_XML_BODY_SIZE: usize = 20 * 1024 * 1024;
-
 /// Error returned when body size exceeds the limit.
 #[derive(Debug, Clone, thiserror::Error)]
 #[error("body size {size} exceeds limit {limit}")]
