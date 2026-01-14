@@ -246,9 +246,9 @@ impl S3Config for StaticConfig {
 ///     S3ConfigValues::new().with_max_xml_body_size(10 * 1024 * 1024)
 /// );
 /// ```
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct HotReloadConfig {
-    inner: ArcSwap<S3ConfigValues>,
+    inner: Arc<ArcSwap<S3ConfigValues>>,
 }
 
 impl HotReloadConfig {
@@ -256,7 +256,7 @@ impl HotReloadConfig {
     #[must_use]
     pub fn new(config: S3ConfigValues) -> Self {
         Self {
-            inner: ArcSwap::from_pointee(config),
+            inner: Arc::new(ArcSwap::from_pointee(config)),
         }
     }
 
@@ -265,8 +265,8 @@ impl HotReloadConfig {
     /// This operation is lock-free and returns an `Arc` to the current configuration.
     /// The snapshot is immutable and will not change even if the configuration is updated.
     #[must_use]
-    pub fn snapshot(&self) -> arc_swap::Guard<Arc<S3ConfigValues>> {
-        self.inner.load()
+    pub fn snapshot(&self) -> Arc<S3ConfigValues> {
+        self.inner.load_full()
     }
 
     /// Updates the configuration atomically.
@@ -381,6 +381,25 @@ mod tests {
     }
 
     #[test]
+    fn test_hot_reload_config_clone() {
+        let config = HotReloadConfig::new(S3ConfigValues::default());
+        let cloned = config.clone();
+
+        // Both should read the same value
+        assert_eq!(config.max_xml_body_size(), 20 * 1024 * 1024);
+        assert_eq!(cloned.max_xml_body_size(), 20 * 1024 * 1024);
+
+        // Updating one should update both (they share the same ArcSwap)
+        config.update(S3ConfigValues {
+            max_xml_body_size: 5 * 1024 * 1024,
+            ..Default::default()
+        });
+
+        assert_eq!(config.max_xml_body_size(), 5 * 1024 * 1024);
+        assert_eq!(cloned.max_xml_body_size(), 5 * 1024 * 1024);
+    }
+
+    #[test]
     fn test_hot_reload_config_trait() {
         let config: Box<dyn S3Config> = Box::new(HotReloadConfig::default());
         assert_eq!(config.max_xml_body_size(), 20 * 1024 * 1024);
@@ -423,6 +442,6 @@ mod tests {
         assert_eq!(static_config.get(), &config);
 
         let hot_reload_config: HotReloadConfig = config.clone().into();
-        assert_eq!(**hot_reload_config.snapshot(), config);
+        assert_eq!(*hot_reload_config.snapshot(), config);
     }
 }
