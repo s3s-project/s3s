@@ -1,6 +1,6 @@
 [package]
 name = "s3s-model"
-version = "0.13.0-alpha"
+version = "0.13.0-alpha.1"
 description = "S3 Protocol Model"
 readme = "../../README.md"
 keywords = ["s3"]
