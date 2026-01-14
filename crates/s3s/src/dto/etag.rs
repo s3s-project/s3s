@@ -152,14 +152,32 @@ impl ETag {
         s.iter().all(|&b| b >= 32 && b != 127 || b == b'\t')
     }
 
+    /// Checks if a byte sequence looks like a valid unquoted S3 `ETag`.
+    ///
+    /// Typical S3 `ETag`s are hex strings (MD5 hashes) or multipart `ETag`s (hex-N format).
+    /// We accept alphanumeric characters with dashes, which covers:
+    /// - Simple MD5 hashes: `4fcec74691ff529f6d016ec3629ff11b`
+    /// - Multipart `ETag`s: `4fcec74691ff529f6d016ec3629ff11b-5`
+    fn is_valid_unquoted_etag(s: &[u8]) -> bool {
+        !s.is_empty() && s.iter().all(|&b| b.is_ascii_alphanumeric() || b == b'-')
+    }
+
     /// Parses an `ETag` from header bytes.
     ///
+    /// Accepts both quoted and unquoted values for S3 compatibility:
+    /// - Strong `ETag`s: `"value"` (RFC 9110 compliant) or `value` (unquoted hex/alphanumeric, for S3 compatibility)
+    /// - Weak `ETag`s: `W/"value"` (RFC 9110 compliant)
+    ///
+    /// For unquoted values, only alphanumeric characters and dashes are accepted (typical MD5/multipart format).
+    /// Malformed quoted values (unclosed quotes, trailing characters) are rejected.
+    ///
     /// # Errors
-    /// + Returns `ParseETagError::InvalidFormat` if the bytes do not match the `ETag` syntax.
+    /// + Returns `ParseETagError::InvalidFormat` if the input is empty or malformed
     /// + Returns `ParseETagError::InvalidChar` if the value contains invalid characters
     pub fn parse_http_header(src: &[u8]) -> Result<Self, ParseETagError> {
         // FIXME: this impl is not optimal unless `unsafe` is used
         match src {
+            // RFC 9110 compliant: strong ETag "value"
             [b'"', val @ .., b'"'] => {
                 if !Self::check_header_value(val) {
                     return Err(ParseETagError::InvalidChar);
@@ -167,12 +185,20 @@ impl ETag {
                 let val = str::from_ascii_simd(val).map_err(|_| ParseETagError::InvalidChar)?;
                 Ok(ETag::Strong(val.to_owned()))
             }
+            // RFC 9110 compliant: weak ETag W/"value"
             [b'W', b'/', b'"', val @ .., b'"'] => {
                 if !Self::check_header_value(val) {
                     return Err(ParseETagError::InvalidChar);
                 }
                 let val = str::from_ascii_simd(val).map_err(|_| ParseETagError::InvalidChar)?;
                 Ok(ETag::Weak(val.to_owned()))
+            }
+            // S3 compatibility: accept unquoted alphanumeric values as strong ETags
+            // Many S3 clients (boto3, AWS Java SDK, etc.) send unquoted ETag values
+            // Only accept clean alphanumeric values (typical MD5 hashes or multipart ETags)
+            val if Self::is_valid_unquoted_etag(val) => {
+                let val = str::from_ascii_simd(val).map_err(|_| ParseETagError::InvalidChar)?;
+                Ok(ETag::Strong(val.to_owned()))
             }
             _ => Err(ParseETagError::InvalidFormat),
         }
@@ -288,40 +314,85 @@ mod tests {
 
     #[test]
     fn parse_invalid_format_cases() {
-        let cases: &[&[u8]] = &[
-            b"",
-            b"abc",
-            b"\"unclosed",
-            b"W/\"unclosed",
-            b"W/xyz",      // 缺少引号
-            b"\"abc\"x",   // 尾随字符
-            b"W/\"abc\"x", // 尾随字符
-        ];
-        for &c in cases {
-            let err = ETag::parse_http_header(c).unwrap_err();
-            assert!(matches!(err, ParseETagError::InvalidFormat), "case={c:?}");
-        }
+        // Empty string should return InvalidFormat
+        let err = ETag::parse_http_header(b"").unwrap_err();
+        assert!(matches!(err, ParseETagError::InvalidFormat));
+
+        // Malformed quoted values should return InvalidFormat
+        let err = ETag::parse_http_header(b"\"unclosed").unwrap_err();
+        assert!(matches!(err, ParseETagError::InvalidFormat));
+
+        let err = ETag::parse_http_header(b"W/\"unclosed").unwrap_err();
+        assert!(matches!(err, ParseETagError::InvalidFormat));
+
+        let err = ETag::parse_http_header(b"W/xyz").unwrap_err();
+        assert!(matches!(err, ParseETagError::InvalidFormat));
+
+        let err = ETag::parse_http_header(b"\"abc\"x").unwrap_err();
+        assert!(matches!(err, ParseETagError::InvalidFormat));
+
+        let err = ETag::parse_http_header(b"W/\"abc\"x").unwrap_err();
+        assert!(matches!(err, ParseETagError::InvalidFormat));
+
+        // Special characters not allowed in unquoted values
+        let err = ETag::parse_http_header(b"**").unwrap_err();
+        assert!(matches!(err, ParseETagError::InvalidFormat));
+
+        let err = ETag::parse_http_header(b"* ").unwrap_err();
+        assert!(matches!(err, ParseETagError::InvalidFormat));
+    }
+
+    #[test]
+    fn parse_unquoted_strong_etag() {
+        // For S3 compatibility, alphanumeric unquoted values should be accepted as strong ETags
+        let etag = ETag::parse_http_header(b"abc").expect("parse unquoted");
+        assert_eq!(etag.as_strong(), Some("abc"));
+
+        let etag = ETag::parse_http_header(b"ABCORZ").expect("parse unquoted etag");
+        assert_eq!(etag.as_strong(), Some("ABCORZ"));
+
+        // Typical MD5 hash format
+        let etag = ETag::parse_http_header(b"4fcec74691ff529f6d016ec3629ff11b").expect("parse unquoted md5");
+        assert_eq!(etag.as_strong(), Some("4fcec74691ff529f6d016ec3629ff11b"));
+
+        // Multipart upload ETag format (hash-partcount)
+        let etag = ETag::parse_http_header(b"4fcec74691ff529f6d016ec3629ff11b-5").expect("parse multipart etag");
+        assert_eq!(etag.as_strong(), Some("4fcec74691ff529f6d016ec3629ff11b-5"));
     }
 
     #[test]
     fn parse_invalid_char_cases() {
-        // 含有换行/回车
+        // Contains newline/carriage return (quoted)
         let err = ETag::parse_http_header(b"\"a\nb\"").unwrap_err();
         assert!(matches!(err, ParseETagError::InvalidChar));
 
         let err = ETag::parse_http_header(b"W/\"a\rb\"").unwrap_err();
         assert!(matches!(err, ParseETagError::InvalidChar));
 
-        // 含有 DEL(0x7f)
+        // Contains DEL (0x7f) (quoted)
         let err = ETag::parse_http_header(b"\"a\x7fb\"").unwrap_err();
         assert!(matches!(err, ParseETagError::InvalidChar));
 
         let err = ETag::parse_http_header(b"W/\"a\x7fb\"").unwrap_err();
         assert!(matches!(err, ParseETagError::InvalidChar));
 
-        // 含有非 ASCII（触发 from_ascii_simd 错误）
+        // Contains non-ASCII (triggers from_ascii_simd error) (quoted)
         let err = ETag::parse_http_header(b"\"a\xc2\xb5b\"").unwrap_err(); // µ
         assert!(matches!(err, ParseETagError::InvalidChar));
+
+        // Invalid chars in unquoted values result in InvalidFormat
+        // (since they don't match alphanumeric pattern)
+        let err = ETag::parse_http_header(b"a\nb").unwrap_err();
+        assert!(matches!(err, ParseETagError::InvalidFormat));
+
+        let err = ETag::parse_http_header(b"a\rb").unwrap_err();
+        assert!(matches!(err, ParseETagError::InvalidFormat));
+
+        let err = ETag::parse_http_header(b"a\x7fb").unwrap_err();
+        assert!(matches!(err, ParseETagError::InvalidFormat));
+
+        let err = ETag::parse_http_header(b"a\xc2\xb5b").unwrap_err(); // µ
+        assert!(matches!(err, ParseETagError::InvalidFormat));
     }
 
     #[test]
@@ -366,9 +437,9 @@ mod tests {
         let e: ETag = "W/\"xyz\"".parse().expect("parse weak from str");
         assert_eq!(e.as_weak(), Some("xyz"));
 
-        // invalid format via FromStr
-        let err = "abc".parse::<ETag>().unwrap_err();
-        assert!(matches!(err, ParseETagError::InvalidFormat));
+        // unquoted ETag via FromStr (S3 compatibility)
+        let e: ETag = "abc".parse().expect("parse unquoted from str");
+        assert_eq!(e.as_strong(), Some("abc"));
     }
 
     #[test]
