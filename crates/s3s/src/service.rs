@@ -10,6 +10,7 @@ use crate::{HttpError, HttpRequest, HttpResponse};
 use std::fmt;
 use std::sync::Arc;
 
+use bytes::Bytes;
 use futures::future::BoxFuture;
 use tracing::{debug, error};
 
@@ -166,6 +167,61 @@ impl tower::Service<http::Request<hyper::body::Incoming>> for S3Service {
     fn call(&mut self, req: http::Request<hyper::body::Incoming>) -> Self::Future {
         let req = req.map(Body::from);
         let service = self.clone();
+        Box::pin(service.call_owned(req))
+    }
+}
+
+/// A wrapper around `S3Service` that accepts any body type implementing `http_body::Body`.
+///
+/// This is useful for integrating with frameworks like Axum that use their own body types.
+///
+/// # Example
+///
+/// ```ignore
+/// use s3s::service::{S3ServiceBuilder, SharedS3Service};
+///
+/// let s3_service = S3ServiceBuilder::new(your_s3_impl).build();
+/// let shared_service = SharedS3Service::from(s3_service);
+///
+/// // Use with Axum
+/// let router = axum::Router::new()
+///     .route_service("/", shared_service);
+/// ```
+#[derive(Clone)]
+pub struct SharedS3Service {
+    inner: S3Service,
+}
+
+impl From<S3Service> for SharedS3Service {
+    fn from(inner: S3Service) -> Self {
+        Self { inner }
+    }
+}
+
+impl fmt::Debug for SharedS3Service {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SharedS3Service").finish_non_exhaustive()
+    }
+}
+
+impl<B> tower::Service<http::Request<B>> for SharedS3Service
+where
+    B: http_body::Body<Data = Bytes> + Send + 'static,
+    B::Error: std::error::Error + Send + Sync + 'static,
+{
+    type Response = HttpResponse;
+
+    type Error = HttpError;
+
+    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
+
+    fn poll_ready(&mut self, _cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
+        std::task::Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, req: http::Request<B>) -> Self::Future {
+        let req = req.map(Body::http_body_unsync);
+        let service = self.inner.clone();
         Box::pin(service.call_owned(req))
     }
 }
