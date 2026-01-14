@@ -61,10 +61,10 @@ impl OrderedQs {
         let mut iter = qs[lower_bound..].iter();
         let pair = iter.next()?;
 
-        if let Some(following) = iter.next() {
-            if following.0 == name {
-                return None;
-            }
+        if let Some(following) = iter.next()
+            && following.0 == name
+        {
+            return None;
         }
 
         (pair.0.as_str() == name).then_some(pair.1.as_str())

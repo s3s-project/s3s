@@ -4,7 +4,7 @@
 
 |               Toolchain               | Version |
 | :-----------------------------------: | :-----: |
-|      [Rust](https://rustup.rs/)       | ^1.86.0 |
+|      [Rust](https://rustup.rs/)       | ^1.88.0 |
 | [just](https://github.com/casey/just) |    ^1.36.0    |
 |                [uv](https://github.com/astral-sh/uv)                 |  ^0.5.0  |
 |                Docker                 |    -    |

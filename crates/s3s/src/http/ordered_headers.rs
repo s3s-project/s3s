@@ -67,10 +67,10 @@ impl<'a> OrderedHeaders<'a> {
         let mut iter = slice[lower_bound..].iter().copied();
         let pair = iter.next()?;
 
-        if let Some(following) = iter.next() {
-            if following.0 == name {
-                return None;
-            }
+        if let Some(following) = iter.next()
+            && following.0 == name
+        {
+            return None;
         }
 
         (pair.0 == name).then_some(pair)
@@ -107,10 +107,10 @@ impl<'a> OrderedHeaders<'a> {
                 headers.push(pair);
                 has_value = true;
             }
-            if !has_value {
-                if let Some(value) = on_missing(name.as_ref()) {
-                    headers.push((name.as_ref(), value));
-                }
+            if !has_value
+                && let Some(value) = on_missing(name.as_ref())
+            {
+                headers.push((name.as_ref(), value));
             }
         }
         Self { headers }

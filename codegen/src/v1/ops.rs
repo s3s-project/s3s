@@ -1068,10 +1068,9 @@ fn codegen_router(ops: &Operations, rust_types: &RustTypes) {
                             }
 
                             if qs.is_empty().not() {
-                                g!("if let Some(qs) = qs {{");
-                                g!("if {cond} {{");
+                                g!("if let Some(qs) = qs");
+                                g!("    && {cond} {{");
                                 succ(route, true);
-                                g!("}}");
                                 g!("}}");
                             } else {
                                 g!("if {cond} {{");

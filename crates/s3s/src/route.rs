@@ -34,12 +34,11 @@ mod tests {
     #[async_trait::async_trait]
     impl S3Route for AssumeRole {
         fn is_match(&self, method: &Method, uri: &Uri, headers: &HeaderMap, _: &mut Extensions) -> bool {
-            if method == Method::POST && uri.path() == "/" {
-                if let Some(val) = headers.get(header::CONTENT_TYPE) {
-                    if val.as_bytes() == b"application/x-www-form-urlencoded" {
-                        return true;
-                    }
-                }
+            if method == Method::POST && uri.path() == "/"
+                && let Some(val) = headers.get(header::CONTENT_TYPE)
+                && val.as_bytes() == b"application/x-www-form-urlencoded"
+            {
+                return true;
             }
             false
         }

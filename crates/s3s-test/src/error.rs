@@ -18,10 +18,10 @@ where
             eprintln!("Backtrace:");
             backtrace::trace(|frame| {
                 backtrace::resolve_frame(frame, |symbol| {
-                    if let (Some(name), Some(filename), Some(colno)) = (symbol.name(), symbol.filename(), symbol.colno()) {
-                        if filename.components().any(|c| c.as_os_str().to_str() == Some("s3s")) {
-                            eprintln!("{name}\n  at {}:{colno}\n", filename.display());
-                        }
+                    if let (Some(name), Some(filename), Some(colno)) = (symbol.name(), symbol.filename(), symbol.colno())
+                        && filename.components().any(|c| c.as_os_str().to_str() == Some("s3s"))
+                    {
+                        eprintln!("{name}\n  at {}:{colno}\n", filename.display());
                     }
                 });
                 true

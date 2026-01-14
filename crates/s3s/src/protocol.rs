@@ -64,10 +64,10 @@ impl TrailingHeaders {
 
     /// Read the trailing headers if available, without taking them.
     pub fn read<R>(&self, f: impl FnOnce(&HeaderMap) -> R) -> Option<R> {
-        if let Ok(guard) = self.0.lock() {
-            if let Some(ref headers) = *guard {
-                return Some(f(headers));
-            }
+        if let Ok(guard) = self.0.lock()
+            && let Some(ref headers) = *guard
+        {
+            return Some(f(headers));
         }
         None
     }

@@ -264,17 +264,17 @@ fn aws_ty_path(name: &str, ops: &Operations, rust_types: &RustTypes) -> String {
     let aws_name = aws_ty_name(name);
 
     for suffix in ["Input", "Output", "Error"] {
-        if let Some(op_name) = name.strip_suffix(suffix) {
-            if ops.contains_key(op_name) {
-                return f!("aws_sdk_s3::operation::{}::{aws_name}", op_name.to_snake_case());
-            }
+        if let Some(op_name) = name.strip_suffix(suffix)
+            && ops.contains_key(op_name)
+        {
+            return f!("aws_sdk_s3::operation::{}::{aws_name}", op_name.to_snake_case());
         }
     }
 
-    if let Some(rust::Type::Struct(ty)) = rust_types.get(name) {
-        if ty.is_error_type {
-            return f!("aws_sdk_s3::types::error::{aws_name}");
-        }
+    if let Some(rust::Type::Struct(ty)) = rust_types.get(name)
+        && ty.is_error_type
+    {
+        return f!("aws_sdk_s3::types::error::{aws_name}");
     }
 
     f!("aws_sdk_s3::types::{aws_name}")
