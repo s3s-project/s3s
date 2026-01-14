@@ -60,7 +60,6 @@ pub trait S3Config: Send + Sync + 'static {
 /// Static configuration.
 ///
 /// Contains configurable parameters for the S3 service with sensible defaults.
-/// This wrapper provides a cheap clone operation by using `Arc` internally.
 /// The configuration is immutable after creation.
 ///
 /// # Example
@@ -69,7 +68,7 @@ pub trait S3Config: Send + Sync + 'static {
 ///
 /// let config = StaticConfig::new()
 ///     .with_max_xml_body_size(10 * 1024 * 1024);
-/// let cloned = config.clone(); // Cheap clone (Arc clone)
+/// let cloned = config.clone();
 ///
 /// // Access configuration via trait methods
 /// let max_size = config.max_xml_body_size();
