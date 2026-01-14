@@ -82,7 +82,8 @@ pub const X_AMZ_CHECKSUM_SHA256: HeaderName = HeaderName::from_static("x-amz-che
 
 pub const X_AMZ_CHECKSUM_TYPE: HeaderName = HeaderName::from_static("x-amz-checksum-type");
 
-pub const X_AMZ_CONFIRM_REMOVE_SELF_BUCKET_ACCESS: HeaderName = HeaderName::from_static("x-amz-confirm-remove-self-bucket-access");
+pub const X_AMZ_CONFIRM_REMOVE_SELF_BUCKET_ACCESS: HeaderName =
+    HeaderName::from_static("x-amz-confirm-remove-self-bucket-access");
 
 pub const X_AMZ_CONTENT_SHA256: HeaderName = HeaderName::from_static("x-amz-content-sha256");
 
@@ -98,11 +99,14 @@ pub const X_AMZ_COPY_SOURCE_IF_UNMODIFIED_SINCE: HeaderName = HeaderName::from_s
 
 pub const X_AMZ_COPY_SOURCE_RANGE: HeaderName = HeaderName::from_static("x-amz-copy-source-range");
 
-pub const X_AMZ_COPY_SOURCE_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM: HeaderName = HeaderName::from_static("x-amz-copy-source-server-side-encryption-customer-algorithm");
+pub const X_AMZ_COPY_SOURCE_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM: HeaderName =
+    HeaderName::from_static("x-amz-copy-source-server-side-encryption-customer-algorithm");
 
-pub const X_AMZ_COPY_SOURCE_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY: HeaderName = HeaderName::from_static("x-amz-copy-source-server-side-encryption-customer-key");
+pub const X_AMZ_COPY_SOURCE_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY: HeaderName =
+    HeaderName::from_static("x-amz-copy-source-server-side-encryption-customer-key");
 
-pub const X_AMZ_COPY_SOURCE_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5: HeaderName = HeaderName::from_static("x-amz-copy-source-server-side-encryption-customer-key-md5");
+pub const X_AMZ_COPY_SOURCE_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5: HeaderName =
+    HeaderName::from_static("x-amz-copy-source-server-side-encryption-customer-key-md5");
 
 pub const X_AMZ_COPY_SOURCE_VERSION_ID: HeaderName = HeaderName::from_static("x-amz-copy-source-version-id");
 
@@ -146,7 +150,8 @@ pub const X_AMZ_FWD_HEADER_X_AMZ_CHECKSUM_CRC32: HeaderName = HeaderName::from_s
 
 pub const X_AMZ_FWD_HEADER_X_AMZ_CHECKSUM_CRC32C: HeaderName = HeaderName::from_static("x-amz-fwd-header-x-amz-checksum-crc32c");
 
-pub const X_AMZ_FWD_HEADER_X_AMZ_CHECKSUM_CRC64NVME: HeaderName = HeaderName::from_static("x-amz-fwd-header-x-amz-checksum-crc64nvme");
+pub const X_AMZ_FWD_HEADER_X_AMZ_CHECKSUM_CRC64NVME: HeaderName =
+    HeaderName::from_static("x-amz-fwd-header-x-amz-checksum-crc64nvme");
 
 pub const X_AMZ_FWD_HEADER_X_AMZ_CHECKSUM_SHA1: HeaderName = HeaderName::from_static("x-amz-fwd-header-x-amz-checksum-sha1");
 
@@ -160,27 +165,36 @@ pub const X_AMZ_FWD_HEADER_X_AMZ_MISSING_META: HeaderName = HeaderName::from_sta
 
 pub const X_AMZ_FWD_HEADER_X_AMZ_MP_PARTS_COUNT: HeaderName = HeaderName::from_static("x-amz-fwd-header-x-amz-mp-parts-count");
 
-pub const X_AMZ_FWD_HEADER_X_AMZ_OBJECT_LOCK_LEGAL_HOLD: HeaderName = HeaderName::from_static("x-amz-fwd-header-x-amz-object-lock-legal-hold");
+pub const X_AMZ_FWD_HEADER_X_AMZ_OBJECT_LOCK_LEGAL_HOLD: HeaderName =
+    HeaderName::from_static("x-amz-fwd-header-x-amz-object-lock-legal-hold");
 
-pub const X_AMZ_FWD_HEADER_X_AMZ_OBJECT_LOCK_MODE: HeaderName = HeaderName::from_static("x-amz-fwd-header-x-amz-object-lock-mode");
+pub const X_AMZ_FWD_HEADER_X_AMZ_OBJECT_LOCK_MODE: HeaderName =
+    HeaderName::from_static("x-amz-fwd-header-x-amz-object-lock-mode");
 
-pub const X_AMZ_FWD_HEADER_X_AMZ_OBJECT_LOCK_RETAIN_UNTIL_DATE: HeaderName = HeaderName::from_static("x-amz-fwd-header-x-amz-object-lock-retain-until-date");
+pub const X_AMZ_FWD_HEADER_X_AMZ_OBJECT_LOCK_RETAIN_UNTIL_DATE: HeaderName =
+    HeaderName::from_static("x-amz-fwd-header-x-amz-object-lock-retain-until-date");
 
-pub const X_AMZ_FWD_HEADER_X_AMZ_REPLICATION_STATUS: HeaderName = HeaderName::from_static("x-amz-fwd-header-x-amz-replication-status");
+pub const X_AMZ_FWD_HEADER_X_AMZ_REPLICATION_STATUS: HeaderName =
+    HeaderName::from_static("x-amz-fwd-header-x-amz-replication-status");
 
 pub const X_AMZ_FWD_HEADER_X_AMZ_REQUEST_CHARGED: HeaderName = HeaderName::from_static("x-amz-fwd-header-x-amz-request-charged");
 
 pub const X_AMZ_FWD_HEADER_X_AMZ_RESTORE: HeaderName = HeaderName::from_static("x-amz-fwd-header-x-amz-restore");
 
-pub const X_AMZ_FWD_HEADER_X_AMZ_SERVER_SIDE_ENCRYPTION: HeaderName = HeaderName::from_static("x-amz-fwd-header-x-amz-server-side-encryption");
+pub const X_AMZ_FWD_HEADER_X_AMZ_SERVER_SIDE_ENCRYPTION: HeaderName =
+    HeaderName::from_static("x-amz-fwd-header-x-amz-server-side-encryption");
 
-pub const X_AMZ_FWD_HEADER_X_AMZ_SERVER_SIDE_ENCRYPTION_AWS_KMS_KEY_ID: HeaderName = HeaderName::from_static("x-amz-fwd-header-x-amz-server-side-encryption-aws-kms-key-id");
+pub const X_AMZ_FWD_HEADER_X_AMZ_SERVER_SIDE_ENCRYPTION_AWS_KMS_KEY_ID: HeaderName =
+    HeaderName::from_static("x-amz-fwd-header-x-amz-server-side-encryption-aws-kms-key-id");
 
-pub const X_AMZ_FWD_HEADER_X_AMZ_SERVER_SIDE_ENCRYPTION_BUCKET_KEY_ENABLED: HeaderName = HeaderName::from_static("x-amz-fwd-header-x-amz-server-side-encryption-bucket-key-enabled");
+pub const X_AMZ_FWD_HEADER_X_AMZ_SERVER_SIDE_ENCRYPTION_BUCKET_KEY_ENABLED: HeaderName =
+    HeaderName::from_static("x-amz-fwd-header-x-amz-server-side-encryption-bucket-key-enabled");
 
-pub const X_AMZ_FWD_HEADER_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM: HeaderName = HeaderName::from_static("x-amz-fwd-header-x-amz-server-side-encryption-customer-algorithm");
+pub const X_AMZ_FWD_HEADER_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM: HeaderName =
+    HeaderName::from_static("x-amz-fwd-header-x-amz-server-side-encryption-customer-algorithm");
 
-pub const X_AMZ_FWD_HEADER_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5: HeaderName = HeaderName::from_static("x-amz-fwd-header-x-amz-server-side-encryption-customer-key-md5");
+pub const X_AMZ_FWD_HEADER_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5: HeaderName =
+    HeaderName::from_static("x-amz-fwd-header-x-amz-server-side-encryption-customer-key-md5");
 
 pub const X_AMZ_FWD_HEADER_X_AMZ_STORAGE_CLASS: HeaderName = HeaderName::from_static("x-amz-fwd-header-x-amz-storage-class");
 
@@ -256,17 +270,22 @@ pub const X_AMZ_SDK_CHECKSUM_ALGORITHM: HeaderName = HeaderName::from_static("x-
 
 pub const X_AMZ_SERVER_SIDE_ENCRYPTION: HeaderName = HeaderName::from_static("x-amz-server-side-encryption");
 
-pub const X_AMZ_SERVER_SIDE_ENCRYPTION_AWS_KMS_KEY_ID: HeaderName = HeaderName::from_static("x-amz-server-side-encryption-aws-kms-key-id");
+pub const X_AMZ_SERVER_SIDE_ENCRYPTION_AWS_KMS_KEY_ID: HeaderName =
+    HeaderName::from_static("x-amz-server-side-encryption-aws-kms-key-id");
 
-pub const X_AMZ_SERVER_SIDE_ENCRYPTION_BUCKET_KEY_ENABLED: HeaderName = HeaderName::from_static("x-amz-server-side-encryption-bucket-key-enabled");
+pub const X_AMZ_SERVER_SIDE_ENCRYPTION_BUCKET_KEY_ENABLED: HeaderName =
+    HeaderName::from_static("x-amz-server-side-encryption-bucket-key-enabled");
 
 pub const X_AMZ_SERVER_SIDE_ENCRYPTION_CONTEXT: HeaderName = HeaderName::from_static("x-amz-server-side-encryption-context");
 
-pub const X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM: HeaderName = HeaderName::from_static("x-amz-server-side-encryption-customer-algorithm");
+pub const X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM: HeaderName =
+    HeaderName::from_static("x-amz-server-side-encryption-customer-algorithm");
 
-pub const X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY: HeaderName = HeaderName::from_static("x-amz-server-side-encryption-customer-key");
+pub const X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY: HeaderName =
+    HeaderName::from_static("x-amz-server-side-encryption-customer-key");
 
-pub const X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5: HeaderName = HeaderName::from_static("x-amz-server-side-encryption-customer-key-md5");
+pub const X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5: HeaderName =
+    HeaderName::from_static("x-amz-server-side-encryption-customer-key-md5");
 
 pub const X_AMZ_SKIP_DESTINATION_VALIDATION: HeaderName = HeaderName::from_static("x-amz-skip-destination-validation");
 
@@ -280,11 +299,11 @@ pub const X_AMZ_TAGGING_COUNT: HeaderName = HeaderName::from_static("x-amz-taggi
 
 pub const X_AMZ_TAGGING_DIRECTIVE: HeaderName = HeaderName::from_static("x-amz-tagging-directive");
 
-pub const X_AMZ_TRANSITION_DEFAULT_MINIMUM_OBJECT_SIZE: HeaderName = HeaderName::from_static("x-amz-transition-default-minimum-object-size");
+pub const X_AMZ_TRANSITION_DEFAULT_MINIMUM_OBJECT_SIZE: HeaderName =
+    HeaderName::from_static("x-amz-transition-default-minimum-object-size");
 
 pub const X_AMZ_VERSION_ID: HeaderName = HeaderName::from_static("x-amz-version-id");
 
 pub const X_AMZ_WEBSITE_REDIRECT_LOCATION: HeaderName = HeaderName::from_static("x-amz-website-redirect-location");
 
 pub const X_AMZ_WRITE_OFFSET_BYTES: HeaderName = HeaderName::from_static("x-amz-write-offset-bytes");
-

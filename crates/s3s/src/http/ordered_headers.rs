@@ -107,9 +107,7 @@ impl<'a> OrderedHeaders<'a> {
                 headers.push(pair);
                 has_value = true;
             }
-            if !has_value
-                && let Some(value) = on_missing(name.as_ref())
-            {
+            if !has_value && let Some(value) = on_missing(name.as_ref()) {
                 headers.push((name.as_ref(), value));
             }
         }

@@ -96,7 +96,8 @@ impl SignatureContext<'_> {
     pub async fn check(&mut self) -> S3Result<Option<CredentialsExt>> {
         if self.req_method == Method::POST
             && let Some(ref mime) = self.mime
-            && mime.type_() == mime::MULTIPART && mime.subtype() == mime::FORM_DATA
+            && mime.type_() == mime::MULTIPART
+            && mime.subtype() == mime::FORM_DATA
         {
             return Ok(Some(self.check_post_signature().await?));
         }
@@ -267,7 +268,8 @@ impl SignatureContext<'_> {
                 // HTTP/2 replaces `host` header with `:authority`
                 // but `:authority` is not in the request headers
                 // so we need to add it back if `host` is in the signed headers
-                if name == "host" && matches!(self.req_version, ::http::Version::HTTP_2 | ::http::Version::HTTP_3)
+                if name == "host"
+                    && matches!(self.req_version, ::http::Version::HTTP_2 | ::http::Version::HTTP_3)
                     && let Some(authority) = self.req_uri.authority()
                 {
                     return Some(authority.as_str());
@@ -344,7 +346,8 @@ impl SignatureContext<'_> {
                 // HTTP/2 replaces `host` header with `:authority`
                 // but `:authority` is not in the request headers
                 // so we need to add it back if `host` is in the signed headers
-                if name == "host" && self.req_version == ::http::Version::HTTP_2
+                if name == "host"
+                    && self.req_version == ::http::Version::HTTP_2
                     && let Some(authority) = self.req_uri.authority()
                 {
                     return Some(authority.as_str());
