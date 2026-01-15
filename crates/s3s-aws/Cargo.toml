@@ -1,6 +1,6 @@
 [package]
 name = "s3s-aws"
-version = "0.13.0-alpha.1"
+version = "0.13.0-alpha.2"
 description = "S3 service adapter integrated with aws-sdk-s3"
 readme = "../../README.md"
 keywords = ["s3"]
@@ -23,7 +23,7 @@ aws-smithy-runtime-api = { workspace = true, features = ["client", "http-1x"] }
 aws-smithy-types = { workspace = true, features = ["http-body-1-x"] }
 aws-smithy-types-convert = { workspace = true, features = ["convert-time"] }
 hyper = "1.8.1"
-s3s = { version = "0.13.0-alpha.1", path = "../s3s", default-features = false }
+s3s = { version = "0.13.0-alpha.2", path = "../s3s", default-features = false }
 std-next = "0.1.9"
 sync_wrapper = "1.0.2"
 tracing = "0.1.44"

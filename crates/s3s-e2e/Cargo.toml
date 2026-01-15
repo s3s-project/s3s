@@ -1,6 +1,6 @@
 [package]
 name = "s3s-e2e"
-version = "0.13.0-alpha.1"
+version = "0.13.0-alpha.2"
 description = "s3s test suite"
 readme = "../../README.md"
 keywords = ["s3"]
@@ -14,7 +14,7 @@ rust-version.workspace = true
 workspace = true
 
 [dependencies]
-s3s-test = { version = "0.13.0-alpha.1", path = "../s3s-test" }
+s3s-test = { version = "0.13.0-alpha.2", path = "../s3s-test" }
 tracing = "0.1.44"
 aws-config = { workspace = true, features = ["behavior-version-latest"] }
 aws-credential-types.workspace = true
@@ -29,4 +29,4 @@ base64-simd = "0.8.0"
 reqwest = { version = "0.12.28", default-features = false, features = ["rustls-tls"] }
 
 [build-dependencies]
-s3s-test = { version = "0.13.0-alpha.1", path = "../s3s-test" }
+s3s-test = { version = "0.13.0-alpha.2", path = "../s3s-test" }

@@ -1,6 +1,6 @@
 [package]
 name = "s3s"
-version = "0.13.0-alpha.1"
+version = "0.13.0-alpha.2"
 description = "S3 Service Adapter"
 readme = "../../README.md"
 keywords = ["s3"]
