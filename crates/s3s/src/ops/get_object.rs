@@ -50,9 +50,9 @@ pub fn merge_custom_headers(resp: &mut Response, headers: HeaderMap) {
     resp.headers.extend(headers);
 
     // special case for https://github.com/Nugine/s3s/issues/80
-    if let Some(val) = resp.headers.get(TRANSFER_ENCODING) {
-        if val.as_bytes() == b"chunked" {
-            resp.headers.remove(CONTENT_LENGTH);
-        }
+    if let Some(val) = resp.headers.get(TRANSFER_ENCODING)
+        && val.as_bytes() == b"chunked"
+    {
+        resp.headers.remove(CONTENT_LENGTH);
     }
 }

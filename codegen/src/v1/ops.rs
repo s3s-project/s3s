@@ -138,6 +138,7 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
         "#![allow(clippy::borrow_interior_mutable_const)]",
         "#![allow(clippy::needless_pass_by_value)]",
         "#![allow(clippy::too_many_lines)]",
+        "#![allow(clippy::collapsible_if)]",
         "#![allow(clippy::unnecessary_wraps)]",
         "",
         "use crate::dto::*;",
@@ -1068,10 +1069,9 @@ fn codegen_router(ops: &Operations, rust_types: &RustTypes) {
                             }
 
                             if qs.is_empty().not() {
-                                g!("if let Some(qs) = qs {{");
-                                g!("if {cond} {{");
+                                g!("if let Some(qs) = qs");
+                                g!("    && {cond} {{");
                                 succ(route, true);
-                                g!("}}");
                                 g!("}}");
                             } else {
                                 g!("if {cond} {{");

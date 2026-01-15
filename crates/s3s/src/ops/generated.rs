@@ -101,6 +101,7 @@
 #![allow(clippy::borrow_interior_mutable_const)]
 #![allow(clippy::needless_pass_by_value)]
 #![allow(clippy::too_many_lines)]
+#![allow(clippy::collapsible_if)]
 #![allow(clippy::unnecessary_wraps)]
 
 use crate::dto::*;
@@ -6676,10 +6677,10 @@ pub fn resolve_route(
                         return Ok((&GetObjectTorrent as &'static dyn super::Operation, false));
                     }
                 }
-                if let Some(qs) = qs {
-                    if qs.has("uploadId") {
-                        return Ok((&ListParts as &'static dyn super::Operation, false));
-                    }
+                if let Some(qs) = qs
+                    && qs.has("uploadId")
+                {
+                    return Ok((&ListParts as &'static dyn super::Operation, false));
                 }
                 Ok((&GetObject as &'static dyn super::Operation, false))
             }
@@ -6712,10 +6713,10 @@ pub fn resolve_route(
                         return Ok((&RestoreObject as &'static dyn super::Operation, true));
                     }
                 }
-                if let Some(qs) = qs {
-                    if qs.has("uploadId") {
-                        return Ok((&CompleteMultipartUpload as &'static dyn super::Operation, true));
-                    }
+                if let Some(qs) = qs
+                    && qs.has("uploadId")
+                {
+                    return Ok((&CompleteMultipartUpload as &'static dyn super::Operation, true));
                 }
                 Err(super::unknown_operation())
             }
@@ -6802,15 +6803,18 @@ pub fn resolve_route(
                         return Ok((&PutObjectTagging as &'static dyn super::Operation, true));
                     }
                 }
-                if let Some(qs) = qs {
-                    if qs.has("partNumber") && qs.has("uploadId") && req.headers.contains_key("x-amz-copy-source") {
-                        return Ok((&UploadPartCopy as &'static dyn super::Operation, false));
-                    }
+                if let Some(qs) = qs
+                    && qs.has("partNumber")
+                    && qs.has("uploadId")
+                    && req.headers.contains_key("x-amz-copy-source")
+                {
+                    return Ok((&UploadPartCopy as &'static dyn super::Operation, false));
                 }
-                if let Some(qs) = qs {
-                    if qs.has("partNumber") && qs.has("uploadId") {
-                        return Ok((&UploadPart as &'static dyn super::Operation, false));
-                    }
+                if let Some(qs) = qs
+                    && qs.has("partNumber")
+                    && qs.has("uploadId")
+                {
+                    return Ok((&UploadPart as &'static dyn super::Operation, false));
                 }
                 if req.headers.contains_key("x-amz-copy-source") {
                     return Ok((&CopyObject as &'static dyn super::Operation, false));
@@ -6873,10 +6877,10 @@ pub fn resolve_route(
                         return Ok((&DeleteObjectTagging as &'static dyn super::Operation, false));
                     }
                 }
-                if let Some(qs) = qs {
-                    if qs.has("uploadId") {
-                        return Ok((&AbortMultipartUpload as &'static dyn super::Operation, false));
-                    }
+                if let Some(qs) = qs
+                    && qs.has("uploadId")
+                {
+                    return Ok((&AbortMultipartUpload as &'static dyn super::Operation, false));
                 }
                 Ok((&DeleteObject as &'static dyn super::Operation, false))
             }

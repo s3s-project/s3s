@@ -20,12 +20,11 @@ pub fn check<T, E>(result: Result<T, SdkError<E>>, allowed_codes: &[&str]) -> Re
 where
     E: fmt::Debug + ProvideErrorMetadata,
 {
-    if let Err(SdkError::ServiceError(ref err)) = result {
-        if let Some(code) = err.err().code() {
-            if allowed_codes.contains(&code) {
-                return Ok(None);
-            }
-        }
+    if let Err(SdkError::ServiceError(ref err)) = result
+        && let Some(code) = err.err().code()
+        && allowed_codes.contains(&code)
+    {
+        return Ok(None);
     }
     if let Err(ref err) = result {
         error!(?err);

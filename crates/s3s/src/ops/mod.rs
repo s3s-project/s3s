@@ -105,10 +105,10 @@ fn unknown_operation() -> S3Error {
 }
 
 fn extract_http2_authority(req: &Request) -> Option<&str> {
-    if matches!(req.version, ::http::Version::HTTP_2 | ::http::Version::HTTP_3) {
-        if let Some(authority) = req.uri.authority() {
-            return Some(authority.as_str());
-        }
+    if matches!(req.version, ::http::Version::HTTP_2 | ::http::Version::HTTP_3)
+        && let Some(authority) = req.uri.authority()
+    {
+        return Some(authority.as_str());
     }
     None
 }
@@ -290,20 +290,20 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
             let validation = ccx.validation.unwrap_or(default_validation);
 
             let result = 'parse: {
-                if let (Some(host_header), Some(s3_host)) = (host_header.as_deref(), ccx.host) {
-                    if !is_socket_addr_or_ip_addr(host_header) {
-                        debug!(?host_header, ?decoded_uri_path, "parsing virtual-hosted-style request");
+                if let (Some(host_header), Some(s3_host)) = (host_header.as_deref(), ccx.host)
+                    && !is_socket_addr_or_ip_addr(host_header)
+                {
+                    debug!(?host_header, ?decoded_uri_path, "parsing virtual-hosted-style request");
 
-                        vh = s3_host.parse_host_header(host_header)?;
-                        debug!(?vh);
+                    vh = s3_host.parse_host_header(host_header)?;
+                    debug!(?vh);
 
-                        vh_bucket = vh.bucket();
-                        break 'parse crate::path::parse_virtual_hosted_style_with_validation(
-                            vh_bucket,
-                            &decoded_uri_path,
-                            validation,
-                        );
-                    }
+                    vh_bucket = vh.bucket();
+                    break 'parse crate::path::parse_virtual_hosted_style_with_validation(
+                        vh_bucket,
+                        &decoded_uri_path,
+                        validation,
+                    );
                 }
 
                 debug!(?decoded_uri_path, "parsing path-style request");
@@ -388,45 +388,44 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
         debug!(?body_changed, ?decoded_content_length, ?has_multipart);
     }
 
-    if let Some(route) = ccx.route {
-        if route.is_match(&req.method, &req.uri, &req.headers, &mut req.extensions) {
-            return Ok(Prepare::CustomRoute);
-        }
+    if let Some(route) = ccx.route
+        && route.is_match(&req.method, &req.uri, &req.headers, &mut req.extensions)
+    {
+        return Ok(Prepare::CustomRoute);
     }
 
     let (op, needs_full_body) = 'resolve: {
-        if let Some(multipart) = &mut req.s3ext.multipart {
-            if req.method == Method::POST {
-                match s3_path {
-                    S3Path::Root => return Err(unknown_operation()),
-                    S3Path::Bucket { .. } => {
-                        // POST object
-                        debug!(?multipart);
-                        let file_stream = multipart.take_file_stream().expect("missing file stream");
-                        // Aggregate file stream with size limit to get known length
-                        // This is required because downstream handlers (like s3s-proxy) need content-length
-                        let vec_bytes = http::aggregate_file_stream_limited(file_stream, http::MAX_POST_OBJECT_FILE_SIZE)
-                            .await
-                            .map_err(|e| invalid_request!(e, "failed to read file stream"))?;
-                        let vec_stream = crate::stream::VecByteStream::new(vec_bytes);
-                        req.s3ext.vec_stream = Some(vec_stream);
-                        break 'resolve (&PutObject as &'static dyn Operation, false);
-                    }
-                    // FIXME: POST /bucket/key hits this branch
-                    S3Path::Object { .. } => return Err(s3_error!(MethodNotAllowed)),
+        if let Some(multipart) = &mut req.s3ext.multipart
+            && req.method == Method::POST
+        {
+            match s3_path {
+                S3Path::Root => return Err(unknown_operation()),
+                S3Path::Bucket { .. } => {
+                    // POST object
+                    debug!(?multipart);
+                    let file_stream = multipart.take_file_stream().expect("missing file stream");
+                    // Aggregate file stream with size limit to get known length
+                    // This is required because downstream handlers (like s3s-proxy) need content-length
+                    let vec_bytes = http::aggregate_file_stream_limited(file_stream, http::MAX_POST_OBJECT_FILE_SIZE)
+                        .await
+                        .map_err(|e| invalid_request!(e, "failed to read file stream"))?;
+                    let vec_stream = crate::stream::VecByteStream::new(vec_bytes);
+                    req.s3ext.vec_stream = Some(vec_stream);
+                    break 'resolve (&PutObject as &'static dyn Operation, false);
                 }
+                // FIXME: POST /bucket/key hits this branch
+                S3Path::Object { .. } => return Err(s3_error!(MethodNotAllowed)),
             }
         }
         resolve_route(req, s3_path, req.s3ext.qs.as_ref())?
     };
 
     // FIXME: hack for E2E tests (minio/mint)
-    if op.name() == "ListObjects" {
-        if let Some(qs) = req.s3ext.qs.as_ref() {
-            if qs.has("events") {
-                return Err(s3_error!(NotImplemented, "listenBucketNotification only works on MinIO"));
-            }
-        }
+    if op.name() == "ListObjects"
+        && let Some(qs) = req.s3ext.qs.as_ref()
+        && qs.has("events")
+    {
+        return Err(s3_error!(NotImplemented, "listenBucketNotification only works on MinIO"));
     }
 
     debug!(op = %op.name(), ?s3_path, "resolved route");

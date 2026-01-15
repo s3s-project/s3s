@@ -65,20 +65,20 @@ fn print_summary(report: &Report) {
                 let status = status(case.passed);
                 let duration = case.duration_ms;
                 println!("{status} {duration:>w$.3}ms [{suite_name}/{fixture_name}/{case_name}]");
-                if !case.passed {
-                    if let Some(ref run) = case.run {
-                        let hint = match run.result {
-                            FnResult::Ok => "".normal(),
-                            FnResult::Err(_) => "ERROR".red(),
-                            FnResult::Panicked => "PANICKED".red().bold(),
-                        };
-                        let msg = if let FnResult::Err(ref e) = run.result {
-                            e.as_str()
-                        } else {
-                            ""
-                        };
-                        println!("  {hint} {msg}");
-                    }
+                if !case.passed
+                    && let Some(ref run) = case.run
+                {
+                    let hint = match run.result {
+                        FnResult::Ok => "".normal(),
+                        FnResult::Err(_) => "ERROR".red(),
+                        FnResult::Panicked => "PANICKED".red().bold(),
+                    };
+                    let msg = if let FnResult::Err(ref e) = run.result {
+                        e.as_str()
+                    } else {
+                        ""
+                    };
+                    println!("  {hint} {msg}");
                 }
             }
             let status = status(fixture.case_count.all_passed());
@@ -128,11 +128,11 @@ async fn async_main(reg: impl FnOnce(&mut TestContext), opt: &Options) -> ExitCo
 
     let report = crate::runner::run(&mut tcx).await;
 
-    if let Some(ref json_path) = opt.json {
-        if let Err(err) = write_report(json_path, &report) {
-            eprintln!("Failed to write report: {err}");
-            return ExitCode::from(2);
-        }
+    if let Some(ref json_path) = opt.json
+        && let Err(err) = write_report(json_path, &report)
+    {
+        eprintln!("Failed to write report: {err}");
+        return ExitCode::from(2);
     }
 
     print_summary(&report);

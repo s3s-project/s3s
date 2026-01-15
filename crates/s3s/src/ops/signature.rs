@@ -94,12 +94,12 @@ fn require_auth(auth: Option<&dyn S3Auth>) -> S3Result<&dyn S3Auth> {
 
 impl SignatureContext<'_> {
     pub async fn check(&mut self) -> S3Result<Option<CredentialsExt>> {
-        if self.req_method == Method::POST {
-            if let Some(ref mime) = self.mime {
-                if mime.type_() == mime::MULTIPART && mime.subtype() == mime::FORM_DATA {
-                    return Ok(Some(self.check_post_signature().await?));
-                }
-            }
+        if self.req_method == Method::POST
+            && let Some(ref mime) = self.mime
+            && mime.type_() == mime::MULTIPART
+            && mime.subtype() == mime::FORM_DATA
+        {
+            return Ok(Some(self.check_post_signature().await?));
         }
 
         if let Some(result) = self.v2_check().await {
@@ -150,11 +150,11 @@ impl SignatureContext<'_> {
     #[tracing::instrument(skip(self))]
     pub async fn v4_check(&mut self) -> Option<S3Result<CredentialsExt>> {
         // query auth
-        if let Some(qs) = self.qs {
-            if qs.has("X-Amz-Signature") {
-                debug!("checking presigned url");
-                return Some(self.v4_check_presigned_url().await);
-            }
+        if let Some(qs) = self.qs
+            && qs.has("X-Amz-Signature")
+        {
+            debug!("checking presigned url");
+            return Some(self.v4_check_presigned_url().await);
         }
 
         // header auth
@@ -268,10 +268,11 @@ impl SignatureContext<'_> {
                 // HTTP/2 replaces `host` header with `:authority`
                 // but `:authority` is not in the request headers
                 // so we need to add it back if `host` is in the signed headers
-                if name == "host" && matches!(self.req_version, ::http::Version::HTTP_2 | ::http::Version::HTTP_3) {
-                    if let Some(authority) = self.req_uri.authority() {
-                        return Some(authority.as_str());
-                    }
+                if name == "host"
+                    && matches!(self.req_version, ::http::Version::HTTP_2 | ::http::Version::HTTP_3)
+                    && let Some(authority) = self.req_uri.authority()
+                {
+                    return Some(authority.as_str());
                 }
                 None
             });
@@ -345,10 +346,11 @@ impl SignatureContext<'_> {
                 // HTTP/2 replaces `host` header with `:authority`
                 // but `:authority` is not in the request headers
                 // so we need to add it back if `host` is in the signed headers
-                if name == "host" && self.req_version == ::http::Version::HTTP_2 {
-                    if let Some(authority) = self.req_uri.authority() {
-                        return Some(authority.as_str());
-                    }
+                if name == "host"
+                    && self.req_version == ::http::Version::HTTP_2
+                    && let Some(authority) = self.req_uri.authority()
+                {
+                    return Some(authority.as_str());
                 }
                 None
             });
@@ -483,19 +485,19 @@ impl SignatureContext<'_> {
     #[tracing::instrument(skip(self))]
     pub async fn v2_check(&mut self) -> Option<S3Result<CredentialsExt>> {
         // query auth
-        if let Some(qs) = self.qs {
-            if qs.has("Signature") {
-                debug!("checking presigned url");
-                return Some(self.v2_check_presigned_url().await);
-            }
+        if let Some(qs) = self.qs
+            && qs.has("Signature")
+        {
+            debug!("checking presigned url");
+            return Some(self.v2_check_presigned_url().await);
         }
 
         // header auth
-        if let Some(auth) = self.hs.get_unique(crate::header::AUTHORIZATION) {
-            if let Ok(auth) = AuthorizationV2::parse(auth) {
-                debug!("checking header auth");
-                return Some(self.v2_check_header_auth(auth).await);
-            }
+        if let Some(auth) = self.hs.get_unique(crate::header::AUTHORIZATION)
+            && let Ok(auth) = AuthorizationV2::parse(auth)
+        {
+            debug!("checking header auth");
+            return Some(self.v2_check_header_auth(auth).await);
         }
 
         None
