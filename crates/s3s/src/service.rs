@@ -16,7 +16,7 @@ use tracing::{debug, error};
 
 pub struct S3ServiceBuilder {
     s3: Arc<dyn S3>,
-    config: Arc<dyn S3Config>,
+    config: Option<Arc<dyn S3Config>>,
     host: Option<Box<dyn S3Host>>,
     auth: Option<Box<dyn S3Auth>>,
     access: Option<Box<dyn S3Access>>,
@@ -29,7 +29,7 @@ impl S3ServiceBuilder {
     pub fn new(s3: impl S3) -> Self {
         Self {
             s3: Arc::new(s3),
-            config: Arc::new(StaticConfig::default()),
+            config: None,
             host: None,
             auth: None,
             access: None,
@@ -38,8 +38,8 @@ impl S3ServiceBuilder {
         }
     }
 
-    pub fn set_config(&mut self, config: impl S3Config) {
-        self.config = Arc::new(config);
+    pub fn set_config(&mut self, config: Arc<dyn S3Config>) {
+        self.config = Some(config);
     }
 
     pub fn set_host(&mut self, host: impl S3Host) {
@@ -64,10 +64,11 @@ impl S3ServiceBuilder {
 
     #[must_use]
     pub fn build(self) -> S3Service {
+        let config = self.config.unwrap_or_else(|| Arc::new(StaticConfig::default()));
         S3Service {
             inner: Arc::new(Inner {
                 s3: self.s3,
-                config: self.config,
+                config,
                 host: self.host,
                 auth: self.auth,
                 access: self.access,
@@ -273,11 +274,11 @@ mod tests {
     fn test_service_builder_custom_config() {
         use crate::config::StaticConfig;
 
-        let custom_config = StaticConfig {
+        let custom_config: Arc<dyn crate::config::S3Config> = Arc::new(StaticConfig {
             max_xml_body_size: 10 * 1024 * 1024,
             max_post_object_file_size: 2 * 1024 * 1024 * 1024,
             ..Default::default()
-        };
+        });
 
         let mut builder = S3ServiceBuilder::new(MockS3);
         builder.set_config(custom_config);
@@ -291,7 +292,7 @@ mod tests {
     fn test_service_builder_hot_reload_config() {
         use crate::config::{HotReloadConfig, StaticConfig};
 
-        let hot_config = HotReloadConfig::new(StaticConfig::default());
+        let hot_config = Arc::new(HotReloadConfig::new(StaticConfig::default()));
 
         let mut builder = S3ServiceBuilder::new(MockS3);
         builder.set_config(hot_config.clone());

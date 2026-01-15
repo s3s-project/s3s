@@ -10,27 +10,25 @@
 //!
 //! # Example
 //! ```
+//! use std::sync::Arc;
 //! use s3s::config::{S3Config, StaticConfig, HotReloadConfig};
 //!
 //! // Using default config values
 //! let config = StaticConfig::default();
 //!
 //! // Using custom config values
-//! let config = StaticConfig {
-//!     max_xml_body_size: 10 * 1024 * 1024,
-//!     ..Default::default()
-//! };
+//! let mut config = StaticConfig::default();
+//! config.max_xml_body_size = 10 * 1024 * 1024;
 //!
 //! // Using static config
 //! let static_config = StaticConfig::default();
 //! assert_eq!(static_config.max_xml_body_size(), 20 * 1024 * 1024);
 //!
 //! // Using hot-reload config (can be updated at runtime)
-//! let hot_reload_config = HotReloadConfig::new(StaticConfig::default());
-//! hot_reload_config.update(StaticConfig {
-//!     max_xml_body_size: 10 * 1024 * 1024,
-//!     ..Default::default()
-//! });
+//! let hot_reload_config = Arc::new(HotReloadConfig::default());
+//! let mut new_config = StaticConfig::default();
+//! new_config.max_xml_body_size = 10 * 1024 * 1024;
+//! hot_reload_config.update(new_config);
 //! assert_eq!(hot_reload_config.max_xml_body_size(), 10 * 1024 * 1024);
 //! ```
 
@@ -69,16 +67,15 @@ pub trait S3Config: Send + Sync + 'static {
 /// ```
 /// use s3s::config::{S3Config, StaticConfig};
 ///
-/// let config = StaticConfig {
-///     max_xml_body_size: 10 * 1024 * 1024,
-///     ..Default::default()
-/// };
+/// let mut config = StaticConfig::default();
+/// config.max_xml_body_size = 10 * 1024 * 1024;
 ///
 /// // Access configuration via trait methods
 /// let max_size = config.max_xml_body_size();
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
+#[non_exhaustive]
 pub struct StaticConfig {
     /// Maximum size for XML body payloads in bytes.
     ///
@@ -156,25 +153,27 @@ impl S3Config for StaticConfig {
 /// This wrapper allows updating the configuration at runtime using `ArcSwap`
 /// for lock-free reads and atomic updates.
 ///
+/// Use `Arc<HotReloadConfig>` when sharing across threads.
+///
 /// # Example
 /// ```
+/// use std::sync::Arc;
 /// use s3s::config::{S3Config, StaticConfig, HotReloadConfig};
 ///
-/// let config = HotReloadConfig::new(StaticConfig::default());
+/// let config = Arc::new(HotReloadConfig::new(StaticConfig::default()));
 ///
 /// // Read configuration (lock-free)
 /// let max_size = config.max_xml_body_size();
 /// println!("Max XML body size: {}", max_size);
 ///
 /// // Update configuration at runtime (atomic swap)
-/// config.update(StaticConfig {
-///     max_xml_body_size: 10 * 1024 * 1024,
-///     ..Default::default()
-/// });
+/// let mut new_config = StaticConfig::default();
+/// new_config.max_xml_body_size = 10 * 1024 * 1024;
+/// config.update(new_config);
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct HotReloadConfig {
-    inner: Arc<ArcSwap<StaticConfig>>,
+    inner: ArcSwap<StaticConfig>,
 }
 
 impl HotReloadConfig {
@@ -182,7 +181,7 @@ impl HotReloadConfig {
     #[must_use]
     pub fn new(config: StaticConfig) -> Self {
         Self {
-            inner: Arc::new(ArcSwap::from_pointee(config)),
+            inner: ArcSwap::from_pointee(config),
         }
     }
 
@@ -300,8 +299,8 @@ mod tests {
     }
 
     #[test]
-    fn test_hot_reload_config_clone() {
-        let config = HotReloadConfig::new(StaticConfig::default());
+    fn test_hot_reload_config_arc() {
+        let config = Arc::new(HotReloadConfig::new(StaticConfig::default()));
         let cloned = config.clone();
 
         // Both should read the same value
@@ -320,7 +319,7 @@ mod tests {
 
     #[test]
     fn test_hot_reload_config_trait() {
-        let config: Box<dyn S3Config> = Box::new(HotReloadConfig::default());
+        let config: Arc<dyn S3Config> = Arc::new(HotReloadConfig::default());
         assert_eq!(config.max_xml_body_size(), 20 * 1024 * 1024);
         assert_eq!(config.max_post_object_file_size(), 5 * 1024 * 1024 * 1024);
     }
@@ -363,7 +362,7 @@ mod tests {
     #[test]
     fn test_hot_reload_in_service_layer() {
         // Test simulating how config would be used in service layer
-        let config = HotReloadConfig::new(StaticConfig::default());
+        let config = Arc::new(HotReloadConfig::new(StaticConfig::default()));
 
         // Simulate processing requests with initial config
         assert_eq!(config.max_xml_body_size(), 20 * 1024 * 1024);
