@@ -1,8 +1,9 @@
 use crate::auth::S3Auth;
 use crate::auth::SecretKey;
+use crate::config::S3Config;
 use crate::error::*;
 use crate::http;
-use crate::http::{AwsChunkedStream, Body, Multipart};
+use crate::http::{AwsChunkedStream, Body, Multipart, MultipartLimits};
 use crate::http::{OrderedHeaders, OrderedQs};
 use crate::protocol::TrailingHeaders;
 use crate::sig_v2;
@@ -18,6 +19,7 @@ use crate::utils::is_base64_encoded;
 
 use std::mem;
 use std::ops::Not;
+use std::sync::Arc;
 
 use hyper::Method;
 use hyper::Uri;
@@ -59,6 +61,7 @@ fn extract_amz_date(hs: &'_ OrderedHeaders<'_>) -> S3Result<Option<AmzDate>> {
 
 pub struct SignatureContext<'a> {
     pub auth: Option<&'a dyn S3Auth>,
+    pub config: &'a Arc<dyn S3Config>,
 
     pub req_version: ::http::Version,
     pub req_method: &'a Method,
@@ -127,7 +130,12 @@ impl SignatureContext<'_> {
                 .ok_or_else(|| invalid_request!("missing boundary"))?;
 
             let body = mem::take(self.req_body);
-            http::transform_multipart(body, boundary.as_str().as_bytes())
+            let limits = MultipartLimits {
+                max_field_size: self.config.max_form_field_size(),
+                max_fields_size: self.config.max_form_fields_size(),
+                max_parts: self.config.max_form_parts(),
+            };
+            http::transform_multipart(body, boundary.as_str().as_bytes(), limits)
                 .await
                 .map_err(|e| s3_error!(e, MalformedPOSTRequest))?
         };

@@ -329,6 +329,7 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
         {
             let mut scx = SignatureContext {
                 auth: ccx.auth,
+                config: ccx.config,
 
                 req_version: req.version,
                 req_method: &req.method,

@@ -16,22 +16,32 @@ use hyper::body::Bytes;
 use memchr::memchr_iter;
 use transform_stream::{AsyncTryStream, Yielder};
 
-/// Maximum size per form field (1 MB)
-/// This prevents `DoS` attacks via oversized individual fields
-const MAX_FORM_FIELD_SIZE: usize = 1024 * 1024;
-
-/// Maximum total size for all form fields combined (20 MB)
-/// This prevents `DoS` attacks via accumulation of many fields
-const MAX_FORM_FIELDS_SIZE: usize = 20 * 1024 * 1024;
-
-/// Maximum number of parts in multipart form
-/// This prevents `DoS` attacks via excessive part count
-const MAX_FORM_PARTS: usize = 1000;
-
 /// Maximum size for boundary matching buffer in `FileStream`
 /// This buffer accumulates bytes when looking for a boundary pattern that spans chunks
 /// Conservative limit: 64KB should be more than enough for any reasonable boundary pattern
 const MAX_BOUNDARY_BUFFER_SIZE: usize = 64 * 1024;
+
+/// Limits for multipart form parsing
+#[derive(Debug, Clone, Copy)]
+#[allow(clippy::struct_field_names)]
+pub struct MultipartLimits {
+    /// Maximum size per form field in bytes
+    pub max_field_size: usize,
+    /// Maximum total size for all form fields combined in bytes
+    pub max_fields_size: usize,
+    /// Maximum number of parts in multipart form
+    pub max_parts: usize,
+}
+
+impl Default for MultipartLimits {
+    fn default() -> Self {
+        Self {
+            max_field_size: 1024 * 1024,        // 1 MB
+            max_fields_size: 20 * 1024 * 1024,  // 20 MB
+            max_parts: 1000,
+        }
+    }
+}
 
 /// Form file
 #[derive(Debug)]
@@ -116,7 +126,7 @@ pub async fn aggregate_file_stream_limited(mut stream: FileStream, max_size: u64
 /// transform multipart
 /// # Errors
 /// Returns an `Err` if the format is invalid
-pub async fn transform_multipart<S>(body_stream: S, boundary: &'_ [u8]) -> Result<Multipart, MultipartError>
+pub async fn transform_multipart<S>(body_stream: S, boundary: &'_ [u8], limits: MultipartLimits) -> Result<Multipart, MultipartError>
 where
     S: Stream<Item = Result<Bytes, StdError>> + Send + Sync + 'static,
 {
@@ -143,11 +153,10 @@ where
             Some(Err(e)) => return Err(MultipartError::Underlying(e)),
             Some(Ok(bytes)) => {
                 // Check if adding these bytes would exceed reasonable buffer size
-                // We use MAX_FORM_FIELDS_SIZE as the limit for the parsing buffer
-                if buf.len().saturating_add(bytes.len()) > MAX_FORM_FIELDS_SIZE {
+                if buf.len().saturating_add(bytes.len()) > limits.max_fields_size {
                     return Err(MultipartError::TotalSizeTooLarge(
                         buf.len().saturating_add(bytes.len()),
-                        MAX_FORM_FIELDS_SIZE,
+                        limits.max_fields_size,
                     ));
                 }
                 buf.extend_from_slice(&bytes);
@@ -155,7 +164,7 @@ where
         }
 
         // try to parse
-        match try_parse(body, pat, &buf, &mut fields, boundary, &mut total_fields_size, &mut parts_count) {
+        match try_parse(body, pat, &buf, &mut fields, boundary, &mut total_fields_size, &mut parts_count, limits) {
             Err((b, p)) => {
                 body = b;
                 pat = p;
@@ -167,6 +176,7 @@ where
 
 /// try to parse data buffer, pat: b"--{boundary}\r\n"
 #[allow(clippy::type_complexity)]
+#[allow(clippy::too_many_arguments)]
 fn try_parse<S>(
     body: Pin<Box<S>>,
     pat: Box<[u8]>,
@@ -175,6 +185,7 @@ fn try_parse<S>(
     boundary: &'_ [u8],
     total_fields_size: &'_ mut usize,
     parts_count: &'_ mut usize,
+    limits: MultipartLimits,
 ) -> Result<Result<Multipart, MultipartError>, (Pin<Box<S>>, Box<[u8]>)>
 where
     S: Stream<Item = Result<Bytes, StdError>> + Send + Sync + 'static,
@@ -214,8 +225,8 @@ where
     loop {
         // Check parts count limit
         *parts_count += 1;
-        if *parts_count > MAX_FORM_PARTS {
-            return Ok(Err(MultipartError::TooManyParts(*parts_count, MAX_FORM_PARTS)));
+        if *parts_count > limits.max_parts {
+            return Ok(Err(MultipartError::TooManyParts(*parts_count, limits.max_parts)));
         }
 
         let (idx, parsed_headers) = match httparse::parse_headers(lines.slice, &mut headers) {
@@ -251,14 +262,14 @@ where
                         let b = &b[..b.len().saturating_sub(2)];
 
                         // Check per-field size limit
-                        if b.len() > MAX_FORM_FIELD_SIZE {
-                            return Ok(Err(MultipartError::FieldTooLarge(b.len(), MAX_FORM_FIELD_SIZE)));
+                        if b.len() > limits.max_field_size {
+                            return Ok(Err(MultipartError::FieldTooLarge(b.len(), limits.max_field_size)));
                         }
 
                         // Check total fields size limit
                         *total_fields_size = total_fields_size.saturating_add(b.len());
-                        if *total_fields_size > MAX_FORM_FIELDS_SIZE {
-                            return Ok(Err(MultipartError::TotalSizeTooLarge(*total_fields_size, MAX_FORM_FIELDS_SIZE)));
+                        if *total_fields_size > limits.max_fields_size {
+                            return Ok(Err(MultipartError::TotalSizeTooLarge(*total_fields_size, limits.max_fields_size)));
                         }
 
                         match std::str::from_utf8(b) {
@@ -672,7 +683,7 @@ mod tests {
 
         let body_stream = futures::stream::iter(body_bytes);
 
-        let ans = transform_multipart(body_stream, boundary.as_bytes()).await.unwrap();
+        let ans = transform_multipart(body_stream, boundary.as_bytes(), MultipartLimits::default()).await.unwrap();
 
         for &(name, value) in &fields {
             let name = name.to_ascii_lowercase();
@@ -719,7 +730,7 @@ mod tests {
         let body_stream = futures::stream::iter(body_bytes);
         let boundary = "------------------------c634190ccaebbc34";
 
-        let ans = transform_multipart(body_stream, boundary.as_bytes()).await.unwrap();
+        let ans = transform_multipart(body_stream, boundary.as_bytes(), MultipartLimits::default()).await.unwrap();
 
         let fields = [
             ("x-amz-signature", "a71d6dfaaa5aa018dc8e3945f2cec30ea1939ff7ed2f2dd65a6d49320c8fa1e6"),
@@ -761,10 +772,10 @@ mod tests {
     #[tokio::test]
     async fn test_field_too_large() {
         let boundary = "boundary123";
+        let limits = MultipartLimits::default();
 
-        // Create a field value that exceeds MAX_FORM_FIELD_SIZE (1 MB)
-        // This will exceed MAX_FORM_FIELD_SIZE and trigger FieldTooLarge error
-        let field_size = MAX_FORM_FIELD_SIZE + 1000; // Just over 1 MB
+        // Create a field value that exceeds max_field_size (1 MB)
+        let field_size = limits.max_field_size + 1000; // Just over 1 MB
         let large_value = "x".repeat(field_size);
 
         let body_bytes = vec![
@@ -776,7 +787,7 @@ mod tests {
 
         let body_stream = futures::stream::iter(body_bytes.into_iter().map(Ok::<_, StdError>));
 
-        let result = transform_multipart(body_stream, boundary.as_bytes()).await;
+        let result = transform_multipart(body_stream, boundary.as_bytes(), limits).await;
         // Either error is acceptable - both indicate the field/buffer is too large
         assert!(result.is_err(), "Should fail when field exceeds limits");
     }
@@ -784,9 +795,10 @@ mod tests {
     #[tokio::test]
     async fn test_total_size_too_large() {
         let boundary = "boundary123";
+        let limits = MultipartLimits::default();
 
-        // Create multiple fields that together exceed MAX_FORM_FIELDS_SIZE (20 MB)
-        let field_size = MAX_FORM_FIELD_SIZE; // 1 MB per field
+        // Create multiple fields that together exceed max_fields_size (20 MB)
+        let field_size = limits.max_field_size; // 1 MB per field
         let num_fields = 21; // 21 fields = 21 MB > 20 MB limit
 
         let mut body_bytes = Vec::new();
@@ -801,11 +813,11 @@ mod tests {
 
         let body_stream = futures::stream::iter(body_bytes.into_iter().map(|s| Ok::<_, StdError>(Bytes::from(s))));
 
-        let result = transform_multipart(body_stream, boundary.as_bytes()).await;
+        let result = transform_multipart(body_stream, boundary.as_bytes(), limits).await;
         match result {
             Err(MultipartError::TotalSizeTooLarge(size, limit)) => {
-                assert_eq!(limit, MAX_FORM_FIELDS_SIZE);
-                assert!(size > MAX_FORM_FIELDS_SIZE);
+                assert_eq!(limit, limits.max_fields_size);
+                assert!(size > limits.max_fields_size);
             }
             _ => panic!("Expected TotalSizeTooLarge error"),
         }
@@ -814,9 +826,10 @@ mod tests {
     #[tokio::test]
     async fn test_too_many_parts() {
         let boundary = "boundary123";
+        let limits = MultipartLimits::default();
 
-        // Create more parts than MAX_FORM_PARTS (1000)
-        let num_parts = MAX_FORM_PARTS + 1;
+        // Create more parts than max_parts (1000)
+        let num_parts = limits.max_parts + 1;
 
         let mut body_bytes = Vec::new();
 
@@ -830,11 +843,11 @@ mod tests {
 
         let body_stream = futures::stream::iter(body_bytes.into_iter().map(|s| Ok::<_, StdError>(Bytes::from(s))));
 
-        let result = transform_multipart(body_stream, boundary.as_bytes()).await;
+        let result = transform_multipart(body_stream, boundary.as_bytes(), limits).await;
         match result {
             Err(MultipartError::TooManyParts(count, limit)) => {
-                assert_eq!(limit, MAX_FORM_PARTS);
-                assert!(count > MAX_FORM_PARTS);
+                assert_eq!(limit, limits.max_parts);
+                assert!(count > limits.max_parts);
             }
             _ => panic!("Expected TooManyParts error"),
         }
@@ -866,7 +879,7 @@ mod tests {
 
         let body_stream = futures::stream::iter(body_bytes.into_iter().map(|s| Ok::<_, StdError>(Bytes::from(s))));
 
-        let result = transform_multipart(body_stream, boundary.as_bytes()).await;
+        let result = transform_multipart(body_stream, boundary.as_bytes(), MultipartLimits::default()).await;
         assert!(result.is_ok(), "Should succeed when within limits");
 
         let multipart = result.unwrap();
@@ -906,7 +919,7 @@ mod tests {
 
         let body_stream = futures::stream::iter(body_bytes.into_iter().map(Ok::<_, StdError>));
 
-        let result = transform_multipart(body_stream, boundary).await;
+        let result = transform_multipart(body_stream, boundary, MultipartLimits::default()).await;
 
         // The multipart parsing will succeed, but when we try to read the file stream,
         // it should error with BoundaryBufferTooLarge
