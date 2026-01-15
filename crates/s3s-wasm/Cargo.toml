@@ -17,4 +17,4 @@ s3s = { version = "0.13.0-alpha.1", path = "../s3s", default-features = false }
 workspace = true
 
 [dev-dependencies]
-wasm-bindgen-test = "0.3.56"
+wasm-bindgen-test = "0.3.58"

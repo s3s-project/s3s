@@ -17,4 +17,4 @@ workspace = true
 anyhow = "1.0.100"
 numeric_cast = "0.3.0"
 serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.148"
+serde_json = "1.0.149"
