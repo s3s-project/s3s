@@ -17,17 +17,4 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_API_TOKEN }}
         run: |
           cargo publish -p s3s --dry-run
-          
-          # fundamental
-          cargo publish -p s3s
-          cargo publish -p s3s-aws
-
-          # supporting
-          cargo publish -p s3s-model
-          cargo publish -p s3s-policy
-          cargo publish -p s3s-test
-          
-          # binary
-          cargo publish -p s3s-proxy
-          cargo publish -p s3s-fs
-          cargo publish -p s3s-e2e
+          cargo publish --workspace
