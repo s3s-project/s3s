@@ -188,12 +188,12 @@ fn extract_decoded_content_length(hs: &'_ OrderedHeaders<'_>) -> S3Result<Option
     }
 }
 
-async fn extract_full_body(content_length: Option<u64>, body: &mut Body, max_xml_body_size: usize) -> S3Result<Bytes> {
+async fn extract_full_body(content_length: Option<u64>, body: &mut Body, max_body_size: usize) -> S3Result<Bytes> {
     if let Some(bytes) = body.bytes() {
         return Ok(bytes);
     }
 
-    let bytes = body.store_all_limited(max_xml_body_size).await.map_err(|e| {
+    let bytes = body.store_all_limited(max_body_size).await.map_err(|e| {
         if e.is::<BodySizeLimitExceeded>() {
             S3Error::with_source(S3ErrorCode::MaxMessageLengthExceeded, e)
         } else {

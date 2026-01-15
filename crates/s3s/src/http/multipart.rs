@@ -36,8 +36,8 @@ pub struct MultipartLimits {
 impl Default for MultipartLimits {
     fn default() -> Self {
         Self {
-            max_field_size: 1024 * 1024,        // 1 MB
-            max_fields_size: 20 * 1024 * 1024,  // 20 MB
+            max_field_size: 1024 * 1024,       // 1 MB
+            max_fields_size: 20 * 1024 * 1024, // 20 MB
             max_parts: 1000,
         }
     }
@@ -126,7 +126,11 @@ pub async fn aggregate_file_stream_limited(mut stream: FileStream, max_size: u64
 /// transform multipart
 /// # Errors
 /// Returns an `Err` if the format is invalid
-pub async fn transform_multipart<S>(body_stream: S, boundary: &'_ [u8], limits: MultipartLimits) -> Result<Multipart, MultipartError>
+pub async fn transform_multipart<S>(
+    body_stream: S,
+    boundary: &'_ [u8],
+    limits: MultipartLimits,
+) -> Result<Multipart, MultipartError>
 where
     S: Stream<Item = Result<Bytes, StdError>> + Send + Sync + 'static,
 {
@@ -683,7 +687,9 @@ mod tests {
 
         let body_stream = futures::stream::iter(body_bytes);
 
-        let ans = transform_multipart(body_stream, boundary.as_bytes(), MultipartLimits::default()).await.unwrap();
+        let ans = transform_multipart(body_stream, boundary.as_bytes(), MultipartLimits::default())
+            .await
+            .unwrap();
 
         for &(name, value) in &fields {
             let name = name.to_ascii_lowercase();
@@ -730,7 +736,9 @@ mod tests {
         let body_stream = futures::stream::iter(body_bytes);
         let boundary = "------------------------c634190ccaebbc34";
 
-        let ans = transform_multipart(body_stream, boundary.as_bytes(), MultipartLimits::default()).await.unwrap();
+        let ans = transform_multipart(body_stream, boundary.as_bytes(), MultipartLimits::default())
+            .await
+            .unwrap();
 
         let fields = [
             ("x-amz-signature", "a71d6dfaaa5aa018dc8e3945f2cec30ea1939ff7ed2f2dd65a6d49320c8fa1e6"),
