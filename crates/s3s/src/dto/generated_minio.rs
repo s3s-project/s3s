@@ -31966,28 +31966,28 @@ impl DtoExt for AbortMultipartUploadInput {
         if self.expected_bucket_owner.as_deref() == Some("") {
             self.expected_bucket_owner = None;
         }
-        if let Some(ref val) = self.request_payer {
-            if val.as_str() == "" {
-                self.request_payer = None;
-            }
+        if let Some(ref val) = self.request_payer
+            && val.as_str() == ""
+        {
+            self.request_payer = None;
         }
     }
 }
 impl DtoExt for AbortMultipartUploadOutput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.request_charged {
-            if val.as_str() == "" {
-                self.request_charged = None;
-            }
+        if let Some(ref val) = self.request_charged
+            && val.as_str() == ""
+        {
+            self.request_charged = None;
         }
     }
 }
 impl DtoExt for AccelerateConfiguration {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.status {
-            if val.as_str() == "" {
-                self.status = None;
-            }
+        if let Some(ref val) = self.status
+            && val.as_str() == ""
+        {
+            self.status = None;
         }
     }
 }
@@ -32056,15 +32056,15 @@ impl DtoExt for Bucket {
 }
 impl DtoExt for BucketInfo {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.data_redundancy {
-            if val.as_str() == "" {
-                self.data_redundancy = None;
-            }
+        if let Some(ref val) = self.data_redundancy
+            && val.as_str() == ""
+        {
+            self.data_redundancy = None;
         }
-        if let Some(ref val) = self.type_ {
-            if val.as_str() == "" {
-                self.type_ = None;
-            }
+        if let Some(ref val) = self.type_
+            && val.as_str() == ""
+        {
+            self.type_ = None;
         }
     }
 }
@@ -32096,10 +32096,10 @@ impl DtoExt for CSVInput {
         if self.field_delimiter.as_deref() == Some("") {
             self.field_delimiter = None;
         }
-        if let Some(ref val) = self.file_header_info {
-            if val.as_str() == "" {
-                self.file_header_info = None;
-            }
+        if let Some(ref val) = self.file_header_info
+            && val.as_str() == ""
+        {
+            self.file_header_info = None;
         }
         if self.quote_character.as_deref() == Some("") {
             self.quote_character = None;
@@ -32123,10 +32123,10 @@ impl DtoExt for CSVOutput {
         if self.quote_escape_character.as_deref() == Some("") {
             self.quote_escape_character = None;
         }
-        if let Some(ref val) = self.quote_fields {
-            if val.as_str() == "" {
-                self.quote_fields = None;
-            }
+        if let Some(ref val) = self.quote_fields
+            && val.as_str() == ""
+        {
+            self.quote_fields = None;
         }
         if self.record_delimiter.as_deref() == Some("") {
             self.record_delimiter = None;
@@ -32150,10 +32150,10 @@ impl DtoExt for Checksum {
         if self.checksum_sha256.as_deref() == Some("") {
             self.checksum_sha256 = None;
         }
-        if let Some(ref val) = self.checksum_type {
-            if val.as_str() == "" {
-                self.checksum_type = None;
-            }
+        if let Some(ref val) = self.checksum_type
+            && val.as_str() == ""
+        {
+            self.checksum_type = None;
         }
     }
 }
@@ -32181,10 +32181,10 @@ impl DtoExt for CompleteMultipartUploadInput {
         if self.checksum_sha256.as_deref() == Some("") {
             self.checksum_sha256 = None;
         }
-        if let Some(ref val) = self.checksum_type {
-            if val.as_str() == "" {
-                self.checksum_type = None;
-            }
+        if let Some(ref val) = self.checksum_type
+            && val.as_str() == ""
+        {
+            self.checksum_type = None;
         }
         if self.expected_bucket_owner.as_deref() == Some("") {
             self.expected_bucket_owner = None;
@@ -32192,10 +32192,10 @@ impl DtoExt for CompleteMultipartUploadInput {
         if let Some(ref mut val) = self.multipart_upload {
             val.ignore_empty_strings();
         }
-        if let Some(ref val) = self.request_payer {
-            if val.as_str() == "" {
-                self.request_payer = None;
-            }
+        if let Some(ref val) = self.request_payer
+            && val.as_str() == ""
+        {
+            self.request_payer = None;
         }
         if self.sse_customer_algorithm.as_deref() == Some("") {
             self.sse_customer_algorithm = None;
@@ -32228,10 +32228,10 @@ impl DtoExt for CompleteMultipartUploadOutput {
         if self.checksum_sha256.as_deref() == Some("") {
             self.checksum_sha256 = None;
         }
-        if let Some(ref val) = self.checksum_type {
-            if val.as_str() == "" {
-                self.checksum_type = None;
-            }
+        if let Some(ref val) = self.checksum_type
+            && val.as_str() == ""
+        {
+            self.checksum_type = None;
         }
         if self.expiration.as_deref() == Some("") {
             self.expiration = None;
@@ -32242,18 +32242,18 @@ impl DtoExt for CompleteMultipartUploadOutput {
         if self.location.as_deref() == Some("") {
             self.location = None;
         }
-        if let Some(ref val) = self.request_charged {
-            if val.as_str() == "" {
-                self.request_charged = None;
-            }
+        if let Some(ref val) = self.request_charged
+            && val.as_str() == ""
+        {
+            self.request_charged = None;
         }
         if self.ssekms_key_id.as_deref() == Some("") {
             self.ssekms_key_id = None;
         }
-        if let Some(ref val) = self.server_side_encryption {
-            if val.as_str() == "" {
-                self.server_side_encryption = None;
-            }
+        if let Some(ref val) = self.server_side_encryption
+            && val.as_str() == ""
+        {
+            self.server_side_encryption = None;
         }
         if self.version_id.as_deref() == Some("") {
             self.version_id = None;
@@ -32294,18 +32294,18 @@ impl DtoExt for Condition {
 }
 impl DtoExt for CopyObjectInput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.acl {
-            if val.as_str() == "" {
-                self.acl = None;
-            }
+        if let Some(ref val) = self.acl
+            && val.as_str() == ""
+        {
+            self.acl = None;
         }
         if self.cache_control.as_deref() == Some("") {
             self.cache_control = None;
         }
-        if let Some(ref val) = self.checksum_algorithm {
-            if val.as_str() == "" {
-                self.checksum_algorithm = None;
-            }
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
         }
         if self.content_disposition.as_deref() == Some("") {
             self.content_disposition = None;
@@ -32343,25 +32343,25 @@ impl DtoExt for CopyObjectInput {
         if self.grant_write_acp.as_deref() == Some("") {
             self.grant_write_acp = None;
         }
-        if let Some(ref val) = self.metadata_directive {
-            if val.as_str() == "" {
-                self.metadata_directive = None;
-            }
+        if let Some(ref val) = self.metadata_directive
+            && val.as_str() == ""
+        {
+            self.metadata_directive = None;
         }
-        if let Some(ref val) = self.object_lock_legal_hold_status {
-            if val.as_str() == "" {
-                self.object_lock_legal_hold_status = None;
-            }
+        if let Some(ref val) = self.object_lock_legal_hold_status
+            && val.as_str() == ""
+        {
+            self.object_lock_legal_hold_status = None;
         }
-        if let Some(ref val) = self.object_lock_mode {
-            if val.as_str() == "" {
-                self.object_lock_mode = None;
-            }
+        if let Some(ref val) = self.object_lock_mode
+            && val.as_str() == ""
+        {
+            self.object_lock_mode = None;
         }
-        if let Some(ref val) = self.request_payer {
-            if val.as_str() == "" {
-                self.request_payer = None;
-            }
+        if let Some(ref val) = self.request_payer
+            && val.as_str() == ""
+        {
+            self.request_payer = None;
         }
         if self.sse_customer_algorithm.as_deref() == Some("") {
             self.sse_customer_algorithm = None;
@@ -32378,23 +32378,23 @@ impl DtoExt for CopyObjectInput {
         if self.ssekms_key_id.as_deref() == Some("") {
             self.ssekms_key_id = None;
         }
-        if let Some(ref val) = self.server_side_encryption {
-            if val.as_str() == "" {
-                self.server_side_encryption = None;
-            }
+        if let Some(ref val) = self.server_side_encryption
+            && val.as_str() == ""
+        {
+            self.server_side_encryption = None;
         }
-        if let Some(ref val) = self.storage_class {
-            if val.as_str() == "" {
-                self.storage_class = None;
-            }
+        if let Some(ref val) = self.storage_class
+            && val.as_str() == ""
+        {
+            self.storage_class = None;
         }
         if self.tagging.as_deref() == Some("") {
             self.tagging = None;
         }
-        if let Some(ref val) = self.tagging_directive {
-            if val.as_str() == "" {
-                self.tagging_directive = None;
-            }
+        if let Some(ref val) = self.tagging_directive
+            && val.as_str() == ""
+        {
+            self.tagging_directive = None;
         }
         if self.version_id.as_deref() == Some("") {
             self.version_id = None;
@@ -32415,10 +32415,10 @@ impl DtoExt for CopyObjectOutput {
         if self.expiration.as_deref() == Some("") {
             self.expiration = None;
         }
-        if let Some(ref val) = self.request_charged {
-            if val.as_str() == "" {
-                self.request_charged = None;
-            }
+        if let Some(ref val) = self.request_charged
+            && val.as_str() == ""
+        {
+            self.request_charged = None;
         }
         if self.sse_customer_algorithm.as_deref() == Some("") {
             self.sse_customer_algorithm = None;
@@ -32432,10 +32432,10 @@ impl DtoExt for CopyObjectOutput {
         if self.ssekms_key_id.as_deref() == Some("") {
             self.ssekms_key_id = None;
         }
-        if let Some(ref val) = self.server_side_encryption {
-            if val.as_str() == "" {
-                self.server_side_encryption = None;
-            }
+        if let Some(ref val) = self.server_side_encryption
+            && val.as_str() == ""
+        {
+            self.server_side_encryption = None;
         }
         if self.version_id.as_deref() == Some("") {
             self.version_id = None;
@@ -32459,10 +32459,10 @@ impl DtoExt for CopyObjectResult {
         if self.checksum_sha256.as_deref() == Some("") {
             self.checksum_sha256 = None;
         }
-        if let Some(ref val) = self.checksum_type {
-            if val.as_str() == "" {
-                self.checksum_type = None;
-            }
+        if let Some(ref val) = self.checksum_type
+            && val.as_str() == ""
+        {
+            self.checksum_type = None;
         }
     }
 }
@@ -32493,19 +32493,19 @@ impl DtoExt for CreateBucketConfiguration {
         if let Some(ref mut val) = self.location {
             val.ignore_empty_strings();
         }
-        if let Some(ref val) = self.location_constraint {
-            if val.as_str() == "" {
-                self.location_constraint = None;
-            }
+        if let Some(ref val) = self.location_constraint
+            && val.as_str() == ""
+        {
+            self.location_constraint = None;
         }
     }
 }
 impl DtoExt for CreateBucketInput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.acl {
-            if val.as_str() == "" {
-                self.acl = None;
-            }
+        if let Some(ref val) = self.acl
+            && val.as_str() == ""
+        {
+            self.acl = None;
         }
         if let Some(ref mut val) = self.create_bucket_configuration {
             val.ignore_empty_strings();
@@ -32525,19 +32525,19 @@ impl DtoExt for CreateBucketInput {
         if self.grant_write_acp.as_deref() == Some("") {
             self.grant_write_acp = None;
         }
-        if let Some(ref val) = self.object_ownership {
-            if val.as_str() == "" {
-                self.object_ownership = None;
-            }
+        if let Some(ref val) = self.object_ownership
+            && val.as_str() == ""
+        {
+            self.object_ownership = None;
         }
     }
 }
 impl DtoExt for CreateBucketMetadataTableConfigurationInput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.checksum_algorithm {
-            if val.as_str() == "" {
-                self.checksum_algorithm = None;
-            }
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
         }
         if self.content_md5.as_deref() == Some("") {
             self.content_md5 = None;
@@ -32557,23 +32557,23 @@ impl DtoExt for CreateBucketOutput {
 }
 impl DtoExt for CreateMultipartUploadInput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.acl {
-            if val.as_str() == "" {
-                self.acl = None;
-            }
+        if let Some(ref val) = self.acl
+            && val.as_str() == ""
+        {
+            self.acl = None;
         }
         if self.cache_control.as_deref() == Some("") {
             self.cache_control = None;
         }
-        if let Some(ref val) = self.checksum_algorithm {
-            if val.as_str() == "" {
-                self.checksum_algorithm = None;
-            }
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
         }
-        if let Some(ref val) = self.checksum_type {
-            if val.as_str() == "" {
-                self.checksum_type = None;
-            }
+        if let Some(ref val) = self.checksum_type
+            && val.as_str() == ""
+        {
+            self.checksum_type = None;
         }
         if self.content_disposition.as_deref() == Some("") {
             self.content_disposition = None;
@@ -32599,20 +32599,20 @@ impl DtoExt for CreateMultipartUploadInput {
         if self.grant_write_acp.as_deref() == Some("") {
             self.grant_write_acp = None;
         }
-        if let Some(ref val) = self.object_lock_legal_hold_status {
-            if val.as_str() == "" {
-                self.object_lock_legal_hold_status = None;
-            }
+        if let Some(ref val) = self.object_lock_legal_hold_status
+            && val.as_str() == ""
+        {
+            self.object_lock_legal_hold_status = None;
         }
-        if let Some(ref val) = self.object_lock_mode {
-            if val.as_str() == "" {
-                self.object_lock_mode = None;
-            }
+        if let Some(ref val) = self.object_lock_mode
+            && val.as_str() == ""
+        {
+            self.object_lock_mode = None;
         }
-        if let Some(ref val) = self.request_payer {
-            if val.as_str() == "" {
-                self.request_payer = None;
-            }
+        if let Some(ref val) = self.request_payer
+            && val.as_str() == ""
+        {
+            self.request_payer = None;
         }
         if self.sse_customer_algorithm.as_deref() == Some("") {
             self.sse_customer_algorithm = None;
@@ -32629,15 +32629,15 @@ impl DtoExt for CreateMultipartUploadInput {
         if self.ssekms_key_id.as_deref() == Some("") {
             self.ssekms_key_id = None;
         }
-        if let Some(ref val) = self.server_side_encryption {
-            if val.as_str() == "" {
-                self.server_side_encryption = None;
-            }
+        if let Some(ref val) = self.server_side_encryption
+            && val.as_str() == ""
+        {
+            self.server_side_encryption = None;
         }
-        if let Some(ref val) = self.storage_class {
-            if val.as_str() == "" {
-                self.storage_class = None;
-            }
+        if let Some(ref val) = self.storage_class
+            && val.as_str() == ""
+        {
+            self.storage_class = None;
         }
         if self.tagging.as_deref() == Some("") {
             self.tagging = None;
@@ -32658,23 +32658,23 @@ impl DtoExt for CreateMultipartUploadOutput {
         if self.bucket.as_deref() == Some("") {
             self.bucket = None;
         }
-        if let Some(ref val) = self.checksum_algorithm {
-            if val.as_str() == "" {
-                self.checksum_algorithm = None;
-            }
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
         }
-        if let Some(ref val) = self.checksum_type {
-            if val.as_str() == "" {
-                self.checksum_type = None;
-            }
+        if let Some(ref val) = self.checksum_type
+            && val.as_str() == ""
+        {
+            self.checksum_type = None;
         }
         if self.key.as_deref() == Some("") {
             self.key = None;
         }
-        if let Some(ref val) = self.request_charged {
-            if val.as_str() == "" {
-                self.request_charged = None;
-            }
+        if let Some(ref val) = self.request_charged
+            && val.as_str() == ""
+        {
+            self.request_charged = None;
         }
         if self.sse_customer_algorithm.as_deref() == Some("") {
             self.sse_customer_algorithm = None;
@@ -32688,10 +32688,10 @@ impl DtoExt for CreateMultipartUploadOutput {
         if self.ssekms_key_id.as_deref() == Some("") {
             self.ssekms_key_id = None;
         }
-        if let Some(ref val) = self.server_side_encryption {
-            if val.as_str() == "" {
-                self.server_side_encryption = None;
-            }
+        if let Some(ref val) = self.server_side_encryption
+            && val.as_str() == ""
+        {
+            self.server_side_encryption = None;
         }
         if self.upload_id.as_deref() == Some("") {
             self.upload_id = None;
@@ -32703,10 +32703,10 @@ impl DtoExt for Credentials {
 }
 impl DtoExt for DefaultRetention {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.mode {
-            if val.as_str() == "" {
-                self.mode = None;
-            }
+        if let Some(ref val) = self.mode
+            && val.as_str() == ""
+        {
+            self.mode = None;
         }
     }
 }
@@ -32822,10 +32822,10 @@ impl DtoExt for DeleteMarkerEntry {
 }
 impl DtoExt for DeleteMarkerReplication {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.status {
-            if val.as_str() == "" {
-                self.status = None;
-            }
+        if let Some(ref val) = self.status
+            && val.as_str() == ""
+        {
+            self.status = None;
         }
     }
 }
@@ -32837,10 +32837,10 @@ impl DtoExt for DeleteObjectInput {
         if self.mfa.as_deref() == Some("") {
             self.mfa = None;
         }
-        if let Some(ref val) = self.request_payer {
-            if val.as_str() == "" {
-                self.request_payer = None;
-            }
+        if let Some(ref val) = self.request_payer
+            && val.as_str() == ""
+        {
+            self.request_payer = None;
         }
         if self.version_id.as_deref() == Some("") {
             self.version_id = None;
@@ -32849,10 +32849,10 @@ impl DtoExt for DeleteObjectInput {
 }
 impl DtoExt for DeleteObjectOutput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.request_charged {
-            if val.as_str() == "" {
-                self.request_charged = None;
-            }
+        if let Some(ref val) = self.request_charged
+            && val.as_str() == ""
+        {
+            self.request_charged = None;
         }
         if self.version_id.as_deref() == Some("") {
             self.version_id = None;
@@ -32878,10 +32878,10 @@ impl DtoExt for DeleteObjectTaggingOutput {
 }
 impl DtoExt for DeleteObjectsInput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.checksum_algorithm {
-            if val.as_str() == "" {
-                self.checksum_algorithm = None;
-            }
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
         }
         self.delete.ignore_empty_strings();
         if self.expected_bucket_owner.as_deref() == Some("") {
@@ -32890,19 +32890,19 @@ impl DtoExt for DeleteObjectsInput {
         if self.mfa.as_deref() == Some("") {
             self.mfa = None;
         }
-        if let Some(ref val) = self.request_payer {
-            if val.as_str() == "" {
-                self.request_payer = None;
-            }
+        if let Some(ref val) = self.request_payer
+            && val.as_str() == ""
+        {
+            self.request_payer = None;
         }
     }
 }
 impl DtoExt for DeleteObjectsOutput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.request_charged {
-            if val.as_str() == "" {
-                self.request_charged = None;
-            }
+        if let Some(ref val) = self.request_charged
+            && val.as_str() == ""
+        {
+            self.request_charged = None;
         }
     }
 }
@@ -32946,10 +32946,10 @@ impl DtoExt for Destination {
         if let Some(ref mut val) = self.replication_time {
             val.ignore_empty_strings();
         }
-        if let Some(ref val) = self.storage_class {
-            if val.as_str() == "" {
-                self.storage_class = None;
-            }
+        if let Some(ref val) = self.storage_class
+            && val.as_str() == ""
+        {
+            self.storage_class = None;
         }
     }
 }
@@ -33011,10 +33011,10 @@ impl DtoExt for ExistingObjectReplication {
 }
 impl DtoExt for FilterRule {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.name {
-            if val.as_str() == "" {
-                self.name = None;
-            }
+        if let Some(ref val) = self.name
+            && val.as_str() == ""
+        {
+            self.name = None;
         }
         if self.value.as_deref() == Some("") {
             self.value = None;
@@ -33026,24 +33026,24 @@ impl DtoExt for GetBucketAccelerateConfigurationInput {
         if self.expected_bucket_owner.as_deref() == Some("") {
             self.expected_bucket_owner = None;
         }
-        if let Some(ref val) = self.request_payer {
-            if val.as_str() == "" {
-                self.request_payer = None;
-            }
+        if let Some(ref val) = self.request_payer
+            && val.as_str() == ""
+        {
+            self.request_payer = None;
         }
     }
 }
 impl DtoExt for GetBucketAccelerateConfigurationOutput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.request_charged {
-            if val.as_str() == "" {
-                self.request_charged = None;
-            }
+        if let Some(ref val) = self.request_charged
+            && val.as_str() == ""
+        {
+            self.request_charged = None;
         }
-        if let Some(ref val) = self.status {
-            if val.as_str() == "" {
-                self.status = None;
-            }
+        if let Some(ref val) = self.status
+            && val.as_str() == ""
+        {
+            self.status = None;
         }
     }
 }
@@ -33132,10 +33132,10 @@ impl DtoExt for GetBucketLifecycleConfigurationInput {
 }
 impl DtoExt for GetBucketLifecycleConfigurationOutput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.transition_default_minimum_object_size {
-            if val.as_str() == "" {
-                self.transition_default_minimum_object_size = None;
-            }
+        if let Some(ref val) = self.transition_default_minimum_object_size
+            && val.as_str() == ""
+        {
+            self.transition_default_minimum_object_size = None;
         }
     }
 }
@@ -33148,10 +33148,10 @@ impl DtoExt for GetBucketLocationInput {
 }
 impl DtoExt for GetBucketLocationOutput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.location_constraint {
-            if val.as_str() == "" {
-                self.location_constraint = None;
-            }
+        if let Some(ref val) = self.location_constraint
+            && val.as_str() == ""
+        {
+            self.location_constraint = None;
         }
     }
 }
@@ -33280,10 +33280,10 @@ impl DtoExt for GetBucketRequestPaymentInput {
 }
 impl DtoExt for GetBucketRequestPaymentOutput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.payer {
-            if val.as_str() == "" {
-                self.payer = None;
-            }
+        if let Some(ref val) = self.payer
+            && val.as_str() == ""
+        {
+            self.payer = None;
         }
     }
 }
@@ -33306,15 +33306,15 @@ impl DtoExt for GetBucketVersioningInput {
 }
 impl DtoExt for GetBucketVersioningOutput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.mfa_delete {
-            if val.as_str() == "" {
-                self.mfa_delete = None;
-            }
+        if let Some(ref val) = self.mfa_delete
+            && val.as_str() == ""
+        {
+            self.mfa_delete = None;
         }
-        if let Some(ref val) = self.status {
-            if val.as_str() == "" {
-                self.status = None;
-            }
+        if let Some(ref val) = self.status
+            && val.as_str() == ""
+        {
+            self.status = None;
         }
     }
 }
@@ -33343,10 +33343,10 @@ impl DtoExt for GetObjectAclInput {
         if self.expected_bucket_owner.as_deref() == Some("") {
             self.expected_bucket_owner = None;
         }
-        if let Some(ref val) = self.request_payer {
-            if val.as_str() == "" {
-                self.request_payer = None;
-            }
+        if let Some(ref val) = self.request_payer
+            && val.as_str() == ""
+        {
+            self.request_payer = None;
         }
         if self.version_id.as_deref() == Some("") {
             self.version_id = None;
@@ -33358,10 +33358,10 @@ impl DtoExt for GetObjectAclOutput {
         if let Some(ref mut val) = self.owner {
             val.ignore_empty_strings();
         }
-        if let Some(ref val) = self.request_charged {
-            if val.as_str() == "" {
-                self.request_charged = None;
-            }
+        if let Some(ref val) = self.request_charged
+            && val.as_str() == ""
+        {
+            self.request_charged = None;
         }
     }
 }
@@ -33370,10 +33370,10 @@ impl DtoExt for GetObjectAttributesInput {
         if self.expected_bucket_owner.as_deref() == Some("") {
             self.expected_bucket_owner = None;
         }
-        if let Some(ref val) = self.request_payer {
-            if val.as_str() == "" {
-                self.request_payer = None;
-            }
+        if let Some(ref val) = self.request_payer
+            && val.as_str() == ""
+        {
+            self.request_payer = None;
         }
         if self.sse_customer_algorithm.as_deref() == Some("") {
             self.sse_customer_algorithm = None;
@@ -33397,15 +33397,15 @@ impl DtoExt for GetObjectAttributesOutput {
         if let Some(ref mut val) = self.object_parts {
             val.ignore_empty_strings();
         }
-        if let Some(ref val) = self.request_charged {
-            if val.as_str() == "" {
-                self.request_charged = None;
-            }
+        if let Some(ref val) = self.request_charged
+            && val.as_str() == ""
+        {
+            self.request_charged = None;
         }
-        if let Some(ref val) = self.storage_class {
-            if val.as_str() == "" {
-                self.storage_class = None;
-            }
+        if let Some(ref val) = self.storage_class
+            && val.as_str() == ""
+        {
+            self.storage_class = None;
         }
         if self.version_id.as_deref() == Some("") {
             self.version_id = None;
@@ -33417,18 +33417,18 @@ impl DtoExt for GetObjectAttributesParts {
 }
 impl DtoExt for GetObjectInput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.checksum_mode {
-            if val.as_str() == "" {
-                self.checksum_mode = None;
-            }
+        if let Some(ref val) = self.checksum_mode
+            && val.as_str() == ""
+        {
+            self.checksum_mode = None;
         }
         if self.expected_bucket_owner.as_deref() == Some("") {
             self.expected_bucket_owner = None;
         }
-        if let Some(ref val) = self.request_payer {
-            if val.as_str() == "" {
-                self.request_payer = None;
-            }
+        if let Some(ref val) = self.request_payer
+            && val.as_str() == ""
+        {
+            self.request_payer = None;
         }
         if self.response_cache_control.as_deref() == Some("") {
             self.response_cache_control = None;
@@ -33464,10 +33464,10 @@ impl DtoExt for GetObjectLegalHoldInput {
         if self.expected_bucket_owner.as_deref() == Some("") {
             self.expected_bucket_owner = None;
         }
-        if let Some(ref val) = self.request_payer {
-            if val.as_str() == "" {
-                self.request_payer = None;
-            }
+        if let Some(ref val) = self.request_payer
+            && val.as_str() == ""
+        {
+            self.request_payer = None;
         }
         if self.version_id.as_deref() == Some("") {
             self.version_id = None;
@@ -33518,10 +33518,10 @@ impl DtoExt for GetObjectOutput {
         if self.checksum_sha256.as_deref() == Some("") {
             self.checksum_sha256 = None;
         }
-        if let Some(ref val) = self.checksum_type {
-            if val.as_str() == "" {
-                self.checksum_type = None;
-            }
+        if let Some(ref val) = self.checksum_type
+            && val.as_str() == ""
+        {
+            self.checksum_type = None;
         }
         if self.content_disposition.as_deref() == Some("") {
             self.content_disposition = None;
@@ -33538,25 +33538,25 @@ impl DtoExt for GetObjectOutput {
         if self.expiration.as_deref() == Some("") {
             self.expiration = None;
         }
-        if let Some(ref val) = self.object_lock_legal_hold_status {
-            if val.as_str() == "" {
-                self.object_lock_legal_hold_status = None;
-            }
+        if let Some(ref val) = self.object_lock_legal_hold_status
+            && val.as_str() == ""
+        {
+            self.object_lock_legal_hold_status = None;
         }
-        if let Some(ref val) = self.object_lock_mode {
-            if val.as_str() == "" {
-                self.object_lock_mode = None;
-            }
+        if let Some(ref val) = self.object_lock_mode
+            && val.as_str() == ""
+        {
+            self.object_lock_mode = None;
         }
-        if let Some(ref val) = self.replication_status {
-            if val.as_str() == "" {
-                self.replication_status = None;
-            }
+        if let Some(ref val) = self.replication_status
+            && val.as_str() == ""
+        {
+            self.replication_status = None;
         }
-        if let Some(ref val) = self.request_charged {
-            if val.as_str() == "" {
-                self.request_charged = None;
-            }
+        if let Some(ref val) = self.request_charged
+            && val.as_str() == ""
+        {
+            self.request_charged = None;
         }
         if self.restore.as_deref() == Some("") {
             self.restore = None;
@@ -33570,15 +33570,15 @@ impl DtoExt for GetObjectOutput {
         if self.ssekms_key_id.as_deref() == Some("") {
             self.ssekms_key_id = None;
         }
-        if let Some(ref val) = self.server_side_encryption {
-            if val.as_str() == "" {
-                self.server_side_encryption = None;
-            }
+        if let Some(ref val) = self.server_side_encryption
+            && val.as_str() == ""
+        {
+            self.server_side_encryption = None;
         }
-        if let Some(ref val) = self.storage_class {
-            if val.as_str() == "" {
-                self.storage_class = None;
-            }
+        if let Some(ref val) = self.storage_class
+            && val.as_str() == ""
+        {
+            self.storage_class = None;
         }
         if self.version_id.as_deref() == Some("") {
             self.version_id = None;
@@ -33593,10 +33593,10 @@ impl DtoExt for GetObjectRetentionInput {
         if self.expected_bucket_owner.as_deref() == Some("") {
             self.expected_bucket_owner = None;
         }
-        if let Some(ref val) = self.request_payer {
-            if val.as_str() == "" {
-                self.request_payer = None;
-            }
+        if let Some(ref val) = self.request_payer
+            && val.as_str() == ""
+        {
+            self.request_payer = None;
         }
         if self.version_id.as_deref() == Some("") {
             self.version_id = None;
@@ -33615,10 +33615,10 @@ impl DtoExt for GetObjectTaggingInput {
         if self.expected_bucket_owner.as_deref() == Some("") {
             self.expected_bucket_owner = None;
         }
-        if let Some(ref val) = self.request_payer {
-            if val.as_str() == "" {
-                self.request_payer = None;
-            }
+        if let Some(ref val) = self.request_payer
+            && val.as_str() == ""
+        {
+            self.request_payer = None;
         }
         if self.version_id.as_deref() == Some("") {
             self.version_id = None;
@@ -33637,19 +33637,19 @@ impl DtoExt for GetObjectTorrentInput {
         if self.expected_bucket_owner.as_deref() == Some("") {
             self.expected_bucket_owner = None;
         }
-        if let Some(ref val) = self.request_payer {
-            if val.as_str() == "" {
-                self.request_payer = None;
-            }
+        if let Some(ref val) = self.request_payer
+            && val.as_str() == ""
+        {
+            self.request_payer = None;
         }
     }
 }
 impl DtoExt for GetObjectTorrentOutput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.request_charged {
-            if val.as_str() == "" {
-                self.request_charged = None;
-            }
+        if let Some(ref val) = self.request_charged
+            && val.as_str() == ""
+        {
+            self.request_charged = None;
         }
     }
 }
@@ -33675,10 +33675,10 @@ impl DtoExt for Grant {
         if let Some(ref mut val) = self.grantee {
             val.ignore_empty_strings();
         }
-        if let Some(ref val) = self.permission {
-            if val.as_str() == "" {
-                self.permission = None;
-            }
+        if let Some(ref val) = self.permission
+            && val.as_str() == ""
+        {
+            self.permission = None;
         }
     }
 }
@@ -33710,10 +33710,10 @@ impl DtoExt for HeadBucketOutput {
         if self.bucket_location_name.as_deref() == Some("") {
             self.bucket_location_name = None;
         }
-        if let Some(ref val) = self.bucket_location_type {
-            if val.as_str() == "" {
-                self.bucket_location_type = None;
-            }
+        if let Some(ref val) = self.bucket_location_type
+            && val.as_str() == ""
+        {
+            self.bucket_location_type = None;
         }
         if self.bucket_region.as_deref() == Some("") {
             self.bucket_region = None;
@@ -33722,18 +33722,18 @@ impl DtoExt for HeadBucketOutput {
 }
 impl DtoExt for HeadObjectInput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.checksum_mode {
-            if val.as_str() == "" {
-                self.checksum_mode = None;
-            }
+        if let Some(ref val) = self.checksum_mode
+            && val.as_str() == ""
+        {
+            self.checksum_mode = None;
         }
         if self.expected_bucket_owner.as_deref() == Some("") {
             self.expected_bucket_owner = None;
         }
-        if let Some(ref val) = self.request_payer {
-            if val.as_str() == "" {
-                self.request_payer = None;
-            }
+        if let Some(ref val) = self.request_payer
+            && val.as_str() == ""
+        {
+            self.request_payer = None;
         }
         if self.response_cache_control.as_deref() == Some("") {
             self.response_cache_control = None;
@@ -33769,10 +33769,10 @@ impl DtoExt for HeadObjectOutput {
         if self.accept_ranges.as_deref() == Some("") {
             self.accept_ranges = None;
         }
-        if let Some(ref val) = self.archive_status {
-            if val.as_str() == "" {
-                self.archive_status = None;
-            }
+        if let Some(ref val) = self.archive_status
+            && val.as_str() == ""
+        {
+            self.archive_status = None;
         }
         if self.cache_control.as_deref() == Some("") {
             self.cache_control = None;
@@ -33792,10 +33792,10 @@ impl DtoExt for HeadObjectOutput {
         if self.checksum_sha256.as_deref() == Some("") {
             self.checksum_sha256 = None;
         }
-        if let Some(ref val) = self.checksum_type {
-            if val.as_str() == "" {
-                self.checksum_type = None;
-            }
+        if let Some(ref val) = self.checksum_type
+            && val.as_str() == ""
+        {
+            self.checksum_type = None;
         }
         if self.content_disposition.as_deref() == Some("") {
             self.content_disposition = None;
@@ -33812,25 +33812,25 @@ impl DtoExt for HeadObjectOutput {
         if self.expiration.as_deref() == Some("") {
             self.expiration = None;
         }
-        if let Some(ref val) = self.object_lock_legal_hold_status {
-            if val.as_str() == "" {
-                self.object_lock_legal_hold_status = None;
-            }
+        if let Some(ref val) = self.object_lock_legal_hold_status
+            && val.as_str() == ""
+        {
+            self.object_lock_legal_hold_status = None;
         }
-        if let Some(ref val) = self.object_lock_mode {
-            if val.as_str() == "" {
-                self.object_lock_mode = None;
-            }
+        if let Some(ref val) = self.object_lock_mode
+            && val.as_str() == ""
+        {
+            self.object_lock_mode = None;
         }
-        if let Some(ref val) = self.replication_status {
-            if val.as_str() == "" {
-                self.replication_status = None;
-            }
+        if let Some(ref val) = self.replication_status
+            && val.as_str() == ""
+        {
+            self.replication_status = None;
         }
-        if let Some(ref val) = self.request_charged {
-            if val.as_str() == "" {
-                self.request_charged = None;
-            }
+        if let Some(ref val) = self.request_charged
+            && val.as_str() == ""
+        {
+            self.request_charged = None;
         }
         if self.restore.as_deref() == Some("") {
             self.restore = None;
@@ -33844,15 +33844,15 @@ impl DtoExt for HeadObjectOutput {
         if self.ssekms_key_id.as_deref() == Some("") {
             self.ssekms_key_id = None;
         }
-        if let Some(ref val) = self.server_side_encryption {
-            if val.as_str() == "" {
-                self.server_side_encryption = None;
-            }
+        if let Some(ref val) = self.server_side_encryption
+            && val.as_str() == ""
+        {
+            self.server_side_encryption = None;
         }
-        if let Some(ref val) = self.storage_class {
-            if val.as_str() == "" {
-                self.storage_class = None;
-            }
+        if let Some(ref val) = self.storage_class
+            && val.as_str() == ""
+        {
+            self.storage_class = None;
         }
         if self.version_id.as_deref() == Some("") {
             self.version_id = None;
@@ -33880,10 +33880,10 @@ impl DtoExt for InputSerialization {
         if let Some(ref mut val) = self.csv {
             val.ignore_empty_strings();
         }
-        if let Some(ref val) = self.compression_type {
-            if val.as_str() == "" {
-                self.compression_type = None;
-            }
+        if let Some(ref val) = self.compression_type
+            && val.as_str() == ""
+        {
+            self.compression_type = None;
         }
         if let Some(ref mut val) = self.json {
             val.ignore_empty_strings();
@@ -33919,15 +33919,15 @@ impl DtoExt for IntelligentTieringFilter {
 }
 impl DtoExt for InvalidObjectState {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.access_tier {
-            if val.as_str() == "" {
-                self.access_tier = None;
-            }
+        if let Some(ref val) = self.access_tier
+            && val.as_str() == ""
+        {
+            self.access_tier = None;
         }
-        if let Some(ref val) = self.storage_class {
-            if val.as_str() == "" {
-                self.storage_class = None;
-            }
+        if let Some(ref val) = self.storage_class
+            && val.as_str() == ""
+        {
+            self.storage_class = None;
         }
     }
 }
@@ -33973,10 +33973,10 @@ impl DtoExt for InventorySchedule {
 }
 impl DtoExt for JSONInput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.type_ {
-            if val.as_str() == "" {
-                self.type_ = None;
-            }
+        if let Some(ref val) = self.type_
+            && val.as_str() == ""
+        {
+            self.type_ = None;
         }
     }
 }
@@ -34150,10 +34150,10 @@ impl DtoExt for ListMultipartUploadsInput {
         if self.delimiter.as_deref() == Some("") {
             self.delimiter = None;
         }
-        if let Some(ref val) = self.encoding_type {
-            if val.as_str() == "" {
-                self.encoding_type = None;
-            }
+        if let Some(ref val) = self.encoding_type
+            && val.as_str() == ""
+        {
+            self.encoding_type = None;
         }
         if self.expected_bucket_owner.as_deref() == Some("") {
             self.expected_bucket_owner = None;
@@ -34164,10 +34164,10 @@ impl DtoExt for ListMultipartUploadsInput {
         if self.prefix.as_deref() == Some("") {
             self.prefix = None;
         }
-        if let Some(ref val) = self.request_payer {
-            if val.as_str() == "" {
-                self.request_payer = None;
-            }
+        if let Some(ref val) = self.request_payer
+            && val.as_str() == ""
+        {
+            self.request_payer = None;
         }
         if self.upload_id_marker.as_deref() == Some("") {
             self.upload_id_marker = None;
@@ -34182,10 +34182,10 @@ impl DtoExt for ListMultipartUploadsOutput {
         if self.delimiter.as_deref() == Some("") {
             self.delimiter = None;
         }
-        if let Some(ref val) = self.encoding_type {
-            if val.as_str() == "" {
-                self.encoding_type = None;
-            }
+        if let Some(ref val) = self.encoding_type
+            && val.as_str() == ""
+        {
+            self.encoding_type = None;
         }
         if self.key_marker.as_deref() == Some("") {
             self.key_marker = None;
@@ -34199,10 +34199,10 @@ impl DtoExt for ListMultipartUploadsOutput {
         if self.prefix.as_deref() == Some("") {
             self.prefix = None;
         }
-        if let Some(ref val) = self.request_charged {
-            if val.as_str() == "" {
-                self.request_charged = None;
-            }
+        if let Some(ref val) = self.request_charged
+            && val.as_str() == ""
+        {
+            self.request_charged = None;
         }
         if self.upload_id_marker.as_deref() == Some("") {
             self.upload_id_marker = None;
@@ -34214,10 +34214,10 @@ impl DtoExt for ListObjectVersionsInput {
         if self.delimiter.as_deref() == Some("") {
             self.delimiter = None;
         }
-        if let Some(ref val) = self.encoding_type {
-            if val.as_str() == "" {
-                self.encoding_type = None;
-            }
+        if let Some(ref val) = self.encoding_type
+            && val.as_str() == ""
+        {
+            self.encoding_type = None;
         }
         if self.expected_bucket_owner.as_deref() == Some("") {
             self.expected_bucket_owner = None;
@@ -34228,10 +34228,10 @@ impl DtoExt for ListObjectVersionsInput {
         if self.prefix.as_deref() == Some("") {
             self.prefix = None;
         }
-        if let Some(ref val) = self.request_payer {
-            if val.as_str() == "" {
-                self.request_payer = None;
-            }
+        if let Some(ref val) = self.request_payer
+            && val.as_str() == ""
+        {
+            self.request_payer = None;
         }
         if self.version_id_marker.as_deref() == Some("") {
             self.version_id_marker = None;
@@ -34243,10 +34243,10 @@ impl DtoExt for ListObjectVersionsOutput {
         if self.delimiter.as_deref() == Some("") {
             self.delimiter = None;
         }
-        if let Some(ref val) = self.encoding_type {
-            if val.as_str() == "" {
-                self.encoding_type = None;
-            }
+        if let Some(ref val) = self.encoding_type
+            && val.as_str() == ""
+        {
+            self.encoding_type = None;
         }
         if self.key_marker.as_deref() == Some("") {
             self.key_marker = None;
@@ -34263,10 +34263,10 @@ impl DtoExt for ListObjectVersionsOutput {
         if self.prefix.as_deref() == Some("") {
             self.prefix = None;
         }
-        if let Some(ref val) = self.request_charged {
-            if val.as_str() == "" {
-                self.request_charged = None;
-            }
+        if let Some(ref val) = self.request_charged
+            && val.as_str() == ""
+        {
+            self.request_charged = None;
         }
         if self.version_id_marker.as_deref() == Some("") {
             self.version_id_marker = None;
@@ -34278,10 +34278,10 @@ impl DtoExt for ListObjectsInput {
         if self.delimiter.as_deref() == Some("") {
             self.delimiter = None;
         }
-        if let Some(ref val) = self.encoding_type {
-            if val.as_str() == "" {
-                self.encoding_type = None;
-            }
+        if let Some(ref val) = self.encoding_type
+            && val.as_str() == ""
+        {
+            self.encoding_type = None;
         }
         if self.expected_bucket_owner.as_deref() == Some("") {
             self.expected_bucket_owner = None;
@@ -34292,10 +34292,10 @@ impl DtoExt for ListObjectsInput {
         if self.prefix.as_deref() == Some("") {
             self.prefix = None;
         }
-        if let Some(ref val) = self.request_payer {
-            if val.as_str() == "" {
-                self.request_payer = None;
-            }
+        if let Some(ref val) = self.request_payer
+            && val.as_str() == ""
+        {
+            self.request_payer = None;
         }
     }
 }
@@ -34304,10 +34304,10 @@ impl DtoExt for ListObjectsOutput {
         if self.delimiter.as_deref() == Some("") {
             self.delimiter = None;
         }
-        if let Some(ref val) = self.encoding_type {
-            if val.as_str() == "" {
-                self.encoding_type = None;
-            }
+        if let Some(ref val) = self.encoding_type
+            && val.as_str() == ""
+        {
+            self.encoding_type = None;
         }
         if self.marker.as_deref() == Some("") {
             self.marker = None;
@@ -34321,10 +34321,10 @@ impl DtoExt for ListObjectsOutput {
         if self.prefix.as_deref() == Some("") {
             self.prefix = None;
         }
-        if let Some(ref val) = self.request_charged {
-            if val.as_str() == "" {
-                self.request_charged = None;
-            }
+        if let Some(ref val) = self.request_charged
+            && val.as_str() == ""
+        {
+            self.request_charged = None;
         }
     }
 }
@@ -34336,10 +34336,10 @@ impl DtoExt for ListObjectsV2Input {
         if self.delimiter.as_deref() == Some("") {
             self.delimiter = None;
         }
-        if let Some(ref val) = self.encoding_type {
-            if val.as_str() == "" {
-                self.encoding_type = None;
-            }
+        if let Some(ref val) = self.encoding_type
+            && val.as_str() == ""
+        {
+            self.encoding_type = None;
         }
         if self.expected_bucket_owner.as_deref() == Some("") {
             self.expected_bucket_owner = None;
@@ -34347,10 +34347,10 @@ impl DtoExt for ListObjectsV2Input {
         if self.prefix.as_deref() == Some("") {
             self.prefix = None;
         }
-        if let Some(ref val) = self.request_payer {
-            if val.as_str() == "" {
-                self.request_payer = None;
-            }
+        if let Some(ref val) = self.request_payer
+            && val.as_str() == ""
+        {
+            self.request_payer = None;
         }
         if self.start_after.as_deref() == Some("") {
             self.start_after = None;
@@ -34365,10 +34365,10 @@ impl DtoExt for ListObjectsV2Output {
         if self.delimiter.as_deref() == Some("") {
             self.delimiter = None;
         }
-        if let Some(ref val) = self.encoding_type {
-            if val.as_str() == "" {
-                self.encoding_type = None;
-            }
+        if let Some(ref val) = self.encoding_type
+            && val.as_str() == ""
+        {
+            self.encoding_type = None;
         }
         if self.name.as_deref() == Some("") {
             self.name = None;
@@ -34379,10 +34379,10 @@ impl DtoExt for ListObjectsV2Output {
         if self.prefix.as_deref() == Some("") {
             self.prefix = None;
         }
-        if let Some(ref val) = self.request_charged {
-            if val.as_str() == "" {
-                self.request_charged = None;
-            }
+        if let Some(ref val) = self.request_charged
+            && val.as_str() == ""
+        {
+            self.request_charged = None;
         }
         if self.start_after.as_deref() == Some("") {
             self.start_after = None;
@@ -34394,10 +34394,10 @@ impl DtoExt for ListPartsInput {
         if self.expected_bucket_owner.as_deref() == Some("") {
             self.expected_bucket_owner = None;
         }
-        if let Some(ref val) = self.request_payer {
-            if val.as_str() == "" {
-                self.request_payer = None;
-            }
+        if let Some(ref val) = self.request_payer
+            && val.as_str() == ""
+        {
+            self.request_payer = None;
         }
         if self.sse_customer_algorithm.as_deref() == Some("") {
             self.sse_customer_algorithm = None;
@@ -34418,15 +34418,15 @@ impl DtoExt for ListPartsOutput {
         if self.bucket.as_deref() == Some("") {
             self.bucket = None;
         }
-        if let Some(ref val) = self.checksum_algorithm {
-            if val.as_str() == "" {
-                self.checksum_algorithm = None;
-            }
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
         }
-        if let Some(ref val) = self.checksum_type {
-            if val.as_str() == "" {
-                self.checksum_type = None;
-            }
+        if let Some(ref val) = self.checksum_type
+            && val.as_str() == ""
+        {
+            self.checksum_type = None;
         }
         if let Some(ref mut val) = self.initiator {
             val.ignore_empty_strings();
@@ -34437,15 +34437,15 @@ impl DtoExt for ListPartsOutput {
         if let Some(ref mut val) = self.owner {
             val.ignore_empty_strings();
         }
-        if let Some(ref val) = self.request_charged {
-            if val.as_str() == "" {
-                self.request_charged = None;
-            }
+        if let Some(ref val) = self.request_charged
+            && val.as_str() == ""
+        {
+            self.request_charged = None;
         }
-        if let Some(ref val) = self.storage_class {
-            if val.as_str() == "" {
-                self.storage_class = None;
-            }
+        if let Some(ref val) = self.storage_class
+            && val.as_str() == ""
+        {
+            self.storage_class = None;
         }
         if self.upload_id.as_deref() == Some("") {
             self.upload_id = None;
@@ -34457,10 +34457,10 @@ impl DtoExt for LocationInfo {
         if self.name.as_deref() == Some("") {
             self.name = None;
         }
-        if let Some(ref val) = self.type_ {
-            if val.as_str() == "" {
-                self.type_ = None;
-            }
+        if let Some(ref val) = self.type_
+            && val.as_str() == ""
+        {
+            self.type_ = None;
         }
     }
 }
@@ -34513,15 +34513,15 @@ impl DtoExt for MetricsConfiguration {
 }
 impl DtoExt for MultipartUpload {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.checksum_algorithm {
-            if val.as_str() == "" {
-                self.checksum_algorithm = None;
-            }
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
         }
-        if let Some(ref val) = self.checksum_type {
-            if val.as_str() == "" {
-                self.checksum_type = None;
-            }
+        if let Some(ref val) = self.checksum_type
+            && val.as_str() == ""
+        {
+            self.checksum_type = None;
         }
         if let Some(ref mut val) = self.initiator {
             val.ignore_empty_strings();
@@ -34532,10 +34532,10 @@ impl DtoExt for MultipartUpload {
         if let Some(ref mut val) = self.owner {
             val.ignore_empty_strings();
         }
-        if let Some(ref val) = self.storage_class {
-            if val.as_str() == "" {
-                self.storage_class = None;
-            }
+        if let Some(ref val) = self.storage_class
+            && val.as_str() == ""
+        {
+            self.storage_class = None;
         }
         if self.upload_id.as_deref() == Some("") {
             self.upload_id = None;
@@ -34547,10 +34547,10 @@ impl DtoExt for NoncurrentVersionExpiration {
 }
 impl DtoExt for NoncurrentVersionTransition {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.storage_class {
-            if val.as_str() == "" {
-                self.storage_class = None;
-            }
+        if let Some(ref val) = self.storage_class
+            && val.as_str() == ""
+        {
+            self.storage_class = None;
         }
     }
 }
@@ -34566,10 +34566,10 @@ impl DtoExt for NotificationConfigurationFilter {
 }
 impl DtoExt for Object {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.checksum_type {
-            if val.as_str() == "" {
-                self.checksum_type = None;
-            }
+        if let Some(ref val) = self.checksum_type
+            && val.as_str() == ""
+        {
+            self.checksum_type = None;
         }
         if self.key.as_deref() == Some("") {
             self.key = None;
@@ -34580,10 +34580,10 @@ impl DtoExt for Object {
         if let Some(ref mut val) = self.restore_status {
             val.ignore_empty_strings();
         }
-        if let Some(ref val) = self.storage_class {
-            if val.as_str() == "" {
-                self.storage_class = None;
-            }
+        if let Some(ref val) = self.storage_class
+            && val.as_str() == ""
+        {
+            self.storage_class = None;
         }
     }
 }
@@ -34596,10 +34596,10 @@ impl DtoExt for ObjectIdentifier {
 }
 impl DtoExt for ObjectLockConfiguration {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.object_lock_enabled {
-            if val.as_str() == "" {
-                self.object_lock_enabled = None;
-            }
+        if let Some(ref val) = self.object_lock_enabled
+            && val.as_str() == ""
+        {
+            self.object_lock_enabled = None;
         }
         if let Some(ref mut val) = self.rule {
             val.ignore_empty_strings();
@@ -34608,19 +34608,19 @@ impl DtoExt for ObjectLockConfiguration {
 }
 impl DtoExt for ObjectLockLegalHold {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.status {
-            if val.as_str() == "" {
-                self.status = None;
-            }
+        if let Some(ref val) = self.status
+            && val.as_str() == ""
+        {
+            self.status = None;
         }
     }
 }
 impl DtoExt for ObjectLockRetention {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.mode {
-            if val.as_str() == "" {
-                self.mode = None;
-            }
+        if let Some(ref val) = self.mode
+            && val.as_str() == ""
+        {
+            self.mode = None;
         }
     }
 }
@@ -34652,10 +34652,10 @@ impl DtoExt for ObjectPart {
 }
 impl DtoExt for ObjectVersion {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.checksum_type {
-            if val.as_str() == "" {
-                self.checksum_type = None;
-            }
+        if let Some(ref val) = self.checksum_type
+            && val.as_str() == ""
+        {
+            self.checksum_type = None;
         }
         if self.key.as_deref() == Some("") {
             self.key = None;
@@ -34666,10 +34666,10 @@ impl DtoExt for ObjectVersion {
         if let Some(ref mut val) = self.restore_status {
             val.ignore_empty_strings();
         }
-        if let Some(ref val) = self.storage_class {
-            if val.as_str() == "" {
-                self.storage_class = None;
-            }
+        if let Some(ref val) = self.storage_class
+            && val.as_str() == ""
+        {
+            self.storage_class = None;
         }
         if self.version_id.as_deref() == Some("") {
             self.version_id = None;
@@ -34730,10 +34730,10 @@ impl DtoExt for Part {
 }
 impl DtoExt for PartitionedPrefix {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.partition_date_source {
-            if val.as_str() == "" {
-                self.partition_date_source = None;
-            }
+        if let Some(ref val) = self.partition_date_source
+            && val.as_str() == ""
+        {
+            self.partition_date_source = None;
         }
     }
 }
@@ -34756,10 +34756,10 @@ impl DtoExt for PublicAccessBlockConfiguration {
 impl DtoExt for PutBucketAccelerateConfigurationInput {
     fn ignore_empty_strings(&mut self) {
         self.accelerate_configuration.ignore_empty_strings();
-        if let Some(ref val) = self.checksum_algorithm {
-            if val.as_str() == "" {
-                self.checksum_algorithm = None;
-            }
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
         }
         if self.expected_bucket_owner.as_deref() == Some("") {
             self.expected_bucket_owner = None;
@@ -34768,18 +34768,18 @@ impl DtoExt for PutBucketAccelerateConfigurationInput {
 }
 impl DtoExt for PutBucketAclInput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.acl {
-            if val.as_str() == "" {
-                self.acl = None;
-            }
+        if let Some(ref val) = self.acl
+            && val.as_str() == ""
+        {
+            self.acl = None;
         }
         if let Some(ref mut val) = self.access_control_policy {
             val.ignore_empty_strings();
         }
-        if let Some(ref val) = self.checksum_algorithm {
-            if val.as_str() == "" {
-                self.checksum_algorithm = None;
-            }
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
         }
         if self.content_md5.as_deref() == Some("") {
             self.content_md5 = None;
@@ -34815,10 +34815,10 @@ impl DtoExt for PutBucketAnalyticsConfigurationInput {
 impl DtoExt for PutBucketCorsInput {
     fn ignore_empty_strings(&mut self) {
         self.cors_configuration.ignore_empty_strings();
-        if let Some(ref val) = self.checksum_algorithm {
-            if val.as_str() == "" {
-                self.checksum_algorithm = None;
-            }
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
         }
         if self.content_md5.as_deref() == Some("") {
             self.content_md5 = None;
@@ -34830,10 +34830,10 @@ impl DtoExt for PutBucketCorsInput {
 }
 impl DtoExt for PutBucketEncryptionInput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.checksum_algorithm {
-            if val.as_str() == "" {
-                self.checksum_algorithm = None;
-            }
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
         }
         if self.content_md5.as_deref() == Some("") {
             self.content_md5 = None;
@@ -34859,10 +34859,10 @@ impl DtoExt for PutBucketInventoryConfigurationInput {
 }
 impl DtoExt for PutBucketLifecycleConfigurationInput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.checksum_algorithm {
-            if val.as_str() == "" {
-                self.checksum_algorithm = None;
-            }
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
         }
         if self.expected_bucket_owner.as_deref() == Some("") {
             self.expected_bucket_owner = None;
@@ -34870,29 +34870,29 @@ impl DtoExt for PutBucketLifecycleConfigurationInput {
         if let Some(ref mut val) = self.lifecycle_configuration {
             val.ignore_empty_strings();
         }
-        if let Some(ref val) = self.transition_default_minimum_object_size {
-            if val.as_str() == "" {
-                self.transition_default_minimum_object_size = None;
-            }
+        if let Some(ref val) = self.transition_default_minimum_object_size
+            && val.as_str() == ""
+        {
+            self.transition_default_minimum_object_size = None;
         }
     }
 }
 impl DtoExt for PutBucketLifecycleConfigurationOutput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.transition_default_minimum_object_size {
-            if val.as_str() == "" {
-                self.transition_default_minimum_object_size = None;
-            }
+        if let Some(ref val) = self.transition_default_minimum_object_size
+            && val.as_str() == ""
+        {
+            self.transition_default_minimum_object_size = None;
         }
     }
 }
 impl DtoExt for PutBucketLoggingInput {
     fn ignore_empty_strings(&mut self) {
         self.bucket_logging_status.ignore_empty_strings();
-        if let Some(ref val) = self.checksum_algorithm {
-            if val.as_str() == "" {
-                self.checksum_algorithm = None;
-            }
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
         }
         if self.content_md5.as_deref() == Some("") {
             self.content_md5 = None;
@@ -34931,10 +34931,10 @@ impl DtoExt for PutBucketOwnershipControlsInput {
 }
 impl DtoExt for PutBucketPolicyInput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.checksum_algorithm {
-            if val.as_str() == "" {
-                self.checksum_algorithm = None;
-            }
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
         }
         if self.content_md5.as_deref() == Some("") {
             self.content_md5 = None;
@@ -34946,10 +34946,10 @@ impl DtoExt for PutBucketPolicyInput {
 }
 impl DtoExt for PutBucketReplicationInput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.checksum_algorithm {
-            if val.as_str() == "" {
-                self.checksum_algorithm = None;
-            }
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
         }
         if self.content_md5.as_deref() == Some("") {
             self.content_md5 = None;
@@ -34965,10 +34965,10 @@ impl DtoExt for PutBucketReplicationInput {
 }
 impl DtoExt for PutBucketRequestPaymentInput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.checksum_algorithm {
-            if val.as_str() == "" {
-                self.checksum_algorithm = None;
-            }
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
         }
         if self.content_md5.as_deref() == Some("") {
             self.content_md5 = None;
@@ -34981,10 +34981,10 @@ impl DtoExt for PutBucketRequestPaymentInput {
 }
 impl DtoExt for PutBucketTaggingInput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.checksum_algorithm {
-            if val.as_str() == "" {
-                self.checksum_algorithm = None;
-            }
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
         }
         if self.content_md5.as_deref() == Some("") {
             self.content_md5 = None;
@@ -34997,10 +34997,10 @@ impl DtoExt for PutBucketTaggingInput {
 }
 impl DtoExt for PutBucketVersioningInput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.checksum_algorithm {
-            if val.as_str() == "" {
-                self.checksum_algorithm = None;
-            }
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
         }
         if self.content_md5.as_deref() == Some("") {
             self.content_md5 = None;
@@ -35016,10 +35016,10 @@ impl DtoExt for PutBucketVersioningInput {
 }
 impl DtoExt for PutBucketWebsiteInput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.checksum_algorithm {
-            if val.as_str() == "" {
-                self.checksum_algorithm = None;
-            }
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
         }
         if self.content_md5.as_deref() == Some("") {
             self.content_md5 = None;
@@ -35032,18 +35032,18 @@ impl DtoExt for PutBucketWebsiteInput {
 }
 impl DtoExt for PutObjectAclInput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.acl {
-            if val.as_str() == "" {
-                self.acl = None;
-            }
+        if let Some(ref val) = self.acl
+            && val.as_str() == ""
+        {
+            self.acl = None;
         }
         if let Some(ref mut val) = self.access_control_policy {
             val.ignore_empty_strings();
         }
-        if let Some(ref val) = self.checksum_algorithm {
-            if val.as_str() == "" {
-                self.checksum_algorithm = None;
-            }
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
         }
         if self.content_md5.as_deref() == Some("") {
             self.content_md5 = None;
@@ -35066,10 +35066,10 @@ impl DtoExt for PutObjectAclInput {
         if self.grant_write_acp.as_deref() == Some("") {
             self.grant_write_acp = None;
         }
-        if let Some(ref val) = self.request_payer {
-            if val.as_str() == "" {
-                self.request_payer = None;
-            }
+        if let Some(ref val) = self.request_payer
+            && val.as_str() == ""
+        {
+            self.request_payer = None;
         }
         if self.version_id.as_deref() == Some("") {
             self.version_id = None;
@@ -35078,27 +35078,27 @@ impl DtoExt for PutObjectAclInput {
 }
 impl DtoExt for PutObjectAclOutput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.request_charged {
-            if val.as_str() == "" {
-                self.request_charged = None;
-            }
+        if let Some(ref val) = self.request_charged
+            && val.as_str() == ""
+        {
+            self.request_charged = None;
         }
     }
 }
 impl DtoExt for PutObjectInput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.acl {
-            if val.as_str() == "" {
-                self.acl = None;
-            }
+        if let Some(ref val) = self.acl
+            && val.as_str() == ""
+        {
+            self.acl = None;
         }
         if self.cache_control.as_deref() == Some("") {
             self.cache_control = None;
         }
-        if let Some(ref val) = self.checksum_algorithm {
-            if val.as_str() == "" {
-                self.checksum_algorithm = None;
-            }
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
         }
         if self.checksum_crc32.as_deref() == Some("") {
             self.checksum_crc32 = None;
@@ -35142,20 +35142,20 @@ impl DtoExt for PutObjectInput {
         if self.grant_write_acp.as_deref() == Some("") {
             self.grant_write_acp = None;
         }
-        if let Some(ref val) = self.object_lock_legal_hold_status {
-            if val.as_str() == "" {
-                self.object_lock_legal_hold_status = None;
-            }
+        if let Some(ref val) = self.object_lock_legal_hold_status
+            && val.as_str() == ""
+        {
+            self.object_lock_legal_hold_status = None;
         }
-        if let Some(ref val) = self.object_lock_mode {
-            if val.as_str() == "" {
-                self.object_lock_mode = None;
-            }
+        if let Some(ref val) = self.object_lock_mode
+            && val.as_str() == ""
+        {
+            self.object_lock_mode = None;
         }
-        if let Some(ref val) = self.request_payer {
-            if val.as_str() == "" {
-                self.request_payer = None;
-            }
+        if let Some(ref val) = self.request_payer
+            && val.as_str() == ""
+        {
+            self.request_payer = None;
         }
         if self.sse_customer_algorithm.as_deref() == Some("") {
             self.sse_customer_algorithm = None;
@@ -35172,15 +35172,15 @@ impl DtoExt for PutObjectInput {
         if self.ssekms_key_id.as_deref() == Some("") {
             self.ssekms_key_id = None;
         }
-        if let Some(ref val) = self.server_side_encryption {
-            if val.as_str() == "" {
-                self.server_side_encryption = None;
-            }
+        if let Some(ref val) = self.server_side_encryption
+            && val.as_str() == ""
+        {
+            self.server_side_encryption = None;
         }
-        if let Some(ref val) = self.storage_class {
-            if val.as_str() == "" {
-                self.storage_class = None;
-            }
+        if let Some(ref val) = self.storage_class
+            && val.as_str() == ""
+        {
+            self.storage_class = None;
         }
         if self.tagging.as_deref() == Some("") {
             self.tagging = None;
@@ -35195,10 +35195,10 @@ impl DtoExt for PutObjectInput {
 }
 impl DtoExt for PutObjectLegalHoldInput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.checksum_algorithm {
-            if val.as_str() == "" {
-                self.checksum_algorithm = None;
-            }
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
         }
         if self.content_md5.as_deref() == Some("") {
             self.content_md5 = None;
@@ -35209,10 +35209,10 @@ impl DtoExt for PutObjectLegalHoldInput {
         if let Some(ref mut val) = self.legal_hold {
             val.ignore_empty_strings();
         }
-        if let Some(ref val) = self.request_payer {
-            if val.as_str() == "" {
-                self.request_payer = None;
-            }
+        if let Some(ref val) = self.request_payer
+            && val.as_str() == ""
+        {
+            self.request_payer = None;
         }
         if self.version_id.as_deref() == Some("") {
             self.version_id = None;
@@ -35221,19 +35221,19 @@ impl DtoExt for PutObjectLegalHoldInput {
 }
 impl DtoExt for PutObjectLegalHoldOutput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.request_charged {
-            if val.as_str() == "" {
-                self.request_charged = None;
-            }
+        if let Some(ref val) = self.request_charged
+            && val.as_str() == ""
+        {
+            self.request_charged = None;
         }
     }
 }
 impl DtoExt for PutObjectLockConfigurationInput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.checksum_algorithm {
-            if val.as_str() == "" {
-                self.checksum_algorithm = None;
-            }
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
         }
         if self.content_md5.as_deref() == Some("") {
             self.content_md5 = None;
@@ -35244,10 +35244,10 @@ impl DtoExt for PutObjectLockConfigurationInput {
         if let Some(ref mut val) = self.object_lock_configuration {
             val.ignore_empty_strings();
         }
-        if let Some(ref val) = self.request_payer {
-            if val.as_str() == "" {
-                self.request_payer = None;
-            }
+        if let Some(ref val) = self.request_payer
+            && val.as_str() == ""
+        {
+            self.request_payer = None;
         }
         if self.token.as_deref() == Some("") {
             self.token = None;
@@ -35256,10 +35256,10 @@ impl DtoExt for PutObjectLockConfigurationInput {
 }
 impl DtoExt for PutObjectLockConfigurationOutput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.request_charged {
-            if val.as_str() == "" {
-                self.request_charged = None;
-            }
+        if let Some(ref val) = self.request_charged
+            && val.as_str() == ""
+        {
+            self.request_charged = None;
         }
     }
 }
@@ -35280,18 +35280,18 @@ impl DtoExt for PutObjectOutput {
         if self.checksum_sha256.as_deref() == Some("") {
             self.checksum_sha256 = None;
         }
-        if let Some(ref val) = self.checksum_type {
-            if val.as_str() == "" {
-                self.checksum_type = None;
-            }
+        if let Some(ref val) = self.checksum_type
+            && val.as_str() == ""
+        {
+            self.checksum_type = None;
         }
         if self.expiration.as_deref() == Some("") {
             self.expiration = None;
         }
-        if let Some(ref val) = self.request_charged {
-            if val.as_str() == "" {
-                self.request_charged = None;
-            }
+        if let Some(ref val) = self.request_charged
+            && val.as_str() == ""
+        {
+            self.request_charged = None;
         }
         if self.sse_customer_algorithm.as_deref() == Some("") {
             self.sse_customer_algorithm = None;
@@ -35305,10 +35305,10 @@ impl DtoExt for PutObjectOutput {
         if self.ssekms_key_id.as_deref() == Some("") {
             self.ssekms_key_id = None;
         }
-        if let Some(ref val) = self.server_side_encryption {
-            if val.as_str() == "" {
-                self.server_side_encryption = None;
-            }
+        if let Some(ref val) = self.server_side_encryption
+            && val.as_str() == ""
+        {
+            self.server_side_encryption = None;
         }
         if self.version_id.as_deref() == Some("") {
             self.version_id = None;
@@ -35317,10 +35317,10 @@ impl DtoExt for PutObjectOutput {
 }
 impl DtoExt for PutObjectRetentionInput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.checksum_algorithm {
-            if val.as_str() == "" {
-                self.checksum_algorithm = None;
-            }
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
         }
         if self.content_md5.as_deref() == Some("") {
             self.content_md5 = None;
@@ -35328,10 +35328,10 @@ impl DtoExt for PutObjectRetentionInput {
         if self.expected_bucket_owner.as_deref() == Some("") {
             self.expected_bucket_owner = None;
         }
-        if let Some(ref val) = self.request_payer {
-            if val.as_str() == "" {
-                self.request_payer = None;
-            }
+        if let Some(ref val) = self.request_payer
+            && val.as_str() == ""
+        {
+            self.request_payer = None;
         }
         if let Some(ref mut val) = self.retention {
             val.ignore_empty_strings();
@@ -35343,19 +35343,19 @@ impl DtoExt for PutObjectRetentionInput {
 }
 impl DtoExt for PutObjectRetentionOutput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.request_charged {
-            if val.as_str() == "" {
-                self.request_charged = None;
-            }
+        if let Some(ref val) = self.request_charged
+            && val.as_str() == ""
+        {
+            self.request_charged = None;
         }
     }
 }
 impl DtoExt for PutObjectTaggingInput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.checksum_algorithm {
-            if val.as_str() == "" {
-                self.checksum_algorithm = None;
-            }
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
         }
         if self.content_md5.as_deref() == Some("") {
             self.content_md5 = None;
@@ -35363,10 +35363,10 @@ impl DtoExt for PutObjectTaggingInput {
         if self.expected_bucket_owner.as_deref() == Some("") {
             self.expected_bucket_owner = None;
         }
-        if let Some(ref val) = self.request_payer {
-            if val.as_str() == "" {
-                self.request_payer = None;
-            }
+        if let Some(ref val) = self.request_payer
+            && val.as_str() == ""
+        {
+            self.request_payer = None;
         }
         self.tagging.ignore_empty_strings();
         if self.version_id.as_deref() == Some("") {
@@ -35383,10 +35383,10 @@ impl DtoExt for PutObjectTaggingOutput {
 }
 impl DtoExt for PutPublicAccessBlockInput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.checksum_algorithm {
-            if val.as_str() == "" {
-                self.checksum_algorithm = None;
-            }
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
         }
         if self.content_md5.as_deref() == Some("") {
             self.content_md5 = None;
@@ -35418,10 +35418,10 @@ impl DtoExt for Redirect {
         if self.http_redirect_code.as_deref() == Some("") {
             self.http_redirect_code = None;
         }
-        if let Some(ref val) = self.protocol {
-            if val.as_str() == "" {
-                self.protocol = None;
-            }
+        if let Some(ref val) = self.protocol
+            && val.as_str() == ""
+        {
+            self.protocol = None;
         }
         if self.replace_key_prefix_with.as_deref() == Some("") {
             self.replace_key_prefix_with = None;
@@ -35433,10 +35433,10 @@ impl DtoExt for Redirect {
 }
 impl DtoExt for RedirectAllRequestsTo {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.protocol {
-            if val.as_str() == "" {
-                self.protocol = None;
-            }
+        if let Some(ref val) = self.protocol
+            && val.as_str() == ""
+        {
+            self.protocol = None;
         }
     }
 }
@@ -35508,18 +35508,18 @@ impl DtoExt for RequestProgress {
 }
 impl DtoExt for RestoreObjectInput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.checksum_algorithm {
-            if val.as_str() == "" {
-                self.checksum_algorithm = None;
-            }
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
         }
         if self.expected_bucket_owner.as_deref() == Some("") {
             self.expected_bucket_owner = None;
         }
-        if let Some(ref val) = self.request_payer {
-            if val.as_str() == "" {
-                self.request_payer = None;
-            }
+        if let Some(ref val) = self.request_payer
+            && val.as_str() == ""
+        {
+            self.request_payer = None;
         }
         if let Some(ref mut val) = self.restore_request {
             val.ignore_empty_strings();
@@ -35531,10 +35531,10 @@ impl DtoExt for RestoreObjectInput {
 }
 impl DtoExt for RestoreObjectOutput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.request_charged {
-            if val.as_str() == "" {
-                self.request_charged = None;
-            }
+        if let Some(ref val) = self.request_charged
+            && val.as_str() == ""
+        {
+            self.request_charged = None;
         }
         if self.restore_output_path.as_deref() == Some("") {
             self.restore_output_path = None;
@@ -35555,15 +35555,15 @@ impl DtoExt for RestoreRequest {
         if let Some(ref mut val) = self.select_parameters {
             val.ignore_empty_strings();
         }
-        if let Some(ref val) = self.tier {
-            if val.as_str() == "" {
-                self.tier = None;
-            }
+        if let Some(ref val) = self.tier
+            && val.as_str() == ""
+        {
+            self.tier = None;
         }
-        if let Some(ref val) = self.type_ {
-            if val.as_str() == "" {
-                self.type_ = None;
-            }
+        if let Some(ref val) = self.type_
+            && val.as_str() == ""
+        {
+            self.type_ = None;
         }
     }
 }
@@ -35583,18 +35583,18 @@ impl DtoExt for S3KeyFilter {
 }
 impl DtoExt for S3Location {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.canned_acl {
-            if val.as_str() == "" {
-                self.canned_acl = None;
-            }
+        if let Some(ref val) = self.canned_acl
+            && val.as_str() == ""
+        {
+            self.canned_acl = None;
         }
         if let Some(ref mut val) = self.encryption {
             val.ignore_empty_strings();
         }
-        if let Some(ref val) = self.storage_class {
-            if val.as_str() == "" {
-                self.storage_class = None;
-            }
+        if let Some(ref val) = self.storage_class
+            && val.as_str() == ""
+        {
+            self.storage_class = None;
         }
         if let Some(ref mut val) = self.tagging {
             val.ignore_empty_strings();
@@ -35724,10 +35724,10 @@ impl DtoExt for TargetGrant {
         if let Some(ref mut val) = self.grantee {
             val.ignore_empty_strings();
         }
-        if let Some(ref val) = self.permission {
-            if val.as_str() == "" {
-                self.permission = None;
-            }
+        if let Some(ref val) = self.permission
+            && val.as_str() == ""
+        {
+            self.permission = None;
         }
     }
 }
@@ -35753,10 +35753,10 @@ impl DtoExt for TopicConfiguration {
 }
 impl DtoExt for Transition {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.storage_class {
-            if val.as_str() == "" {
-                self.storage_class = None;
-            }
+        if let Some(ref val) = self.storage_class
+            && val.as_str() == ""
+        {
+            self.storage_class = None;
         }
     }
 }
@@ -35780,10 +35780,10 @@ impl DtoExt for UploadPartCopyInput {
         if self.expected_source_bucket_owner.as_deref() == Some("") {
             self.expected_source_bucket_owner = None;
         }
-        if let Some(ref val) = self.request_payer {
-            if val.as_str() == "" {
-                self.request_payer = None;
-            }
+        if let Some(ref val) = self.request_payer
+            && val.as_str() == ""
+        {
+            self.request_payer = None;
         }
         if self.sse_customer_algorithm.as_deref() == Some("") {
             self.sse_customer_algorithm = None;
@@ -35804,10 +35804,10 @@ impl DtoExt for UploadPartCopyOutput {
         if self.copy_source_version_id.as_deref() == Some("") {
             self.copy_source_version_id = None;
         }
-        if let Some(ref val) = self.request_charged {
-            if val.as_str() == "" {
-                self.request_charged = None;
-            }
+        if let Some(ref val) = self.request_charged
+            && val.as_str() == ""
+        {
+            self.request_charged = None;
         }
         if self.sse_customer_algorithm.as_deref() == Some("") {
             self.sse_customer_algorithm = None;
@@ -35818,19 +35818,19 @@ impl DtoExt for UploadPartCopyOutput {
         if self.ssekms_key_id.as_deref() == Some("") {
             self.ssekms_key_id = None;
         }
-        if let Some(ref val) = self.server_side_encryption {
-            if val.as_str() == "" {
-                self.server_side_encryption = None;
-            }
+        if let Some(ref val) = self.server_side_encryption
+            && val.as_str() == ""
+        {
+            self.server_side_encryption = None;
         }
     }
 }
 impl DtoExt for UploadPartInput {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.checksum_algorithm {
-            if val.as_str() == "" {
-                self.checksum_algorithm = None;
-            }
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
         }
         if self.checksum_crc32.as_deref() == Some("") {
             self.checksum_crc32 = None;
@@ -35853,10 +35853,10 @@ impl DtoExt for UploadPartInput {
         if self.expected_bucket_owner.as_deref() == Some("") {
             self.expected_bucket_owner = None;
         }
-        if let Some(ref val) = self.request_payer {
-            if val.as_str() == "" {
-                self.request_payer = None;
-            }
+        if let Some(ref val) = self.request_payer
+            && val.as_str() == ""
+        {
+            self.request_payer = None;
         }
         if self.sse_customer_algorithm.as_deref() == Some("") {
             self.sse_customer_algorithm = None;
@@ -35886,10 +35886,10 @@ impl DtoExt for UploadPartOutput {
         if self.checksum_sha256.as_deref() == Some("") {
             self.checksum_sha256 = None;
         }
-        if let Some(ref val) = self.request_charged {
-            if val.as_str() == "" {
-                self.request_charged = None;
-            }
+        if let Some(ref val) = self.request_charged
+            && val.as_str() == ""
+        {
+            self.request_charged = None;
         }
         if self.sse_customer_algorithm.as_deref() == Some("") {
             self.sse_customer_algorithm = None;
@@ -35900,24 +35900,24 @@ impl DtoExt for UploadPartOutput {
         if self.ssekms_key_id.as_deref() == Some("") {
             self.ssekms_key_id = None;
         }
-        if let Some(ref val) = self.server_side_encryption {
-            if val.as_str() == "" {
-                self.server_side_encryption = None;
-            }
+        if let Some(ref val) = self.server_side_encryption
+            && val.as_str() == ""
+        {
+            self.server_side_encryption = None;
         }
     }
 }
 impl DtoExt for VersioningConfiguration {
     fn ignore_empty_strings(&mut self) {
-        if let Some(ref val) = self.mfa_delete {
-            if val.as_str() == "" {
-                self.mfa_delete = None;
-            }
+        if let Some(ref val) = self.mfa_delete
+            && val.as_str() == ""
+        {
+            self.mfa_delete = None;
         }
-        if let Some(ref val) = self.status {
-            if val.as_str() == "" {
-                self.status = None;
-            }
+        if let Some(ref val) = self.status
+            && val.as_str() == ""
+        {
+            self.status = None;
         }
     }
 }
@@ -35978,25 +35978,25 @@ impl DtoExt for WriteGetObjectResponseInput {
         if self.expiration.as_deref() == Some("") {
             self.expiration = None;
         }
-        if let Some(ref val) = self.object_lock_legal_hold_status {
-            if val.as_str() == "" {
-                self.object_lock_legal_hold_status = None;
-            }
+        if let Some(ref val) = self.object_lock_legal_hold_status
+            && val.as_str() == ""
+        {
+            self.object_lock_legal_hold_status = None;
         }
-        if let Some(ref val) = self.object_lock_mode {
-            if val.as_str() == "" {
-                self.object_lock_mode = None;
-            }
+        if let Some(ref val) = self.object_lock_mode
+            && val.as_str() == ""
+        {
+            self.object_lock_mode = None;
         }
-        if let Some(ref val) = self.replication_status {
-            if val.as_str() == "" {
-                self.replication_status = None;
-            }
+        if let Some(ref val) = self.replication_status
+            && val.as_str() == ""
+        {
+            self.replication_status = None;
         }
-        if let Some(ref val) = self.request_charged {
-            if val.as_str() == "" {
-                self.request_charged = None;
-            }
+        if let Some(ref val) = self.request_charged
+            && val.as_str() == ""
+        {
+            self.request_charged = None;
         }
         if self.restore.as_deref() == Some("") {
             self.restore = None;
@@ -36010,15 +36010,15 @@ impl DtoExt for WriteGetObjectResponseInput {
         if self.ssekms_key_id.as_deref() == Some("") {
             self.ssekms_key_id = None;
         }
-        if let Some(ref val) = self.server_side_encryption {
-            if val.as_str() == "" {
-                self.server_side_encryption = None;
-            }
+        if let Some(ref val) = self.server_side_encryption
+            && val.as_str() == ""
+        {
+            self.server_side_encryption = None;
         }
-        if let Some(ref val) = self.storage_class {
-            if val.as_str() == "" {
-                self.storage_class = None;
-            }
+        if let Some(ref val) = self.storage_class
+            && val.as_str() == ""
+        {
+            self.storage_class = None;
         }
         if self.version_id.as_deref() == Some("") {
             self.version_id = None;

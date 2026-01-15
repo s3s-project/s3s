@@ -503,12 +503,12 @@ impl S3 for FileSystem {
 
         // Check If-None-Match condition
         // If-None-Match: * means "only create if the object doesn't exist"
-        if let Some(ref condition) = if_none_match {
-            if condition.is_any() {
-                let object_path = self.get_object_path(&bucket, &key)?;
-                if object_path.exists() {
-                    return Err(s3_error!(PreconditionFailed, "Object already exists"));
-                }
+        if let Some(ref condition) = if_none_match
+            && condition.is_any()
+        {
+            let object_path = self.get_object_path(&bucket, &key)?;
+            if object_path.exists() {
+                return Err(s3_error!(PreconditionFailed, "Object already exists"));
             }
         }
 
@@ -540,10 +540,10 @@ impl S3 for FileSystem {
         }
 
         if key.ends_with('/') {
-            if let Some(len) = content_length {
-                if len > 0 {
-                    return Err(s3_error!(UnexpectedContent, "Unexpected request body when creating a directory object."));
-                }
+            if let Some(len) = content_length
+                && len > 0
+            {
+                return Err(s3_error!(UnexpectedContent, "Unexpected request body when creating a directory object."));
             }
             let object_path = self.get_object_path(&bucket, &key)?;
             try_!(fs::create_dir_all(&object_path).await);
@@ -577,23 +577,23 @@ impl S3 for FileSystem {
 
         let checksum = checksum.finalize();
 
-        if let Some(trailers) = req.trailing_headers {
-            if let Some(trailers) = trailers.take() {
-                if let Some(crc32) = trailers.get("x-amz-checksum-crc32") {
-                    input.checksum_crc32 = Some(crc32.to_str().map_err(|_| s3_error!(InvalidArgument))?.to_owned());
-                }
-                if let Some(crc32c) = trailers.get("x-amz-checksum-crc32c") {
-                    input.checksum_crc32c = Some(crc32c.to_str().map_err(|_| s3_error!(InvalidArgument))?.to_owned());
-                }
-                if let Some(sha1) = trailers.get("x-amz-checksum-sha1") {
-                    input.checksum_sha1 = Some(sha1.to_str().map_err(|_| s3_error!(InvalidArgument))?.to_owned());
-                }
-                if let Some(sha256) = trailers.get("x-amz-checksum-sha256") {
-                    input.checksum_sha256 = Some(sha256.to_str().map_err(|_| s3_error!(InvalidArgument))?.to_owned());
-                }
-                if let Some(crc64nvme) = trailers.get("x-amz-checksum-crc64nvme") {
-                    input.checksum_crc64nvme = Some(crc64nvme.to_str().map_err(|_| s3_error!(InvalidArgument))?.to_owned());
-                }
+        if let Some(trailers) = req.trailing_headers
+            && let Some(trailers) = trailers.take()
+        {
+            if let Some(crc32) = trailers.get("x-amz-checksum-crc32") {
+                input.checksum_crc32 = Some(crc32.to_str().map_err(|_| s3_error!(InvalidArgument))?.to_owned());
+            }
+            if let Some(crc32c) = trailers.get("x-amz-checksum-crc32c") {
+                input.checksum_crc32c = Some(crc32c.to_str().map_err(|_| s3_error!(InvalidArgument))?.to_owned());
+            }
+            if let Some(sha1) = trailers.get("x-amz-checksum-sha1") {
+                input.checksum_sha1 = Some(sha1.to_str().map_err(|_| s3_error!(InvalidArgument))?.to_owned());
+            }
+            if let Some(sha256) = trailers.get("x-amz-checksum-sha256") {
+                input.checksum_sha256 = Some(sha256.to_str().map_err(|_| s3_error!(InvalidArgument))?.to_owned());
+            }
+            if let Some(crc64nvme) = trailers.get("x-amz-checksum-crc64nvme") {
+                input.checksum_crc64nvme = Some(crc64nvme.to_str().map_err(|_| s3_error!(InvalidArgument))?.to_owned());
             }
         }
 

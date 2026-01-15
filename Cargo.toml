@@ -6,7 +6,7 @@ resolver = "3"
 edition = "2024"
 repository = "https://github.com/Nugine/s3s"
 license = "Apache-2.0"
-rust-version = "1.86.0"
+rust-version = "1.88.0"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

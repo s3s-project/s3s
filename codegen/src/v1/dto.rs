@@ -61,12 +61,12 @@ pub fn collect_rust_types(model: &smithy::Model, ops: &Operations) -> RustTypes 
             continue;
         }
 
-        if etag_condition_alias_types.contains(&rs_shape_name.as_str()) {
-            if let smithy::Shape::String(shape) = shape {
-                let ty = rust::Type::alias(&rs_shape_name, "ETagCondition", shape.traits.doc());
-                insert(rs_shape_name, ty);
-                continue;
-            }
+        if etag_condition_alias_types.contains(&rs_shape_name.as_str())
+            && let smithy::Shape::String(shape) = shape
+        {
+            let ty = rust::Type::alias(&rs_shape_name, "ETagCondition", shape.traits.doc());
+            insert(rs_shape_name, ty);
+            continue;
         }
 
         match shape {
@@ -442,13 +442,12 @@ fn collect_types_needing_custom_default(rust_types: &RustTypes) -> BTreeSet<Stri
 
     // Start with Configuration types that can't derive Default
     for (name, rust_type) in rust_types {
-        if name.ends_with("Configuration") {
-            if let rust::Type::Struct(ty) = rust_type {
-                if !can_derive_default(ty, rust_types) {
-                    // Add this type and all its struct dependencies
-                    collect_struct_dependencies(name, rust_types, &mut types_needing_custom_default);
-                }
-            }
+        if name.ends_with("Configuration")
+            && let rust::Type::Struct(ty) = rust_type
+            && !can_derive_default(ty, rust_types)
+        {
+            // Add this type and all its struct dependencies
+            collect_struct_dependencies(name, rust_types, &mut types_needing_custom_default);
         }
     }
 
@@ -462,27 +461,27 @@ fn collect_struct_dependencies(type_name: &str, rust_types: &RustTypes, result: 
     }
 
     // Only add this type if it can't derive Default
-    if let Some(rust::Type::Struct(s)) = rust_types.get(type_name) {
-        if !can_derive_default(s, rust_types) {
-            result.insert(type_name.to_owned());
+    if let Some(rust::Type::Struct(s)) = rust_types.get(type_name)
+        && !can_derive_default(s, rust_types)
+    {
+        result.insert(type_name.to_owned());
 
-            // Recursively add struct dependencies that also can't derive Default
-            for field in &s.fields {
-                // Skip optional fields and list/map types (they already have Default)
-                if field.option_type {
-                    continue;
-                }
+        // Recursively add struct dependencies that also can't derive Default
+        for field in &s.fields {
+            // Skip optional fields and list/map types (they already have Default)
+            if field.option_type {
+                continue;
+            }
 
-                if let Some(field_type) = rust_types.get(&field.type_) {
-                    match field_type {
-                        rust::Type::Struct(_) => {
-                            collect_struct_dependencies(&field.type_, rust_types, result);
-                        }
-                        rust::Type::List(_) | rust::Type::Map(_) => {
-                            // Lists and maps already have Default, skip
-                        }
-                        _ => {}
+            if let Some(field_type) = rust_types.get(&field.type_) {
+                match field_type {
+                    rust::Type::Struct(_) => {
+                        collect_struct_dependencies(&field.type_, rust_types, result);
                     }
+                    rust::Type::List(_) | rust::Type::Map(_) => {
+                        // Lists and maps already have Default, skip
+                    }
+                    _ => {}
                 }
             }
         }
@@ -898,10 +897,10 @@ fn can_derive_serde(ty: &rust::Struct, rust_types: &RustTypes) -> bool {
                 }
                 rust::Type::List(list) => {
                     // Check if the list element type can be serialized
-                    if let Some(rust::Type::Struct(s)) = rust_types.get(&list.member.type_) {
-                        if !can_derive_serde(s, rust_types) {
-                            return false;
-                        }
+                    if let Some(rust::Type::Struct(s)) = rust_types.get(&list.member.type_)
+                        && !can_derive_serde(s, rust_types)
+                    {
+                        return false;
                     }
                 }
                 _ => {}
@@ -1144,10 +1143,9 @@ fn codegen_dto_ext(rust_types: &RustTypes) {
                 }
                 rust::Type::StrEnum(_) => {
                     if field.option_type {
-                        g!("if let Some(ref val) = self.{} {{", field.name);
-                        g!("    if val.as_str() == \"\" {{");
-                        g!("        self.{} = None;", field.name);
-                        g!("    }}");
+                        g!("if let Some(ref val) = self.{}", field.name);
+                        g!("    && val.as_str() == \"\" {{");
+                        g!("    self.{} = None;", field.name);
                         g!("}}");
                     }
                 }

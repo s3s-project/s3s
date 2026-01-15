@@ -179,6 +179,14 @@ mod tests {
 
     #[test]
     fn parse_invalid() {
+        // Empty string should return error
+        let err = ETagCondition::parse_http_header(b"").unwrap_err();
+        assert!(matches!(
+            err,
+            ParseETagConditionError::InvalidFormat | ParseETagConditionError::ETagError(_)
+        ));
+
+        // Malformed values should return error
         let err = ETagCondition::parse_http_header(b"**").unwrap_err();
         assert!(matches!(
             err,
@@ -196,5 +204,28 @@ mod tests {
             err,
             ParseETagConditionError::InvalidFormat | ParseETagConditionError::ETagError(_)
         ));
+    }
+
+    #[test]
+    fn parse_unquoted_values() {
+        // Typical S3 ETag values without quotes (alphanumeric only)
+        let cond = ETagCondition::parse_http_header(b"ABCORZ").expect("parse simple string");
+        assert_eq!(cond.as_etag().unwrap().as_strong(), Some("ABCORZ"));
+
+        let cond = ETagCondition::parse_http_header(b"4fcec74691ff529f6d016ec3629ff11b").expect("parse md5 hash");
+        assert_eq!(cond.as_etag().unwrap().as_strong(), Some("4fcec74691ff529f6d016ec3629ff11b"));
+
+        // Multipart upload ETag format
+        let cond = ETagCondition::parse_http_header(b"4fcec74691ff529f6d016ec3629ff11b-5").expect("parse multipart etag");
+        assert_eq!(cond.as_etag().unwrap().as_strong(), Some("4fcec74691ff529f6d016ec3629ff11b-5"));
+
+        // Single-character alphanumeric should be parsed as ETag, not confused with wildcard "*"
+        let cond = ETagCondition::parse_http_header(b"a").expect("parse single char");
+        assert!(!cond.is_any()); // Should NOT be wildcard
+        assert_eq!(cond.as_etag().unwrap().as_strong(), Some("a"));
+
+        let cond = ETagCondition::parse_http_header(b"1").expect("parse single digit");
+        assert!(!cond.is_any()); // Should NOT be wildcard
+        assert_eq!(cond.as_etag().unwrap().as_strong(), Some("1"));
     }
 }
