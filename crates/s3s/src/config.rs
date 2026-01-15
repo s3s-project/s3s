@@ -15,19 +15,22 @@
 //! // Using default config values
 //! let config = StaticConfig::default();
 //!
-//! // Using builder pattern
-//! let config = StaticConfig::new()
-//!     .with_max_xml_body_size(10 * 1024 * 1024);
+//! // Using custom config values
+//! let config = StaticConfig {
+//!     max_xml_body_size: 10 * 1024 * 1024,
+//!     ..Default::default()
+//! };
 //!
-//! // Using static config (cheaper clone, immutable)
+//! // Using static config
 //! let static_config = StaticConfig::default();
 //! assert_eq!(static_config.max_xml_body_size(), 20 * 1024 * 1024);
 //!
 //! // Using hot-reload config (can be updated at runtime)
 //! let hot_reload_config = HotReloadConfig::new(StaticConfig::default());
-//! hot_reload_config.update(
-//!     StaticConfig::new().with_max_xml_body_size(10 * 1024 * 1024)
-//! );
+//! hot_reload_config.update(StaticConfig {
+//!     max_xml_body_size: 10 * 1024 * 1024,
+//!     ..Default::default()
+//! });
 //! assert_eq!(hot_reload_config.max_xml_body_size(), 10 * 1024 * 1024);
 //! ```
 
@@ -66,16 +69,16 @@ pub trait S3Config: Send + Sync + 'static {
 /// ```
 /// use s3s::config::{S3Config, StaticConfig};
 ///
-/// let config = StaticConfig::new()
-///     .with_max_xml_body_size(10 * 1024 * 1024);
-/// let cloned = config.clone();
+/// let config = StaticConfig {
+///     max_xml_body_size: 10 * 1024 * 1024,
+///     ..Default::default()
+/// };
 ///
 /// // Access configuration via trait methods
 /// let max_size = config.max_xml_body_size();
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
-#[non_exhaustive]
 pub struct StaticConfig {
     /// Maximum size for XML body payloads in bytes.
     ///
@@ -126,49 +129,6 @@ impl Default for StaticConfig {
     }
 }
 
-impl StaticConfig {
-    /// Creates a new `StaticConfig` with default values.
-    #[must_use]
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Sets the maximum XML body size.
-    #[must_use]
-    pub fn with_max_xml_body_size(mut self, size: usize) -> Self {
-        self.max_xml_body_size = size;
-        self
-    }
-
-    /// Sets the maximum POST object file size.
-    #[must_use]
-    pub fn with_max_post_object_file_size(mut self, size: u64) -> Self {
-        self.max_post_object_file_size = size;
-        self
-    }
-
-    /// Sets the maximum form field size.
-    #[must_use]
-    pub fn with_max_form_field_size(mut self, size: usize) -> Self {
-        self.max_form_field_size = size;
-        self
-    }
-
-    /// Sets the maximum total form fields size.
-    #[must_use]
-    pub fn with_max_form_fields_size(mut self, size: usize) -> Self {
-        self.max_form_fields_size = size;
-        self
-    }
-
-    /// Sets the maximum number of form parts.
-    #[must_use]
-    pub fn with_max_form_parts(mut self, count: usize) -> Self {
-        self.max_form_parts = count;
-        self
-    }
-}
-
 impl S3Config for StaticConfig {
     fn max_xml_body_size(&self) -> usize {
         self.max_xml_body_size
@@ -207,9 +167,10 @@ impl S3Config for StaticConfig {
 /// println!("Max XML body size: {}", max_size);
 ///
 /// // Update configuration at runtime (atomic swap)
-/// config.update(
-///     StaticConfig::new().with_max_xml_body_size(10 * 1024 * 1024)
-/// );
+/// config.update(StaticConfig {
+///     max_xml_body_size: 10 * 1024 * 1024,
+///     ..Default::default()
+/// });
 /// ```
 #[derive(Debug, Clone)]
 pub struct HotReloadConfig {
@@ -408,7 +369,10 @@ mod tests {
         assert_eq!(config.max_xml_body_size(), 20 * 1024 * 1024);
 
         // Simulate config reload (e.g., from config file change)
-        config.update(StaticConfig::new().with_max_xml_body_size(30 * 1024 * 1024));
+        config.update(StaticConfig {
+            max_xml_body_size: 30 * 1024 * 1024,
+            ..Default::default()
+        });
 
         // New requests should see updated config
         assert_eq!(config.max_xml_body_size(), 30 * 1024 * 1024);

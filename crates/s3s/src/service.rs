@@ -271,11 +271,13 @@ mod tests {
 
     #[test]
     fn test_service_builder_custom_config() {
-        use crate::config::{HotReloadConfig, StaticConfig};
+        use crate::config::StaticConfig;
 
-        let custom_config = StaticConfig::new()
-            .with_max_xml_body_size(10 * 1024 * 1024)
-            .with_max_post_object_file_size(2 * 1024 * 1024 * 1024);
+        let custom_config = StaticConfig {
+            max_xml_body_size: 10 * 1024 * 1024,
+            max_post_object_file_size: 2 * 1024 * 1024 * 1024,
+            ..Default::default()
+        };
 
         let mut builder = S3ServiceBuilder::new(MockS3);
         builder.set_config(custom_config);
@@ -299,7 +301,10 @@ mod tests {
         assert_eq!(service.inner.config.max_xml_body_size(), 20 * 1024 * 1024);
 
         // Update the config
-        hot_config.update(StaticConfig::new().with_max_xml_body_size(30 * 1024 * 1024));
+        hot_config.update(StaticConfig {
+            max_xml_body_size: 30 * 1024 * 1024,
+            ..Default::default()
+        });
 
         // Service should see the new value
         assert_eq!(service.inner.config.max_xml_body_size(), 30 * 1024 * 1024);
