@@ -17,7 +17,7 @@ std-next = "0.1.9"
 numeric_cast = "0.3.0"
 regex = "1.12.2"
 serde = { version = "1.0.228", features = ["derive"] }
-serde_json = { version = "1.0.148", features = ["preserve_order"] }
+serde_json = { version = "1.0.149", features = ["preserve_order"] }
 serde_urlencoded = "0.7.1"
 s3s-model = { version = "0.13.0-alpha.1", path = "../crates/s3s-model" }
 http = "1.4.0"
