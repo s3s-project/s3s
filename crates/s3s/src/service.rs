@@ -276,11 +276,11 @@ mod tests {
     fn test_service_builder_custom_config() {
         use crate::config::{HotReloadConfigProvider, S3Config};
 
-        let custom_config = Arc::new(HotReloadConfigProvider::new(S3Config {
+        let custom_config = Arc::new(HotReloadConfigProvider::new(Arc::new(S3Config {
             max_xml_body_size: 10 * 1024 * 1024,
             max_post_object_file_size: 2 * 1024 * 1024 * 1024,
             ..Default::default()
-        }));
+        })));
 
         let mut builder = S3ServiceBuilder::new(MockS3);
         builder.set_config(custom_config);
@@ -295,7 +295,7 @@ mod tests {
     fn test_service_builder_hot_reload_config() {
         use crate::config::{HotReloadConfigProvider, S3Config};
 
-        let hot_config = Arc::new(HotReloadConfigProvider::new(S3Config::default()));
+        let hot_config = Arc::new(HotReloadConfigProvider::new(Arc::new(S3Config::default())));
 
         let mut builder = S3ServiceBuilder::new(MockS3);
         builder.set_config(hot_config.clone());
@@ -306,10 +306,10 @@ mod tests {
         assert_eq!(config.max_xml_body_size, 20 * 1024 * 1024);
 
         // Update the config
-        hot_config.update(S3Config {
+        hot_config.update(Arc::new(S3Config {
             max_xml_body_size: 30 * 1024 * 1024,
             ..Default::default()
-        });
+        }));
 
         // Service should see the new value
         let new_config = service.inner.config.snapshot();
@@ -320,10 +320,10 @@ mod tests {
     fn test_service_builder_static_config() {
         use crate::config::{S3Config, StaticConfigProvider};
 
-        let static_config = Arc::new(StaticConfigProvider::new(S3Config {
+        let static_config = Arc::new(StaticConfigProvider::new(Arc::new(S3Config {
             max_xml_body_size: 10 * 1024 * 1024,
             ..Default::default()
-        }));
+        })));
 
         let mut builder = S3ServiceBuilder::new(MockS3);
         builder.set_config(static_config);

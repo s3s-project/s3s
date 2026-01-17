@@ -22,7 +22,7 @@
 //! config.max_xml_body_size = 10 * 1024 * 1024;
 //!
 //! // Using static config provider (immutable)
-//! let static_provider = Arc::new(StaticConfigProvider::new(config.clone()));
+//! let static_provider = Arc::new(StaticConfigProvider::new(Arc::new(config.clone())));
 //! let snapshot = static_provider.snapshot();
 //! assert_eq!(snapshot.max_xml_body_size, 10 * 1024 * 1024);
 //!
@@ -34,7 +34,7 @@
 //! // Update configuration at runtime
 //! let mut new_config = S3Config::default();
 //! new_config.max_xml_body_size = 10 * 1024 * 1024;
-//! hot_reload_provider.update(new_config);
+//! hot_reload_provider.update(Arc::new(new_config));
 //! assert_eq!(hot_reload_provider.snapshot().max_xml_body_size, 10 * 1024 * 1024);
 //! ```
 
@@ -77,12 +77,12 @@ pub trait S3ConfigProvider: Send + Sync + 'static {
 /// config.max_xml_body_size = 10 * 1024 * 1024;
 ///
 /// // Wrap in StaticConfigProvider for immutable config
-/// let static_provider = Arc::new(StaticConfigProvider::new(config.clone()));
+/// let static_provider = Arc::new(StaticConfigProvider::new(Arc::new(config.clone())));
 /// let snapshot = static_provider.snapshot();
 /// assert_eq!(snapshot.max_xml_body_size, 10 * 1024 * 1024);
 ///
 /// // Or wrap in HotReloadConfigProvider for runtime updates
-/// let hot_config = Arc::new(HotReloadConfigProvider::new(config));
+/// let hot_config = Arc::new(HotReloadConfigProvider::new(Arc::new(config)));
 /// let snapshot = hot_config.snapshot();
 /// assert_eq!(snapshot.max_xml_body_size, 10 * 1024 * 1024);
 /// ```
@@ -125,6 +125,14 @@ pub struct S3Config {
     ///
     /// Default: 1000
     pub max_form_parts: usize,
+
+    /// Maximum allowed time skew for presigned URLs in seconds.
+    ///
+    /// This allows requests that are up to this many seconds in the future
+    /// to account for clock skew between the client and server.
+    ///
+    /// Default: 900 (15 minutes)
+    pub max_skew_time_secs: u32,
 }
 
 impl Default for S3Config {
@@ -135,6 +143,7 @@ impl Default for S3Config {
             max_form_field_size: 1024 * 1024,                  // 1 MB
             max_form_fields_size: 20 * 1024 * 1024,            // 20 MB
             max_form_parts: 1000,
+            max_skew_time_secs: 900, // 15 minutes
         }
     }
 }
@@ -151,7 +160,7 @@ impl Default for S3Config {
 /// use std::sync::Arc;
 /// use s3s::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
 ///
-/// let config = Arc::new(StaticConfigProvider::new(S3Config::default()));
+/// let config = Arc::new(StaticConfigProvider::new(Arc::new(S3Config::default())));
 ///
 /// // Read configuration via snapshot (just clones the Arc)
 /// let snapshot = config.snapshot();
@@ -165,22 +174,14 @@ pub struct StaticConfigProvider {
 impl StaticConfigProvider {
     /// Creates a new static configuration provider.
     #[must_use]
-    pub fn new(config: S3Config) -> Self {
-        Self {
-            inner: Arc::new(config),
-        }
+    pub fn new(config: Arc<S3Config>) -> Self {
+        Self { inner: config }
     }
 }
 
 impl Default for StaticConfigProvider {
     fn default() -> Self {
-        Self::new(S3Config::default())
-    }
-}
-
-impl From<S3Config> for StaticConfigProvider {
-    fn from(config: S3Config) -> Self {
-        Self::new(config)
+        Self::new(Arc::new(S3Config::default()))
     }
 }
 
@@ -202,7 +203,7 @@ impl S3ConfigProvider for StaticConfigProvider {
 /// use std::sync::Arc;
 /// use s3s::config::{S3Config, S3ConfigProvider, HotReloadConfigProvider};
 ///
-/// let config = Arc::new(HotReloadConfigProvider::new(S3Config::default()));
+/// let config = Arc::new(HotReloadConfigProvider::new(Arc::new(S3Config::default())));
 ///
 /// // Read configuration via snapshot (lock-free, consistent)
 /// let snapshot = config.snapshot();
@@ -211,7 +212,7 @@ impl S3ConfigProvider for StaticConfigProvider {
 /// // Update configuration at runtime (atomic swap)
 /// let mut new_config = S3Config::default();
 /// new_config.max_xml_body_size = 10 * 1024 * 1024;
-/// config.update(new_config);
+/// config.update(Arc::new(new_config));
 /// ```
 #[derive(Debug)]
 pub struct HotReloadConfigProvider {
@@ -221,29 +222,23 @@ pub struct HotReloadConfigProvider {
 impl HotReloadConfigProvider {
     /// Creates a new hot-reload configuration provider.
     #[must_use]
-    pub fn new(config: S3Config) -> Self {
+    pub fn new(config: Arc<S3Config>) -> Self {
         Self {
-            inner: ArcSwap::from_pointee(config),
+            inner: ArcSwap::from(config),
         }
     }
 
     /// Updates the configuration atomically.
     ///
     /// This operation replaces the entire configuration atomically.
-    pub fn update(&self, config: S3Config) {
-        self.inner.store(Arc::new(config));
+    pub fn update(&self, config: Arc<S3Config>) {
+        self.inner.store(config);
     }
 }
 
 impl Default for HotReloadConfigProvider {
     fn default() -> Self {
-        Self::new(S3Config::default())
-    }
-}
-
-impl From<S3Config> for HotReloadConfigProvider {
-    fn from(config: S3Config) -> Self {
-        Self::new(config)
+        Self::new(Arc::new(S3Config::default()))
     }
 }
 
@@ -269,7 +264,7 @@ mod tests {
 
     #[test]
     fn test_static_config_provider() {
-        let provider = StaticConfigProvider::new(S3Config::default());
+        let provider = StaticConfigProvider::new(Arc::new(S3Config::default()));
         assert_eq!(provider.snapshot().max_xml_body_size, 20 * 1024 * 1024);
 
         // Snapshots should be the same Arc
@@ -280,27 +275,27 @@ mod tests {
 
     #[test]
     fn test_hot_reload_config_provider() {
-        let provider = HotReloadConfigProvider::new(S3Config::default());
+        let provider = HotReloadConfigProvider::new(Arc::new(S3Config::default()));
         assert_eq!(provider.snapshot().max_xml_body_size, 20 * 1024 * 1024);
 
         // Update configuration
-        provider.update(S3Config {
+        provider.update(Arc::new(S3Config {
             max_xml_body_size: 5 * 1024 * 1024,
             ..Default::default()
-        });
+        }));
         assert_eq!(provider.snapshot().max_xml_body_size, 5 * 1024 * 1024);
     }
 
     #[test]
     fn test_hot_reload_snapshot_immutable() {
-        let provider = HotReloadConfigProvider::new(S3Config::default());
+        let provider = HotReloadConfigProvider::new(Arc::new(S3Config::default()));
         let snapshot = provider.snapshot();
 
         // Update configuration
-        provider.update(S3Config {
+        provider.update(Arc::new(S3Config {
             max_xml_body_size: 5 * 1024 * 1024,
             ..Default::default()
-        });
+        }));
 
         // Original snapshot should be unchanged
         assert_eq!(snapshot.max_xml_body_size, 20 * 1024 * 1024);
@@ -311,7 +306,7 @@ mod tests {
 
     #[test]
     fn test_hot_reload_config_provider_arc() {
-        let provider = Arc::new(HotReloadConfigProvider::new(S3Config::default()));
+        let provider = Arc::new(HotReloadConfigProvider::new(Arc::new(S3Config::default())));
         let cloned = provider.clone();
 
         // Both should read the same value
@@ -319,10 +314,10 @@ mod tests {
         assert_eq!(cloned.snapshot().max_xml_body_size, 20 * 1024 * 1024);
 
         // Updating one should update both (they share the same ArcSwap)
-        provider.update(S3Config {
+        provider.update(Arc::new(S3Config {
             max_xml_body_size: 5 * 1024 * 1024,
             ..Default::default()
-        });
+        }));
 
         assert_eq!(provider.snapshot().max_xml_body_size, 5 * 1024 * 1024);
         assert_eq!(cloned.snapshot().max_xml_body_size, 5 * 1024 * 1024);
@@ -352,6 +347,7 @@ mod tests {
             max_form_field_size: 512 * 1024,
             max_form_fields_size: 5 * 1024 * 1024,
             max_form_parts: 500,
+            max_skew_time_secs: 600,
         };
 
         let json = serde_json::to_string(&config).expect("serialize failed");
@@ -373,29 +369,19 @@ mod tests {
     }
 
     #[test]
-    fn test_from_impl() {
-        let config = S3Config::default();
-        let hot_reload_provider: HotReloadConfigProvider = config.clone().into();
-        assert_eq!(*hot_reload_provider.snapshot(), config);
-
-        let static_provider: StaticConfigProvider = config.clone().into();
-        assert_eq!(*static_provider.snapshot(), config);
-    }
-
-    #[test]
     fn test_hot_reload_in_service_layer() {
         // Test simulating how config would be used in service layer
-        let provider = Arc::new(HotReloadConfigProvider::new(S3Config::default()));
+        let provider = Arc::new(HotReloadConfigProvider::new(Arc::new(S3Config::default())));
 
         // Simulate processing requests with initial config
         let snapshot = provider.snapshot();
         assert_eq!(snapshot.max_xml_body_size, 20 * 1024 * 1024);
 
         // Simulate config reload (e.g., from config file change)
-        provider.update(S3Config {
+        provider.update(Arc::new(S3Config {
             max_xml_body_size: 30 * 1024 * 1024,
             ..Default::default()
-        });
+        }));
 
         // New requests should see updated config
         let new_snapshot = provider.snapshot();

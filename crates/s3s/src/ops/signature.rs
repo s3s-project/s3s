@@ -249,13 +249,12 @@ impl SignatureContext<'_> {
 
             let duration = now - date;
 
-            // Allow requests that are up to 15 minutes in the future.
+            // Allow requests that are up to max_skew_time_secs in the future.
             // This is to account for clock skew between the client and server.
             // See also https://github.com/minio/minio/blob/b5177993b371817699d3fa25685f54f88d8bfcce/cmd/signature-v4.go#L238-L242
 
-            // TODO: configurable max_skew_time
-
-            let max_skew_time = time::Duration::seconds(15 * 60);
+            let config = self.config.snapshot();
+            let max_skew_time = time::Duration::seconds(i64::from(config.max_skew_time_secs));
             if duration.is_negative() && duration.abs() > max_skew_time {
                 return Err(s3_error!(RequestTimeTooSkewed, "request date is later than server time too much"));
             }
