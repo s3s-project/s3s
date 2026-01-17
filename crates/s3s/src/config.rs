@@ -260,6 +260,7 @@ mod tests {
         assert_eq!(config.max_form_field_size, 1024 * 1024);
         assert_eq!(config.max_form_fields_size, 20 * 1024 * 1024);
         assert_eq!(config.max_form_parts, 1000);
+        assert_eq!(config.max_skew_time_secs, 900);
     }
 
     #[test]

@@ -38,9 +38,8 @@ impl S3ServiceBuilder {
         }
     }
 
-    pub fn set_config(&mut self, config: Arc<dyn S3ConfigProvider>) -> &mut Self {
+    pub fn set_config(&mut self, config: Arc<dyn S3ConfigProvider>) {
         self.config = Some(config);
-        self
     }
 
     pub fn set_host(&mut self, host: impl S3Host) {
