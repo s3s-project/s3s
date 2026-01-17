@@ -27,10 +27,8 @@ use s3s::{Body, HttpError, S3, S3Request, S3Response, S3Result};
 
 use axum::Router;
 use axum::error_handling::HandleError;
-use axum::http::{Response, StatusCode};
+use axum::http::{Extensions, HeaderMap, Method, Response, StatusCode, Uri};
 use axum::routing::get;
-use hyper::http::Extensions;
-use hyper::{HeaderMap, Method, Uri};
 use tokio::net::TcpListener;
 
 /// A minimal S3 implementation for demonstration purposes
