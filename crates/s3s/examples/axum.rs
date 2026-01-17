@@ -81,7 +81,9 @@ async fn health_check() -> &'static str {
     "OK"
 }
 
-/// Error handler that converts `HttpError` to an HTTP response
+/// Error handler for HTTP-level errors.
+/// Note: S3 application errors (e.g., `NoSuchBucket`) are already converted to
+/// proper HTTP responses by `S3Service` and won't reach this handler.
 async fn handle_s3_error(err: HttpError) -> Response<Body> {
     tracing::error!(?err, "S3 service error");
     Response::builder()
