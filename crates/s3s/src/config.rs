@@ -19,23 +19,23 @@
 //!
 //! // Using custom config values
 //! let mut config = S3Config::default();
-//! config.max_xml_body_size = 10 * 1024 * 1024;
+//! config.xml_max_body_size = 10 * 1024 * 1024;
 //!
 //! // Using static config provider (immutable)
 //! let static_provider = Arc::new(StaticConfigProvider::new(Arc::new(config.clone())));
 //! let snapshot = static_provider.snapshot();
-//! assert_eq!(snapshot.max_xml_body_size, 10 * 1024 * 1024);
+//! assert_eq!(snapshot.xml_max_body_size, 10 * 1024 * 1024);
 //!
 //! // Using hot-reload config provider (can be updated at runtime)
 //! let hot_reload_provider = Arc::new(HotReloadConfigProvider::default());
 //! let snapshot = hot_reload_provider.snapshot();
-//! assert_eq!(snapshot.max_xml_body_size, 20 * 1024 * 1024);
+//! assert_eq!(snapshot.xml_max_body_size, 20 * 1024 * 1024);
 //!
 //! // Update configuration at runtime
 //! let mut new_config = S3Config::default();
-//! new_config.max_xml_body_size = 10 * 1024 * 1024;
+//! new_config.xml_max_body_size = 10 * 1024 * 1024;
 //! hot_reload_provider.update(Arc::new(new_config));
-//! assert_eq!(hot_reload_provider.snapshot().max_xml_body_size, 10 * 1024 * 1024);
+//! assert_eq!(hot_reload_provider.snapshot().xml_max_body_size, 10 * 1024 * 1024);
 //! ```
 
 use std::sync::Arc;
@@ -74,17 +74,17 @@ pub trait S3ConfigProvider: Send + Sync + 'static {
 /// use s3s::config::{S3Config, S3ConfigProvider, StaticConfigProvider, HotReloadConfigProvider};
 ///
 /// let mut config = S3Config::default();
-/// config.max_xml_body_size = 10 * 1024 * 1024;
+/// config.xml_max_body_size = 10 * 1024 * 1024;
 ///
 /// // Wrap in StaticConfigProvider for immutable config
 /// let static_provider = Arc::new(StaticConfigProvider::new(Arc::new(config.clone())));
 /// let snapshot = static_provider.snapshot();
-/// assert_eq!(snapshot.max_xml_body_size, 10 * 1024 * 1024);
+/// assert_eq!(snapshot.xml_max_body_size, 10 * 1024 * 1024);
 ///
 /// // Or wrap in HotReloadConfigProvider for runtime updates
 /// let hot_config = Arc::new(HotReloadConfigProvider::new(Arc::new(config)));
 /// let snapshot = hot_config.snapshot();
-/// assert_eq!(snapshot.max_xml_body_size, 10 * 1024 * 1024);
+/// assert_eq!(snapshot.xml_max_body_size, 10 * 1024 * 1024);
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
@@ -96,35 +96,35 @@ pub struct S3Config {
     /// the full body in memory (e.g., XML parsing).
     ///
     /// Default: 20 MB (20 * 1024 * 1024)
-    pub max_xml_body_size: usize,
+    pub xml_max_body_size: usize,
 
     /// Maximum file size for POST object in bytes.
     ///
     /// S3 has a 5GB limit for single PUT object, so this is a reasonable default.
     ///
     /// Default: 5 GB (5 * 1024 * 1024 * 1024)
-    pub max_post_object_file_size: u64,
+    pub post_object_max_file_size: u64,
 
     /// Maximum size per form field in bytes.
     ///
     /// This prevents denial-of-service attacks via oversized individual fields.
     ///
     /// Default: 1 MB (1024 * 1024)
-    pub max_form_field_size: usize,
+    pub form_max_field_size: usize,
 
     /// Maximum total size for all form fields combined in bytes.
     ///
     /// This prevents denial-of-service attacks via accumulation of many fields.
     ///
     /// Default: 20 MB (20 * 1024 * 1024)
-    pub max_form_fields_size: usize,
+    pub form_max_fields_size: usize,
 
     /// Maximum number of parts in multipart form.
     ///
     /// This prevents denial-of-service attacks via excessive part count.
     ///
     /// Default: 1000
-    pub max_form_parts: usize,
+    pub form_max_parts: usize,
 
     /// Maximum allowed time skew for presigned URLs in seconds.
     ///
@@ -132,18 +132,18 @@ pub struct S3Config {
     /// to account for clock skew between the client and server.
     ///
     /// Default: 900 (15 minutes)
-    pub max_skew_time_secs: u32,
+    pub presigned_url_max_skew_time_secs: u32,
 }
 
 impl Default for S3Config {
     fn default() -> Self {
         Self {
-            max_xml_body_size: 20 * 1024 * 1024,               // 20 MB
-            max_post_object_file_size: 5 * 1024 * 1024 * 1024, // 5 GB
-            max_form_field_size: 1024 * 1024,                  // 1 MB
-            max_form_fields_size: 20 * 1024 * 1024,            // 20 MB
-            max_form_parts: 1000,
-            max_skew_time_secs: 900, // 15 minutes
+            xml_max_body_size: 20 * 1024 * 1024,               // 20 MB
+            post_object_max_file_size: 5 * 1024 * 1024 * 1024, // 5 GB
+            form_max_field_size: 1024 * 1024,                  // 1 MB
+            form_max_fields_size: 20 * 1024 * 1024,            // 20 MB
+            form_max_parts: 1000,
+            presigned_url_max_skew_time_secs: 900, // 15 minutes
         }
     }
 }
@@ -164,7 +164,7 @@ impl Default for S3Config {
 ///
 /// // Read configuration via snapshot (just clones the Arc)
 /// let snapshot = config.snapshot();
-/// println!("Max XML body size: {}", snapshot.max_xml_body_size);
+/// println!("Max XML body size: {}", snapshot.xml_max_body_size);
 /// ```
 #[derive(Debug)]
 pub struct StaticConfigProvider {
@@ -207,11 +207,11 @@ impl S3ConfigProvider for StaticConfigProvider {
 ///
 /// // Read configuration via snapshot (lock-free, consistent)
 /// let snapshot = config.snapshot();
-/// println!("Max XML body size: {}", snapshot.max_xml_body_size);
+/// println!("Max XML body size: {}", snapshot.xml_max_body_size);
 ///
 /// // Update configuration at runtime (atomic swap)
 /// let mut new_config = S3Config::default();
-/// new_config.max_xml_body_size = 10 * 1024 * 1024;
+/// new_config.xml_max_body_size = 10 * 1024 * 1024;
 /// config.update(Arc::new(new_config));
 /// ```
 #[derive(Debug)]
@@ -255,18 +255,18 @@ mod tests {
     #[test]
     fn test_default_config() {
         let config = S3Config::default();
-        assert_eq!(config.max_xml_body_size, 20 * 1024 * 1024);
-        assert_eq!(config.max_post_object_file_size, 5 * 1024 * 1024 * 1024);
-        assert_eq!(config.max_form_field_size, 1024 * 1024);
-        assert_eq!(config.max_form_fields_size, 20 * 1024 * 1024);
-        assert_eq!(config.max_form_parts, 1000);
-        assert_eq!(config.max_skew_time_secs, 900);
+        assert_eq!(config.xml_max_body_size, 20 * 1024 * 1024);
+        assert_eq!(config.post_object_max_file_size, 5 * 1024 * 1024 * 1024);
+        assert_eq!(config.form_max_field_size, 1024 * 1024);
+        assert_eq!(config.form_max_fields_size, 20 * 1024 * 1024);
+        assert_eq!(config.form_max_parts, 1000);
+        assert_eq!(config.presigned_url_max_skew_time_secs, 900);
     }
 
     #[test]
     fn test_static_config_provider() {
         let provider = StaticConfigProvider::new(Arc::new(S3Config::default()));
-        assert_eq!(provider.snapshot().max_xml_body_size, 20 * 1024 * 1024);
+        assert_eq!(provider.snapshot().xml_max_body_size, 20 * 1024 * 1024);
 
         // Snapshots should be the same Arc
         let snapshot1 = provider.snapshot();
@@ -277,14 +277,14 @@ mod tests {
     #[test]
     fn test_hot_reload_config_provider() {
         let provider = HotReloadConfigProvider::new(Arc::new(S3Config::default()));
-        assert_eq!(provider.snapshot().max_xml_body_size, 20 * 1024 * 1024);
+        assert_eq!(provider.snapshot().xml_max_body_size, 20 * 1024 * 1024);
 
         // Update configuration
         provider.update(Arc::new(S3Config {
-            max_xml_body_size: 5 * 1024 * 1024,
+            xml_max_body_size: 5 * 1024 * 1024,
             ..Default::default()
         }));
-        assert_eq!(provider.snapshot().max_xml_body_size, 5 * 1024 * 1024);
+        assert_eq!(provider.snapshot().xml_max_body_size, 5 * 1024 * 1024);
     }
 
     #[test]
@@ -294,15 +294,15 @@ mod tests {
 
         // Update configuration
         provider.update(Arc::new(S3Config {
-            max_xml_body_size: 5 * 1024 * 1024,
+            xml_max_body_size: 5 * 1024 * 1024,
             ..Default::default()
         }));
 
         // Original snapshot should be unchanged
-        assert_eq!(snapshot.max_xml_body_size, 20 * 1024 * 1024);
+        assert_eq!(snapshot.xml_max_body_size, 20 * 1024 * 1024);
 
         // New read should reflect the update
-        assert_eq!(provider.snapshot().max_xml_body_size, 5 * 1024 * 1024);
+        assert_eq!(provider.snapshot().xml_max_body_size, 5 * 1024 * 1024);
     }
 
     #[test]
@@ -311,44 +311,44 @@ mod tests {
         let cloned = provider.clone();
 
         // Both should read the same value
-        assert_eq!(provider.snapshot().max_xml_body_size, 20 * 1024 * 1024);
-        assert_eq!(cloned.snapshot().max_xml_body_size, 20 * 1024 * 1024);
+        assert_eq!(provider.snapshot().xml_max_body_size, 20 * 1024 * 1024);
+        assert_eq!(cloned.snapshot().xml_max_body_size, 20 * 1024 * 1024);
 
         // Updating one should update both (they share the same ArcSwap)
         provider.update(Arc::new(S3Config {
-            max_xml_body_size: 5 * 1024 * 1024,
+            xml_max_body_size: 5 * 1024 * 1024,
             ..Default::default()
         }));
 
-        assert_eq!(provider.snapshot().max_xml_body_size, 5 * 1024 * 1024);
-        assert_eq!(cloned.snapshot().max_xml_body_size, 5 * 1024 * 1024);
+        assert_eq!(provider.snapshot().xml_max_body_size, 5 * 1024 * 1024);
+        assert_eq!(cloned.snapshot().xml_max_body_size, 5 * 1024 * 1024);
     }
 
     #[test]
     fn test_config_provider_trait() {
         let provider: Arc<dyn S3ConfigProvider> = Arc::new(HotReloadConfigProvider::default());
         let snapshot = provider.snapshot();
-        assert_eq!(snapshot.max_xml_body_size, 20 * 1024 * 1024);
-        assert_eq!(snapshot.max_post_object_file_size, 5 * 1024 * 1024 * 1024);
+        assert_eq!(snapshot.xml_max_body_size, 20 * 1024 * 1024);
+        assert_eq!(snapshot.post_object_max_file_size, 5 * 1024 * 1024 * 1024);
     }
 
     #[test]
     fn test_static_config_provider_trait() {
         let provider: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
         let snapshot = provider.snapshot();
-        assert_eq!(snapshot.max_xml_body_size, 20 * 1024 * 1024);
-        assert_eq!(snapshot.max_post_object_file_size, 5 * 1024 * 1024 * 1024);
+        assert_eq!(snapshot.xml_max_body_size, 20 * 1024 * 1024);
+        assert_eq!(snapshot.post_object_max_file_size, 5 * 1024 * 1024 * 1024);
     }
 
     #[test]
     fn test_serde_roundtrip() {
         let config = S3Config {
-            max_xml_body_size: 10 * 1024 * 1024,
-            max_post_object_file_size: 1024 * 1024 * 1024,
-            max_form_field_size: 512 * 1024,
-            max_form_fields_size: 5 * 1024 * 1024,
-            max_form_parts: 500,
-            max_skew_time_secs: 600,
+            xml_max_body_size: 10 * 1024 * 1024,
+            post_object_max_file_size: 1024 * 1024 * 1024,
+            form_max_field_size: 512 * 1024,
+            form_max_fields_size: 5 * 1024 * 1024,
+            form_max_parts: 500,
+            presigned_url_max_skew_time_secs: 600,
         };
 
         let json = serde_json::to_string(&config).expect("serialize failed");
@@ -360,13 +360,13 @@ mod tests {
     #[test]
     fn test_serde_default_values() {
         // Test that missing fields use default values
-        let json = r#"{"max_xml_body_size": 1024}"#;
+        let json = r#"{"xml_max_body_size": 1024}"#;
         let config: S3Config = serde_json::from_str(json).expect("deserialize failed");
 
-        assert_eq!(config.max_xml_body_size, 1024);
+        assert_eq!(config.xml_max_body_size, 1024);
         // Other fields should have defaults
-        assert_eq!(config.max_post_object_file_size, 5 * 1024 * 1024 * 1024);
-        assert_eq!(config.max_form_field_size, 1024 * 1024);
+        assert_eq!(config.post_object_max_file_size, 5 * 1024 * 1024 * 1024);
+        assert_eq!(config.form_max_field_size, 1024 * 1024);
     }
 
     #[test]
@@ -376,16 +376,16 @@ mod tests {
 
         // Simulate processing requests with initial config
         let snapshot = provider.snapshot();
-        assert_eq!(snapshot.max_xml_body_size, 20 * 1024 * 1024);
+        assert_eq!(snapshot.xml_max_body_size, 20 * 1024 * 1024);
 
         // Simulate config reload (e.g., from config file change)
         provider.update(Arc::new(S3Config {
-            max_xml_body_size: 30 * 1024 * 1024,
+            xml_max_body_size: 30 * 1024 * 1024,
             ..Default::default()
         }));
 
         // New requests should see updated config
         let new_snapshot = provider.snapshot();
-        assert_eq!(new_snapshot.max_xml_body_size, 30 * 1024 * 1024);
+        assert_eq!(new_snapshot.xml_max_body_size, 30 * 1024 * 1024);
     }
 }

@@ -132,9 +132,9 @@ impl SignatureContext<'_> {
             let body = mem::take(self.req_body);
             let config = self.config.snapshot();
             let limits = MultipartLimits {
-                max_field_size: config.max_form_field_size,
-                max_fields_size: config.max_form_fields_size,
-                max_parts: config.max_form_parts,
+                max_field_size: config.form_max_field_size,
+                max_fields_size: config.form_max_fields_size,
+                max_parts: config.form_max_parts,
             };
             http::transform_multipart(body, boundary.as_str().as_bytes(), limits)
                 .await
@@ -254,7 +254,7 @@ impl SignatureContext<'_> {
             // See also https://github.com/minio/minio/blob/b5177993b371817699d3fa25685f54f88d8bfcce/cmd/signature-v4.go#L238-L242
 
             let config = self.config.snapshot();
-            let max_skew_time = time::Duration::seconds(i64::from(config.max_skew_time_secs));
+            let max_skew_time = time::Duration::seconds(i64::from(config.presigned_url_max_skew_time_secs));
             if duration.is_negative() && duration.abs() > max_skew_time {
                 return Err(s3_error!(RequestTimeTooSkewed, "request date is later than server time too much"));
             }

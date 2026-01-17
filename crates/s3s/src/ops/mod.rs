@@ -410,7 +410,7 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                     // Aggregate file stream with size limit to get known length
                     // This is required because downstream handlers (like s3s-proxy) need content-length
                     let config = ccx.config.snapshot();
-                    let vec_bytes = http::aggregate_file_stream_limited(file_stream, config.max_post_object_file_size)
+                    let vec_bytes = http::aggregate_file_stream_limited(file_stream, config.post_object_max_file_size)
                         .await
                         .map_err(|e| invalid_request!(e, "failed to read file stream"))?;
                     let vec_stream = crate::stream::VecByteStream::new(vec_bytes);
@@ -454,7 +454,7 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
 
     if needs_full_body {
         let config = ccx.config.snapshot();
-        extract_full_body(content_length, &mut req.body, config.max_xml_body_size).await?;
+        extract_full_body(content_length, &mut req.body, config.xml_max_body_size).await?;
     }
 
     Ok(Prepare::S3(op))

@@ -267,8 +267,8 @@ mod tests {
 
         // Should have default config values
         let config = service.inner.config.snapshot();
-        assert_eq!(config.max_xml_body_size, 20 * 1024 * 1024);
-        assert_eq!(config.max_post_object_file_size, 5 * 1024 * 1024 * 1024);
+        assert_eq!(config.xml_max_body_size, 20 * 1024 * 1024);
+        assert_eq!(config.post_object_max_file_size, 5 * 1024 * 1024 * 1024);
     }
 
     #[test]
@@ -276,8 +276,8 @@ mod tests {
         use crate::config::{HotReloadConfigProvider, S3Config};
 
         let custom_config = Arc::new(HotReloadConfigProvider::new(Arc::new(S3Config {
-            max_xml_body_size: 10 * 1024 * 1024,
-            max_post_object_file_size: 2 * 1024 * 1024 * 1024,
+            xml_max_body_size: 10 * 1024 * 1024,
+            post_object_max_file_size: 2 * 1024 * 1024 * 1024,
             ..Default::default()
         })));
 
@@ -286,8 +286,8 @@ mod tests {
         let service = builder.build();
 
         let config = service.inner.config.snapshot();
-        assert_eq!(config.max_xml_body_size, 10 * 1024 * 1024);
-        assert_eq!(config.max_post_object_file_size, 2 * 1024 * 1024 * 1024);
+        assert_eq!(config.xml_max_body_size, 10 * 1024 * 1024);
+        assert_eq!(config.post_object_max_file_size, 2 * 1024 * 1024 * 1024);
     }
 
     #[test]
@@ -302,17 +302,17 @@ mod tests {
 
         // Initial value
         let config = service.inner.config.snapshot();
-        assert_eq!(config.max_xml_body_size, 20 * 1024 * 1024);
+        assert_eq!(config.xml_max_body_size, 20 * 1024 * 1024);
 
         // Update the config
         hot_config.update(Arc::new(S3Config {
-            max_xml_body_size: 30 * 1024 * 1024,
+            xml_max_body_size: 30 * 1024 * 1024,
             ..Default::default()
         }));
 
         // Service should see the new value
         let new_config = service.inner.config.snapshot();
-        assert_eq!(new_config.max_xml_body_size, 30 * 1024 * 1024);
+        assert_eq!(new_config.xml_max_body_size, 30 * 1024 * 1024);
     }
 
     #[test]
@@ -320,7 +320,7 @@ mod tests {
         use crate::config::{S3Config, StaticConfigProvider};
 
         let static_config = Arc::new(StaticConfigProvider::new(Arc::new(S3Config {
-            max_xml_body_size: 10 * 1024 * 1024,
+            xml_max_body_size: 10 * 1024 * 1024,
             ..Default::default()
         })));
 
@@ -329,6 +329,6 @@ mod tests {
         let service = builder.build();
 
         let config = service.inner.config.snapshot();
-        assert_eq!(config.max_xml_body_size, 10 * 1024 * 1024);
+        assert_eq!(config.xml_max_body_size, 10 * 1024 * 1024);
     }
 }
