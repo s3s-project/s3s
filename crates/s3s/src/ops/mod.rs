@@ -20,7 +20,7 @@ mod tests;
 
 use crate::access::{S3Access, S3AccessContext};
 use crate::auth::{Credentials, S3Auth};
-use crate::config::S3Config;
+use crate::config::S3ConfigProvider;
 use crate::error::*;
 use crate::header;
 use crate::host::S3Host;
@@ -56,7 +56,7 @@ pub trait Operation: Send + Sync + 'static {
 
 pub struct CallContext<'a> {
     pub s3: &'a Arc<dyn S3>,
-    pub config: &'a Arc<dyn S3Config>,
+    pub config: &'a Arc<dyn S3ConfigProvider>,
     pub host: Option<&'a dyn S3Host>,
     pub auth: Option<&'a dyn S3Auth>,
     pub access: Option<&'a dyn S3Access>,

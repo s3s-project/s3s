@@ -1,6 +1,6 @@
 use crate::auth::S3Auth;
 use crate::auth::SecretKey;
-use crate::config::S3Config;
+use crate::config::S3ConfigProvider;
 use crate::error::*;
 use crate::http;
 use crate::http::{AwsChunkedStream, Body, Multipart, MultipartLimits};
@@ -61,7 +61,7 @@ fn extract_amz_date(hs: &'_ OrderedHeaders<'_>) -> S3Result<Option<AmzDate>> {
 
 pub struct SignatureContext<'a> {
     pub auth: Option<&'a dyn S3Auth>,
-    pub config: &'a Arc<dyn S3Config>,
+    pub config: &'a Arc<dyn S3ConfigProvider>,
 
     pub req_version: ::http::Version,
     pub req_method: &'a Method,
