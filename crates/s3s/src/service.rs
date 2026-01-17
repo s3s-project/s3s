@@ -8,9 +8,11 @@ use crate::s3_trait::S3;
 use crate::validation::NameValidation;
 use crate::{HttpError, HttpRequest, HttpResponse};
 
+use std::any::TypeId;
 use std::fmt;
 use std::sync::Arc;
 
+use bytes::Bytes;
 use futures::future::BoxFuture;
 use tracing::{debug, error};
 
@@ -163,7 +165,11 @@ impl hyper::service::Service<http::Request<hyper::body::Incoming>> for S3Service
     }
 }
 
-impl tower::Service<http::Request<hyper::body::Incoming>> for S3Service {
+impl<B> tower::Service<http::Request<B>> for S3Service
+where
+    B: http_body::Body<Data = Bytes> + Send + 'static,
+    B::Error: std::error::Error + Send + Sync + 'static,
+{
     type Response = HttpResponse;
 
     type Error = HttpError;
@@ -174,8 +180,21 @@ impl tower::Service<http::Request<hyper::body::Incoming>> for S3Service {
         std::task::Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, req: http::Request<hyper::body::Incoming>) -> Self::Future {
-        let req = req.map(Body::from);
+    fn call(&mut self, req: http::Request<B>) -> Self::Future {
+        // Use downcast to check if B is hyper::body::Incoming for optimal handling
+        let req = if TypeId::of::<B>() == TypeId::of::<hyper::body::Incoming>() {
+            // B is hyper::body::Incoming, use the optimized From impl
+            let (parts, body) = req.into_parts();
+            let mut slot = Some(body);
+            let body = (&mut slot as &mut dyn std::any::Any)
+                .downcast_mut::<Option<hyper::body::Incoming>>()
+                .unwrap()
+                .take()
+                .unwrap();
+            http::Request::from_parts(parts, Body::from(body))
+        } else {
+            req.map(Body::http_body_unsync)
+        };
         let service = self.clone();
         Box::pin(service.call_owned(req))
     }
