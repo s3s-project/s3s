@@ -1,6 +1,6 @@
 use crate::access::S3Access;
 use crate::auth::S3Auth;
-use crate::config::{S3Config, StaticConfig};
+use crate::config::{HotReloadConfig, S3Config};
 use crate::host::S3Host;
 use crate::http::{Body, Request};
 use crate::route::S3Route;
@@ -65,7 +65,7 @@ impl S3ServiceBuilder {
 
     #[must_use]
     pub fn build(self) -> S3Service {
-        let config = self.config.unwrap_or_else(|| Arc::new(StaticConfig::default()));
+        let config = self.config.unwrap_or_else(|| Arc::new(HotReloadConfig::default()));
         S3Service {
             inner: Arc::new(Inner {
                 s3: self.s3,
@@ -274,13 +274,13 @@ mod tests {
 
     #[test]
     fn test_service_builder_custom_config() {
-        use crate::config::StaticConfig;
+        use crate::config::{HotReloadConfig, StaticConfig};
 
-        let custom_config: Arc<dyn crate::config::S3Config> = Arc::new(StaticConfig {
+        let custom_config = Arc::new(HotReloadConfig::new(StaticConfig {
             max_xml_body_size: 10 * 1024 * 1024,
             max_post_object_file_size: 2 * 1024 * 1024 * 1024,
             ..Default::default()
-        });
+        }));
 
         let mut builder = S3ServiceBuilder::new(MockS3);
         builder.set_config(custom_config);

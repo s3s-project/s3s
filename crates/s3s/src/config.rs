@@ -5,7 +5,7 @@
 //! # Features
 //! - `serde` support for serialization/deserialization
 //! - Default values for all parameters
-//! - Static configuration via [`StaticConfig`]
+//! - Configuration values via [`StaticConfig`]
 //! - Hot-reload configuration via [`HotReloadConfig`]
 //!
 //! # Example
@@ -20,13 +20,12 @@
 //! let mut config = StaticConfig::default();
 //! config.max_xml_body_size = 10 * 1024 * 1024;
 //!
-//! // Using static config with snapshot
-//! let static_config: Arc<dyn S3Config> = Arc::new(StaticConfig::default());
-//! let snapshot = static_config.snapshot();
-//! assert_eq!(snapshot.max_xml_body_size, 20 * 1024 * 1024);
-//!
 //! // Using hot-reload config (can be updated at runtime)
 //! let hot_reload_config = Arc::new(HotReloadConfig::default());
+//! let snapshot = hot_reload_config.snapshot();
+//! assert_eq!(snapshot.max_xml_body_size, 20 * 1024 * 1024);
+//!
+//! // Update configuration at runtime
 //! let mut new_config = StaticConfig::default();
 //! new_config.max_xml_body_size = 10 * 1024 * 1024;
 //! hot_reload_config.update(new_config);
@@ -44,7 +43,7 @@ use serde::{Deserialize, Serialize};
 /// This design allows for faster access and consistent reads across multiple
 /// config values.
 ///
-/// Both [`StaticConfig`] and [`HotReloadConfig`] implement this trait.
+/// Users should use [`HotReloadConfig`] which implements this trait.
 pub trait S3Config: Send + Sync + 'static {
     /// Returns a snapshot of the current configuration.
     ///
@@ -59,17 +58,19 @@ pub trait S3Config: Send + Sync + 'static {
 /// Contains configurable parameters for the S3 service with sensible defaults.
 /// The configuration is immutable after creation.
 ///
+/// Use this struct with [`HotReloadConfig`] for runtime-updatable configuration.
+///
 /// # Example
 /// ```
 /// use std::sync::Arc;
-/// use s3s::config::{S3Config, StaticConfig};
+/// use s3s::config::{S3Config, StaticConfig, HotReloadConfig};
 ///
 /// let mut config = StaticConfig::default();
 /// config.max_xml_body_size = 10 * 1024 * 1024;
 ///
-/// // Access configuration via snapshot
-/// let static_config: Arc<dyn S3Config> = Arc::new(config);
-/// let snapshot = static_config.snapshot();
+/// // Wrap in HotReloadConfig for use with the service
+/// let hot_config = Arc::new(HotReloadConfig::new(config));
+/// let snapshot = hot_config.snapshot();
 /// assert_eq!(snapshot.max_xml_body_size, 10 * 1024 * 1024);
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -122,12 +123,6 @@ impl Default for StaticConfig {
             max_form_fields_size: 20 * 1024 * 1024,            // 20 MB
             max_form_parts: 1000,
         }
-    }
-}
-
-impl S3Config for StaticConfig {
-    fn snapshot(&self) -> Arc<StaticConfig> {
-        Arc::new(self.clone())
     }
 }
 
@@ -206,25 +201,6 @@ mod tests {
         assert_eq!(config.max_form_field_size, 1024 * 1024);
         assert_eq!(config.max_form_fields_size, 20 * 1024 * 1024);
         assert_eq!(config.max_form_parts, 1000);
-    }
-
-    #[test]
-    fn test_static_config() {
-        let config = StaticConfig {
-            max_xml_body_size: 10 * 1024 * 1024,
-            ..Default::default()
-        };
-        let snapshot = config.snapshot();
-        assert_eq!(snapshot.max_xml_body_size, 10 * 1024 * 1024);
-        assert_eq!(config.max_xml_body_size, 10 * 1024 * 1024);
-    }
-
-    #[test]
-    fn test_static_config_trait() {
-        let config: Box<dyn S3Config> = Box::new(StaticConfig::default());
-        let snapshot = config.snapshot();
-        assert_eq!(snapshot.max_xml_body_size, 20 * 1024 * 1024);
-        assert_eq!(snapshot.max_post_object_file_size, 5 * 1024 * 1024 * 1024);
     }
 
     #[test]
