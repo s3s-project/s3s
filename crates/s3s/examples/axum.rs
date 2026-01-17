@@ -56,14 +56,19 @@ impl S3Route for AssumeRoleRoute {
     fn is_match(&self, method: &Method, uri: &Uri, headers: &HeaderMap, _: &mut Extensions) -> bool {
         // Match POST requests to "/" with content-type "application/x-www-form-urlencoded"
         // This is the typical pattern for STS AssumeRole requests
-        if method == Method::POST && uri.path() == "/" {
-            if let Some(val) = headers.get(hyper::header::CONTENT_TYPE) {
-                if val.as_bytes() == b"application/x-www-form-urlencoded" {
-                    return true;
-                }
-            }
+        if method == Method::POST
+            && uri.path() == "/"
+            && let Some(val) = headers.get(hyper::header::CONTENT_TYPE)
+            && val.as_bytes() == b"application/x-www-form-urlencoded"
+        {
+            return true;
         }
         false
+    }
+
+    async fn check_access(&self, _req: &mut S3Request<Body>) -> S3Result<()> {
+        // For demonstration, allow all requests without credentials
+        Ok(())
     }
 
     async fn call(&self, _req: S3Request<Body>) -> S3Result<S3Response<Body>> {
