@@ -174,8 +174,12 @@ where
         let req = if TypeId::of::<B>() == TypeId::of::<hyper::body::Incoming>() {
             // B is hyper::body::Incoming, use the optimized From impl
             let (parts, body) = req.into_parts();
-            let boxed: Box<dyn std::any::Any> = Box::new(body);
-            let body = *boxed.downcast::<hyper::body::Incoming>().expect("TypeId verified");
+            let mut slot = Some(body);
+            let body = (&mut slot as &mut dyn std::any::Any)
+                .downcast_mut::<Option<hyper::body::Incoming>>()
+                .unwrap()
+                .take()
+                .unwrap();
             http::Request::from_parts(parts, Body::from(body))
         } else {
             req.map(Body::http_body_unsync)
