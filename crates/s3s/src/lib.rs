@@ -28,6 +28,7 @@ mod time;
 pub mod access;
 pub mod auth;
 pub mod checksum;
+pub mod config;
 pub mod crypto;
 pub mod dto;
 pub mod header;

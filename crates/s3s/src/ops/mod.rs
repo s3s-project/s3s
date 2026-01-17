@@ -20,6 +20,7 @@ mod tests;
 
 use crate::access::{S3Access, S3AccessContext};
 use crate::auth::{Credentials, S3Auth};
+use crate::config::S3ConfigProvider;
 use crate::error::*;
 use crate::header;
 use crate::host::S3Host;
@@ -55,6 +56,7 @@ pub trait Operation: Send + Sync + 'static {
 
 pub struct CallContext<'a> {
     pub s3: &'a Arc<dyn S3>,
+    pub config: &'a Arc<dyn S3ConfigProvider>,
     pub host: Option<&'a dyn S3Host>,
     pub auth: Option<&'a dyn S3Auth>,
     pub access: Option<&'a dyn S3Access>,
@@ -186,12 +188,12 @@ fn extract_decoded_content_length(hs: &'_ OrderedHeaders<'_>) -> S3Result<Option
     }
 }
 
-async fn extract_full_body(content_length: Option<u64>, body: &mut Body) -> S3Result<Bytes> {
+async fn extract_full_body(content_length: Option<u64>, body: &mut Body, max_body_size: usize) -> S3Result<Bytes> {
     if let Some(bytes) = body.bytes() {
         return Ok(bytes);
     }
 
-    let bytes = body.store_all_limited(http::MAX_XML_BODY_SIZE).await.map_err(|e| {
+    let bytes = body.store_all_limited(max_body_size).await.map_err(|e| {
         if e.is::<BodySizeLimitExceeded>() {
             S3Error::with_source(S3ErrorCode::MaxMessageLengthExceeded, e)
         } else {
@@ -327,6 +329,7 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
         {
             let mut scx = SignatureContext {
                 auth: ccx.auth,
+                config: ccx.config,
 
                 req_version: req.version,
                 req_method: &req.method,
@@ -406,7 +409,8 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                     let file_stream = multipart.take_file_stream().expect("missing file stream");
                     // Aggregate file stream with size limit to get known length
                     // This is required because downstream handlers (like s3s-proxy) need content-length
-                    let vec_bytes = http::aggregate_file_stream_limited(file_stream, http::MAX_POST_OBJECT_FILE_SIZE)
+                    let config = ccx.config.snapshot();
+                    let vec_bytes = http::aggregate_file_stream_limited(file_stream, config.post_object_max_file_size)
                         .await
                         .map_err(|e| invalid_request!(e, "failed to read file stream"))?;
                     let vec_stream = crate::stream::VecByteStream::new(vec_bytes);
@@ -449,7 +453,8 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
     debug!(op = %op.name(), ?s3_path, "checked access");
 
     if needs_full_body {
-        extract_full_body(content_length, &mut req.body).await?;
+        let config = ccx.config.snapshot();
+        extract_full_body(content_length, &mut req.body, config.xml_max_body_size).await?;
     }
 
     Ok(Prepare::S3(op))

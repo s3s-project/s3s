@@ -1,8 +1,9 @@
 use crate::auth::S3Auth;
 use crate::auth::SecretKey;
+use crate::config::S3ConfigProvider;
 use crate::error::*;
 use crate::http;
-use crate::http::{AwsChunkedStream, Body, Multipart};
+use crate::http::{AwsChunkedStream, Body, Multipart, MultipartLimits};
 use crate::http::{OrderedHeaders, OrderedQs};
 use crate::protocol::TrailingHeaders;
 use crate::sig_v2;
@@ -18,6 +19,7 @@ use crate::utils::is_base64_encoded;
 
 use std::mem;
 use std::ops::Not;
+use std::sync::Arc;
 
 use hyper::Method;
 use hyper::Uri;
@@ -59,6 +61,7 @@ fn extract_amz_date(hs: &'_ OrderedHeaders<'_>) -> S3Result<Option<AmzDate>> {
 
 pub struct SignatureContext<'a> {
     pub auth: Option<&'a dyn S3Auth>,
+    pub config: &'a Arc<dyn S3ConfigProvider>,
 
     pub req_version: ::http::Version,
     pub req_method: &'a Method,
@@ -127,7 +130,13 @@ impl SignatureContext<'_> {
                 .ok_or_else(|| invalid_request!("missing boundary"))?;
 
             let body = mem::take(self.req_body);
-            http::transform_multipart(body, boundary.as_str().as_bytes())
+            let config = self.config.snapshot();
+            let limits = MultipartLimits {
+                max_field_size: config.form_max_field_size,
+                max_fields_size: config.form_max_fields_size,
+                max_parts: config.form_max_parts,
+            };
+            http::transform_multipart(body, boundary.as_str().as_bytes(), limits)
                 .await
                 .map_err(|e| s3_error!(e, MalformedPOSTRequest))?
         };
@@ -240,13 +249,12 @@ impl SignatureContext<'_> {
 
             let duration = now - date;
 
-            // Allow requests that are up to 15 minutes in the future.
+            // Allow requests that are up to max_skew_time_secs in the future.
             // This is to account for clock skew between the client and server.
             // See also https://github.com/minio/minio/blob/b5177993b371817699d3fa25685f54f88d8bfcce/cmd/signature-v4.go#L238-L242
 
-            // TODO: configurable max_skew_time
-
-            let max_skew_time = time::Duration::seconds(15 * 60);
+            let config = self.config.snapshot();
+            let max_skew_time = time::Duration::seconds(i64::from(config.presigned_url_max_skew_time_secs));
             if duration.is_negative() && duration.abs() > max_skew_time {
                 return Err(s3_error!(RequestTimeTooSkewed, "request date is later than server time too much"));
             }
