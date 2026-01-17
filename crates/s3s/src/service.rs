@@ -267,8 +267,9 @@ mod tests {
         let service = builder.build();
 
         // Should have default config values
-        assert_eq!(service.inner.config.max_xml_body_size(), 20 * 1024 * 1024);
-        assert_eq!(service.inner.config.max_post_object_file_size(), 5 * 1024 * 1024 * 1024);
+        let config = service.inner.config.snapshot();
+        assert_eq!(config.max_xml_body_size, 20 * 1024 * 1024);
+        assert_eq!(config.max_post_object_file_size, 5 * 1024 * 1024 * 1024);
     }
 
     #[test]
@@ -285,8 +286,9 @@ mod tests {
         builder.set_config(custom_config);
         let service = builder.build();
 
-        assert_eq!(service.inner.config.max_xml_body_size(), 10 * 1024 * 1024);
-        assert_eq!(service.inner.config.max_post_object_file_size(), 2 * 1024 * 1024 * 1024);
+        let config = service.inner.config.snapshot();
+        assert_eq!(config.max_xml_body_size, 10 * 1024 * 1024);
+        assert_eq!(config.max_post_object_file_size, 2 * 1024 * 1024 * 1024);
     }
 
     #[test]
@@ -300,7 +302,8 @@ mod tests {
         let service = builder.build();
 
         // Initial value
-        assert_eq!(service.inner.config.max_xml_body_size(), 20 * 1024 * 1024);
+        let config = service.inner.config.snapshot();
+        assert_eq!(config.max_xml_body_size, 20 * 1024 * 1024);
 
         // Update the config
         hot_config.update(StaticConfig {
@@ -309,6 +312,7 @@ mod tests {
         });
 
         // Service should see the new value
-        assert_eq!(service.inner.config.max_xml_body_size(), 30 * 1024 * 1024);
+        let new_config = service.inner.config.snapshot();
+        assert_eq!(new_config.max_xml_body_size, 30 * 1024 * 1024);
     }
 }

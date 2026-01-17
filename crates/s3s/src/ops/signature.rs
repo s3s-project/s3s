@@ -130,10 +130,11 @@ impl SignatureContext<'_> {
                 .ok_or_else(|| invalid_request!("missing boundary"))?;
 
             let body = mem::take(self.req_body);
+            let config = self.config.snapshot();
             let limits = MultipartLimits {
-                max_field_size: self.config.max_form_field_size(),
-                max_fields_size: self.config.max_form_fields_size(),
-                max_parts: self.config.max_form_parts(),
+                max_field_size: config.max_form_field_size,
+                max_fields_size: config.max_form_fields_size,
+                max_parts: config.max_form_parts,
             };
             http::transform_multipart(body, boundary.as_str().as_bytes(), limits)
                 .await

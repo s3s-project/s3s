@@ -20,16 +20,17 @@
 //! let mut config = StaticConfig::default();
 //! config.max_xml_body_size = 10 * 1024 * 1024;
 //!
-//! // Using static config
-//! let static_config = StaticConfig::default();
-//! assert_eq!(static_config.max_xml_body_size(), 20 * 1024 * 1024);
+//! // Using static config with snapshot
+//! let static_config: Arc<dyn S3Config> = Arc::new(StaticConfig::default());
+//! let snapshot = static_config.snapshot();
+//! assert_eq!(snapshot.max_xml_body_size, 20 * 1024 * 1024);
 //!
 //! // Using hot-reload config (can be updated at runtime)
 //! let hot_reload_config = Arc::new(HotReloadConfig::default());
 //! let mut new_config = StaticConfig::default();
 //! new_config.max_xml_body_size = 10 * 1024 * 1024;
 //! hot_reload_config.update(new_config);
-//! assert_eq!(hot_reload_config.max_xml_body_size(), 10 * 1024 * 1024);
+//! assert_eq!(hot_reload_config.snapshot().max_xml_body_size, 10 * 1024 * 1024);
 //! ```
 
 use std::sync::Arc;
@@ -39,23 +40,18 @@ use serde::{Deserialize, Serialize};
 
 /// S3 Service Configuration trait.
 ///
-/// This trait provides getter methods for configurable parameters.
+/// This trait provides a `snapshot` method that returns an `Arc<StaticConfig>`.
+/// This design allows for faster access and consistent reads across multiple
+/// config values.
+///
 /// Both [`StaticConfig`] and [`HotReloadConfig`] implement this trait.
 pub trait S3Config: Send + Sync + 'static {
-    /// Returns the maximum size for XML body payloads in bytes.
-    fn max_xml_body_size(&self) -> usize;
-
-    /// Returns the maximum file size for POST object in bytes.
-    fn max_post_object_file_size(&self) -> u64;
-
-    /// Returns the maximum size per form field in bytes.
-    fn max_form_field_size(&self) -> usize;
-
-    /// Returns the maximum total size for all form fields combined in bytes.
-    fn max_form_fields_size(&self) -> usize;
-
-    /// Returns the maximum number of parts in multipart form.
-    fn max_form_parts(&self) -> usize;
+    /// Returns a snapshot of the current configuration.
+    ///
+    /// This operation returns an `Arc<StaticConfig>` that provides consistent
+    /// access to all configuration values. The snapshot is immutable and will
+    /// not change even if the underlying configuration is updated.
+    fn snapshot(&self) -> Arc<StaticConfig>;
 }
 
 /// Static configuration.
@@ -65,13 +61,16 @@ pub trait S3Config: Send + Sync + 'static {
 ///
 /// # Example
 /// ```
+/// use std::sync::Arc;
 /// use s3s::config::{S3Config, StaticConfig};
 ///
 /// let mut config = StaticConfig::default();
 /// config.max_xml_body_size = 10 * 1024 * 1024;
 ///
-/// // Access configuration via trait methods
-/// let max_size = config.max_xml_body_size();
+/// // Access configuration via snapshot
+/// let static_config: Arc<dyn S3Config> = Arc::new(config);
+/// let snapshot = static_config.snapshot();
+/// assert_eq!(snapshot.max_xml_body_size, 10 * 1024 * 1024);
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
@@ -127,24 +126,8 @@ impl Default for StaticConfig {
 }
 
 impl S3Config for StaticConfig {
-    fn max_xml_body_size(&self) -> usize {
-        self.max_xml_body_size
-    }
-
-    fn max_post_object_file_size(&self) -> u64 {
-        self.max_post_object_file_size
-    }
-
-    fn max_form_field_size(&self) -> usize {
-        self.max_form_field_size
-    }
-
-    fn max_form_fields_size(&self) -> usize {
-        self.max_form_fields_size
-    }
-
-    fn max_form_parts(&self) -> usize {
-        self.max_form_parts
+    fn snapshot(&self) -> Arc<StaticConfig> {
+        Arc::new(self.clone())
     }
 }
 
@@ -162,9 +145,9 @@ impl S3Config for StaticConfig {
 ///
 /// let config = Arc::new(HotReloadConfig::new(StaticConfig::default()));
 ///
-/// // Read configuration (lock-free)
-/// let max_size = config.max_xml_body_size();
-/// println!("Max XML body size: {}", max_size);
+/// // Read configuration via snapshot (lock-free, consistent)
+/// let snapshot = config.snapshot();
+/// println!("Max XML body size: {}", snapshot.max_xml_body_size);
 ///
 /// // Update configuration at runtime (atomic swap)
 /// let mut new_config = StaticConfig::default();
@@ -183,15 +166,6 @@ impl HotReloadConfig {
         Self {
             inner: ArcSwap::from_pointee(config),
         }
-    }
-
-    /// Returns a snapshot of the current configuration.
-    ///
-    /// This operation is lock-free and returns an `Arc` to the current configuration.
-    /// The snapshot is immutable and will not change even if the configuration is updated.
-    #[must_use]
-    pub fn snapshot(&self) -> Arc<StaticConfig> {
-        self.inner.load_full()
     }
 
     /// Updates the configuration atomically.
@@ -215,24 +189,8 @@ impl From<StaticConfig> for HotReloadConfig {
 }
 
 impl S3Config for HotReloadConfig {
-    fn max_xml_body_size(&self) -> usize {
-        self.inner.load().max_xml_body_size
-    }
-
-    fn max_post_object_file_size(&self) -> u64 {
-        self.inner.load().max_post_object_file_size
-    }
-
-    fn max_form_field_size(&self) -> usize {
-        self.inner.load().max_form_field_size
-    }
-
-    fn max_form_fields_size(&self) -> usize {
-        self.inner.load().max_form_fields_size
-    }
-
-    fn max_form_parts(&self) -> usize {
-        self.inner.load().max_form_parts
+    fn snapshot(&self) -> Arc<StaticConfig> {
+        self.inner.load_full()
     }
 }
 
@@ -256,28 +214,30 @@ mod tests {
             max_xml_body_size: 10 * 1024 * 1024,
             ..Default::default()
         };
-        assert_eq!(config.max_xml_body_size(), 10 * 1024 * 1024);
+        let snapshot = config.snapshot();
+        assert_eq!(snapshot.max_xml_body_size, 10 * 1024 * 1024);
         assert_eq!(config.max_xml_body_size, 10 * 1024 * 1024);
     }
 
     #[test]
     fn test_static_config_trait() {
         let config: Box<dyn S3Config> = Box::new(StaticConfig::default());
-        assert_eq!(config.max_xml_body_size(), 20 * 1024 * 1024);
-        assert_eq!(config.max_post_object_file_size(), 5 * 1024 * 1024 * 1024);
+        let snapshot = config.snapshot();
+        assert_eq!(snapshot.max_xml_body_size, 20 * 1024 * 1024);
+        assert_eq!(snapshot.max_post_object_file_size, 5 * 1024 * 1024 * 1024);
     }
 
     #[test]
     fn test_hot_reload_config() {
         let config = HotReloadConfig::new(StaticConfig::default());
-        assert_eq!(config.max_xml_body_size(), 20 * 1024 * 1024);
+        assert_eq!(config.snapshot().max_xml_body_size, 20 * 1024 * 1024);
 
         // Update configuration
         config.update(StaticConfig {
             max_xml_body_size: 5 * 1024 * 1024,
             ..Default::default()
         });
-        assert_eq!(config.max_xml_body_size(), 5 * 1024 * 1024);
+        assert_eq!(config.snapshot().max_xml_body_size, 5 * 1024 * 1024);
     }
 
     #[test]
@@ -295,7 +255,7 @@ mod tests {
         assert_eq!(snapshot.max_xml_body_size, 20 * 1024 * 1024);
 
         // New read should reflect the update
-        assert_eq!(config.max_xml_body_size(), 5 * 1024 * 1024);
+        assert_eq!(config.snapshot().max_xml_body_size, 5 * 1024 * 1024);
     }
 
     #[test]
@@ -304,8 +264,8 @@ mod tests {
         let cloned = config.clone();
 
         // Both should read the same value
-        assert_eq!(config.max_xml_body_size(), 20 * 1024 * 1024);
-        assert_eq!(cloned.max_xml_body_size(), 20 * 1024 * 1024);
+        assert_eq!(config.snapshot().max_xml_body_size, 20 * 1024 * 1024);
+        assert_eq!(cloned.snapshot().max_xml_body_size, 20 * 1024 * 1024);
 
         // Updating one should update both (they share the same ArcSwap)
         config.update(StaticConfig {
@@ -313,15 +273,16 @@ mod tests {
             ..Default::default()
         });
 
-        assert_eq!(config.max_xml_body_size(), 5 * 1024 * 1024);
-        assert_eq!(cloned.max_xml_body_size(), 5 * 1024 * 1024);
+        assert_eq!(config.snapshot().max_xml_body_size, 5 * 1024 * 1024);
+        assert_eq!(cloned.snapshot().max_xml_body_size, 5 * 1024 * 1024);
     }
 
     #[test]
     fn test_hot_reload_config_trait() {
         let config: Arc<dyn S3Config> = Arc::new(HotReloadConfig::default());
-        assert_eq!(config.max_xml_body_size(), 20 * 1024 * 1024);
-        assert_eq!(config.max_post_object_file_size(), 5 * 1024 * 1024 * 1024);
+        let snapshot = config.snapshot();
+        assert_eq!(snapshot.max_xml_body_size, 20 * 1024 * 1024);
+        assert_eq!(snapshot.max_post_object_file_size, 5 * 1024 * 1024 * 1024);
     }
 
     #[test]
@@ -365,7 +326,8 @@ mod tests {
         let config = Arc::new(HotReloadConfig::new(StaticConfig::default()));
 
         // Simulate processing requests with initial config
-        assert_eq!(config.max_xml_body_size(), 20 * 1024 * 1024);
+        let snapshot = config.snapshot();
+        assert_eq!(snapshot.max_xml_body_size, 20 * 1024 * 1024);
 
         // Simulate config reload (e.g., from config file change)
         config.update(StaticConfig {
@@ -374,6 +336,7 @@ mod tests {
         });
 
         // New requests should see updated config
-        assert_eq!(config.max_xml_body_size(), 30 * 1024 * 1024);
+        let new_snapshot = config.snapshot();
+        assert_eq!(new_snapshot.max_xml_body_size, 30 * 1024 * 1024);
     }
 }
