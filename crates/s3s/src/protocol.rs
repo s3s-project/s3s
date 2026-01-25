@@ -51,7 +51,7 @@ impl TrailingHeaders {
     /// Returns true if trailers have been produced by the body stream.
     #[must_use]
     pub fn is_ready(&self) -> bool {
-        self.0.lock().map(|g| g.is_some()).unwrap_or(false)
+        self.0.lock().is_ok_and(|g| g.is_some())
     }
 
     /// Take the trailing headers if available.
