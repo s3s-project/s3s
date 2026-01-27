@@ -118,6 +118,21 @@ impl http::TryFromHeaderValue for CopySource {
 mod tests {
     use super::*;
 
+
+    #[test]
+    fn leading_slash_and_percent_decoding() {
+        let header = "/awsexamplebucket/reports/jan%20u.pdf?versionId=v%201";
+        let val = CopySource::parse(header).unwrap();
+        match val {
+            CopySource::Bucket { bucket, key, version_id } => {
+                assert_eq!(&*bucket, "awsexamplebucket");
+                assert_eq!(&*key, "reports/jan u.pdf");
+                assert_eq!(version_id.as_deref().unwrap(), "v 1");
+            }
+            CopySource::AccessPoint { .. } => panic!(),
+        }
+    }
+
     #[test]
     fn path_style() {
         {

@@ -128,3 +128,53 @@ fn extract_host_from_uri() {
     let host = extract_host(&req).unwrap();
     assert_eq!(host, None);
 }
+
+#[tokio::test]
+async fn presigned_url_expires_0_should_be_expired() {
+    use crate::config::{S3ConfigProvider, StaticConfigProvider};
+    use crate::http::{Body, OrderedHeaders, OrderedQs};
+    use crate::ops::signature::SignatureContext;
+    use crate::S3ErrorCode;
+    use hyper::{Method, Uri};
+    use std::sync::Arc;
+
+    let qs = OrderedQs::parse(concat!(
+    "X-Amz-Algorithm=AWS4-HMAC-SHA256",
+    "&X-Amz-Credential=AKIAIOSFODNN7EXAMPLE%2F20130524%2Fus-east-1%2Fs3%2Faws4_request",
+    "&X-Amz-Date=20130524T000000Z",
+    "&X-Amz-Expires=0",
+    "&X-Amz-SignedHeaders=host",
+    "&X-Amz-Signature=aeeed9bbccd4d02ee5c0109b86d86835f995330da4c265957d157751f604d404"
+    ))
+        .unwrap();
+
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+
+    let method = Method::GET;
+    let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+    let mut body = Body::empty();
+
+    let mut cx = SignatureContext {
+        auth: None,
+        config: &config,
+        req_version: ::http::Version::HTTP_11,
+        req_method: &method,
+        req_uri: &uri,
+        req_body: &mut body,
+        qs: Some(&qs),
+        hs: OrderedHeaders::from_slice_unchecked(&[]),
+        decoded_uri_path: "/test.txt".to_owned(),
+        vh_bucket: None,
+        content_length: None,
+        mime: None,
+        decoded_content_length: None,
+        transformed_body: None,
+        multipart: None,
+        trailing_headers: None,
+    };
+
+
+    let result = cx.v4_check_presigned_url().await;
+    assert_eq!(result.is_err(), true);
+    assert_eq!(result.err().unwrap().code(), &S3ErrorCode::AccessDenied);
+}
