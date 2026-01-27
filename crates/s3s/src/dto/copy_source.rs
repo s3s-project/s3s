@@ -54,31 +54,30 @@ impl CopySource {
     /// # Errors
     /// Returns an error if the header is invalid
     pub fn parse(header: &str) -> Result<Self, ParseCopySourceError> {
-        let header = urlencoding::decode(header).map_err(|_| ParseCopySourceError::InvalidEncoding)?;
+        let (path_part, version_id) = if let Some(idx) = header.find("?versionId=") {
+            let (path, version_part) = header.split_at(idx);
+            let version_id_raw = version_part.strip_prefix("?versionId=");
+            let version_id = version_id_raw
+                .map(urlencoding::decode)
+                .transpose()
+                .map_err(|_| ParseCopySourceError::InvalidEncoding)?;
+            (path, version_id)
+        } else {
+            (header, None)
+        };
+        let header = urlencoding::decode(path_part).map_err(|_| ParseCopySourceError::InvalidEncoding)?;
         let header = header.strip_prefix('/').unwrap_or(&header);
 
         // FIXME: support access point
         match header.split_once('/') {
             None => Err(ParseCopySourceError::PatternMismatch),
-            Some((bucket, remaining)) => {
-                let (key, version_id) = match remaining.split_once('?') {
-                    Some((key, remaining)) => {
-                        let version_id = remaining
-                            .split_once('=')
-                            .and_then(|(name, val)| (name == "versionId").then_some(val));
-                        (key, version_id)
-                    }
-                    None => (remaining, None),
-                };
-
+            Some((bucket, key)) => {
                 if !path::check_bucket_name(bucket) {
                     return Err(ParseCopySourceError::InvalidBucketName);
                 }
-
                 if !path::check_key(key) {
                     return Err(ParseCopySourceError::InvalidKey);
                 }
-
                 Ok(Self::Bucket {
                     bucket: bucket.into(),
                     key: key.into(),
@@ -118,6 +117,20 @@ impl http::TryFromHeaderValue for CopySource {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn leading_slash_and_percent_decoding() {
+        let header = "/awsexamplebucket/reports/file%3Fversion.txt?versionId=abc";
+        let val = CopySource::parse(header).unwrap();
+        match val {
+            CopySource::Bucket { bucket, key, version_id } => {
+                assert_eq!(&*bucket, "awsexamplebucket");
+                assert_eq!(&*key, "reports/file?version.txt");
+                assert_eq!(version_id.as_deref().unwrap(), "abc");
+            }
+            CopySource::AccessPoint { .. } => panic!(),
+        }
+    }
 
     #[test]
     fn path_style() {
