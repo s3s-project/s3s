@@ -56,7 +56,11 @@ impl CopySource {
     pub fn parse(header: &str) -> Result<Self, ParseCopySourceError> {
         let (path_part, version_id) = if let Some(idx) = header.find("?versionId=") {
             let (path, version_part) = header.split_at(idx);
-            let version_id = version_part.strip_prefix("?versionId=");
+            let version_id_raw = version_part.strip_prefix("?versionId=");
+            let version_id = version_id_raw
+                .map(urlencoding::decode)
+                .transpose()
+                .map_err(|_| ParseCopySourceError::InvalidEncoding)?;
             (path, version_id)
         } else {
             (header, None)
