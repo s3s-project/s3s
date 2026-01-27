@@ -118,7 +118,6 @@ impl http::TryFromHeaderValue for CopySource {
 mod tests {
     use super::*;
 
-
     #[test]
     fn leading_slash_and_percent_decoding() {
         let header = "/awsexamplebucket/reports/jan%20u.pdf?versionId=v%201";
