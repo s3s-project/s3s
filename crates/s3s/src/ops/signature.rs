@@ -84,6 +84,7 @@ pub struct SignatureContext<'a> {
     pub trailing_headers: Option<TrailingHeaders>,
 }
 
+#[derive(Debug)]
 pub struct CredentialsExt {
     pub access_key: String,
     pub secret_key: SecretKey,

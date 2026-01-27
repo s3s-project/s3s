@@ -174,6 +174,7 @@ async fn presigned_url_expires_0_should_be_expired() {
     };
 
     let result = cx.v4_check_presigned_url().await;
-    assert_eq!(result.is_err(), true);
-    assert_eq!(result.err().unwrap().code(), &S3ErrorCode::AccessDenied);
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert_eq!(err.code(), &S3ErrorCode::AccessDenied);
 }
