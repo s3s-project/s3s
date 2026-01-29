@@ -11,7 +11,12 @@ if [ -z "$RUST_LOG" ]; then
     export RUST_LOG="s3s_fs=debug,s3s=debug"
 fi
 
-killall s3s-fs || echo
+S3S_FS_PIDS=$(pgrep -x s3s-fs || true)
+if [ -n "$S3S_FS_PIDS" ]; then
+    for pid in $S3S_FS_PIDS; do
+        kill "$pid"
+    done
+fi
 
 s3s-fs \
     --access-key    AKEXAMPLES3S    \
@@ -57,3 +62,10 @@ docker run --rm --network host \
     -v "$CONF_PATH":/etc/s3-tests.conf:ro \
     "$S3TEST_IMAGE" \
     tox "${S3TEST_ARGS[@]}" | tee target/s3-tests.log
+
+S3S_FS_PIDS=$(pgrep -x s3s-fs || true)
+if [ -n "$S3S_FS_PIDS" ]; then
+    for pid in $S3S_FS_PIDS; do
+        kill "$pid"
+    done
+fi
