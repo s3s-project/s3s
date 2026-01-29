@@ -168,4 +168,6 @@ jobs:
       - uses: actions/upload-artifact@v6
         with:
           name: e2e-s3tests.logs
-          path: ./target/s3-tests.log
+          path: |
+            ./target/s3-tests.log
+            ./target/s3s-fs.log
