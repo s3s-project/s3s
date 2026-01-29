@@ -153,3 +153,19 @@ jobs:
       - run: docker pull minio/minio:latest
       - run: just install s3s-e2e
       - run: ./scripts/e2e-minio.sh
+
+  e2e-s3tests:
+    name: e2e (s3-tests, s3s-fs)
+    needs: skip-check
+    if: needs.skip-check.outputs.should_skip != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
+      - run: docker pull quay.io/ceph/s3-tests:latest
+      - run: just install s3s-fs
+      - run: ./scripts/e2e-s3tests.sh
+      - uses: actions/upload-artifact@v6
+        with:
+          name: e2e-s3tests.logs
+          path: ./target/s3-tests.log
