@@ -32,9 +32,9 @@ aws-config = { version = "1.8.12", default-features = false }
 aws-credential-types = "1.2.11"
 aws-sdk-s3 = "1.121.0"
 aws-sdk-sts = "1.96.0"
-aws-smithy-runtime-api = "1.11.0"
+aws-smithy-runtime-api = "1.11.3"
 aws-smithy-types = "1.4.0"
-aws-smithy-types-convert = "0.60.11"
+aws-smithy-types-convert = "0.60.12"
 
 # Crypto dependencies
 hmac = "=0.13.0-rc.4"
