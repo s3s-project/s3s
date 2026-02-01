@@ -16,7 +16,7 @@ def parse_report(report_path: str) -> ElementTree.Element:
 def get_int_attr(elem: ElementTree.Element, name: str) -> int:
     value = elem.attrib.get(name, "0")
     try:
-        return int(float(value))
+        return int(value)
     except ValueError as exc:
         raise SystemExit(f"invalid {name} value: {value}") from exc
 

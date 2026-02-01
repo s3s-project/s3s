@@ -24,12 +24,12 @@ kill_s3s_fs() {
     fi
 }
 
-kill_s3s_fs
-
 if ! command -v s3s-fs >/dev/null 2>&1; then
     echo "s3s-fs is required; run: just install s3s-fs"
     exit 1
 fi
+
+kill_s3s_fs
 
 s3s-fs \
     --access-key    AKEXAMPLES3S    \
