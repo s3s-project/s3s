@@ -30,6 +30,10 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
     g!("impl S3 for Proxy {{");
 
     for op in ops.values() {
+        // PostObject is a synthetic API in s3s; aws-sdk-s3 has no corresponding operation.
+        if op.name == "PostObject" {
+            continue;
+        }
         let method_name = op.name.to_snake_case();
         let s3s_input = f!("s3s::dto::{}", op.input);
         let s3s_output = f!("s3s::dto::{}", op.output);

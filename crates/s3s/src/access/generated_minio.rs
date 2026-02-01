@@ -540,6 +540,13 @@ pub trait S3Access: Send + Sync + 'static {
         Ok(())
     }
 
+    /// Checks whether the PostObject request has accesses to the resources.
+    ///
+    /// This method returns `Ok(())` by default.
+    async fn post_object(&self, _req: &mut S3Request<PostObjectInput>) -> S3Result<()> {
+        Ok(())
+    }
+
     /// Checks whether the PutBucketAccelerateConfiguration request has accesses to the resources.
     ///
     /// This method returns `Ok(())` by default.
