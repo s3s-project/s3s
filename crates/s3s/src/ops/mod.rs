@@ -406,6 +406,15 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                 S3Path::Bucket { .. } => {
                     // POST object
                     debug!(?multipart);
+
+                    // TODO: Implement support for these POST Object form fields
+                    // See https://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectPOST.html
+                    for field in ["policy", "success_action_status", "success_action_redirect", "redirect"] {
+                        if multipart.find_field_value(field).is_some() {
+                            return Err(s3_error!(NotImplemented, "POST Object form field '{}' is not implemented yet", field));
+                        }
+                    }
+
                     let file_stream = multipart.take_file_stream().expect("missing file stream");
                     // Aggregate file stream with size limit to get known length
                     // This is required because downstream handlers (like s3s-proxy) need content-length
@@ -415,7 +424,7 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                         .map_err(|e| invalid_request!(e, "failed to read file stream"))?;
                     let vec_stream = crate::stream::VecByteStream::new(vec_bytes);
                     req.s3ext.vec_stream = Some(vec_stream);
-                    break 'resolve (&PutObject as &'static dyn Operation, false);
+                    break 'resolve (&PostObject as &'static dyn Operation, false);
                 }
                 // FIXME: POST /bucket/key hits this branch
                 S3Path::Object { .. } => return Err(s3_error!(MethodNotAllowed)),

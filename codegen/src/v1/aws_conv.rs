@@ -21,6 +21,9 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
 
     for (name, rust_type) in rust_types {
         match name.as_str() {
+            // PostObject is a synthetic API in s3s; aws-sdk-s3 has no corresponding types.
+            "PostObjectInput" => continue,
+            "PostObjectOutput" => continue,
             "SelectObjectContentRequest" => continue,
             "SelectObjectContentInput" => continue,
             "AssumeRoleOutput" => continue,

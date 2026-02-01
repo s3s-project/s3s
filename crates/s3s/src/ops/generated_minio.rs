@@ -66,6 +66,7 @@
 // ListObjects
 // ListObjectsV2
 // ListParts
+// PostObject
 // PutBucketAccelerateConfiguration
 // PutBucketAcl
 // PutBucketAnalyticsConfiguration
@@ -6556,6 +6557,55 @@ impl super::Operation for WriteGetObjectResponse {
             Ok(val) => val,
             Err(err) => return super::serialize_error(err, false),
         };
+        let mut resp = Self::serialize_http(s3_resp.output)?;
+        resp.headers.extend(s3_resp.headers);
+        resp.extensions.extend(s3_resp.extensions);
+        Ok(resp)
+    }
+}
+
+pub struct PostObject;
+
+impl PostObject {
+    pub fn deserialize_http(req: &mut http::Request) -> S3Result<PostObjectInput> {
+        let Some(m) = req.s3ext.multipart.take() else {
+            return Err(invalid_request!("missing multipart form"));
+        };
+        let put_input = PutObject::deserialize_http_multipart(req, m)?;
+        Ok(put_object_input_into_post_object_input(put_input))
+    }
+
+    pub fn serialize_http(x: PostObjectOutput) -> S3Result<http::Response> {
+        PutObject::serialize_http(post_object_output_into_put_object_output(x))
+    }
+}
+
+#[async_trait::async_trait]
+impl super::Operation for PostObject {
+    fn name(&self) -> &'static str {
+        "PostObject"
+    }
+
+    async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
+        let post_input = Self::deserialize_http(req)?;
+        let put_input = post_object_input_into_put_object_input(post_input);
+        let mut put_req = super::build_s3_request(put_input, req);
+        let s3 = ccx.s3;
+        if let Some(access) = ccx.access {
+            // Keep backward-compatible behavior: POST object used to be gated by put_object access check.
+            access.put_object(&mut put_req).await?;
+        }
+        let mut post_req = put_req.map_input(put_object_input_into_post_object_input);
+        if let Some(access) = ccx.access {
+            // New hook for POST object (optional).
+            access.post_object(&mut post_req).await?;
+        }
+        let result = s3.post_object(post_req).await;
+        let s3_resp = match result {
+            Ok(val) => val,
+            Err(err) => return super::serialize_error(err, false),
+        };
+        // Keep identical HTTP response behavior to PutObject.
         let mut resp = Self::serialize_http(s3_resp.output)?;
         resp.headers.extend(s3_resp.headers);
         resp.extensions.extend(s3_resp.extensions);

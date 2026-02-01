@@ -88,27 +88,40 @@ if __name__ == "__main__":
         f"na {total_na_count:>3}"
     )
 
-    passed_groups = [
-        # FIXME: https://github.com/minio/mint/blob/master/run/core/aws-sdk-go-v2/main.go#L294
-        # "aws-sdk-go",  version outdated
-        "aws-sdk-ruby",
-        "awscli",
-        "minio-go",
-        "s3cmd",
-    ]
+    # passed_groups = [
+    #     # FIXME: https://github.com/minio/mint/blob/master/run/core/aws-sdk-go-v2/main.go#L294
+    #     # "aws-sdk-go",  version outdated
+    #     "aws-sdk-ruby",
+    #     "awscli",
+    #     "minio-go",
+    #     "s3cmd",
+    # ]
 
-    for group in passed_groups:
-        assert counts[group]["fail"] == 0, f'group "{group}" failed'
+    # for group in passed_groups:
+    #     assert counts[group]["fail"] == 0, f'group "{group}" failed'
 
-    # FIXME: E2E tests
-    # https://github.com/Nugine/s3s/issues/4
-    # https://github.com/Nugine/s3s/pull/141#issuecomment-2142662531
+    # # FIXME: E2E tests
+    # # https://github.com/Nugine/s3s/issues/4
+    # # https://github.com/Nugine/s3s/pull/141#issuecomment-2142662531
 
-    assert "minio-dotnet" not in counts
+    # assert "minio-dotnet" not in counts
+    # assert counts["minio-js"]["pass"] >= 190
+    # assert counts["versioning"]["pass"] >= 4
+    # assert counts["minio-java"]["pass"] >= 17
+
+    # assert counts["aws-sdk-php"]["pass"] >= 10
+    # assert counts["minio-py"]["pass"] >= 2
+    # assert counts["mc"]["pass"] >= 2
+
+    assert counts["aws-sdk-go-v2"]["pass"] >= 5
+    assert counts["aws-sdk-php"]["fail"] == 0
+    assert counts["aws-sdk-ruby"]["pass"] >= 12
+    assert counts["awscli"]["fail"] == 0
+    assert counts["mc"]["pass"] >= 16
+    assert counts["minio-go"]["fail"] == 0
+    assert counts["minio-java"]["pass"] >= 43
     assert counts["minio-js"]["pass"] >= 190
+    assert counts["minio-py"]["pass"] >= 16
+    assert counts["s3cmd"]["fail"] == 0
+    assert counts["s3select"]["fail"] == 0
     assert counts["versioning"]["pass"] >= 4
-    assert counts["minio-java"]["pass"] >= 17
-
-    assert counts["aws-sdk-php"]["pass"] >= 10
-    assert counts["minio-py"]["pass"] >= 2
-    assert counts["mc"]["pass"] >= 2

@@ -4245,6 +4245,17 @@ pub trait S3: Send + Sync + 'static {
         Err(s3_error!(NotImplemented, "ListParts is not implemented yet"))
     }
 
+    /// POST Object (multipart form upload)
+    ///
+    /// This is a synthetic method separated from `PutObject` so implementations can distinguish
+    /// POST vs PUT. By default it delegates to [`S3::put_object`] to keep behavior identical.
+    async fn post_object(&self, req: S3Request<PostObjectInput>) -> S3Result<S3Response<PostObjectOutput>> {
+        let resp = self
+            .put_object(req.map_input(crate::dto::post_object_input_into_put_object_input))
+            .await?;
+        Ok(resp.map_output(crate::dto::put_object_output_into_post_object_output))
+    }
+
     /// <note>
     /// <p>This operation is not supported for directory buckets.</p>
     /// </note>

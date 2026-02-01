@@ -42,7 +42,9 @@ pub const SKIPPED_OPS: &[&str] = &["CreateSession", "ListDirectoryBuckets"];
 
 pub fn collect_operations(model: &smithy::Model) -> Operations {
     let mut operations: Operations = default();
-    let mut insert = |name, op| assert!(operations.insert(name, op).is_none());
+    let insert = |operations: &mut Operations, name: String, op: Operation| {
+        assert!(operations.insert(name, op).is_none());
+    };
 
     for (shape_name, shape) in &model.shapes {
         let smithy::Shape::Operation(sh) = shape else { continue };
@@ -111,7 +113,32 @@ pub fn collect_operations(model: &smithy::Model) -> Operations {
             http_uri: sh.traits.http_uri().unwrap().to_owned(),
             http_code,
         };
-        insert(op_name, op);
+        insert(&mut operations, op_name, op);
+    }
+
+    // PostObject is a synthetic operation (multipart form upload) which is not present in the
+    // upstream Smithy model. We add it here so downstream generators (trait/access/etc.) can treat
+    // it like a normal operation.
+    if operations.contains_key("PostObject").not() {
+        let op_name = o("PostObject");
+        let op = Operation {
+            name: op_name.clone(),
+
+            input: o("PostObjectInput"),
+            output: o("PostObjectOutput"),
+
+            // Placeholders (there is no Smithy-modeled input/output for PostObject).
+            smithy_input: o("Unit"),
+            smithy_output: o("Unit"),
+
+            s3_unwrapped_xml_output: false,
+            doc: None,
+
+            http_method: o("POST"),
+            http_uri: o("/{Bucket}"),
+            http_code: 200,
+        };
+        insert(&mut operations, op_name, op);
     }
 
     operations
@@ -168,6 +195,9 @@ fn codegen_http(ops: &Operations, rust_types: &RustTypes) {
     codegen_header_value(ops, rust_types);
 
     for op in ops.values() {
+        if op.name == "PostObject" {
+            continue;
+        }
         g!("pub struct {};", op.name);
         g!();
 
@@ -182,6 +212,77 @@ fn codegen_http(ops: &Operations, rust_types: &RustTypes) {
         codegen_op_http_call(op);
         g!();
     }
+
+    codegen_post_object_fork_op(rust_types);
+}
+
+fn codegen_post_object_fork_op(rust_types: &RustTypes) {
+    // PostObject is a synthetic operation: same behavior as PutObject (multipart form upload),
+    // but separated at the trait layer so implementations can distinguish PUT vs POST later.
+    // Keep behavior identical for now by delegating serialization to PutObject.
+    let Some(rust::Type::Struct(put_in)) = rust_types.get("PutObjectInput") else { return };
+    let Some(rust::Type::Struct(_put_out)) = rust_types.get("PutObjectOutput") else { return };
+    let Some(rust::Type::Struct(post_in)) = rust_types.get("PostObjectInput") else { return };
+    let Some(rust::Type::Struct(_post_out)) = rust_types.get("PostObjectOutput") else { return };
+
+    // Sanity: forked types should stay field-identical.
+    assert_eq!(put_in.fields.len(), post_in.fields.len());
+    for (a, b) in put_in.fields.iter().zip(post_in.fields.iter()) {
+        assert_eq!(a.name, b.name);
+        assert_eq!(a.type_, b.type_);
+        assert_eq!(a.option_type, b.option_type);
+    }
+
+    g(["pub struct PostObject;", "", "impl PostObject {"]);
+    g([
+        "    pub fn deserialize_http(req: &mut http::Request) -> S3Result<PostObjectInput> {",
+        "        let Some(m) = req.s3ext.multipart.take() else {",
+        "            return Err(invalid_request!(\"missing multipart form\"));",
+        "        };",
+        "        let put_input = PutObject::deserialize_http_multipart(req, m)?;",
+        "        Ok(put_object_input_into_post_object_input(put_input))",
+        "    }",
+        "",
+        "    pub fn serialize_http(x: PostObjectOutput) -> S3Result<http::Response> {",
+        "        PutObject::serialize_http(post_object_output_into_put_object_output(x))",
+        "    }",
+        "}",
+        "",
+    ]);
+
+    g(["#[async_trait::async_trait]", "impl super::Operation for PostObject {"]);
+    g(["    fn name(&self) -> &'static str {", "        \"PostObject\"", "    }", ""]);
+
+    g([
+        "    async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {",
+        "        let post_input = Self::deserialize_http(req)?;",
+        "        let put_input = post_object_input_into_put_object_input(post_input);",
+        "        let mut put_req = super::build_s3_request(put_input, req);",
+        "        let s3 = ccx.s3;",
+        "        if let Some(access) = ccx.access {",
+        "            // Keep backward-compatible behavior: POST object used to be gated by put_object access check.",
+        "            access.put_object(&mut put_req).await?;",
+        "        }",
+        "        let mut post_req = put_req.map_input(put_object_input_into_post_object_input);",
+        "        if let Some(access) = ccx.access {",
+        "            // New hook for POST object (optional).",
+        "            access.post_object(&mut post_req).await?;",
+        "        }",
+        "        let result = s3.post_object(post_req).await;",
+        "        let s3_resp = match result {",
+        "            Ok(val) => val,",
+        "            Err(err) => return super::serialize_error(err, false),",
+        "        };",
+        "        // Keep identical HTTP response behavior to PutObject.",
+        "        let mut resp = Self::serialize_http(s3_resp.output)?;",
+        "        resp.headers.extend(s3_resp.headers);",
+        "        resp.extensions.extend(s3_resp.extensions);",
+        "        Ok(resp)",
+        "    }",
+        "}",
+    ]);
+
+    g!();
 }
 
 fn codegen_header_value(ops: &Operations, rust_types: &RustTypes) {
@@ -798,6 +899,11 @@ struct Route<'a> {
 fn collect_routes<'a>(ops: &'a Operations, rust_types: &'a RustTypes) -> HashMap<String, HashMap<PathPattern, Vec<Route<'a>>>> {
     let mut ans: HashMap<String, HashMap<PathPattern, Vec<Route<'_>>>> = default();
     for op in ops.values() {
+        // PostObject is resolved in ops::prepare() for multipart requests.
+        // Do not put it into the generated router to avoid overlaps.
+        if op.name == "PostObject" {
+            continue;
+        }
         let pat = PathPattern::parse(&op.http_uri);
         let map = ans.entry(op.http_method.clone()).or_default();
         let vec = map.entry(pat).or_default();

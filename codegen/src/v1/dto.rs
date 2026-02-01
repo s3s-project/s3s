@@ -271,6 +271,26 @@ pub fn collect_rust_types(model: &smithy::Model, ops: &Operations) -> RustTypes 
     patch_types(&mut space);
     unify_operation_types(ops, &mut space);
 
+    // POST Object is not a Smithy-modeled operation in the upstream S3 model.
+    // We still want to distinguish it from PutObject at the trait layer.
+    // Fork the unified DTO types so behavior can stay identical,
+    // while leaving room to extend PostObject* with POST-only fields later.
+    for (src, dst) in [("PutObjectInput", "PostObjectInput"), ("PutObjectOutput", "PostObjectOutput")] {
+        if let Some(src_ty) = space.get(src).cloned() {
+            let mut dst_ty = src_ty;
+            match &mut dst_ty {
+                rust::Type::Struct(s) => {
+                    dst.clone_into(&mut s.name);
+                }
+                _ => {
+                    // PutObject{Input,Output} are expected to be structs.
+                    unimplemented!("{src} is not a struct");
+                }
+            }
+            assert!(space.insert(dst.to_owned(), dst_ty).is_none());
+        }
+    }
+
     space
 }
 
@@ -375,6 +395,9 @@ fn unify_operation_types(ops: &Operations, space: &mut RustTypes) {
 
     // unify operation input type
     for op in ops.values() {
+        if op.name == "PostObject" {
+            continue;
+        }
         if op.name == "SelectObjectContent" {
             continue;
         }
@@ -398,6 +421,9 @@ fn unify_operation_types(ops: &Operations, space: &mut RustTypes) {
 
     // unify operation output type
     for op in ops.values() {
+        if op.name == "PostObject" {
+            continue;
+        }
         let output_ty = if op.smithy_output == "Unit" {
             rust::Struct {
                 name: op.output.clone(),
@@ -588,10 +614,70 @@ pub fn codegen(rust_types: &RustTypes, ops: &Operations, patch: Option<Patch>) {
     codegen_builders(rust_types, ops);
 
     codegen_dto_ext(rust_types);
+    codegen_post_object_mapping_helpers(rust_types);
 
     if matches!(patch, Some(Patch::Minio)) {
         super::minio::codegen_in_dto();
     }
+}
+
+fn codegen_post_object_mapping_helpers(rust_types: &RustTypes) {
+    let Some(rust::Type::Struct(put_in)) = rust_types.get("PutObjectInput") else { return };
+    let Some(rust::Type::Struct(put_out)) = rust_types.get("PutObjectOutput") else { return };
+    let Some(rust::Type::Struct(post_in)) = rust_types.get("PostObjectInput") else { return };
+    let Some(rust::Type::Struct(post_out)) = rust_types.get("PostObjectOutput") else { return };
+
+    // Sanity: forked types should stay field-identical.
+    assert_eq!(put_in.fields.len(), post_in.fields.len());
+    for (a, b) in put_in.fields.iter().zip(post_in.fields.iter()) {
+        assert_eq!(a.name, b.name);
+        assert_eq!(a.type_, b.type_);
+        assert_eq!(a.option_type, b.option_type);
+    }
+    assert_eq!(put_out.fields.len(), post_out.fields.len());
+    for (a, b) in put_out.fields.iter().zip(post_out.fields.iter()) {
+        assert_eq!(a.name, b.name);
+        assert_eq!(a.type_, b.type_);
+        assert_eq!(a.option_type, b.option_type);
+    }
+
+    g!();
+    g([
+        "// NOTE: PostObject is a synthetic API in s3s.",
+        "// Today it is DTO-identical to PutObject, but PostObject may diverge later (e.g. post policy).",
+    ]);
+
+    g!("pub(crate) fn put_object_input_into_post_object_input(x: PutObjectInput) -> PostObjectInput {{");
+    g!("    PostObjectInput {{");
+    for field in &put_in.fields {
+        g!("        {}: x.{},", field.name, field.name);
+    }
+    g!("    }}");
+    g!("}}");
+
+    g!("pub(crate) fn post_object_input_into_put_object_input(x: PostObjectInput) -> PutObjectInput {{");
+    g!("    PutObjectInput {{");
+    for field in &post_in.fields {
+        g!("        {}: x.{},", field.name, field.name);
+    }
+    g!("    }}");
+    g!("}}");
+
+    g!("pub(crate) fn put_object_output_into_post_object_output(x: PutObjectOutput) -> PostObjectOutput {{");
+    g!("    PostObjectOutput {{");
+    for field in &put_out.fields {
+        g!("        {}: x.{},", field.name, field.name);
+    }
+    g!("    }}");
+    g!("}}");
+
+    g!("pub(crate) fn post_object_output_into_put_object_output(x: PostObjectOutput) -> PutObjectOutput {{");
+    g!("    PutObjectOutput {{");
+    for field in &post_out.fields {
+        g!("        {}: x.{},", field.name, field.name);
+    }
+    g!("    }}");
+    g!("}}");
 }
 
 fn codegen_struct(ty: &rust::Struct, rust_types: &RustTypes, ops: &Operations, needs_serde: bool, needs_custom_default: bool) {

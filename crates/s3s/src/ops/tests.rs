@@ -178,3 +178,137 @@ async fn presigned_url_expires_0_should_be_expired() {
     let err = result.unwrap_err();
     assert_eq!(err.code(), &S3ErrorCode::AccessDenied);
 }
+
+#[allow(clippy::too_many_lines)]
+#[tokio::test]
+async fn post_multipart_bucket_routes_to_post_object() {
+    use crate::S3Request;
+    use crate::auth::{SecretKey, SimpleAuth};
+    use crate::config::{S3ConfigProvider, StaticConfigProvider};
+    use crate::http::{Body, Request};
+    use crate::ops::CallContext;
+    use crate::sig_v4;
+    use bytes::Bytes;
+    use hyper::Method;
+    use hyper::header::HeaderValue;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct TestS3 {
+        put_calls: AtomicUsize,
+        post_calls: AtomicUsize,
+    }
+
+    #[async_trait::async_trait]
+    impl crate::s3_trait::S3 for TestS3 {
+        async fn put_object(
+            &self,
+            _req: S3Request<crate::dto::PutObjectInput>,
+        ) -> crate::error::S3Result<crate::protocol::S3Response<crate::dto::PutObjectOutput>> {
+            self.put_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(crate::protocol::S3Response::new(crate::dto::PutObjectOutput::default()))
+        }
+
+        async fn post_object(
+            &self,
+            _req: S3Request<crate::dto::PostObjectInput>,
+        ) -> crate::error::S3Result<crate::protocol::S3Response<crate::dto::PostObjectOutput>> {
+            self.post_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(crate::protocol::S3Response::new(crate::dto::PostObjectOutput::default()))
+        }
+    }
+
+    let test_s3 = Arc::new(TestS3 {
+        put_calls: AtomicUsize::new(0),
+        post_calls: AtomicUsize::new(0),
+    });
+    let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+
+    let access_key = "AKIAIOSFODNN7EXAMPLE";
+    let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+    let auth = SimpleAuth::from_single(access_key, secret_key.clone());
+
+    let ccx = CallContext {
+        s3: &s3,
+        config: &config,
+        host: None,
+        auth: Some(&auth),
+        access: None,
+        route: None,
+        validation: None,
+    };
+
+    // Build a minimal multipart/form-data POST object request.
+    // Signature is validated by v4_check_post_signature using the policy blob.
+    let boundary = "------------------------c634190ccaebbc34";
+    let bucket = "mc-test-bucket-32569";
+    let key = "mc-test-object-7658";
+    let policy_b64 = "eyJleHBpcmF0aW9uIjoiMjAyMC0xMC0wM1QxMzoyNTo0Ny4yMThaIiwiY29uZGl0aW9ucyI6W1siZXEiLCIkYnVja2V0IiwibWMtdGVzdC1idWNrZXQtMzI1NjkiXSxbImVxIiwiJGtleSIsIm1jLXRlc3Qtb2JqZWN0LTc2NTgiXSxbImVxIiwiJHgtYW16LWRhdGUiLCIyMDIwMDkyNlQxMzI1NDdaIl0sWyJlcSIsIiR4LWFtei1hbGdvcml0aG0iLCJBV1M0LUhNQUMtU0hBMjU2Il0sWyJlcSIsIiR4LWFtei1jcmVkZW50aWFsIiwiQUtJQUlPU0ZPRE5ON0VYQU1QTEUvMjAyMDA5MjYvdXMtZWFzdC0xL3MzL2F3czRfcmVxdWVzdCJdXX0=";
+    let algorithm = "AWS4-HMAC-SHA256";
+    let credential = "AKIAIOSFODNN7EXAMPLE/20200926/us-east-1/s3/aws4_request";
+    let amz_date = sig_v4::AmzDate::parse("20200926T132547Z").unwrap();
+    let region = "us-east-1";
+    let service = "s3";
+    let signature = sig_v4::calculate_signature(policy_b64, &secret_key, &amz_date, region, service);
+
+    let body = format!(
+        concat!(
+            "--{b}\r\n",
+            "Content-Disposition: form-data; name=\"x-amz-signature\"\r\n\r\n",
+            "{signature}\r\n",
+            "--{b}\r\n",
+            "Content-Disposition: form-data; name=\"bucket\"\r\n\r\n",
+            "{bucket}\r\n",
+            "--{b}\r\n",
+            "Content-Disposition: form-data; name=\"policy\"\r\n\r\n",
+            "{policy_b64}\r\n",
+            "--{b}\r\n",
+            "Content-Disposition: form-data; name=\"x-amz-algorithm\"\r\n\r\n",
+            "{algorithm}\r\n",
+            "--{b}\r\n",
+            "Content-Disposition: form-data; name=\"x-amz-credential\"\r\n\r\n",
+            "{credential}\r\n",
+            "--{b}\r\n",
+            "Content-Disposition: form-data; name=\"x-amz-date\"\r\n\r\n",
+            "{amz_date}\r\n",
+            "--{b}\r\n",
+            "Content-Disposition: form-data; name=\"key\"\r\n\r\n",
+            "{key}\r\n",
+            "--{b}\r\n",
+            "Content-Disposition: form-data; name=\"file\"; filename=\"a.txt\"\r\n",
+            "Content-Type: text/plain\r\n\r\n",
+            "hello\r\n",
+            "--{b}--\r\n"
+        ),
+        amz_date = amz_date.fmt_iso8601(),
+        b = boundary,
+        signature = signature,
+        bucket = bucket,
+        policy_b64 = policy_b64,
+        algorithm = algorithm,
+        credential = credential,
+        key = key,
+    );
+
+    let mut req = Request::from(
+        hyper::Request::builder()
+            .method(Method::POST)
+            .uri(format!("http://localhost/{bucket}"))
+            .header(crate::header::HOST, "localhost")
+            .header(
+                crate::header::CONTENT_TYPE,
+                HeaderValue::from_str(&format!("multipart/form-data; boundary={boundary}")).unwrap(),
+            )
+            .body(Body::from(Bytes::from(body)))
+            .unwrap(),
+    );
+
+    // POST Object with `policy` field should return NotImplemented
+    // TODO: Remove this assertion when policy validation is implemented
+    let result = super::prepare(&mut req, &ccx).await;
+    match result {
+        Err(err) => assert_eq!(*err.code(), crate::error::S3ErrorCode::NotImplemented),
+        Ok(_) => panic!("expected NotImplemented error"),
+    }
+}

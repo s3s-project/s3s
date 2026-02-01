@@ -15264,6 +15264,703 @@ impl fmt::Debug for PolicyStatus {
     }
 }
 
+#[derive(Default)]
+pub struct PostObjectInput {
+    /// <p>The canned ACL to apply to the object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html#CannedACL">Canned
+    /// ACL</a> in the <i>Amazon S3 User Guide</i>.</p>
+    /// <p>When adding a new object, you can use headers to grant ACL-based permissions to
+    /// individual Amazon Web Services accounts or to predefined groups defined by Amazon S3. These permissions are
+    /// then added to the ACL on the object. By default, all objects are private. Only the owner
+    /// has full access control. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html">Access Control List (ACL) Overview</a>
+    /// and <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-using-rest-api.html">Managing
+    /// ACLs Using the REST API</a> in the <i>Amazon S3 User Guide</i>.</p>
+    /// <p>If the bucket that you're uploading objects to uses the bucket owner enforced setting
+    /// for S3 Object Ownership, ACLs are disabled and no longer affect permissions. Buckets that
+    /// use this setting only accept PUT requests that don't specify an ACL or PUT requests that
+    /// specify bucket owner full control ACLs, such as the <code>bucket-owner-full-control</code>
+    /// canned ACL or an equivalent form of this ACL expressed in the XML format. PUT requests that
+    /// contain other ACLs (for example, custom grants to certain Amazon Web Services accounts) fail and return a
+    /// <code>400</code> error with the error code <code>AccessControlListNotSupported</code>.
+    /// For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/about-object-ownership.html"> Controlling ownership of
+    /// objects and disabling ACLs</a> in the <i>Amazon S3 User Guide</i>.</p>
+    /// <note>
+    /// <ul>
+    /// <li>
+    /// <p>This functionality is not supported for directory buckets.</p>
+    /// </li>
+    /// <li>
+    /// <p>This functionality is not supported for Amazon S3 on Outposts.</p>
+    /// </li>
+    /// </ul>
+    /// </note>
+    pub acl: Option<ObjectCannedACL>,
+    /// <p>Object data.</p>
+    pub body: Option<StreamingBlob>,
+    /// <p>The bucket name to which the PUT action was initiated. </p>
+    /// <p>
+    /// <b>Directory buckets</b> -
+    /// When you use this operation with a directory bucket, you must use virtual-hosted-style requests in the format <code>
+    /// <i>Bucket-name</i>.s3express-<i>zone-id</i>.<i>region-code</i>.amazonaws.com</code>. Path-style requests are not supported.  Directory bucket names must be unique in the chosen Zone (Availability Zone or Local Zone). Bucket names must follow the format <code>
+    /// <i>bucket-base-name</i>--<i>zone-id</i>--x-s3</code> (for example, <code>
+    /// <i>amzn-s3-demo-bucket</i>--<i>usw2-az1</i>--x-s3</code>). For information about bucket naming
+    /// restrictions, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/directory-bucket-naming-rules.html">Directory bucket naming
+    /// rules</a> in the <i>Amazon S3 User Guide</i>.</p>
+    /// <p>
+    /// <b>Access points</b> - When you use this action with an access point, you must provide the alias of the access point in place of the bucket name or specify the access point ARN. When using the access point ARN, you must direct requests to the access point hostname. The access point hostname takes the form <i>AccessPointName</i>-<i>AccountId</i>.s3-accesspoint.<i>Region</i>.amazonaws.com. When using this action with an access point through the Amazon Web Services SDKs, you provide the access point ARN in place of the bucket name. For more information about access point ARNs, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-access-points.html">Using access points</a> in the <i>Amazon S3 User Guide</i>.</p>
+    /// <note>
+    /// <p>Access points and Object Lambda access points are not supported by directory buckets.</p>
+    /// </note>
+    /// <p>
+    /// <b>S3 on Outposts</b> - When you use this action with S3 on Outposts, you must direct requests to the S3 on Outposts hostname. The S3 on Outposts hostname takes the
+    /// form <code>
+    /// <i>AccessPointName</i>-<i>AccountId</i>.<i>outpostID</i>.s3-outposts.<i>Region</i>.amazonaws.com</code>. When you use this action with S3 on Outposts, the destination bucket must be the Outposts access point ARN or the access point alias. For more information about S3 on Outposts, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/S3onOutposts.html">What is S3 on Outposts?</a> in the <i>Amazon S3 User Guide</i>.</p>
+    pub bucket: BucketName,
+    /// <p>Specifies whether Amazon S3 should use an S3 Bucket Key for object encryption with
+    /// server-side encryption using Key Management Service (KMS) keys (SSE-KMS).</p>
+    /// <p>
+    /// <b>General purpose buckets</b> - Setting this header to
+    /// <code>true</code> causes Amazon S3 to use an S3 Bucket Key for object encryption with
+    /// SSE-KMS. Also, specifying this header with a PUT action doesn't affect bucket-level settings for S3
+    /// Bucket Key.</p>
+    /// <p>
+    /// <b>Directory buckets</b> - S3 Bucket Keys are always enabled for <code>GET</code> and <code>PUT</code> operations in a directory bucket and can’t be disabled. S3 Bucket Keys aren't supported, when you copy SSE-KMS encrypted objects from general purpose buckets  
+    /// to directory buckets, from directory buckets to general purpose buckets, or between directory buckets, through <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_CopyObject.html">CopyObject</a>, <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_UploadPartCopy.html">UploadPartCopy</a>, <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/directory-buckets-objects-Batch-Ops">the Copy operation in Batch Operations</a>, or
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/create-import-job">the import jobs</a>. In this case, Amazon S3 makes a call to KMS every time a copy request is made for a KMS-encrypted object.</p>
+    pub bucket_key_enabled: Option<BucketKeyEnabled>,
+    /// <p>Can be used to specify caching behavior along the request/reply chain. For more
+    /// information, see <a href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.9">http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.9</a>.</p>
+    pub cache_control: Option<CacheControl>,
+    /// <p>Indicates the algorithm used to create the checksum for the object when you use the SDK. This header will not provide any
+    /// additional functionality if you don't use the SDK. When you send this header, there must be a corresponding <code>x-amz-checksum-<i>algorithm</i>
+    /// </code> or
+    /// <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>.</p>
+    /// <p>For the <code>x-amz-checksum-<i>algorithm</i>
+    /// </code> header, replace <code>
+    /// <i>algorithm</i>
+    /// </code> with the supported algorithm from the following list: </p>
+    /// <ul>
+    /// <li>
+    /// <p>
+    /// <code>CRC32</code>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <code>CRC32C</code>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <code>CRC64NVME</code>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <code>SHA1</code>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <code>SHA256</code>
+    /// </p>
+    /// </li>
+    /// </ul>
+    /// <p>For more
+    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    /// <p>If the individual checksum value you provide through <code>x-amz-checksum-<i>algorithm</i>
+    /// </code> doesn't match the checksum algorithm you set through <code>x-amz-sdk-checksum-algorithm</code>, Amazon S3 fails the request with a <code>BadDigest</code> error.</p>
+    /// <note>
+    /// <p>The <code>Content-MD5</code> or <code>x-amz-sdk-checksum-algorithm</code> header is
+    /// required for any request to upload an object with a retention period configured using
+    /// Amazon S3 Object Lock. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-lock-managing.html#object-lock-put-object">Uploading objects to an Object Lock enabled bucket </a> in the
+    /// <i>Amazon S3 User Guide</i>.</p>
+    /// </note>
+    /// <p>For directory buckets, when you use Amazon Web Services SDKs, <code>CRC32</code> is the default checksum algorithm that's used for performance.</p>
+    pub checksum_algorithm: Option<ChecksumAlgorithm>,
+    /// <p>This header can be used as a data integrity check to verify that the data received is the same data that was originally sent.
+    /// This header specifies the Base64 encoded, 32-bit <code>CRC32</code> checksum of the object. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the
+    /// <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_crc32: Option<ChecksumCRC32>,
+    /// <p>This header can be used as a data integrity check to verify that the data received is the same data that was originally sent.
+    /// This header specifies the Base64 encoded, 32-bit <code>CRC32C</code> checksum of the object. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the
+    /// <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_crc32c: Option<ChecksumCRC32C>,
+    /// <p>This header can be used as a data integrity check to verify that the data received is
+    /// the same data that was originally sent. This header specifies the Base64 encoded, 64-bit
+    /// <code>CRC64NVME</code> checksum of the object. The <code>CRC64NVME</code> checksum is
+    /// always a full object checksum. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity
+    /// in the Amazon S3 User Guide</a>.</p>
+    pub checksum_crc64nvme: Option<ChecksumCRC64NVME>,
+    /// <p>This header can be used as a data integrity check to verify that the data received is the same data that was originally sent.
+    /// This header specifies the Base64 encoded, 160-bit <code>SHA1</code> digest of the object. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the
+    /// <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_sha1: Option<ChecksumSHA1>,
+    /// <p>This header can be used as a data integrity check to verify that the data received is the same data that was originally sent.
+    /// This header specifies the Base64 encoded, 256-bit <code>SHA256</code> digest of the object. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the
+    /// <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_sha256: Option<ChecksumSHA256>,
+    /// <p>Specifies presentational information for the object. For more information, see <a href="https://www.rfc-editor.org/rfc/rfc6266#section-4">https://www.rfc-editor.org/rfc/rfc6266#section-4</a>.</p>
+    pub content_disposition: Option<ContentDisposition>,
+    /// <p>Specifies what content encodings have been applied to the object and thus what decoding
+    /// mechanisms must be applied to obtain the media-type referenced by the Content-Type header
+    /// field. For more information, see <a href="https://www.rfc-editor.org/rfc/rfc9110.html#field.content-encoding">https://www.rfc-editor.org/rfc/rfc9110.html#field.content-encoding</a>.</p>
+    pub content_encoding: Option<ContentEncoding>,
+    /// <p>The language the content is in.</p>
+    pub content_language: Option<ContentLanguage>,
+    /// <p>Size of the body in bytes. This parameter is useful when the size of the body cannot be
+    /// determined automatically. For more information, see <a href="https://www.rfc-editor.org/rfc/rfc9110.html#name-content-length">https://www.rfc-editor.org/rfc/rfc9110.html#name-content-length</a>.</p>
+    pub content_length: Option<ContentLength>,
+    /// <p>The Base64 encoded 128-bit <code>MD5</code> digest of the message (without the headers) according to
+    /// RFC 1864. This header can be used as a message integrity check to verify that the data is
+    /// the same data that was originally sent. Although it is optional, we recommend using the
+    /// Content-MD5 mechanism as an end-to-end integrity check. For more information about REST
+    /// request authentication, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/RESTAuthentication.html">REST Authentication</a>.</p>
+    /// <note>
+    /// <p>The <code>Content-MD5</code> or <code>x-amz-sdk-checksum-algorithm</code> header is
+    /// required for any request to upload an object with a retention period configured using
+    /// Amazon S3 Object Lock. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-lock-managing.html#object-lock-put-object">Uploading objects to an Object Lock enabled bucket </a> in the
+    /// <i>Amazon S3 User Guide</i>.</p>
+    /// </note>
+    /// <note>
+    /// <p>This functionality is not supported for directory buckets.</p>
+    /// </note>
+    pub content_md5: Option<ContentMD5>,
+    /// <p>A standard MIME type describing the format of the contents. For more information, see
+    /// <a href="https://www.rfc-editor.org/rfc/rfc9110.html#name-content-type">https://www.rfc-editor.org/rfc/rfc9110.html#name-content-type</a>.</p>
+    pub content_type: Option<ContentType>,
+    /// <p>The account ID of the expected bucket owner. If the account ID that you provide does not match the actual owner of the bucket, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).</p>
+    pub expected_bucket_owner: Option<AccountId>,
+    /// <p>The date and time at which the object is no longer cacheable. For more information, see
+    /// <a href="https://www.rfc-editor.org/rfc/rfc7234#section-5.3">https://www.rfc-editor.org/rfc/rfc7234#section-5.3</a>.</p>
+    pub expires: Option<Expires>,
+    /// <p>Gives the grantee READ, READ_ACP, and WRITE_ACP permissions on the object.</p>
+    /// <note>
+    /// <ul>
+    /// <li>
+    /// <p>This functionality is not supported for directory buckets.</p>
+    /// </li>
+    /// <li>
+    /// <p>This functionality is not supported for Amazon S3 on Outposts.</p>
+    /// </li>
+    /// </ul>
+    /// </note>
+    pub grant_full_control: Option<GrantFullControl>,
+    /// <p>Allows grantee to read the object data and its metadata.</p>
+    /// <note>
+    /// <ul>
+    /// <li>
+    /// <p>This functionality is not supported for directory buckets.</p>
+    /// </li>
+    /// <li>
+    /// <p>This functionality is not supported for Amazon S3 on Outposts.</p>
+    /// </li>
+    /// </ul>
+    /// </note>
+    pub grant_read: Option<GrantRead>,
+    /// <p>Allows grantee to read the object ACL.</p>
+    /// <note>
+    /// <ul>
+    /// <li>
+    /// <p>This functionality is not supported for directory buckets.</p>
+    /// </li>
+    /// <li>
+    /// <p>This functionality is not supported for Amazon S3 on Outposts.</p>
+    /// </li>
+    /// </ul>
+    /// </note>
+    pub grant_read_acp: Option<GrantReadACP>,
+    /// <p>Allows grantee to write the ACL for the applicable object.</p>
+    /// <note>
+    /// <ul>
+    /// <li>
+    /// <p>This functionality is not supported for directory buckets.</p>
+    /// </li>
+    /// <li>
+    /// <p>This functionality is not supported for Amazon S3 on Outposts.</p>
+    /// </li>
+    /// </ul>
+    /// </note>
+    pub grant_write_acp: Option<GrantWriteACP>,
+    /// <p>Uploads the object only if the ETag (entity tag) value provided during the WRITE
+    /// operation matches the ETag of the object in S3. If the ETag values do not match, the
+    /// operation returns a <code>412 Precondition Failed</code> error.</p>
+    /// <p>If a conflicting operation occurs during the upload S3 returns a <code>409 ConditionalRequestConflict</code> response. On a 409 failure you should fetch the object's ETag and retry the upload.</p>
+    /// <p>Expects the ETag value as a string.</p>
+    /// <p>For more information about conditional requests, see <a href="https://tools.ietf.org/html/rfc7232">RFC 7232</a>, or <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-requests.html">Conditional requests</a> in the <i>Amazon S3 User Guide</i>.</p>
+    pub if_match: Option<IfMatch>,
+    /// <p>Uploads the object only if the object key name does not already exist in the bucket
+    /// specified. Otherwise, Amazon S3 returns a <code>412 Precondition Failed</code> error.</p>
+    /// <p>If a conflicting operation occurs during the upload S3 returns a <code>409
+    /// ConditionalRequestConflict</code> response. On a 409 failure you should retry the
+    /// upload.</p>
+    /// <p>Expects the '*' (asterisk) character.</p>
+    /// <p>For more information about conditional requests, see <a href="https://tools.ietf.org/html/rfc7232">RFC 7232</a>, or <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-requests.html">Conditional requests</a> in the <i>Amazon S3 User Guide</i>.</p>
+    pub if_none_match: Option<IfNoneMatch>,
+    /// <p>Object key for which the PUT action was initiated.</p>
+    pub key: ObjectKey,
+    /// <p>A map of metadata to store with the object in S3.</p>
+    pub metadata: Option<Metadata>,
+    /// <p>Specifies whether a legal hold will be applied to this object. For more information
+    /// about S3 Object Lock, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lock.html">Object Lock</a> in the
+    /// <i>Amazon S3 User Guide</i>.</p>
+    /// <note>
+    /// <p>This functionality is not supported for directory buckets.</p>
+    /// </note>
+    pub object_lock_legal_hold_status: Option<ObjectLockLegalHoldStatus>,
+    /// <p>The Object Lock mode that you want to apply to this object.</p>
+    /// <note>
+    /// <p>This functionality is not supported for directory buckets.</p>
+    /// </note>
+    pub object_lock_mode: Option<ObjectLockMode>,
+    /// <p>The date and time when you want this object's Object Lock to expire. Must be formatted
+    /// as a timestamp parameter.</p>
+    /// <note>
+    /// <p>This functionality is not supported for directory buckets.</p>
+    /// </note>
+    pub object_lock_retain_until_date: Option<ObjectLockRetainUntilDate>,
+    pub request_payer: Option<RequestPayer>,
+    /// <p>Specifies the algorithm to use when encrypting the object (for example,
+    /// <code>AES256</code>).</p>
+    /// <note>
+    /// <p>This functionality is not supported for directory buckets.</p>
+    /// </note>
+    pub sse_customer_algorithm: Option<SSECustomerAlgorithm>,
+    /// <p>Specifies the customer-provided encryption key for Amazon S3 to use in encrypting data. This
+    /// value is used to store the object and then it is discarded; Amazon S3 does not store the
+    /// encryption key. The key must be appropriate for use with the algorithm specified in the
+    /// <code>x-amz-server-side-encryption-customer-algorithm</code> header.</p>
+    /// <note>
+    /// <p>This functionality is not supported for directory buckets.</p>
+    /// </note>
+    pub sse_customer_key: Option<SSECustomerKey>,
+    /// <p>Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses
+    /// this header for a message integrity check to ensure that the encryption key was transmitted
+    /// without error.</p>
+    /// <note>
+    /// <p>This functionality is not supported for directory buckets.</p>
+    /// </note>
+    pub sse_customer_key_md5: Option<SSECustomerKeyMD5>,
+    /// <p>Specifies the Amazon Web Services KMS Encryption Context as an additional encryption context to use for object encryption. The value of
+    /// this header is a Base64 encoded string of a UTF-8 encoded JSON, which contains the encryption context as key-value pairs.
+    /// This value is stored as object metadata and automatically gets passed on
+    /// to Amazon Web Services KMS for future <code>GetObject</code> operations on
+    /// this object.</p>
+    /// <p>
+    /// <b>General purpose buckets</b> - This value must be explicitly added during <code>CopyObject</code> operations if you want an additional encryption context for your object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingKMSEncryption.html#encryption-context">Encryption context</a> in the <i>Amazon S3 User Guide</i>.</p>
+    /// <p>
+    /// <b>Directory buckets</b> - You can optionally provide an explicit encryption context value. The value must match the default encryption context - the bucket Amazon Resource Name (ARN). An additional encryption context value is not supported. </p>
+    pub ssekms_encryption_context: Option<SSEKMSEncryptionContext>,
+    /// <p>Specifies the KMS key ID (Key ID, Key ARN, or Key Alias) to use for object encryption. If the KMS key doesn't exist in the same
+    /// account that's issuing the command, you must use the full Key ARN not the Key ID.</p>
+    /// <p>
+    /// <b>General purpose buckets</b> - If you specify <code>x-amz-server-side-encryption</code> with <code>aws:kms</code> or <code>aws:kms:dsse</code>, this header specifies the ID (Key ID, Key ARN, or Key Alias) of the KMS
+    /// key to use. If you specify
+    /// <code>x-amz-server-side-encryption:aws:kms</code> or
+    /// <code>x-amz-server-side-encryption:aws:kms:dsse</code>, but do not provide <code>x-amz-server-side-encryption-aws-kms-key-id</code>, Amazon S3 uses the Amazon Web Services managed key
+    /// (<code>aws/s3</code>) to protect the data.</p>
+    /// <p>
+    /// <b>Directory buckets</b> - To encrypt data using SSE-KMS, it's recommended to specify the
+    /// <code>x-amz-server-side-encryption</code> header to <code>aws:kms</code>. Then, the <code>x-amz-server-side-encryption-aws-kms-key-id</code> header implicitly uses
+    /// the bucket's default KMS customer managed key ID. If you want to explicitly set the <code>
+    /// x-amz-server-side-encryption-aws-kms-key-id</code> header, it must match the bucket's default customer managed key (using key ID or ARN, not alias). Your SSE-KMS configuration can only support 1 <a href="https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#customer-cmk">customer managed key</a> per directory bucket's lifetime.
+    /// The <a href="https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#aws-managed-cmk">Amazon Web Services managed key</a> (<code>aws/s3</code>) isn't supported.
+    ///
+    /// Incorrect key specification results in an HTTP <code>400 Bad Request</code> error. </p>
+    pub ssekms_key_id: Option<SSEKMSKeyId>,
+    /// <p>The server-side encryption algorithm that was used when you store this object in Amazon S3
+    /// (for example, <code>AES256</code>, <code>aws:kms</code>, <code>aws:kms:dsse</code>).</p>
+    /// <ul>
+    /// <li>
+    /// <p>
+    /// <b>General purpose buckets </b> - You have four mutually
+    /// exclusive options to protect data using server-side encryption in Amazon S3, depending on
+    /// how you choose to manage the encryption keys. Specifically, the encryption key
+    /// options are Amazon S3 managed keys (SSE-S3), Amazon Web Services KMS keys (SSE-KMS or DSSE-KMS), and
+    /// customer-provided keys (SSE-C). Amazon S3 encrypts data with server-side encryption by
+    /// using Amazon S3 managed keys (SSE-S3) by default. You can optionally tell Amazon S3 to encrypt
+    /// data at rest by using server-side encryption with other key options. For more
+    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingServerSideEncryption.html">Using Server-Side
+    /// Encryption</a> in the <i>Amazon S3 User Guide</i>.</p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <b>Directory buckets </b> -
+    /// For directory buckets, there are only two supported options for server-side encryption: server-side encryption with Amazon S3 managed keys (SSE-S3) (<code>AES256</code>) and server-side encryption with KMS keys (SSE-KMS) (<code>aws:kms</code>). We recommend that the bucket's default encryption uses the desired encryption configuration and you don't override the bucket default encryption in your
+    /// <code>CreateSession</code> requests or <code>PUT</code> object requests. Then, new objects
+    /// are automatically encrypted with the desired encryption settings. For more
+    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-express-serv-side-encryption.html">Protecting data with server-side encryption</a> in the <i>Amazon S3 User Guide</i>. For more information about the encryption overriding behaviors in directory buckets, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-express-specifying-kms-encryption.html">Specifying server-side encryption with KMS for new object uploads</a>. </p>
+    /// <p>In the Zonal endpoint API calls (except <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_CopyObject.html">CopyObject</a> and <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_UploadPartCopy.html">UploadPartCopy</a>) using the REST API, the encryption request headers must match the encryption settings that are specified in the <code>CreateSession</code> request.
+    /// You can't override the values of the encryption settings (<code>x-amz-server-side-encryption</code>, <code>x-amz-server-side-encryption-aws-kms-key-id</code>, <code>x-amz-server-side-encryption-context</code>, and <code>x-amz-server-side-encryption-bucket-key-enabled</code>) that are specified in the <code>CreateSession</code> request.
+    /// You don't need to explicitly specify these encryption settings values in Zonal endpoint API calls, and   
+    /// Amazon S3 will use the encryption settings values from the <code>CreateSession</code> request to protect new objects in the directory bucket.
+    /// </p>
+    /// <note>
+    /// <p>When you use the CLI or the Amazon Web Services SDKs, for <code>CreateSession</code>, the session token refreshes automatically to avoid service interruptions when a session expires. The CLI or the Amazon Web Services SDKs use the bucket's default encryption configuration for the
+    /// <code>CreateSession</code> request. It's not supported to override the encryption settings values in the <code>CreateSession</code> request.
+    /// So in the Zonal endpoint API calls (except <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_CopyObject.html">CopyObject</a> and <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_UploadPartCopy.html">UploadPartCopy</a>),
+    /// the encryption request headers must match the default encryption configuration of the directory bucket.
+    ///
+    /// </p>
+    /// </note>
+    /// </li>
+    /// </ul>
+    pub server_side_encryption: Option<ServerSideEncryption>,
+    /// <p>By default, Amazon S3 uses the STANDARD Storage Class to store newly created objects. The
+    /// STANDARD storage class provides high durability and high availability. Depending on
+    /// performance needs, you can specify a different Storage Class. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/storage-class-intro.html">Storage
+    /// Classes</a> in the <i>Amazon S3 User Guide</i>.</p>
+    /// <note>
+    /// <ul>
+    /// <li>
+    /// <p>For directory buckets, only the S3 Express One Zone storage class is supported to store
+    /// newly created objects.</p>
+    /// </li>
+    /// <li>
+    /// <p>Amazon S3 on Outposts only uses the OUTPOSTS Storage Class.</p>
+    /// </li>
+    /// </ul>
+    /// </note>
+    pub storage_class: Option<StorageClass>,
+    /// <p>The tag-set for the object. The tag-set must be encoded as URL Query parameters. (For
+    /// example, "Key1=Value1")</p>
+    /// <note>
+    /// <p>This functionality is not supported for directory buckets.</p>
+    /// </note>
+    pub tagging: Option<TaggingHeader>,
+    pub version_id: Option<ObjectVersionId>,
+    /// <p>If the bucket is configured as a website, redirects requests for this object to another
+    /// object in the same bucket or to an external URL. Amazon S3 stores the value of this header in
+    /// the object metadata. For information about object metadata, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingMetadata.html">Object Key and Metadata</a> in the
+    /// <i>Amazon S3 User Guide</i>.</p>
+    /// <p>In the following example, the request header sets the redirect to an object
+    /// (anotherPage.html) in the same bucket:</p>
+    /// <p>
+    /// <code>x-amz-website-redirect-location: /anotherPage.html</code>
+    /// </p>
+    /// <p>In the following example, the request header sets the object redirect to another
+    /// website:</p>
+    /// <p>
+    /// <code>x-amz-website-redirect-location: http://www.example.com/</code>
+    /// </p>
+    /// <p>For more information about website hosting in Amazon S3, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/WebsiteHosting.html">Hosting Websites on Amazon S3</a> and
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/how-to-page-redirect.html">How to
+    /// Configure Website Page Redirects</a> in the <i>Amazon S3 User Guide</i>. </p>
+    /// <note>
+    /// <p>This functionality is not supported for directory buckets.</p>
+    /// </note>
+    pub website_redirect_location: Option<WebsiteRedirectLocation>,
+    /// <p>
+    /// Specifies the offset for appending data to existing objects in bytes.
+    /// The offset must be equal to the size of the existing object being appended to.
+    /// If no object exists, setting this header to 0 will create a new object.
+    /// </p>
+    /// <note>
+    /// <p>This functionality is only supported for objects in the Amazon S3 Express One Zone storage class in directory buckets.</p>
+    /// </note>
+    pub write_offset_bytes: Option<WriteOffsetBytes>,
+}
+
+impl fmt::Debug for PostObjectInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("PostObjectInput");
+        if let Some(ref val) = self.acl {
+            d.field("acl", val);
+        }
+        if let Some(ref val) = self.body {
+            d.field("body", val);
+        }
+        d.field("bucket", &self.bucket);
+        if let Some(ref val) = self.bucket_key_enabled {
+            d.field("bucket_key_enabled", val);
+        }
+        if let Some(ref val) = self.cache_control {
+            d.field("cache_control", val);
+        }
+        if let Some(ref val) = self.checksum_algorithm {
+            d.field("checksum_algorithm", val);
+        }
+        if let Some(ref val) = self.checksum_crc32 {
+            d.field("checksum_crc32", val);
+        }
+        if let Some(ref val) = self.checksum_crc32c {
+            d.field("checksum_crc32c", val);
+        }
+        if let Some(ref val) = self.checksum_crc64nvme {
+            d.field("checksum_crc64nvme", val);
+        }
+        if let Some(ref val) = self.checksum_sha1 {
+            d.field("checksum_sha1", val);
+        }
+        if let Some(ref val) = self.checksum_sha256 {
+            d.field("checksum_sha256", val);
+        }
+        if let Some(ref val) = self.content_disposition {
+            d.field("content_disposition", val);
+        }
+        if let Some(ref val) = self.content_encoding {
+            d.field("content_encoding", val);
+        }
+        if let Some(ref val) = self.content_language {
+            d.field("content_language", val);
+        }
+        if let Some(ref val) = self.content_length {
+            d.field("content_length", val);
+        }
+        if let Some(ref val) = self.content_md5 {
+            d.field("content_md5", val);
+        }
+        if let Some(ref val) = self.content_type {
+            d.field("content_type", val);
+        }
+        if let Some(ref val) = self.expected_bucket_owner {
+            d.field("expected_bucket_owner", val);
+        }
+        if let Some(ref val) = self.expires {
+            d.field("expires", val);
+        }
+        if let Some(ref val) = self.grant_full_control {
+            d.field("grant_full_control", val);
+        }
+        if let Some(ref val) = self.grant_read {
+            d.field("grant_read", val);
+        }
+        if let Some(ref val) = self.grant_read_acp {
+            d.field("grant_read_acp", val);
+        }
+        if let Some(ref val) = self.grant_write_acp {
+            d.field("grant_write_acp", val);
+        }
+        if let Some(ref val) = self.if_match {
+            d.field("if_match", val);
+        }
+        if let Some(ref val) = self.if_none_match {
+            d.field("if_none_match", val);
+        }
+        d.field("key", &self.key);
+        if let Some(ref val) = self.metadata {
+            d.field("metadata", val);
+        }
+        if let Some(ref val) = self.object_lock_legal_hold_status {
+            d.field("object_lock_legal_hold_status", val);
+        }
+        if let Some(ref val) = self.object_lock_mode {
+            d.field("object_lock_mode", val);
+        }
+        if let Some(ref val) = self.object_lock_retain_until_date {
+            d.field("object_lock_retain_until_date", val);
+        }
+        if let Some(ref val) = self.request_payer {
+            d.field("request_payer", val);
+        }
+        if let Some(ref val) = self.sse_customer_algorithm {
+            d.field("sse_customer_algorithm", val);
+        }
+        if let Some(ref val) = self.sse_customer_key {
+            d.field("sse_customer_key", val);
+        }
+        if let Some(ref val) = self.sse_customer_key_md5 {
+            d.field("sse_customer_key_md5", val);
+        }
+        if let Some(ref val) = self.ssekms_encryption_context {
+            d.field("ssekms_encryption_context", val);
+        }
+        if let Some(ref val) = self.ssekms_key_id {
+            d.field("ssekms_key_id", val);
+        }
+        if let Some(ref val) = self.server_side_encryption {
+            d.field("server_side_encryption", val);
+        }
+        if let Some(ref val) = self.storage_class {
+            d.field("storage_class", val);
+        }
+        if let Some(ref val) = self.tagging {
+            d.field("tagging", val);
+        }
+        if let Some(ref val) = self.version_id {
+            d.field("version_id", val);
+        }
+        if let Some(ref val) = self.website_redirect_location {
+            d.field("website_redirect_location", val);
+        }
+        if let Some(ref val) = self.write_offset_bytes {
+            d.field("write_offset_bytes", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+
+impl PostObjectInput {
+    #[must_use]
+    pub fn builder() -> builders::PostObjectInputBuilder {
+        default()
+    }
+}
+
+#[derive(Clone, Default, PartialEq)]
+pub struct PostObjectOutput {
+    /// <p>Indicates whether the uploaded object uses an S3 Bucket Key for server-side encryption
+    /// with Key Management Service (KMS) keys (SSE-KMS).</p>
+    pub bucket_key_enabled: Option<BucketKeyEnabled>,
+    /// <p>The Base64 encoded, 32-bit <code>CRC32 checksum</code> of the object. This checksum is only be present if the checksum was uploaded
+    /// with the object. When you use an API operation on an object that was uploaded using multipart uploads, this value may not be a direct checksum value of the full object. Instead, it's a calculation based on the checksum values of each individual part. For more information about how checksums are calculated
+    /// with multipart uploads, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html#large-object-checksums">
+    /// Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_crc32: Option<ChecksumCRC32>,
+    /// <p>The Base64 encoded, 32-bit <code>CRC32C</code> checksum of the object. This checksum is only present if the checksum was uploaded
+    /// with the object. When you use an API operation on an object that was uploaded using multipart uploads, this value may not be a direct checksum value of the full object. Instead, it's a calculation based on the checksum values of each individual part. For more information about how checksums are calculated
+    /// with multipart uploads, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html#large-object-checksums">
+    /// Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_crc32c: Option<ChecksumCRC32C>,
+    /// <p>The Base64 encoded, 64-bit <code>CRC64NVME</code> checksum of the object. This header
+    /// is present if the object was uploaded with the <code>CRC64NVME</code> checksum algorithm, or if it
+    /// was uploaded without a checksum (and Amazon S3 added the default checksum,
+    /// <code>CRC64NVME</code>, to the uploaded object). For more information about how
+    /// checksums are calculated with multipart uploads, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity
+    /// in the Amazon S3 User Guide</a>.</p>
+    pub checksum_crc64nvme: Option<ChecksumCRC64NVME>,
+    /// <p>The Base64 encoded, 160-bit <code>SHA1</code> digest of the object. This will only be present if the object was uploaded
+    /// with the object. When you use the API operation on an object that was uploaded using multipart uploads, this value may not be a direct checksum value of the full object. Instead, it's a calculation based on the checksum values of each individual part. For more information about how checksums are calculated
+    /// with multipart uploads, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html#large-object-checksums">
+    /// Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_sha1: Option<ChecksumSHA1>,
+    /// <p>The Base64 encoded, 256-bit <code>SHA256</code> digest of the object. This will only be present if the object was uploaded
+    /// with the object. When you use an API operation on an object that was uploaded using multipart uploads, this value may not be a direct checksum value of the full object. Instead, it's a calculation based on the checksum values of each individual part. For more information about how checksums are calculated
+    /// with multipart uploads, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html#large-object-checksums">
+    /// Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_sha256: Option<ChecksumSHA256>,
+    /// <p>This header specifies the checksum type of the object, which determines how part-level
+    /// checksums are combined to create an object-level checksum for multipart objects. For
+    /// <code>PutObject</code> uploads, the checksum type is always <code>FULL_OBJECT</code>. You can use this header as a
+    /// data integrity check to verify that the checksum type that is received is the same checksum
+    /// that was specified. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_type: Option<ChecksumType>,
+    /// <p>Entity tag for the uploaded object.</p>
+    /// <p>
+    /// <b>General purpose buckets </b> - To ensure that data is not
+    /// corrupted traversing the network, for objects where the ETag is the MD5 digest of the
+    /// object, you can calculate the MD5 while putting an object to Amazon S3 and compare the returned
+    /// ETag to the calculated MD5 value.</p>
+    /// <p>
+    /// <b>Directory buckets </b> - The ETag for the object in
+    /// a directory bucket isn't the MD5 digest of the object.</p>
+    pub e_tag: Option<ETag>,
+    /// <p>If the expiration is configured for the object (see <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketLifecycleConfiguration.html">PutBucketLifecycleConfiguration</a>) in the <i>Amazon S3 User Guide</i>,
+    /// the response includes this header. It includes the <code>expiry-date</code> and
+    /// <code>rule-id</code> key-value pairs that provide information about object expiration.
+    /// The value of the <code>rule-id</code> is URL-encoded.</p>
+    /// <note>
+    /// <p>Object expiration information is not returned in directory buckets and this header returns the value "<code>NotImplemented</code>" in all responses for directory buckets.</p>
+    /// </note>
+    pub expiration: Option<Expiration>,
+    pub request_charged: Option<RequestCharged>,
+    /// <p>If server-side encryption with a customer-provided encryption key was requested, the
+    /// response will include this header to confirm the encryption algorithm that's used.</p>
+    /// <note>
+    /// <p>This functionality is not supported for directory buckets.</p>
+    /// </note>
+    pub sse_customer_algorithm: Option<SSECustomerAlgorithm>,
+    /// <p>If server-side encryption with a customer-provided encryption key was requested, the
+    /// response will include this header to provide the round-trip message integrity verification
+    /// of the customer-provided encryption key.</p>
+    /// <note>
+    /// <p>This functionality is not supported for directory buckets.</p>
+    /// </note>
+    pub sse_customer_key_md5: Option<SSECustomerKeyMD5>,
+    /// <p>If present, indicates the Amazon Web Services KMS Encryption Context to use for object encryption. The value of
+    /// this header is a Base64 encoded string of a UTF-8 encoded JSON, which contains the encryption context as key-value pairs.
+    /// This value is stored as object metadata and automatically gets
+    /// passed on to Amazon Web Services KMS for future <code>GetObject</code>
+    /// operations on this object.</p>
+    pub ssekms_encryption_context: Option<SSEKMSEncryptionContext>,
+    /// <p>If present, indicates the ID of the KMS key that was used for object encryption.</p>
+    pub ssekms_key_id: Option<SSEKMSKeyId>,
+    /// <p>The server-side encryption algorithm used when you store this object in Amazon S3.</p>
+    pub server_side_encryption: Option<ServerSideEncryption>,
+    /// <p>
+    /// The size of the object in bytes. This value is only be present if you append to an object.
+    /// </p>
+    /// <note>
+    /// <p>This functionality is only supported for objects in the Amazon S3 Express One Zone storage class in directory buckets.</p>
+    /// </note>
+    pub size: Option<Size>,
+    /// <p>Version ID of the object.</p>
+    /// <p>If you enable versioning for a bucket, Amazon S3 automatically generates a unique version ID
+    /// for the object being stored. Amazon S3 returns this ID in the response. When you enable
+    /// versioning for a bucket, if Amazon S3 receives multiple write requests for the same object
+    /// simultaneously, it stores all of the objects. For more information about versioning, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/AddingObjectstoVersioningEnabledBuckets.html">Adding Objects to
+    /// Versioning-Enabled Buckets</a> in the <i>Amazon S3 User Guide</i>. For
+    /// information about returning the versioning state of a bucket, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketVersioning.html">GetBucketVersioning</a>. </p>
+    /// <note>
+    /// <p>This functionality is not supported for directory buckets.</p>
+    /// </note>
+    pub version_id: Option<ObjectVersionId>,
+}
+
+impl fmt::Debug for PostObjectOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("PostObjectOutput");
+        if let Some(ref val) = self.bucket_key_enabled {
+            d.field("bucket_key_enabled", val);
+        }
+        if let Some(ref val) = self.checksum_crc32 {
+            d.field("checksum_crc32", val);
+        }
+        if let Some(ref val) = self.checksum_crc32c {
+            d.field("checksum_crc32c", val);
+        }
+        if let Some(ref val) = self.checksum_crc64nvme {
+            d.field("checksum_crc64nvme", val);
+        }
+        if let Some(ref val) = self.checksum_sha1 {
+            d.field("checksum_sha1", val);
+        }
+        if let Some(ref val) = self.checksum_sha256 {
+            d.field("checksum_sha256", val);
+        }
+        if let Some(ref val) = self.checksum_type {
+            d.field("checksum_type", val);
+        }
+        if let Some(ref val) = self.e_tag {
+            d.field("e_tag", val);
+        }
+        if let Some(ref val) = self.expiration {
+            d.field("expiration", val);
+        }
+        if let Some(ref val) = self.request_charged {
+            d.field("request_charged", val);
+        }
+        if let Some(ref val) = self.sse_customer_algorithm {
+            d.field("sse_customer_algorithm", val);
+        }
+        if let Some(ref val) = self.sse_customer_key_md5 {
+            d.field("sse_customer_key_md5", val);
+        }
+        if let Some(ref val) = self.ssekms_encryption_context {
+            d.field("ssekms_encryption_context", val);
+        }
+        if let Some(ref val) = self.ssekms_key_id {
+            d.field("ssekms_key_id", val);
+        }
+        if let Some(ref val) = self.server_side_encryption {
+            d.field("server_side_encryption", val);
+        }
+        if let Some(ref val) = self.size {
+            d.field("size", val);
+        }
+        if let Some(ref val) = self.version_id {
+            d.field("version_id", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+
 pub type Prefix = String;
 
 pub type Priority = i32;
@@ -21276,6 +21973,7 @@ mod tests {
         require_default::<ListObjectsOutput>();
         require_default::<ListObjectsV2Output>();
         require_default::<ListPartsOutput>();
+        require_default::<PostObjectOutput>();
         require_default::<PutBucketAccelerateConfigurationOutput>();
         require_default::<PutBucketAclOutput>();
         require_default::<PutBucketAnalyticsConfigurationOutput>();
@@ -27447,6 +28145,647 @@ pub mod builders {
                 sse_customer_key,
                 sse_customer_key_md5,
                 upload_id,
+            })
+        }
+    }
+
+    /// A builder for [`PostObjectInput`]
+    #[derive(Default)]
+    pub struct PostObjectInputBuilder {
+        acl: Option<ObjectCannedACL>,
+
+        body: Option<StreamingBlob>,
+
+        bucket: Option<BucketName>,
+
+        bucket_key_enabled: Option<BucketKeyEnabled>,
+
+        cache_control: Option<CacheControl>,
+
+        checksum_algorithm: Option<ChecksumAlgorithm>,
+
+        checksum_crc32: Option<ChecksumCRC32>,
+
+        checksum_crc32c: Option<ChecksumCRC32C>,
+
+        checksum_crc64nvme: Option<ChecksumCRC64NVME>,
+
+        checksum_sha1: Option<ChecksumSHA1>,
+
+        checksum_sha256: Option<ChecksumSHA256>,
+
+        content_disposition: Option<ContentDisposition>,
+
+        content_encoding: Option<ContentEncoding>,
+
+        content_language: Option<ContentLanguage>,
+
+        content_length: Option<ContentLength>,
+
+        content_md5: Option<ContentMD5>,
+
+        content_type: Option<ContentType>,
+
+        expected_bucket_owner: Option<AccountId>,
+
+        expires: Option<Expires>,
+
+        grant_full_control: Option<GrantFullControl>,
+
+        grant_read: Option<GrantRead>,
+
+        grant_read_acp: Option<GrantReadACP>,
+
+        grant_write_acp: Option<GrantWriteACP>,
+
+        if_match: Option<IfMatch>,
+
+        if_none_match: Option<IfNoneMatch>,
+
+        key: Option<ObjectKey>,
+
+        metadata: Option<Metadata>,
+
+        object_lock_legal_hold_status: Option<ObjectLockLegalHoldStatus>,
+
+        object_lock_mode: Option<ObjectLockMode>,
+
+        object_lock_retain_until_date: Option<ObjectLockRetainUntilDate>,
+
+        request_payer: Option<RequestPayer>,
+
+        sse_customer_algorithm: Option<SSECustomerAlgorithm>,
+
+        sse_customer_key: Option<SSECustomerKey>,
+
+        sse_customer_key_md5: Option<SSECustomerKeyMD5>,
+
+        ssekms_encryption_context: Option<SSEKMSEncryptionContext>,
+
+        ssekms_key_id: Option<SSEKMSKeyId>,
+
+        server_side_encryption: Option<ServerSideEncryption>,
+
+        storage_class: Option<StorageClass>,
+
+        tagging: Option<TaggingHeader>,
+
+        version_id: Option<ObjectVersionId>,
+
+        website_redirect_location: Option<WebsiteRedirectLocation>,
+
+        write_offset_bytes: Option<WriteOffsetBytes>,
+    }
+
+    impl PostObjectInputBuilder {
+        pub fn set_acl(&mut self, field: Option<ObjectCannedACL>) -> &mut Self {
+            self.acl = field;
+            self
+        }
+
+        pub fn set_body(&mut self, field: Option<StreamingBlob>) -> &mut Self {
+            self.body = field;
+            self
+        }
+
+        pub fn set_bucket(&mut self, field: BucketName) -> &mut Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        pub fn set_bucket_key_enabled(&mut self, field: Option<BucketKeyEnabled>) -> &mut Self {
+            self.bucket_key_enabled = field;
+            self
+        }
+
+        pub fn set_cache_control(&mut self, field: Option<CacheControl>) -> &mut Self {
+            self.cache_control = field;
+            self
+        }
+
+        pub fn set_checksum_algorithm(&mut self, field: Option<ChecksumAlgorithm>) -> &mut Self {
+            self.checksum_algorithm = field;
+            self
+        }
+
+        pub fn set_checksum_crc32(&mut self, field: Option<ChecksumCRC32>) -> &mut Self {
+            self.checksum_crc32 = field;
+            self
+        }
+
+        pub fn set_checksum_crc32c(&mut self, field: Option<ChecksumCRC32C>) -> &mut Self {
+            self.checksum_crc32c = field;
+            self
+        }
+
+        pub fn set_checksum_crc64nvme(&mut self, field: Option<ChecksumCRC64NVME>) -> &mut Self {
+            self.checksum_crc64nvme = field;
+            self
+        }
+
+        pub fn set_checksum_sha1(&mut self, field: Option<ChecksumSHA1>) -> &mut Self {
+            self.checksum_sha1 = field;
+            self
+        }
+
+        pub fn set_checksum_sha256(&mut self, field: Option<ChecksumSHA256>) -> &mut Self {
+            self.checksum_sha256 = field;
+            self
+        }
+
+        pub fn set_content_disposition(&mut self, field: Option<ContentDisposition>) -> &mut Self {
+            self.content_disposition = field;
+            self
+        }
+
+        pub fn set_content_encoding(&mut self, field: Option<ContentEncoding>) -> &mut Self {
+            self.content_encoding = field;
+            self
+        }
+
+        pub fn set_content_language(&mut self, field: Option<ContentLanguage>) -> &mut Self {
+            self.content_language = field;
+            self
+        }
+
+        pub fn set_content_length(&mut self, field: Option<ContentLength>) -> &mut Self {
+            self.content_length = field;
+            self
+        }
+
+        pub fn set_content_md5(&mut self, field: Option<ContentMD5>) -> &mut Self {
+            self.content_md5 = field;
+            self
+        }
+
+        pub fn set_content_type(&mut self, field: Option<ContentType>) -> &mut Self {
+            self.content_type = field;
+            self
+        }
+
+        pub fn set_expected_bucket_owner(&mut self, field: Option<AccountId>) -> &mut Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        pub fn set_expires(&mut self, field: Option<Expires>) -> &mut Self {
+            self.expires = field;
+            self
+        }
+
+        pub fn set_grant_full_control(&mut self, field: Option<GrantFullControl>) -> &mut Self {
+            self.grant_full_control = field;
+            self
+        }
+
+        pub fn set_grant_read(&mut self, field: Option<GrantRead>) -> &mut Self {
+            self.grant_read = field;
+            self
+        }
+
+        pub fn set_grant_read_acp(&mut self, field: Option<GrantReadACP>) -> &mut Self {
+            self.grant_read_acp = field;
+            self
+        }
+
+        pub fn set_grant_write_acp(&mut self, field: Option<GrantWriteACP>) -> &mut Self {
+            self.grant_write_acp = field;
+            self
+        }
+
+        pub fn set_if_match(&mut self, field: Option<IfMatch>) -> &mut Self {
+            self.if_match = field;
+            self
+        }
+
+        pub fn set_if_none_match(&mut self, field: Option<IfNoneMatch>) -> &mut Self {
+            self.if_none_match = field;
+            self
+        }
+
+        pub fn set_key(&mut self, field: ObjectKey) -> &mut Self {
+            self.key = Some(field);
+            self
+        }
+
+        pub fn set_metadata(&mut self, field: Option<Metadata>) -> &mut Self {
+            self.metadata = field;
+            self
+        }
+
+        pub fn set_object_lock_legal_hold_status(&mut self, field: Option<ObjectLockLegalHoldStatus>) -> &mut Self {
+            self.object_lock_legal_hold_status = field;
+            self
+        }
+
+        pub fn set_object_lock_mode(&mut self, field: Option<ObjectLockMode>) -> &mut Self {
+            self.object_lock_mode = field;
+            self
+        }
+
+        pub fn set_object_lock_retain_until_date(&mut self, field: Option<ObjectLockRetainUntilDate>) -> &mut Self {
+            self.object_lock_retain_until_date = field;
+            self
+        }
+
+        pub fn set_request_payer(&mut self, field: Option<RequestPayer>) -> &mut Self {
+            self.request_payer = field;
+            self
+        }
+
+        pub fn set_sse_customer_algorithm(&mut self, field: Option<SSECustomerAlgorithm>) -> &mut Self {
+            self.sse_customer_algorithm = field;
+            self
+        }
+
+        pub fn set_sse_customer_key(&mut self, field: Option<SSECustomerKey>) -> &mut Self {
+            self.sse_customer_key = field;
+            self
+        }
+
+        pub fn set_sse_customer_key_md5(&mut self, field: Option<SSECustomerKeyMD5>) -> &mut Self {
+            self.sse_customer_key_md5 = field;
+            self
+        }
+
+        pub fn set_ssekms_encryption_context(&mut self, field: Option<SSEKMSEncryptionContext>) -> &mut Self {
+            self.ssekms_encryption_context = field;
+            self
+        }
+
+        pub fn set_ssekms_key_id(&mut self, field: Option<SSEKMSKeyId>) -> &mut Self {
+            self.ssekms_key_id = field;
+            self
+        }
+
+        pub fn set_server_side_encryption(&mut self, field: Option<ServerSideEncryption>) -> &mut Self {
+            self.server_side_encryption = field;
+            self
+        }
+
+        pub fn set_storage_class(&mut self, field: Option<StorageClass>) -> &mut Self {
+            self.storage_class = field;
+            self
+        }
+
+        pub fn set_tagging(&mut self, field: Option<TaggingHeader>) -> &mut Self {
+            self.tagging = field;
+            self
+        }
+
+        pub fn set_version_id(&mut self, field: Option<ObjectVersionId>) -> &mut Self {
+            self.version_id = field;
+            self
+        }
+
+        pub fn set_website_redirect_location(&mut self, field: Option<WebsiteRedirectLocation>) -> &mut Self {
+            self.website_redirect_location = field;
+            self
+        }
+
+        pub fn set_write_offset_bytes(&mut self, field: Option<WriteOffsetBytes>) -> &mut Self {
+            self.write_offset_bytes = field;
+            self
+        }
+
+        #[must_use]
+        pub fn acl(mut self, field: Option<ObjectCannedACL>) -> Self {
+            self.acl = field;
+            self
+        }
+
+        #[must_use]
+        pub fn body(mut self, field: Option<StreamingBlob>) -> Self {
+            self.body = field;
+            self
+        }
+
+        #[must_use]
+        pub fn bucket(mut self, field: BucketName) -> Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn bucket_key_enabled(mut self, field: Option<BucketKeyEnabled>) -> Self {
+            self.bucket_key_enabled = field;
+            self
+        }
+
+        #[must_use]
+        pub fn cache_control(mut self, field: Option<CacheControl>) -> Self {
+            self.cache_control = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_algorithm(mut self, field: Option<ChecksumAlgorithm>) -> Self {
+            self.checksum_algorithm = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_crc32(mut self, field: Option<ChecksumCRC32>) -> Self {
+            self.checksum_crc32 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_crc32c(mut self, field: Option<ChecksumCRC32C>) -> Self {
+            self.checksum_crc32c = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_crc64nvme(mut self, field: Option<ChecksumCRC64NVME>) -> Self {
+            self.checksum_crc64nvme = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_sha1(mut self, field: Option<ChecksumSHA1>) -> Self {
+            self.checksum_sha1 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_sha256(mut self, field: Option<ChecksumSHA256>) -> Self {
+            self.checksum_sha256 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn content_disposition(mut self, field: Option<ContentDisposition>) -> Self {
+            self.content_disposition = field;
+            self
+        }
+
+        #[must_use]
+        pub fn content_encoding(mut self, field: Option<ContentEncoding>) -> Self {
+            self.content_encoding = field;
+            self
+        }
+
+        #[must_use]
+        pub fn content_language(mut self, field: Option<ContentLanguage>) -> Self {
+            self.content_language = field;
+            self
+        }
+
+        #[must_use]
+        pub fn content_length(mut self, field: Option<ContentLength>) -> Self {
+            self.content_length = field;
+            self
+        }
+
+        #[must_use]
+        pub fn content_md5(mut self, field: Option<ContentMD5>) -> Self {
+            self.content_md5 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn content_type(mut self, field: Option<ContentType>) -> Self {
+            self.content_type = field;
+            self
+        }
+
+        #[must_use]
+        pub fn expected_bucket_owner(mut self, field: Option<AccountId>) -> Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        #[must_use]
+        pub fn expires(mut self, field: Option<Expires>) -> Self {
+            self.expires = field;
+            self
+        }
+
+        #[must_use]
+        pub fn grant_full_control(mut self, field: Option<GrantFullControl>) -> Self {
+            self.grant_full_control = field;
+            self
+        }
+
+        #[must_use]
+        pub fn grant_read(mut self, field: Option<GrantRead>) -> Self {
+            self.grant_read = field;
+            self
+        }
+
+        #[must_use]
+        pub fn grant_read_acp(mut self, field: Option<GrantReadACP>) -> Self {
+            self.grant_read_acp = field;
+            self
+        }
+
+        #[must_use]
+        pub fn grant_write_acp(mut self, field: Option<GrantWriteACP>) -> Self {
+            self.grant_write_acp = field;
+            self
+        }
+
+        #[must_use]
+        pub fn if_match(mut self, field: Option<IfMatch>) -> Self {
+            self.if_match = field;
+            self
+        }
+
+        #[must_use]
+        pub fn if_none_match(mut self, field: Option<IfNoneMatch>) -> Self {
+            self.if_none_match = field;
+            self
+        }
+
+        #[must_use]
+        pub fn key(mut self, field: ObjectKey) -> Self {
+            self.key = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn metadata(mut self, field: Option<Metadata>) -> Self {
+            self.metadata = field;
+            self
+        }
+
+        #[must_use]
+        pub fn object_lock_legal_hold_status(mut self, field: Option<ObjectLockLegalHoldStatus>) -> Self {
+            self.object_lock_legal_hold_status = field;
+            self
+        }
+
+        #[must_use]
+        pub fn object_lock_mode(mut self, field: Option<ObjectLockMode>) -> Self {
+            self.object_lock_mode = field;
+            self
+        }
+
+        #[must_use]
+        pub fn object_lock_retain_until_date(mut self, field: Option<ObjectLockRetainUntilDate>) -> Self {
+            self.object_lock_retain_until_date = field;
+            self
+        }
+
+        #[must_use]
+        pub fn request_payer(mut self, field: Option<RequestPayer>) -> Self {
+            self.request_payer = field;
+            self
+        }
+
+        #[must_use]
+        pub fn sse_customer_algorithm(mut self, field: Option<SSECustomerAlgorithm>) -> Self {
+            self.sse_customer_algorithm = field;
+            self
+        }
+
+        #[must_use]
+        pub fn sse_customer_key(mut self, field: Option<SSECustomerKey>) -> Self {
+            self.sse_customer_key = field;
+            self
+        }
+
+        #[must_use]
+        pub fn sse_customer_key_md5(mut self, field: Option<SSECustomerKeyMD5>) -> Self {
+            self.sse_customer_key_md5 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn ssekms_encryption_context(mut self, field: Option<SSEKMSEncryptionContext>) -> Self {
+            self.ssekms_encryption_context = field;
+            self
+        }
+
+        #[must_use]
+        pub fn ssekms_key_id(mut self, field: Option<SSEKMSKeyId>) -> Self {
+            self.ssekms_key_id = field;
+            self
+        }
+
+        #[must_use]
+        pub fn server_side_encryption(mut self, field: Option<ServerSideEncryption>) -> Self {
+            self.server_side_encryption = field;
+            self
+        }
+
+        #[must_use]
+        pub fn storage_class(mut self, field: Option<StorageClass>) -> Self {
+            self.storage_class = field;
+            self
+        }
+
+        #[must_use]
+        pub fn tagging(mut self, field: Option<TaggingHeader>) -> Self {
+            self.tagging = field;
+            self
+        }
+
+        #[must_use]
+        pub fn version_id(mut self, field: Option<ObjectVersionId>) -> Self {
+            self.version_id = field;
+            self
+        }
+
+        #[must_use]
+        pub fn website_redirect_location(mut self, field: Option<WebsiteRedirectLocation>) -> Self {
+            self.website_redirect_location = field;
+            self
+        }
+
+        #[must_use]
+        pub fn write_offset_bytes(mut self, field: Option<WriteOffsetBytes>) -> Self {
+            self.write_offset_bytes = field;
+            self
+        }
+
+        pub fn build(self) -> Result<PostObjectInput, BuildError> {
+            let acl = self.acl;
+            let body = self.body;
+            let bucket = self.bucket.ok_or_else(|| BuildError::missing_field("bucket"))?;
+            let bucket_key_enabled = self.bucket_key_enabled;
+            let cache_control = self.cache_control;
+            let checksum_algorithm = self.checksum_algorithm;
+            let checksum_crc32 = self.checksum_crc32;
+            let checksum_crc32c = self.checksum_crc32c;
+            let checksum_crc64nvme = self.checksum_crc64nvme;
+            let checksum_sha1 = self.checksum_sha1;
+            let checksum_sha256 = self.checksum_sha256;
+            let content_disposition = self.content_disposition;
+            let content_encoding = self.content_encoding;
+            let content_language = self.content_language;
+            let content_length = self.content_length;
+            let content_md5 = self.content_md5;
+            let content_type = self.content_type;
+            let expected_bucket_owner = self.expected_bucket_owner;
+            let expires = self.expires;
+            let grant_full_control = self.grant_full_control;
+            let grant_read = self.grant_read;
+            let grant_read_acp = self.grant_read_acp;
+            let grant_write_acp = self.grant_write_acp;
+            let if_match = self.if_match;
+            let if_none_match = self.if_none_match;
+            let key = self.key.ok_or_else(|| BuildError::missing_field("key"))?;
+            let metadata = self.metadata;
+            let object_lock_legal_hold_status = self.object_lock_legal_hold_status;
+            let object_lock_mode = self.object_lock_mode;
+            let object_lock_retain_until_date = self.object_lock_retain_until_date;
+            let request_payer = self.request_payer;
+            let sse_customer_algorithm = self.sse_customer_algorithm;
+            let sse_customer_key = self.sse_customer_key;
+            let sse_customer_key_md5 = self.sse_customer_key_md5;
+            let ssekms_encryption_context = self.ssekms_encryption_context;
+            let ssekms_key_id = self.ssekms_key_id;
+            let server_side_encryption = self.server_side_encryption;
+            let storage_class = self.storage_class;
+            let tagging = self.tagging;
+            let version_id = self.version_id;
+            let website_redirect_location = self.website_redirect_location;
+            let write_offset_bytes = self.write_offset_bytes;
+            Ok(PostObjectInput {
+                acl,
+                body,
+                bucket,
+                bucket_key_enabled,
+                cache_control,
+                checksum_algorithm,
+                checksum_crc32,
+                checksum_crc32c,
+                checksum_crc64nvme,
+                checksum_sha1,
+                checksum_sha256,
+                content_disposition,
+                content_encoding,
+                content_language,
+                content_length,
+                content_md5,
+                content_type,
+                expected_bucket_owner,
+                expires,
+                grant_full_control,
+                grant_read,
+                grant_read_acp,
+                grant_write_acp,
+                if_match,
+                if_none_match,
+                key,
+                metadata,
+                object_lock_legal_hold_status,
+                object_lock_mode,
+                object_lock_retain_until_date,
+                request_payer,
+                sse_customer_algorithm,
+                sse_customer_key,
+                sse_customer_key_md5,
+                ssekms_encryption_context,
+                ssekms_key_id,
+                server_side_encryption,
+                storage_class,
+                tagging,
+                version_id,
+                website_redirect_location,
+                write_offset_bytes,
             })
         }
     }
@@ -34740,6 +36079,166 @@ impl DtoExt for PartitionedPrefix {
 impl DtoExt for PolicyStatus {
     fn ignore_empty_strings(&mut self) {}
 }
+impl DtoExt for PostObjectInput {
+    fn ignore_empty_strings(&mut self) {
+        if let Some(ref val) = self.acl
+            && val.as_str() == ""
+        {
+            self.acl = None;
+        }
+        if self.cache_control.as_deref() == Some("") {
+            self.cache_control = None;
+        }
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
+        }
+        if self.checksum_crc32.as_deref() == Some("") {
+            self.checksum_crc32 = None;
+        }
+        if self.checksum_crc32c.as_deref() == Some("") {
+            self.checksum_crc32c = None;
+        }
+        if self.checksum_crc64nvme.as_deref() == Some("") {
+            self.checksum_crc64nvme = None;
+        }
+        if self.checksum_sha1.as_deref() == Some("") {
+            self.checksum_sha1 = None;
+        }
+        if self.checksum_sha256.as_deref() == Some("") {
+            self.checksum_sha256 = None;
+        }
+        if self.content_disposition.as_deref() == Some("") {
+            self.content_disposition = None;
+        }
+        if self.content_encoding.as_deref() == Some("") {
+            self.content_encoding = None;
+        }
+        if self.content_language.as_deref() == Some("") {
+            self.content_language = None;
+        }
+        if self.content_md5.as_deref() == Some("") {
+            self.content_md5 = None;
+        }
+        if self.expected_bucket_owner.as_deref() == Some("") {
+            self.expected_bucket_owner = None;
+        }
+        if self.grant_full_control.as_deref() == Some("") {
+            self.grant_full_control = None;
+        }
+        if self.grant_read.as_deref() == Some("") {
+            self.grant_read = None;
+        }
+        if self.grant_read_acp.as_deref() == Some("") {
+            self.grant_read_acp = None;
+        }
+        if self.grant_write_acp.as_deref() == Some("") {
+            self.grant_write_acp = None;
+        }
+        if let Some(ref val) = self.object_lock_legal_hold_status
+            && val.as_str() == ""
+        {
+            self.object_lock_legal_hold_status = None;
+        }
+        if let Some(ref val) = self.object_lock_mode
+            && val.as_str() == ""
+        {
+            self.object_lock_mode = None;
+        }
+        if let Some(ref val) = self.request_payer
+            && val.as_str() == ""
+        {
+            self.request_payer = None;
+        }
+        if self.sse_customer_algorithm.as_deref() == Some("") {
+            self.sse_customer_algorithm = None;
+        }
+        if self.sse_customer_key.as_deref() == Some("") {
+            self.sse_customer_key = None;
+        }
+        if self.sse_customer_key_md5.as_deref() == Some("") {
+            self.sse_customer_key_md5 = None;
+        }
+        if self.ssekms_encryption_context.as_deref() == Some("") {
+            self.ssekms_encryption_context = None;
+        }
+        if self.ssekms_key_id.as_deref() == Some("") {
+            self.ssekms_key_id = None;
+        }
+        if let Some(ref val) = self.server_side_encryption
+            && val.as_str() == ""
+        {
+            self.server_side_encryption = None;
+        }
+        if let Some(ref val) = self.storage_class
+            && val.as_str() == ""
+        {
+            self.storage_class = None;
+        }
+        if self.tagging.as_deref() == Some("") {
+            self.tagging = None;
+        }
+        if self.version_id.as_deref() == Some("") {
+            self.version_id = None;
+        }
+        if self.website_redirect_location.as_deref() == Some("") {
+            self.website_redirect_location = None;
+        }
+    }
+}
+impl DtoExt for PostObjectOutput {
+    fn ignore_empty_strings(&mut self) {
+        if self.checksum_crc32.as_deref() == Some("") {
+            self.checksum_crc32 = None;
+        }
+        if self.checksum_crc32c.as_deref() == Some("") {
+            self.checksum_crc32c = None;
+        }
+        if self.checksum_crc64nvme.as_deref() == Some("") {
+            self.checksum_crc64nvme = None;
+        }
+        if self.checksum_sha1.as_deref() == Some("") {
+            self.checksum_sha1 = None;
+        }
+        if self.checksum_sha256.as_deref() == Some("") {
+            self.checksum_sha256 = None;
+        }
+        if let Some(ref val) = self.checksum_type
+            && val.as_str() == ""
+        {
+            self.checksum_type = None;
+        }
+        if self.expiration.as_deref() == Some("") {
+            self.expiration = None;
+        }
+        if let Some(ref val) = self.request_charged
+            && val.as_str() == ""
+        {
+            self.request_charged = None;
+        }
+        if self.sse_customer_algorithm.as_deref() == Some("") {
+            self.sse_customer_algorithm = None;
+        }
+        if self.sse_customer_key_md5.as_deref() == Some("") {
+            self.sse_customer_key_md5 = None;
+        }
+        if self.ssekms_encryption_context.as_deref() == Some("") {
+            self.ssekms_encryption_context = None;
+        }
+        if self.ssekms_key_id.as_deref() == Some("") {
+            self.ssekms_key_id = None;
+        }
+        if let Some(ref val) = self.server_side_encryption
+            && val.as_str() == ""
+        {
+            self.server_side_encryption = None;
+        }
+        if self.version_id.as_deref() == Some("") {
+            self.version_id = None;
+        }
+    }
+}
 impl DtoExt for Progress {
     fn ignore_empty_strings(&mut self) {}
 }
@@ -36023,6 +37522,143 @@ impl DtoExt for WriteGetObjectResponseInput {
         if self.version_id.as_deref() == Some("") {
             self.version_id = None;
         }
+    }
+}
+
+// NOTE: PostObject is a synthetic API in s3s.
+// Today it is DTO-identical to PutObject, but PostObject may diverge later (e.g. post policy).
+pub(crate) fn put_object_input_into_post_object_input(x: PutObjectInput) -> PostObjectInput {
+    PostObjectInput {
+        acl: x.acl,
+        body: x.body,
+        bucket: x.bucket,
+        bucket_key_enabled: x.bucket_key_enabled,
+        cache_control: x.cache_control,
+        checksum_algorithm: x.checksum_algorithm,
+        checksum_crc32: x.checksum_crc32,
+        checksum_crc32c: x.checksum_crc32c,
+        checksum_crc64nvme: x.checksum_crc64nvme,
+        checksum_sha1: x.checksum_sha1,
+        checksum_sha256: x.checksum_sha256,
+        content_disposition: x.content_disposition,
+        content_encoding: x.content_encoding,
+        content_language: x.content_language,
+        content_length: x.content_length,
+        content_md5: x.content_md5,
+        content_type: x.content_type,
+        expected_bucket_owner: x.expected_bucket_owner,
+        expires: x.expires,
+        grant_full_control: x.grant_full_control,
+        grant_read: x.grant_read,
+        grant_read_acp: x.grant_read_acp,
+        grant_write_acp: x.grant_write_acp,
+        if_match: x.if_match,
+        if_none_match: x.if_none_match,
+        key: x.key,
+        metadata: x.metadata,
+        object_lock_legal_hold_status: x.object_lock_legal_hold_status,
+        object_lock_mode: x.object_lock_mode,
+        object_lock_retain_until_date: x.object_lock_retain_until_date,
+        request_payer: x.request_payer,
+        sse_customer_algorithm: x.sse_customer_algorithm,
+        sse_customer_key: x.sse_customer_key,
+        sse_customer_key_md5: x.sse_customer_key_md5,
+        ssekms_encryption_context: x.ssekms_encryption_context,
+        ssekms_key_id: x.ssekms_key_id,
+        server_side_encryption: x.server_side_encryption,
+        storage_class: x.storage_class,
+        tagging: x.tagging,
+        version_id: x.version_id,
+        website_redirect_location: x.website_redirect_location,
+        write_offset_bytes: x.write_offset_bytes,
+    }
+}
+pub(crate) fn post_object_input_into_put_object_input(x: PostObjectInput) -> PutObjectInput {
+    PutObjectInput {
+        acl: x.acl,
+        body: x.body,
+        bucket: x.bucket,
+        bucket_key_enabled: x.bucket_key_enabled,
+        cache_control: x.cache_control,
+        checksum_algorithm: x.checksum_algorithm,
+        checksum_crc32: x.checksum_crc32,
+        checksum_crc32c: x.checksum_crc32c,
+        checksum_crc64nvme: x.checksum_crc64nvme,
+        checksum_sha1: x.checksum_sha1,
+        checksum_sha256: x.checksum_sha256,
+        content_disposition: x.content_disposition,
+        content_encoding: x.content_encoding,
+        content_language: x.content_language,
+        content_length: x.content_length,
+        content_md5: x.content_md5,
+        content_type: x.content_type,
+        expected_bucket_owner: x.expected_bucket_owner,
+        expires: x.expires,
+        grant_full_control: x.grant_full_control,
+        grant_read: x.grant_read,
+        grant_read_acp: x.grant_read_acp,
+        grant_write_acp: x.grant_write_acp,
+        if_match: x.if_match,
+        if_none_match: x.if_none_match,
+        key: x.key,
+        metadata: x.metadata,
+        object_lock_legal_hold_status: x.object_lock_legal_hold_status,
+        object_lock_mode: x.object_lock_mode,
+        object_lock_retain_until_date: x.object_lock_retain_until_date,
+        request_payer: x.request_payer,
+        sse_customer_algorithm: x.sse_customer_algorithm,
+        sse_customer_key: x.sse_customer_key,
+        sse_customer_key_md5: x.sse_customer_key_md5,
+        ssekms_encryption_context: x.ssekms_encryption_context,
+        ssekms_key_id: x.ssekms_key_id,
+        server_side_encryption: x.server_side_encryption,
+        storage_class: x.storage_class,
+        tagging: x.tagging,
+        version_id: x.version_id,
+        website_redirect_location: x.website_redirect_location,
+        write_offset_bytes: x.write_offset_bytes,
+    }
+}
+pub(crate) fn put_object_output_into_post_object_output(x: PutObjectOutput) -> PostObjectOutput {
+    PostObjectOutput {
+        bucket_key_enabled: x.bucket_key_enabled,
+        checksum_crc32: x.checksum_crc32,
+        checksum_crc32c: x.checksum_crc32c,
+        checksum_crc64nvme: x.checksum_crc64nvme,
+        checksum_sha1: x.checksum_sha1,
+        checksum_sha256: x.checksum_sha256,
+        checksum_type: x.checksum_type,
+        e_tag: x.e_tag,
+        expiration: x.expiration,
+        request_charged: x.request_charged,
+        sse_customer_algorithm: x.sse_customer_algorithm,
+        sse_customer_key_md5: x.sse_customer_key_md5,
+        ssekms_encryption_context: x.ssekms_encryption_context,
+        ssekms_key_id: x.ssekms_key_id,
+        server_side_encryption: x.server_side_encryption,
+        size: x.size,
+        version_id: x.version_id,
+    }
+}
+pub(crate) fn post_object_output_into_put_object_output(x: PostObjectOutput) -> PutObjectOutput {
+    PutObjectOutput {
+        bucket_key_enabled: x.bucket_key_enabled,
+        checksum_crc32: x.checksum_crc32,
+        checksum_crc32c: x.checksum_crc32c,
+        checksum_crc64nvme: x.checksum_crc64nvme,
+        checksum_sha1: x.checksum_sha1,
+        checksum_sha256: x.checksum_sha256,
+        checksum_type: x.checksum_type,
+        e_tag: x.e_tag,
+        expiration: x.expiration,
+        request_charged: x.request_charged,
+        sse_customer_algorithm: x.sse_customer_algorithm,
+        sse_customer_key_md5: x.sse_customer_key_md5,
+        ssekms_encryption_context: x.ssekms_encryption_context,
+        ssekms_key_id: x.ssekms_key_id,
+        server_side_encryption: x.server_side_encryption,
+        size: x.size,
+        version_id: x.version_id,
     }
 }
 
