@@ -28,7 +28,7 @@ chrono = { version = "0.4.43", default-features = false, features = [
     "std",
     "clock",
 ] }
-clap = { version = "4.5.55", optional = true, features = ["derive"] }
+clap = { version = "4.5.56", optional = true, features = ["derive"] }
 crc32c = "0.6.8"
 futures = "0.3.31"
 hex-simd = "0.8.0"
