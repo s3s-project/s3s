@@ -172,4 +172,5 @@ jobs:
           name: e2e-s3tests.logs
           path: |
             ./target/s3-tests.log
+            ./target/s3-tests.junit.xml
             ./target/s3s-fs.log
