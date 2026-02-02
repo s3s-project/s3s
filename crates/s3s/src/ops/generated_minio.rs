@@ -6595,10 +6595,26 @@ impl PostObject {
 
         // Handle success_action_redirect: return 303 See Other with Location header
         if let Some(redirect_url) = success_action_redirect {
+            // Validate redirect URL doesn't contain control characters that could enable header injection
+            if redirect_url.chars().any(char::is_control) {
+                return Err(s3_error!(InvalidArgument, "success_action_redirect contains invalid control characters"));
+            }
+
             // Build query string with proper URL encoding using serde_urlencoded
             let query_params = serde_urlencoded::to_string([("bucket", bucket), ("key", key), ("etag", etag_str)])
                 .map_err(|e| s3_error!(e, InternalError))?;
-            let location = format!("{}{}{}", redirect_url, if redirect_url.contains('?') { "&" } else { "?" }, query_params,);
+
+            // Insert query parameters before any fragment per RFC 3986: scheme://authority/path?query#fragment
+            let (base, fragment) = match redirect_url.split_once('#') {
+                Some((b, f)) => (b, Some(f)),
+                None => (redirect_url, None),
+            };
+            let separator = if base.contains('?') { '&' } else { '?' };
+            let location = match fragment {
+                Some(f) => format!("{base}{separator}{query_params}#{f}"),
+                None => format!("{base}{separator}{query_params}"),
+            };
+
             let mut res = http::Response::with_status(http::StatusCode::SEE_OTHER);
             res.headers
                 .insert(hyper::header::LOCATION, location.parse().map_err(|e| s3_error!(e, InternalError))?);
@@ -6667,7 +6683,7 @@ impl super::Operation for PostObject {
             access.post_object(&mut post_req).await?;
         }
         // Restore POST-specific fields that were lost during conversion
-        post_req.input.success_action_redirect = success_action_redirect.clone();
+        post_req.input.success_action_redirect.clone_from(&success_action_redirect);
         post_req.input.success_action_status = success_action_status;
         let result = s3.post_object(post_req).await;
         let s3_resp = match result {
