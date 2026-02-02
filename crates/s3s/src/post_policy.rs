@@ -295,6 +295,9 @@ impl RawCondition {
                 }
                 let min = items[1].as_u64().ok_or(PostPolicyError::InvalidCondition)?;
                 let max = items[2].as_u64().ok_or(PostPolicyError::InvalidCondition)?;
+                if min > max {
+                    return Err(PostPolicyError::InvalidCondition);
+                }
                 Ok(PostPolicyCondition::ContentLengthRange { min, max })
             }
             _ => Err(PostPolicyError::InvalidCondition),
@@ -362,7 +365,7 @@ mod tests {
             }
         );
 
-        assert_eq!(policy.conditions[2], PostPolicyCondition::ContentLengthRange { min: 0, max: 10485760 });
+        assert_eq!(policy.conditions[2], PostPolicyCondition::ContentLengthRange { min: 0, max: 10_485_760 });
 
         assert_eq!(
             policy.conditions[3],
@@ -443,6 +446,193 @@ mod tests {
         assert_eq!(normalize_field_name("X-Amz-Meta-Custom"), "x-amz-meta-custom");
     }
 
-    // Validation tests require a mock Multipart, which is complex to construct.
-    // These will be tested in integration tests.
+    #[test]
+    fn test_invalid_content_length_range_min_greater_than_max() {
+        let json = r#"{
+            "expiration": "2030-01-01T00:00:00.000Z",
+            "conditions": [
+                ["content-length-range", 1000, 100]
+            ]
+        }"#;
+
+        let result = PostPolicy::from_json(json);
+        assert!(matches!(result, Err(PostPolicyError::InvalidCondition)));
+    }
+
+    #[test]
+    fn test_valid_content_length_range_equal() {
+        let json = r#"{
+            "expiration": "2030-01-01T00:00:00.000Z",
+            "conditions": [
+                ["content-length-range", 100, 100]
+            ]
+        }"#;
+
+        let result = PostPolicy::from_json(json);
+        assert!(result.is_ok());
+        let policy = result.unwrap();
+        assert_eq!(policy.content_length_range(), Some((100, 100)));
+    }
+
+    // Helper function to create a mock Multipart for testing
+    fn create_test_multipart(fields: Vec<(&str, &str)>, content_type: Option<&str>) -> Multipart {
+        use crate::http::File;
+        
+        let fields: Vec<(String, String)> = fields
+            .into_iter()
+            .map(|(k, v)| (k.to_owned(), v.to_owned()))
+            .collect();
+
+        let file = File {
+            name: "test.txt".to_owned(),
+            content_type: content_type.map(String::from),
+            stream: None,
+        };
+
+        Multipart::new_for_test(fields, file)
+    }
+
+    #[test]
+    fn test_validate_condition_eq_success() {
+        let multipart = create_test_multipart(vec![("bucket", "mybucket"), ("key", "mykey")], None);
+        let condition = PostPolicyCondition::Eq {
+            field: "bucket".to_owned(),
+            value: "mybucket".to_owned(),
+        };
+        
+        let result = PostPolicy::validate_condition(&condition, &multipart, 0);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_condition_eq_failure() {
+        let multipart = create_test_multipart(vec![("bucket", "mybucket"), ("key", "mykey")], None);
+        let condition = PostPolicyCondition::Eq {
+            field: "bucket".to_owned(),
+            value: "wrongbucket".to_owned(),
+        };
+        
+        let result = PostPolicy::validate_condition(&condition, &multipart, 0);
+        assert!(result.is_err());
+        if let Err(e) = result {
+            assert!(matches!(e.code(), S3ErrorCode::InvalidPolicyDocument));
+        }
+    }
+
+    #[test]
+    fn test_validate_condition_starts_with_success() {
+        let multipart = create_test_multipart(vec![("key", "user/alice/file.txt")], None);
+        let condition = PostPolicyCondition::StartsWith {
+            field: "key".to_owned(),
+            prefix: "user/".to_owned(),
+        };
+        
+        let result = PostPolicy::validate_condition(&condition, &multipart, 0);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_condition_starts_with_empty_prefix() {
+        let multipart = create_test_multipart(vec![("key", "anyvalue")], None);
+        let condition = PostPolicyCondition::StartsWith {
+            field: "key".to_owned(),
+            prefix: String::new(),
+        };
+        
+        let result = PostPolicy::validate_condition(&condition, &multipart, 0);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_condition_starts_with_failure() {
+        let multipart = create_test_multipart(vec![("key", "public/file.txt")], None);
+        let condition = PostPolicyCondition::StartsWith {
+            field: "key".to_owned(),
+            prefix: "user/".to_owned(),
+        };
+        
+        let result = PostPolicy::validate_condition(&condition, &multipart, 0);
+        assert!(result.is_err());
+        if let Err(e) = result {
+            assert!(matches!(e.code(), S3ErrorCode::InvalidPolicyDocument));
+        }
+    }
+
+    #[test]
+    fn test_validate_condition_content_length_range_success() {
+        let multipart = create_test_multipart(vec![], None);
+        let condition = PostPolicyCondition::ContentLengthRange { min: 100, max: 1000 };
+        
+        let result = PostPolicy::validate_condition(&condition, &multipart, 500);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_condition_content_length_range_at_min() {
+        let multipart = create_test_multipart(vec![], None);
+        let condition = PostPolicyCondition::ContentLengthRange { min: 100, max: 1000 };
+        
+        let result = PostPolicy::validate_condition(&condition, &multipart, 100);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_condition_content_length_range_at_max() {
+        let multipart = create_test_multipart(vec![], None);
+        let condition = PostPolicyCondition::ContentLengthRange { min: 100, max: 1000 };
+        
+        let result = PostPolicy::validate_condition(&condition, &multipart, 1000);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_condition_content_length_range_too_small() {
+        let multipart = create_test_multipart(vec![], None);
+        let condition = PostPolicyCondition::ContentLengthRange { min: 100, max: 1000 };
+        
+        let result = PostPolicy::validate_condition(&condition, &multipart, 99);
+        assert!(result.is_err());
+        if let Err(e) = result {
+            assert!(matches!(e.code(), S3ErrorCode::InvalidPolicyDocument));
+        }
+    }
+
+    #[test]
+    fn test_validate_condition_content_length_range_too_large() {
+        let multipart = create_test_multipart(vec![], None);
+        let condition = PostPolicyCondition::ContentLengthRange { min: 100, max: 1000 };
+        
+        let result = PostPolicy::validate_condition(&condition, &multipart, 1001);
+        assert!(result.is_err());
+        if let Err(e) = result {
+            assert!(matches!(e.code(), S3ErrorCode::InvalidPolicyDocument));
+        }
+    }
+
+    #[test]
+    fn test_validate_condition_content_type() {
+        let multipart = create_test_multipart(vec![], Some("image/jpeg"));
+        let condition = PostPolicyCondition::Eq {
+            field: "content-type".to_owned(),
+            value: "image/jpeg".to_owned(),
+        };
+        
+        let result = PostPolicy::validate_condition(&condition, &multipart, 0);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_condition_missing_field() {
+        let multipart = create_test_multipart(vec![], None);
+        let condition = PostPolicyCondition::Eq {
+            field: "bucket".to_owned(),
+            value: "mybucket".to_owned(),
+        };
+        
+        let result = PostPolicy::validate_condition(&condition, &multipart, 0);
+        assert!(result.is_err());
+        if let Err(e) = result {
+            assert!(matches!(e.code(), S3ErrorCode::InvalidPolicyDocument));
+        }
+    }
 }

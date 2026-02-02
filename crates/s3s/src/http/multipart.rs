@@ -87,6 +87,12 @@ impl Multipart {
         }
         Some(pair.1.as_str())
     }
+
+    /// Create a Multipart for testing purposes
+    #[cfg(test)]
+    pub(crate) fn new_for_test(fields: Vec<(String, String)>, file: File) -> Self {
+        Self { fields, file }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
