@@ -63,6 +63,8 @@ pub struct Multipart {
     fields: Vec<(String, String)>,
     /// file
     pub file: File,
+    /// policy_limits
+    pub policy_limits: Option<(u64, u64)>
 }
 
 impl Multipart {
@@ -309,7 +311,7 @@ where
                 }
                 fields.sort_by(|lhs, rhs| lhs.0.as_str().cmp(rhs.0.as_str()));
 
-                return Ok(Ok(Multipart { fields, file }));
+                return Ok(Ok(Multipart { fields, file, policy_limits: None }));
             }
         }
     }

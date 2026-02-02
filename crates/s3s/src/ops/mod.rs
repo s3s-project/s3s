@@ -24,7 +24,7 @@ use crate::config::S3ConfigProvider;
 use crate::error::*;
 use crate::header;
 use crate::host::S3Host;
-use crate::http::Body;
+use crate::http::{Body, MultipartError};
 use crate::http::{self, BodySizeLimitExceeded};
 use crate::http::{OrderedHeaders, OrderedQs};
 use crate::http::{Request, Response};
@@ -407,19 +407,25 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                     // POST object
                     debug!(?multipart);
 
-                    // TODO: Implement support for the "policy" POST Object form field
-                    // See https://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectPOST.html
-                    if multipart.find_field_value("policy").is_some() {
-                        return Err(s3_error!(NotImplemented, "POST Object form field 'policy' is not implemented yet"));
-                    }
-
                     let file_stream = multipart.take_file_stream().expect("missing file stream");
                     // Aggregate file stream with size limit to get known length
                     // This is required because downstream handlers (like s3s-proxy) need content-length
                     let config = ccx.config.snapshot();
-                    let vec_bytes = http::aggregate_file_stream_limited(file_stream, config.post_object_max_file_size)
+                    let (min_len, max_len) = multipart.policy_limits.unwrap_or((0, config.post_object_max_file_size));
+                    let vec_bytes = http::aggregate_file_stream_limited(file_stream, max_len)
                         .await
-                        .map_err(|e| invalid_request!(e, "failed to read file stream"))?;
+                        .map_err(|e| {
+                            if let MultipartError::FileTooLarge(_, _) = e {
+                                s3_error!(EntityTooLarge, "file size exceeds policy limit")
+                            } else {
+                                invalid_request!(e, "failed to read file stream")
+                            }
+                        })?;
+
+                    if (vec_bytes.len() as u64) < min_len {
+                        return Err(s3_error!(EntityTooSmall, "file size is smaller than the policy limit"));
+                    }
+
                     let vec_stream = crate::stream::VecByteStream::new(vec_bytes);
                     req.s3ext.vec_stream = Some(vec_stream);
                     break 'resolve (&PostObject as &'static dyn Operation, false);

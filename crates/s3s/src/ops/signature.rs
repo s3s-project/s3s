@@ -21,6 +21,7 @@ use std::mem;
 use std::ops::Not;
 use std::sync::Arc;
 
+use base64_simd::STANDARD;
 use hyper::Method;
 use hyper::Uri;
 use mime::Mime;
@@ -176,7 +177,7 @@ impl SignatureContext<'_> {
         None
     }
 
-    pub async fn v4_check_post_signature(&mut self, multipart: Multipart) -> S3Result<CredentialsExt> {
+    pub async fn v4_check_post_signature(&mut self, mut multipart: Multipart) -> S3Result<CredentialsExt> {
         let auth = require_auth(self.auth)?;
 
         let info = PostSignatureV4::extract(&multipart).ok_or_else(|| invalid_request!("missing required multipart fields"))?;
@@ -212,8 +213,79 @@ impl SignatureContext<'_> {
             return Err(s3_error!(SignatureDoesNotMatch));
         }
 
+        let policy_buf = STANDARD
+            .decode_to_vec(info.policy)
+            .map_err(|_| invalid_request!("invalid field: policy (base64 decode failed)"))?;
+
+        let policy_json: serde_json::Value = serde_json::from_slice(&policy_buf)
+            .map_err(|_| invalid_request!("invalid field: policy (json parse failed)"))?;
+
+        if let Some(expiration_str) = policy_json.get("expiration").and_then(|v| v.as_str()) {
+            let parse_format = time::format_description::well_known::Iso8601::DEFAULT;
+            let expiration_dt = time::OffsetDateTime::parse(expiration_str, &parse_format)
+                .map_err(|_| invalid_request!("invalid field: policy expiration format"))?;
+            
+            if time::OffsetDateTime::now_utc() > expiration_dt {
+                return Err(s3_error!(AccessDenied, "request has expired"));
+            }
+
+        } else {
+            return Err(invalid_request!("missing field: policy expiration"));
+        }
+
+        let mut content_length_min: Option<u64> = None;
+        let mut content_length_max: Option<u64> = None;
+
+        if let Some(conditions) = policy_json.get("conditions").and_then(|v| v.as_array()) {
+            for condition in conditions {
+                if let Some(map) = condition.as_object() {
+                    for (k, v) in map {
+                        let field_name = k.trim_start_matches('$');
+                        let expected_val = v.as_str().unwrap_or("");
+                        let actual_val = multipart.find_field_value(field_name).unwrap_or("");
+                        
+                        if actual_val != expected_val {
+                            return Err(s3_error!(AccessDenied, "policy condition failed: {}", field_name));
+                        }
+                    }
+                } else if let Some(arr) = condition.as_array() {
+                    if arr.len() < 2 { continue; }
+                    let operator = arr[0].as_str().unwrap_or("");
+                    
+                    match operator {
+                        "eq" => {
+                            let key = arr[1].as_str().unwrap_or("").trim_start_matches('$');
+                            let val = arr[2].as_str().unwrap_or("");
+                            
+                            let actual_val = multipart.find_field_value(key).unwrap_or("");
+                            if actual_val != val {
+                                return Err(s3_error!(AccessDenied, "policy condition failed: {} must equal {}", key, val));
+                            }
+                        },
+                        "starts-with" => {
+                            let key = arr[1].as_str().unwrap_or("").trim_start_matches('$');
+                            let prefix = arr[2].as_str().unwrap_or("");
+                            let actual_val = multipart.find_field_value(key).unwrap_or("");
+                            if !actual_val.starts_with(prefix) {
+                                return Err(s3_error!(AccessDenied, "policy condition failed: {} must start with {}", key, prefix)); 
+                            }
+                        },
+                        "content-length-range" => {
+                            content_length_min = Some(arr[1].as_u64().unwrap_or(0));
+                            content_length_max = Some(arr[2].as_u64().unwrap_or(u64::MAX));
+                        },
+                        _ => {}
+                    }
+                }
+            }
+        }
+
         let region = region.to_owned();
         let service = service.to_owned();
+
+        if let (Some(min), Some(max)) = (content_length_min, content_length_max) {
+            multipart.policy_limits = Some((min, max));
+        }
 
         self.multipart = Some(multipart);
         Ok(CredentialsExt {
