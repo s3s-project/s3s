@@ -311,6 +311,14 @@ pub fn collect_rust_types(model: &smithy::Model, ops: &Operations) -> RustTypes 
             )),
             ..rust::StructField::default()
         });
+        post_in.fields.push(rust::StructField {
+            name: o("policy"),
+            type_: o("crate::PostPolicy"),
+            option_type: true,
+            position: o("s3s"),
+            doc: Some(o("The POST policy document that was included in the request.")),
+            ..rust::StructField::default()
+        });
     }
 
     space
