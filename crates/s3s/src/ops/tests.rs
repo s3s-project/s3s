@@ -304,11 +304,11 @@ async fn post_multipart_bucket_routes_to_post_object() {
             .unwrap(),
     );
 
-    // POST Object with `policy` field should return NotImplemented
-    // TODO: Remove this assertion when policy validation is implemented
+    // POST Object with `policy` field now validates the policy.
+    // The test policy has expired (2020-10-03), so we expect AccessDenied.
     let result = super::prepare(&mut req, &ccx).await;
     match result {
-        Err(err) => assert_eq!(*err.code(), crate::error::S3ErrorCode::NotImplemented),
-        Ok(_) => panic!("expected NotImplemented error"),
+        Err(err) => assert_eq!(*err.code(), crate::error::S3ErrorCode::AccessDenied),
+        Ok(_) => panic!("expected AccessDenied error for expired policy"),
     }
 }
