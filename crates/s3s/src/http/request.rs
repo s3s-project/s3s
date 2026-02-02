@@ -35,6 +35,8 @@ pub(crate) struct S3Extensions {
     pub region: Option<String>,
     pub service: Option<String>,
     pub trailing_headers: Option<TrailingHeaders>,
+
+    pub post_policy: Option<crate::PostPolicy>,
 }
 
 impl From<HttpRequest> for Request {

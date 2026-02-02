@@ -407,12 +407,6 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                     // POST object
                     debug!(?multipart);
 
-                    // TODO: Implement support for the "policy" POST Object form field
-                    // See https://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectPOST.html
-                    if multipart.find_field_value("policy").is_some() {
-                        return Err(s3_error!(NotImplemented, "POST Object form field 'policy' is not implemented yet"));
-                    }
-
                     let file_stream = multipart.take_file_stream().expect("missing file stream");
                     // Aggregate file stream with size limit to get known length
                     // This is required because downstream handlers (like s3s-proxy) need content-length
@@ -420,8 +414,23 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                     let vec_bytes = http::aggregate_file_stream_limited(file_stream, config.post_object_max_file_size)
                         .await
                         .map_err(|e| invalid_request!(e, "failed to read file stream"))?;
+                    let file_size = vec_bytes.len() as u64;
                     let vec_stream = crate::stream::VecByteStream::new(vec_bytes);
                     req.s3ext.vec_stream = Some(vec_stream);
+
+                    // Parse and validate POST policy if present
+                    // See https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-HTTPPOSTConstructPolicy.html
+                    if let Some(policy_b64) = multipart.find_field_value("policy") {
+                        let policy = crate::PostPolicy::from_base64(policy_b64)
+                            .map_err(|e| s3_error!(e, InvalidPolicyDocument, "failed to parse POST policy"))?;
+
+                        // Validate the policy (expiration and conditions)
+                        let now = time::OffsetDateTime::now_utc();
+                        policy.validate(multipart, file_size, now)?;
+
+                        req.s3ext.post_policy = Some(policy);
+                    }
+
                     break 'resolve (&PostObject as &'static dyn Operation, false);
                 }
                 // FIXME: POST /bucket/key hits this branch
