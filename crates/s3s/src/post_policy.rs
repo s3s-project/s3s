@@ -118,37 +118,34 @@ impl PostPolicy {
 
         // Check all conditions
         for condition in &self.conditions {
-            self.validate_condition(condition, multipart, file_size)?;
+            Self::validate_condition(condition, multipart, file_size)?;
         }
 
         Ok(())
     }
 
-    fn validate_condition(&self, condition: &PostPolicyCondition, multipart: &Multipart, file_size: u64) -> S3Result<()> {
+    fn validate_condition(condition: &PostPolicyCondition, multipart: &Multipart, file_size: u64) -> S3Result<()> {
         match condition {
             PostPolicyCondition::Eq { field, value } => {
-                let actual = self.get_field_value(field, multipart);
+                let actual = Self::get_field_value(field, multipart);
                 if actual.as_deref() != Some(value.as_str()) {
                     return Err(S3Error::with_message(
                         S3ErrorCode::InvalidPolicyDocument,
                         format!(
-                            "Policy condition 'eq' for field '{}' failed: expected '{}', got '{}'",
-                            field,
-                            value,
+                            "Policy condition 'eq' for field '{field}' failed: expected '{value}', got '{}'",
                             actual.unwrap_or_default()
                         ),
                     ));
                 }
             }
             PostPolicyCondition::StartsWith { field, prefix } => {
-                let actual = self.get_field_value(field, multipart);
+                let actual = Self::get_field_value(field, multipart);
                 let actual_str = actual.as_deref().unwrap_or("");
                 if !actual_str.starts_with(prefix.as_str()) {
                     return Err(S3Error::with_message(
                         S3ErrorCode::InvalidPolicyDocument,
                         format!(
-                            "Policy condition 'starts-with' for field '{}' failed: expected prefix '{}', got '{}'",
-                            field, prefix, actual_str
+                            "Policy condition 'starts-with' for field '{field}' failed: expected prefix '{prefix}', got '{actual_str}'"
                         ),
                     ));
                 }
@@ -157,7 +154,7 @@ impl PostPolicy {
                 if file_size < *min || file_size > *max {
                     return Err(S3Error::with_message(
                         S3ErrorCode::InvalidPolicyDocument,
-                        format!("File size {} is not within the allowed range [{}, {}]", file_size, min, max),
+                        format!("File size {file_size} is not within the allowed range [{min}, {max}]"),
                     ));
                 }
             }
@@ -165,7 +162,7 @@ impl PostPolicy {
         Ok(())
     }
 
-    fn get_field_value<'a>(&self, field: &str, multipart: &'a Multipart) -> Option<String> {
+    fn get_field_value(field: &str, multipart: &Multipart) -> Option<String> {
         // Special handling for certain fields
         match field {
             "bucket" => {
@@ -207,9 +204,9 @@ struct RawPostPolicy {
 /// Raw condition that can be either array format or object format
 #[derive(Debug)]
 enum RawCondition {
-    /// Array format: ["eq", "$key", "value"] or ["starts-with", "$key", "prefix"] or ["content-length-range", min, max]
+    /// Array format: `["eq", "$key", "value"]` or `["starts-with", "$key", "prefix"]` or `["content-length-range", min, max]`
     Array(Vec<serde_json::Value>),
-    /// Object format: {"bucket": "mybucket"} (shorthand for eq)
+    /// Object format: `{"bucket": "mybucket"}` (shorthand for eq)
     Object(HashMap<String, String>),
 }
 
@@ -257,12 +254,12 @@ impl<'de> Deserialize<'de> for RawCondition {
 impl RawCondition {
     fn into_condition(self) -> Result<PostPolicyCondition, PostPolicyError> {
         match self {
-            RawCondition::Array(items) => Self::parse_array_condition(items),
+            RawCondition::Array(items) => Self::parse_array_condition(&items),
             RawCondition::Object(map) => Self::parse_object_condition(map),
         }
     }
 
-    fn parse_array_condition(items: Vec<serde_json::Value>) -> Result<PostPolicyCondition, PostPolicyError> {
+    fn parse_array_condition(items: &[serde_json::Value]) -> Result<PostPolicyCondition, PostPolicyError> {
         if items.is_empty() {
             return Err(PostPolicyError::InvalidCondition);
         }
