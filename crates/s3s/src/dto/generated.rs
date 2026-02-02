@@ -15543,6 +15543,10 @@ pub struct PostObjectInput {
     /// <p>This functionality is only supported for objects in the Amazon S3 Express One Zone storage class in directory buckets.</p>
     /// </note>
     pub write_offset_bytes: Option<WriteOffsetBytes>,
+    /// The URL to which the client is redirected upon successful upload.
+    pub success_action_redirect: Option<String>,
+    /// The status code returned to the client upon successful upload. Valid values are 200, 201, and 204.
+    pub success_action_status: Option<i32>,
 }
 
 impl fmt::Debug for PostObjectInput {
@@ -15666,6 +15670,12 @@ impl fmt::Debug for PostObjectInput {
         }
         if let Some(ref val) = self.write_offset_bytes {
             d.field("write_offset_bytes", val);
+        }
+        if let Some(ref val) = self.success_action_redirect {
+            d.field("success_action_redirect", val);
+        }
+        if let Some(ref val) = self.success_action_status {
+            d.field("success_action_status", val);
         }
         d.finish_non_exhaustive()
     }
@@ -28020,6 +28030,10 @@ pub mod builders {
         website_redirect_location: Option<WebsiteRedirectLocation>,
 
         write_offset_bytes: Option<WriteOffsetBytes>,
+
+        success_action_redirect: Option<String>,
+
+        success_action_status: Option<i32>,
     }
 
     impl PostObjectInputBuilder {
@@ -28225,6 +28239,16 @@ pub mod builders {
 
         pub fn set_write_offset_bytes(&mut self, field: Option<WriteOffsetBytes>) -> &mut Self {
             self.write_offset_bytes = field;
+            self
+        }
+
+        pub fn set_success_action_redirect(&mut self, field: Option<String>) -> &mut Self {
+            self.success_action_redirect = field;
+            self
+        }
+
+        pub fn set_success_action_status(&mut self, field: Option<i32>) -> &mut Self {
+            self.success_action_status = field;
             self
         }
 
@@ -28474,6 +28498,18 @@ pub mod builders {
             self
         }
 
+        #[must_use]
+        pub fn success_action_redirect(mut self, field: Option<String>) -> Self {
+            self.success_action_redirect = field;
+            self
+        }
+
+        #[must_use]
+        pub fn success_action_status(mut self, field: Option<i32>) -> Self {
+            self.success_action_status = field;
+            self
+        }
+
         pub fn build(self) -> Result<PostObjectInput, BuildError> {
             let acl = self.acl;
             let body = self.body;
@@ -28516,6 +28552,8 @@ pub mod builders {
             let tagging = self.tagging;
             let website_redirect_location = self.website_redirect_location;
             let write_offset_bytes = self.write_offset_bytes;
+            let success_action_redirect = self.success_action_redirect;
+            let success_action_status = self.success_action_status;
             Ok(PostObjectInput {
                 acl,
                 body,
@@ -28558,6 +28596,8 @@ pub mod builders {
                 tagging,
                 website_redirect_location,
                 write_offset_bytes,
+                success_action_redirect,
+                success_action_status,
             })
         }
     }
@@ -37258,7 +37298,7 @@ impl DtoExt for WriteGetObjectResponseInput {
 }
 
 // NOTE: PostObject is a synthetic API in s3s.
-// Today it is DTO-identical to PutObject, but PostObject may diverge later (e.g. post policy).
+// PostObjectInput has extra fields for POST-specific behavior (success_action_redirect, success_action_status).
 pub(crate) fn put_object_input_into_post_object_input(x: PutObjectInput) -> PostObjectInput {
     PostObjectInput {
         acl: x.acl,
@@ -37302,6 +37342,8 @@ pub(crate) fn put_object_input_into_post_object_input(x: PutObjectInput) -> Post
         tagging: x.tagging,
         website_redirect_location: x.website_redirect_location,
         write_offset_bytes: x.write_offset_bytes,
+        success_action_redirect: None,
+        success_action_status: None,
     }
 }
 pub(crate) fn post_object_input_into_put_object_input(x: PostObjectInput) -> PutObjectInput {
@@ -37370,6 +37412,7 @@ pub(crate) fn put_object_output_into_post_object_output(x: PutObjectOutput) -> P
         version_id: x.version_id,
     }
 }
+#[allow(dead_code)]
 pub(crate) fn post_object_output_into_put_object_output(x: PostObjectOutput) -> PutObjectOutput {
     PutObjectOutput {
         bucket_key_enabled: x.bucket_key_enabled,

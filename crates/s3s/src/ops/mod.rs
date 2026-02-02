@@ -407,12 +407,10 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                     // POST object
                     debug!(?multipart);
 
-                    // TODO: Implement support for these POST Object form fields
+                    // TODO: Implement support for the "policy" POST Object form field
                     // See https://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectPOST.html
-                    for field in ["policy", "success_action_status", "success_action_redirect", "redirect"] {
-                        if multipart.find_field_value(field).is_some() {
-                            return Err(s3_error!(NotImplemented, "POST Object form field '{}' is not implemented yet", field));
-                        }
+                    if multipart.find_field_value("policy").is_some() {
+                        return Err(s3_error!(NotImplemented, "POST Object form field 'policy' is not implemented yet"));
                     }
 
                     let file_stream = multipart.take_file_stream().expect("missing file stream");
