@@ -6558,8 +6558,10 @@ impl PostObject {
         };
 
         // Parse POST-specific fields before consuming the multipart form
-        let success_action_redirect: Option<String> = http::parse_field_value(&m, "success_action_redirect")?
-            .or_else(|| http::parse_field_value(&m, "redirect").ok().flatten());
+        let success_action_redirect: Option<String> = match http::parse_field_value(&m, "success_action_redirect")? {
+            Some(v) => Some(v),
+            None => http::parse_field_value(&m, "redirect")?,
+        };
         let success_action_status: Option<i32> = http::parse_field_value(&m, "success_action_status")?;
 
         let put_input = PutObject::deserialize_http_multipart(req, m)?;
@@ -6657,13 +6659,13 @@ impl super::Operation for PostObject {
             access.put_object(&mut put_req).await?;
         }
         let mut post_req = put_req.map_input(put_object_input_into_post_object_input);
+        // Restore POST-specific fields that were lost during conversion
+        post_req.input.success_action_redirect.clone_from(&success_action_redirect);
+        post_req.input.success_action_status = success_action_status;
         if let Some(access) = ccx.access {
             // New hook for POST object (optional).
             access.post_object(&mut post_req).await?;
         }
-        // Restore POST-specific fields that were lost during conversion
-        post_req.input.success_action_redirect.clone_from(&success_action_redirect);
-        post_req.input.success_action_status = success_action_status;
         let result = s3.post_object(post_req).await;
         let s3_resp = match result {
             Ok(val) => val,
