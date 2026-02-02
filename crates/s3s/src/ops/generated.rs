@@ -6580,29 +6580,18 @@ impl PostObject {
 
         // Handle success_action_redirect: return 303 See Other with Location header
         if let Some(redirect_url) = success_action_redirect {
-            // Validate redirect URL doesn't contain control characters that could enable header injection
-            if redirect_url.chars().any(char::is_control) {
-                return Err(s3_error!(InvalidArgument, "success_action_redirect contains invalid control characters"));
-            }
+            // Parse the URL to validate and manipulate it properly
+            let mut url = url::Url::parse(redirect_url).map_err(|e| s3_error!(e, InvalidArgument, "Invalid redirect URL"))?;
 
-            // Build query string with proper URL encoding using serde_urlencoded
-            let query_params = serde_urlencoded::to_string([("bucket", bucket), ("key", key), ("etag", etag_str)])
-                .map_err(|e| s3_error!(e, InternalError))?;
-
-            // Insert query parameters before any fragment, per RFC 3986: scheme://authority/path?query#fragment
-            let (base, fragment) = match redirect_url.split_once('#') {
-                Some((b, f)) => (b, Some(f)),
-                None => (redirect_url, None),
-            };
-            let separator = if base.contains('?') { '&' } else { '?' };
-            let location = match fragment {
-                Some(f) => format!("{base}{separator}{query_params}#{f}"),
-                None => format!("{base}{separator}{query_params}"),
-            };
+            // Add query parameters (bucket, key, etag) to the URL
+            url.query_pairs_mut()
+                .append_pair("bucket", bucket)
+                .append_pair("key", key)
+                .append_pair("etag", etag_str);
 
             let mut res = http::Response::with_status(http::StatusCode::SEE_OTHER);
             res.headers
-                .insert(hyper::header::LOCATION, location.parse().map_err(|e| s3_error!(e, InternalError))?);
+                .insert(hyper::header::LOCATION, url.as_str().parse().map_err(|e| s3_error!(e, InternalError))?);
             return Ok(res);
         }
 
