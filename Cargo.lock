@@ -1413,9 +1413,9 @@ dependencies = [
 
 [[package]]
 name = "hmac"
-version = "0.13.0-rc.4"
+version = "0.13.0-rc.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d9956e202a691c5c86c60303a421f66f93f44b29433407b7c43cf2bebadc750e"
+checksum = "f1c597ac7d6cc8143e30e83ef70915e7f883b18d8bec2e2b2bce47f5bbb06d57"
 dependencies = [
  "digest 0.11.0-rc.9",
 ]
@@ -1917,9 +1917,9 @@ dependencies = [
 
 [[package]]
 name = "md-5"
-version = "0.11.0-rc.4"
+version = "0.11.0-rc.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "340c5c3970c137330f5289dc52a6f6c24db6d6839b6121efdeeb120061c30313"
+checksum = "64dd2c9099caf8e29b629305199dddb1c6d981562b62c089afea54b0b4b5c333"
 dependencies = [
  "cfg-if",
  "digest 0.11.0-rc.9",
@@ -2697,7 +2697,7 @@ dependencies = [
  "crc-fast",
  "futures",
  "hex-simd",
- "hmac 0.13.0-rc.4",
+ "hmac 0.13.0-rc.3",
  "http 1.4.0",
  "http-body 1.0.1",
  "http-body-util",
@@ -2705,7 +2705,7 @@ dependencies = [
  "hyper 1.8.1",
  "hyper-util",
  "itoa",
- "md-5 0.11.0-rc.4",
+ "md-5 0.11.0-rc.3",
  "memchr",
  "mime",
  "nom",
@@ -2717,8 +2717,8 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_urlencoded",
- "sha1 0.11.0-rc.4",
- "sha2 0.11.0-rc.4",
+ "sha1 0.11.0-rc.3",
+ "sha2 0.11.0-rc.3",
  "smallvec",
  "std-next",
  "subtle",
@@ -2783,7 +2783,7 @@ dependencies = [
  "futures",
  "http-body 1.0.1",
  "http-body-util",
- "md-5 0.11.0-rc.4",
+ "md-5 0.11.0-rc.3",
  "reqwest",
  "s3s-test",
  "tracing",
@@ -3058,9 +3058,9 @@ dependencies = [
 
 [[package]]
 name = "sha1"
-version = "0.11.0-rc.4"
+version = "0.11.0-rc.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c777f0a122a53fddb0beb6e706771197000b8eb5c9f42b5b850f450ef48c788"
+checksum = "aa1ae819b9870cadc959a052363de870944a1646932d274a4e270f64bf79e5ef"
 dependencies = [
  "cfg-if",
  "cpufeatures",
@@ -3080,9 +3080,9 @@ dependencies = [
 
 [[package]]
 name = "sha2"
-version = "0.11.0-rc.4"
+version = "0.11.0-rc.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7535f94fa3339fe9e5e9be6260a909e62af97f6e14b32345ccf79b92b8b81233"
+checksum = "19d43dc0354d88b791216bb5c1bfbb60c0814460cc653ae0ebd71f286d0bd927"
 dependencies = [
  "cfg-if",
  "cpufeatures",
