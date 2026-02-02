@@ -89,8 +89,19 @@ impl Multipart {
     }
 
     /// Create a Multipart for testing purposes
+    ///
+    /// This mirrors the normalization performed in `try_parse` by:
+    /// - lowercasing field names
+    /// - sorting fields by name
     #[cfg(test)]
-    pub(crate) fn new_for_test(fields: Vec<(String, String)>, file: File) -> Self {
+    pub(crate) fn new_for_test(mut fields: Vec<(String, String)>, file: File) -> Self {
+        // Normalize field names to lowercase to match production behavior.
+        for (name, _) in &mut fields {
+            *name = name.to_ascii_lowercase();
+        }
+
+        // Sort fields by name so that `find_field_value`'s binary search works correctly.
+        fields.sort_by(|a, b| a.0.cmp(&b.0));
         Self { fields, file }
     }
 }
