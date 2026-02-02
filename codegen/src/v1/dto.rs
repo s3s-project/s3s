@@ -291,6 +291,28 @@ pub fn collect_rust_types(model: &smithy::Model, ops: &Operations) -> RustTypes 
         }
     }
 
+    // Add POST Object specific fields to PostObjectInput
+    if let Some(rust::Type::Struct(post_in)) = space.get_mut("PostObjectInput") {
+        post_in.fields.push(rust::StructField {
+            name: o("success_action_redirect"),
+            type_: o("String"),
+            option_type: true,
+            position: o("s3s"),
+            doc: Some(o("The URL to which the client is redirected upon successful upload.")),
+            ..rust::StructField::default()
+        });
+        post_in.fields.push(rust::StructField {
+            name: o("success_action_status"),
+            type_: o("i32"),
+            option_type: true,
+            position: o("s3s"),
+            doc: Some(o(
+                "The status code returned to the client upon successful upload. Valid values are 200, 201, and 204.",
+            )),
+            ..rust::StructField::default()
+        });
+    }
+
     space
 }
 
@@ -627,8 +649,9 @@ fn codegen_post_object_mapping_helpers(rust_types: &RustTypes) {
     let Some(rust::Type::Struct(post_in)) = rust_types.get("PostObjectInput") else { return };
     let Some(rust::Type::Struct(post_out)) = rust_types.get("PostObjectOutput") else { return };
 
-    // Sanity: forked types should stay field-identical.
-    assert_eq!(put_in.fields.len(), post_in.fields.len());
+    // PostObjectInput has extra fields (success_action_redirect, success_action_status).
+    // We verify that the common fields (those from PutObjectInput) match.
+    assert!(post_in.fields.len() >= put_in.fields.len());
     for (a, b) in put_in.fields.iter().zip(post_in.fields.iter()) {
         assert_eq!(a.name, b.name);
         assert_eq!(a.type_, b.type_);
@@ -641,10 +664,18 @@ fn codegen_post_object_mapping_helpers(rust_types: &RustTypes) {
         assert_eq!(a.option_type, b.option_type);
     }
 
+    // Collect POST-only field names (those not in PutObjectInput)
+    let put_in_field_names: std::collections::BTreeSet<_> = put_in.fields.iter().map(|f| f.name.as_str()).collect();
+    let post_only_fields: Vec<_> = post_in
+        .fields
+        .iter()
+        .filter(|f| !put_in_field_names.contains(f.name.as_str()))
+        .collect();
+
     g!();
     g([
         "// NOTE: PostObject is a synthetic API in s3s.",
-        "// Today it is DTO-identical to PutObject, but PostObject may diverge later (e.g. post policy).",
+        "// PostObjectInput has extra fields for POST-specific behavior (success_action_redirect, success_action_status).",
     ]);
 
     g!("pub(crate) fn put_object_input_into_post_object_input(x: PutObjectInput) -> PostObjectInput {{");
@@ -652,12 +683,17 @@ fn codegen_post_object_mapping_helpers(rust_types: &RustTypes) {
     for field in &put_in.fields {
         g!("        {}: x.{},", field.name, field.name);
     }
+    // POST-only fields get default values
+    for field in &post_only_fields {
+        g!("        {}: None,", field.name);
+    }
     g!("    }}");
     g!("}}");
 
     g!("pub(crate) fn post_object_input_into_put_object_input(x: PostObjectInput) -> PutObjectInput {{");
     g!("    PutObjectInput {{");
-    for field in &post_in.fields {
+    // Only copy fields that exist in PutObjectInput
+    for field in &put_in.fields {
         g!("        {}: x.{},", field.name, field.name);
     }
     g!("    }}");
@@ -671,6 +707,8 @@ fn codegen_post_object_mapping_helpers(rust_types: &RustTypes) {
     g!("    }}");
     g!("}}");
 
+    // This function is currently unused but kept for symmetry and potential future use
+    g!("#[allow(dead_code)]");
     g!("pub(crate) fn post_object_output_into_put_object_output(x: PostObjectOutput) -> PutObjectOutput {{");
     g!("    PutObjectOutput {{");
     for field in &post_out.fields {

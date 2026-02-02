@@ -2732,6 +2732,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "transform-stream",
+ "url",
  "urlencoding",
  "zeroize",
 ]
