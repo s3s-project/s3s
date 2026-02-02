@@ -6595,6 +6595,11 @@ impl PostObject {
 
         // Handle success_action_redirect: return 303 See Other with Location header
         if let Some(redirect_url) = success_action_redirect {
+            // Defense-in-depth: Reject URLs with control characters that could enable header injection
+            if redirect_url.chars().any(char::is_control) {
+                return Err(s3_error!(InvalidArgument, "success_action_redirect contains invalid control characters"));
+            }
+
             // Parse the URL to validate and manipulate it properly
             let mut url = url::Url::parse(redirect_url).map_err(|e| s3_error!(e, InvalidArgument, "Invalid redirect URL"))?;
 
