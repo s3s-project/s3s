@@ -477,11 +477,8 @@ mod tests {
     // Helper function to create a mock Multipart for testing
     fn create_test_multipart(fields: Vec<(&str, &str)>, content_type: Option<&str>) -> Multipart {
         use crate::http::File;
-        
-        let fields: Vec<(String, String)> = fields
-            .into_iter()
-            .map(|(k, v)| (k.to_owned(), v.to_owned()))
-            .collect();
+
+        let fields: Vec<(String, String)> = fields.into_iter().map(|(k, v)| (k.to_owned(), v.to_owned())).collect();
 
         let file = File {
             name: "test.txt".to_owned(),
@@ -499,7 +496,7 @@ mod tests {
             field: "bucket".to_owned(),
             value: "mybucket".to_owned(),
         };
-        
+
         let result = PostPolicy::validate_condition(&condition, &multipart, 0);
         assert!(result.is_ok());
     }
@@ -511,7 +508,7 @@ mod tests {
             field: "bucket".to_owned(),
             value: "wrongbucket".to_owned(),
         };
-        
+
         let result = PostPolicy::validate_condition(&condition, &multipart, 0);
         assert!(result.is_err());
         if let Err(e) = result {
@@ -526,7 +523,7 @@ mod tests {
             field: "key".to_owned(),
             prefix: "user/".to_owned(),
         };
-        
+
         let result = PostPolicy::validate_condition(&condition, &multipart, 0);
         assert!(result.is_ok());
     }
@@ -538,7 +535,7 @@ mod tests {
             field: "key".to_owned(),
             prefix: String::new(),
         };
-        
+
         let result = PostPolicy::validate_condition(&condition, &multipart, 0);
         assert!(result.is_ok());
     }
@@ -550,7 +547,7 @@ mod tests {
             field: "key".to_owned(),
             prefix: "user/".to_owned(),
         };
-        
+
         let result = PostPolicy::validate_condition(&condition, &multipart, 0);
         assert!(result.is_err());
         if let Err(e) = result {
@@ -562,7 +559,7 @@ mod tests {
     fn test_validate_condition_content_length_range_success() {
         let multipart = create_test_multipart(vec![], None);
         let condition = PostPolicyCondition::ContentLengthRange { min: 100, max: 1000 };
-        
+
         let result = PostPolicy::validate_condition(&condition, &multipart, 500);
         assert!(result.is_ok());
     }
@@ -571,7 +568,7 @@ mod tests {
     fn test_validate_condition_content_length_range_at_min() {
         let multipart = create_test_multipart(vec![], None);
         let condition = PostPolicyCondition::ContentLengthRange { min: 100, max: 1000 };
-        
+
         let result = PostPolicy::validate_condition(&condition, &multipart, 100);
         assert!(result.is_ok());
     }
@@ -580,7 +577,7 @@ mod tests {
     fn test_validate_condition_content_length_range_at_max() {
         let multipart = create_test_multipart(vec![], None);
         let condition = PostPolicyCondition::ContentLengthRange { min: 100, max: 1000 };
-        
+
         let result = PostPolicy::validate_condition(&condition, &multipart, 1000);
         assert!(result.is_ok());
     }
@@ -589,7 +586,7 @@ mod tests {
     fn test_validate_condition_content_length_range_too_small() {
         let multipart = create_test_multipart(vec![], None);
         let condition = PostPolicyCondition::ContentLengthRange { min: 100, max: 1000 };
-        
+
         let result = PostPolicy::validate_condition(&condition, &multipart, 99);
         assert!(result.is_err());
         if let Err(e) = result {
@@ -601,7 +598,7 @@ mod tests {
     fn test_validate_condition_content_length_range_too_large() {
         let multipart = create_test_multipart(vec![], None);
         let condition = PostPolicyCondition::ContentLengthRange { min: 100, max: 1000 };
-        
+
         let result = PostPolicy::validate_condition(&condition, &multipart, 1001);
         assert!(result.is_err());
         if let Err(e) = result {
@@ -616,7 +613,7 @@ mod tests {
             field: "content-type".to_owned(),
             value: "image/jpeg".to_owned(),
         };
-        
+
         let result = PostPolicy::validate_condition(&condition, &multipart, 0);
         assert!(result.is_ok());
     }
@@ -628,7 +625,7 @@ mod tests {
             field: "bucket".to_owned(),
             value: "mybucket".to_owned(),
         };
-        
+
         let result = PostPolicy::validate_condition(&condition, &multipart, 0);
         assert!(result.is_err());
         if let Err(e) = result {
