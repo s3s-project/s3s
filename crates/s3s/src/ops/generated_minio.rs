@@ -6579,10 +6579,14 @@ impl PostObject {
         };
         let success_action_status: Option<i32> = http::parse_field_value(&m, "success_action_status")?;
 
+        // Get the validated POST policy from request extensions
+        let policy = req.s3ext.post_policy.take();
+
         let put_input = PutObject::deserialize_http_multipart(req, m)?;
         let mut post_input = put_object_input_into_post_object_input(put_input);
         post_input.success_action_redirect = success_action_redirect;
         post_input.success_action_status = success_action_status;
+        post_input.policy = policy;
         Ok(post_input)
     }
 
