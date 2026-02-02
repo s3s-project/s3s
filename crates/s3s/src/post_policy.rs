@@ -2,17 +2,17 @@
 //!
 //! See <https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-HTTPPOSTConstructPolicy.html>
 
-use crate::dto::Timestamp;
-use crate::dto::TimestampFormat;
-use crate::http::Multipart;
 use crate::S3Error;
 use crate::S3ErrorCode;
 use crate::S3Result;
+use crate::dto::Timestamp;
+use crate::dto::TimestampFormat;
+use crate::http::Multipart;
 
 use std::collections::HashMap;
 
-use serde::de::{Deserializer, MapAccess, SeqAccess, Visitor};
 use serde::Deserialize;
+use serde::de::{Deserializer, MapAccess, SeqAccess, Visitor};
 
 /// POST Object Policy
 ///
@@ -131,7 +131,12 @@ impl PostPolicy {
                 if actual.as_deref() != Some(value.as_str()) {
                     return Err(S3Error::with_message(
                         S3ErrorCode::InvalidPolicyDocument,
-                        format!("Policy condition 'eq' for field '{}' failed: expected '{}', got '{}'", field, value, actual.unwrap_or_default()),
+                        format!(
+                            "Policy condition 'eq' for field '{}' failed: expected '{}', got '{}'",
+                            field,
+                            value,
+                            actual.unwrap_or_default()
+                        ),
                     ));
                 }
             }
