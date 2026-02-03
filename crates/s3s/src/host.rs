@@ -3,6 +3,7 @@ use crate::error::S3Result;
 use std::borrow::Cow;
 
 use stdx::default::default;
+use tracing::warn;
 
 #[derive(Debug, Clone)]
 pub struct VirtualHost<'a> {
@@ -90,6 +91,12 @@ fn is_valid_domain(mut s: &str) -> bool {
     true
 }
 
+/// Checks if the bucket name looks like a domain (contains dots).
+/// This is used to hint when virtual-hosted-style requests might not be correctly configured.
+fn looks_like_domain(bucket: &str) -> bool {
+    bucket.contains('.')
+}
+
 fn parse_host_header<'a>(base_domain: &'a str, host: &'a str) -> Option<VirtualHost<'a>> {
     if host == base_domain {
         return Some(VirtualHost::new(base_domain));
@@ -133,6 +140,15 @@ impl S3Host for SingleDomain {
 
         if is_valid_domain(host) {
             let bucket = host.to_ascii_lowercase();
+            if looks_like_domain(&bucket) {
+                warn!(
+                    bucket = %bucket,
+                    base_domain = %base_domain,
+                    "The bucket name looks like a domain. \
+                    If you intended to use virtual-hosted-style requests, \
+                    ensure the base domain is configured correctly."
+                );
+            }
             return Ok(VirtualHost::with_bucket(host, bucket));
         }
 
@@ -194,6 +210,15 @@ impl S3Host for MultiDomain {
 
         if is_valid_domain(host) {
             let bucket = host.to_ascii_lowercase();
+            if looks_like_domain(&bucket) {
+                warn!(
+                    bucket = %bucket,
+                    base_domains = ?self.base_domains,
+                    "The bucket name looks like a domain. \
+                    If you intended to use virtual-hosted-style requests, \
+                    ensure the base domains are configured correctly."
+                );
+            }
             return Ok(VirtualHost::with_bucket(host, bucket));
         }
 
@@ -290,5 +315,18 @@ mod tests {
         let vh = result.unwrap();
         assert_eq!(vh.domain(), "example.com");
         assert_eq!(vh.bucket(), Some("example.com.org"));
+    }
+
+    #[test]
+    fn test_looks_like_domain() {
+        // Bucket names with dots look like domains
+        assert!(looks_like_domain("my.bucket"));
+        assert!(looks_like_domain("bucket.example.com"));
+        assert!(looks_like_domain("my.example.s3.bucket"));
+
+        // Bucket names without dots don't look like domains
+        assert!(!looks_like_domain("mybucket"));
+        assert!(!looks_like_domain("my-bucket"));
+        assert!(!looks_like_domain("my-bucket-name"));
     }
 }
