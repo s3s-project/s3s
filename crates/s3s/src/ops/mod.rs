@@ -415,6 +415,7 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                             .map_err(|e| s3_error!(e, InvalidPolicyDocument, "failed to parse POST policy"))?;
                         
                         // Check policy expiration early to avoid reading file if policy is expired
+                        // Note: clone is necessary because Into<OffsetDateTime> consumes the Timestamp
                         let expiration_time: time::OffsetDateTime = policy.expiration.clone().into();
                         if now >= expiration_time {
                             return Err(S3Error::with_message(S3ErrorCode::AccessDenied, "Request has expired"));
@@ -428,8 +429,9 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                     // Determine file size limit: use stricter of policy max or config max
                     let config = ccx.config.snapshot();
                     let max_file_size = if let Some(ref pol) = policy {
-                        if let Some((_min, max)) = pol.content_length_range() {
+                        if let Some((_, max)) = pol.content_length_range() {
                             // Use the minimum of policy max and config max to prevent resource exhaustion
+                            // Note: policy min is validated later in policy.validate()
                             std::cmp::min(max, config.post_object_max_file_size)
                         } else {
                             config.post_object_max_file_size
