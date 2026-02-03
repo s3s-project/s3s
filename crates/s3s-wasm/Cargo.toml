@@ -8,9 +8,9 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
-futures = "0.3.31"
+futures = { workspace = true, features = ["executor"] }
 getrandom = { version = "0.3.4", features = ["wasm_js"] }
-http = "1.4.0"
+http.workspace = true
 s3s = { version = "0.13.0-alpha.2", path = "../s3s", default-features = false }
 
 [lints]

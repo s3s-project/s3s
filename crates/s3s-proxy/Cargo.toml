@@ -17,8 +17,8 @@ workspace = true
 aws-config = { workspace = true, features = ["behavior-version-latest"] }
 aws-credential-types.workspace = true
 aws-sdk-s3.workspace = true
-clap = { version = "4.5.56", features = ["derive"] }
-hyper-util = { version = "0.1.19", features = [
+clap.workspace = true
+hyper-util = { workspace = true, features = [
     "server-auto",
     "server-graceful",
     "http1",
@@ -27,6 +27,6 @@ hyper-util = { version = "0.1.19", features = [
 ] }
 s3s = { version = "0.13.0-alpha.2", path = "../s3s" }
 s3s-aws = { version = "0.13.0-alpha.2", path = "../s3s-aws" }
-tokio = { version = "1.49.0", features = ["full"] }
-tracing = "0.1.44"
-tracing-subscriber = { version = "0.3.22", features = ["env-filter", "time"] }
+tokio = { workspace = true, features = ["full"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
