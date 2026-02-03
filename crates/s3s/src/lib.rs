@@ -18,7 +18,6 @@ mod error;
 
 mod http;
 mod ops;
-mod post_policy;
 mod protocol;
 mod s3_op;
 mod s3_trait;
@@ -35,6 +34,7 @@ pub mod dto;
 pub mod header;
 pub mod host;
 pub mod path;
+pub mod post_policy;
 pub mod route;
 pub mod service;
 pub mod stream;
@@ -43,9 +43,6 @@ pub mod xml;
 
 pub use self::error::*;
 pub use self::http::Body;
-pub use self::post_policy::PostPolicy;
-pub use self::post_policy::PostPolicyCondition;
-pub use self::post_policy::PostPolicyError;
 pub use self::s3_op::S3Operation;
 pub use self::s3_trait::S3;
 

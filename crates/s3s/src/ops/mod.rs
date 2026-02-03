@@ -29,6 +29,7 @@ use crate::http::{self, BodySizeLimitExceeded};
 use crate::http::{OrderedHeaders, OrderedQs};
 use crate::http::{Request, Response};
 use crate::path::{ParseS3PathError, S3Path};
+use crate::post_policy::PostPolicy;
 use crate::protocol::S3Request;
 use crate::route::S3Route;
 use crate::s3_trait::S3;
@@ -411,7 +412,7 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                     // See https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-HTTPPOSTConstructPolicy.html
                     let now = time::OffsetDateTime::now_utc();
                     let policy = if let Some(policy_b64) = multipart.find_field_value("policy") {
-                        let policy = crate::PostPolicy::from_base64(policy_b64)
+                        let policy = PostPolicy::from_base64(policy_b64)
                             .map_err(|e| s3_error!(e, InvalidPolicyDocument, "failed to parse POST policy"))?;
 
                         // Check policy expiration early to avoid reading file if policy is expired

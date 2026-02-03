@@ -5,6 +5,7 @@
 
 use super::*;
 use crate::error::S3Result;
+use crate::post_policy::PostPolicy;
 
 use std::borrow::Cow;
 use std::convert::Infallible;
@@ -15669,7 +15670,7 @@ pub struct PostObjectInput {
     /// The status code returned to the client upon successful upload. Valid values are 200, 201, and 204.
     pub success_action_status: Option<i32>,
     /// The POST policy document that was included in the request.
-    pub policy: Option<crate::PostPolicy>,
+    pub policy: Option<PostPolicy>,
 }
 
 impl fmt::Debug for PostObjectInput {
@@ -28255,7 +28256,7 @@ pub mod builders {
 
         success_action_status: Option<i32>,
 
-        policy: Option<crate::PostPolicy>,
+        policy: Option<PostPolicy>,
     }
 
     impl PostObjectInputBuilder {
@@ -28479,7 +28480,7 @@ pub mod builders {
             self
         }
 
-        pub fn set_policy(&mut self, field: Option<crate::PostPolicy>) -> &mut Self {
+        pub fn set_policy(&mut self, field: Option<PostPolicy>) -> &mut Self {
             self.policy = field;
             self
         }
@@ -28749,7 +28750,7 @@ pub mod builders {
         }
 
         #[must_use]
-        pub fn policy(mut self, field: Option<crate::PostPolicy>) -> Self {
+        pub fn policy(mut self, field: Option<PostPolicy>) -> Self {
             self.policy = field;
             self
         }

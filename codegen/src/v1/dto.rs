@@ -313,7 +313,7 @@ pub fn collect_rust_types(model: &smithy::Model, ops: &Operations) -> RustTypes 
         });
         post_in.fields.push(rust::StructField {
             name: o("policy"),
-            type_: o("crate::PostPolicy"),
+            type_: o("PostPolicy"),
             option_type: true,
             position: o("s3s"),
             doc: Some(o("The POST policy document that was included in the request.")),
@@ -592,6 +592,7 @@ pub fn codegen(rust_types: &RustTypes, ops: &Operations, patch: Option<Patch>) {
         "",
         "use super::*;",
         "use crate::error::S3Result;",
+        "use crate::post_policy::PostPolicy;",
         "",
         "use std::borrow::Cow;",
         "use std::convert::Infallible;",
