@@ -13,11 +13,11 @@ workspace = true
 [dependencies]
 scoped-writer = "0.3.0"
 heck = "0.5.0"
-std-next = "0.1.9"
-numeric_cast = "0.3.0"
-regex = "1.12.2"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = { version = "1.0.149", features = ["preserve_order"] }
+std-next.workspace = true
+numeric_cast.workspace = true
+regex = "1.12.3"
+serde.workspace = true
+serde_json = { workspace = true, features = ["preserve_order"] }
 serde_urlencoded = "0.7.1"
 s3s-model = { version = "0.13.0-alpha.2", path = "../crates/s3s-model" }
-http = "1.4.0"
+http.workspace = true

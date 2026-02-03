@@ -17,14 +17,14 @@ workspace = true
 minio = ["s3s/minio"]
 
 [dependencies]
-async-trait = "0.1.89"
+async-trait.workspace = true
 aws-sdk-s3.workspace = true
 aws-smithy-runtime-api = { workspace = true, features = ["client", "http-1x"] }
 aws-smithy-types = { workspace = true, features = ["http-body-1-x"] }
 aws-smithy-types-convert = { workspace = true, features = ["convert-time"] }
-hyper = "1.8.1"
+hyper.workspace = true
 s3s = { version = "0.13.0-alpha.2", path = "../s3s", default-features = false }
-std-next = "0.1.9"
+std-next.workspace = true
 sync_wrapper = "1.0.2"
-tracing = "0.1.44"
-transform-stream = "0.3.1"
+tracing.workspace = true
+transform-stream.workspace = true

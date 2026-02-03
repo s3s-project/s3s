@@ -15,6 +15,6 @@ workspace = true
 
 [dependencies]
 anyhow = "1.0.100"
-numeric_cast = "0.3.0"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.149"
+numeric_cast.workspace = true
+serde.workspace = true
+serde_json.workspace = true
