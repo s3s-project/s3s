@@ -316,7 +316,6 @@ async fn post_multipart_bucket_routes_to_post_object() {
 // Helper functions for POST policy resource exhaustion tests
 
 /// Helper to create a test S3 service that tracks POST calls
-#[cfg(test)]
 mod post_policy_test_helpers {
     use crate::S3Request;
     use crate::auth::{SecretKey, SimpleAuth};
