@@ -33,6 +33,16 @@ just codegen
 
 It should change nothing if you are running the latest code.
 
+### Run semver checks
+
+Check for API breaking changes:
+
+```bash
+just semver-checks
+```
+
+Note: This requires published crate versions on crates.io to compare against.
+
 ### Open documentation
 
 ```bash
