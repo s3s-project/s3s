@@ -409,12 +409,12 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
 
                     // Parse POST policy BEFORE reading file stream to prevent resource exhaustion
                     // See https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-HTTPPOSTConstructPolicy.html
+                    let now = time::OffsetDateTime::now_utc();
                     let policy = if let Some(policy_b64) = multipart.find_field_value("policy") {
                         let policy = crate::PostPolicy::from_base64(policy_b64)
                             .map_err(|e| s3_error!(e, InvalidPolicyDocument, "failed to parse POST policy"))?;
                         
                         // Check policy expiration early to avoid reading file if policy is expired
-                        let now = time::OffsetDateTime::now_utc();
                         let expiration_time: time::OffsetDateTime = policy.expiration.clone().into();
                         if now >= expiration_time {
                             return Err(S3Error::with_message(S3ErrorCode::AccessDenied, "Request has expired"));
@@ -450,7 +450,6 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
 
                     // Validate the policy conditions (if policy exists)
                     if let Some(policy) = policy {
-                        let now = time::OffsetDateTime::now_utc();
                         policy.validate(multipart, file_size, now)?;
                         req.s3ext.post_policy = Some(policy);
                     }
