@@ -41,3 +41,6 @@ hmac = "=0.13.0-rc.4"
 md-5 = "=0.11.0-rc.4"
 sha1 = "=0.11.0-rc.4"
 sha2 = "=0.11.0-rc.4"
+
+# Common dependencies
+bytes = "1.11.1"
