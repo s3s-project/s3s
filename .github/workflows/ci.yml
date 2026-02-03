@@ -60,6 +60,8 @@ jobs:
   semver-checks:
     needs: skip-check
     if: needs.skip-check.outputs.should_skip != 'true'
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
