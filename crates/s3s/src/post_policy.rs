@@ -117,6 +117,21 @@ impl PostPolicy {
         }
 
         // Check all conditions
+        self.validate_conditions_only(multipart, file_size)
+    }
+
+    /// Validate only the policy conditions, skipping the expiration check
+    ///
+    /// This is useful when the expiration has already been checked separately.
+    ///
+    /// # Arguments
+    /// * `multipart` - The multipart form data
+    /// * `file_size` - The size of the uploaded file in bytes
+    ///
+    /// # Errors
+    /// Returns `InvalidPolicyDocument` if any condition is not satisfied
+    pub fn validate_conditions_only(&self, multipart: &Multipart, file_size: u64) -> S3Result<()> {
+        // Check all conditions
         for condition in &self.conditions {
             Self::validate_condition(condition, multipart, file_size)?;
         }
