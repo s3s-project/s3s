@@ -57,6 +57,19 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: just ci-rust
 
+  semver-checks:
+    needs: skip-check
+    if: needs.skip-check.outputs.should_skip != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Check semver
+        uses: obi1kenobi/cargo-semver-checks-action@v2
+        with:
+          exclude: s3s-wasm
+
   cross-test:
     needs: skip-check
     if: needs.skip-check.outputs.should_skip != 'true'
