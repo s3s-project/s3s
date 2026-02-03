@@ -8,7 +8,8 @@ use stdx::default::default;
 pub struct VirtualHost<'a> {
     domain: Cow<'a, str>,
     bucket: Option<Cow<'a, str>>,
-    // pub(crate) region: Option<Cow<'a, str>>,
+    /// The region extracted from the host header, if available.
+    pub region: Option<Cow<'a, str>>,
 }
 
 impl<'a> VirtualHost<'a> {
@@ -16,6 +17,7 @@ impl<'a> VirtualHost<'a> {
         Self {
             domain: domain.into(),
             bucket: None,
+            region: None,
         }
     }
 
@@ -23,6 +25,7 @@ impl<'a> VirtualHost<'a> {
         Self {
             domain: domain.into(),
             bucket: Some(bucket.into()),
+            region: None,
         }
     }
 
@@ -36,6 +39,12 @@ impl<'a> VirtualHost<'a> {
     #[must_use]
     pub fn bucket(&self) -> Option<&str> {
         self.bucket.as_deref()
+    }
+
+    /// Sets the region for this virtual host.
+    pub fn with_region(mut self, region: impl Into<Cow<'a, str>>) -> Self {
+        self.region = Some(region.into());
+        self
     }
 }
 
@@ -91,12 +100,20 @@ fn is_valid_domain(mut s: &str) -> bool {
 }
 
 fn parse_host_header<'a>(base_domain: &'a str, host: &'a str) -> Option<VirtualHost<'a>> {
+    use crate::region::extract_region_from_host;
+
+    let region = extract_region_from_host(host).map(Cow::Borrowed);
+
     if host == base_domain {
-        return Some(VirtualHost::new(base_domain));
+        let mut vh = VirtualHost::new(base_domain);
+        vh.region = region;
+        return Some(vh);
     }
 
     if let Some(bucket) = host.strip_suffix(base_domain).and_then(|h| h.strip_suffix('.')) {
-        return Some(VirtualHost::with_bucket(base_domain, bucket));
+        let mut vh = VirtualHost::with_bucket(base_domain, bucket);
+        vh.region = region;
+        return Some(vh);
     }
 
     None
@@ -125,6 +142,8 @@ impl SingleDomain {
 
 impl S3Host for SingleDomain {
     fn parse_host_header<'a>(&'a self, host: &'a str) -> S3Result<VirtualHost<'a>> {
+        use crate::region::extract_region_from_host;
+
         let base_domain = self.base_domain.as_str();
 
         if let Some(vh) = parse_host_header(base_domain, host) {
@@ -133,7 +152,10 @@ impl S3Host for SingleDomain {
 
         if is_valid_domain(host) {
             let bucket = host.to_ascii_lowercase();
-            return Ok(VirtualHost::with_bucket(host, bucket));
+            let region = extract_region_from_host(host).map(Cow::Borrowed);
+            let mut vh = VirtualHost::with_bucket(host, bucket);
+            vh.region = region;
+            return Ok(vh);
         }
 
         Err(s3_error!(InvalidRequest, "Invalid host header"))
@@ -186,6 +208,8 @@ impl MultiDomain {
 
 impl S3Host for MultiDomain {
     fn parse_host_header<'a>(&'a self, host: &'a str) -> S3Result<VirtualHost<'a>> {
+        use crate::region::extract_region_from_host;
+
         for base_domain in &self.base_domains {
             if let Some(vh) = parse_host_header(base_domain, host) {
                 return Ok(vh);
@@ -194,7 +218,10 @@ impl S3Host for MultiDomain {
 
         if is_valid_domain(host) {
             let bucket = host.to_ascii_lowercase();
-            return Ok(VirtualHost::with_bucket(host, bucket));
+            let region = extract_region_from_host(host).map(Cow::Borrowed);
+            let mut vh = VirtualHost::with_bucket(host, bucket);
+            vh.region = region;
+            return Ok(vh);
         }
 
         Err(s3_error!(InvalidRequest, "Invalid host header"))
