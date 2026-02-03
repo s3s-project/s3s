@@ -384,11 +384,7 @@ mod post_policy_test_helpers {
     }
 
     /// Build a POST object request with a policy
-    pub fn build_post_object_request(
-        policy_json: &str,
-        file_content: &str,
-        secret_key: &SecretKey,
-    ) -> Request {
+    pub fn build_post_object_request(policy_json: &str, file_content: &str, secret_key: &SecretKey) -> Request {
         let policy_b64 = base64_simd::STANDARD.encode_to_string(policy_json);
 
         let boundary = "------------------------test12345678";
