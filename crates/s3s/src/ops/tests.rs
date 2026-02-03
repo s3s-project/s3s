@@ -567,7 +567,7 @@ async fn post_object_file_exceeds_policy_max_but_under_config_max() {
     let result = super::prepare(&mut req, &ccx).await;
     assert!(result.is_err(), "expected error for file exceeding policy limit");
 
-    // Should get FileTooLarge or InvalidRequest error
+    // MultipartError::FileTooLarge is wrapped into InvalidRequest by the invalid_request! macro
     match result {
         Err(err) => {
             let code = err.code();

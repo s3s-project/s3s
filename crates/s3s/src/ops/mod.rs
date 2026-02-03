@@ -451,8 +451,9 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                     req.s3ext.vec_stream = Some(vec_stream);
 
                     // Validate the policy conditions (if policy exists)
+                    // Note: expiration was already checked above before reading the file
                     if let Some(policy) = policy {
-                        policy.validate(multipart, file_size, now)?;
+                        policy.validate_conditions_only(multipart, file_size)?;
                         req.s3ext.post_policy = Some(policy);
                     }
 
