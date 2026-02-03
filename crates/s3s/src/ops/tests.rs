@@ -573,8 +573,7 @@ async fn post_object_file_exceeds_policy_max_but_under_config_max() {
             let code = err.code();
             assert!(
                 matches!(code, crate::error::S3ErrorCode::InvalidRequest),
-                "expected InvalidRequest error, got {:?}",
-                code
+                "expected InvalidRequest error, got {code:?}",
             );
         }
         Ok(_) => panic!("expected error for file exceeding policy limit"),
