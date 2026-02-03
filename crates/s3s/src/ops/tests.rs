@@ -350,8 +350,10 @@ async fn post_object_policy_max_smaller_than_config_max() {
     let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
 
     // Set config max to 1MB
-    let mut config = S3Config::default();
-    config.post_object_max_file_size = 1024 * 1024; // 1 MB
+    let config = S3Config {
+        post_object_max_file_size: 1024 * 1024, // 1 MB
+        ..Default::default()
+    };
     let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(config)));
 
     let access_key = "AKIAIOSFODNN7EXAMPLE";
@@ -467,8 +469,10 @@ async fn post_object_file_exceeds_policy_max_but_under_config_max() {
     let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(TestS3);
 
     // Set config max to 10KB
-    let mut config = S3Config::default();
-    config.post_object_max_file_size = 10 * 1024; // 10 KB
+    let config = S3Config {
+        post_object_max_file_size: 10 * 1024, // 10 KB
+        ..Default::default()
+    };
     let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(config)));
 
     let access_key = "AKIAIOSFODNN7EXAMPLE";
@@ -614,8 +618,10 @@ async fn post_object_policy_max_larger_than_config_max() {
     let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
 
     // Set config max to 200 bytes (smaller than policy max)
-    let mut config = S3Config::default();
-    config.post_object_max_file_size = 200; // 200 bytes
+    let config = S3Config {
+        post_object_max_file_size: 200, // 200 bytes
+        ..Default::default()
+    };
     let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(config)));
 
     let access_key = "AKIAIOSFODNN7EXAMPLE";
