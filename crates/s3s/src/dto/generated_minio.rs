@@ -5,6 +5,7 @@
 
 use super::*;
 use crate::error::S3Result;
+use crate::post_policy::PostPolicy;
 
 use std::borrow::Cow;
 use std::convert::Infallible;
@@ -15668,6 +15669,8 @@ pub struct PostObjectInput {
     pub success_action_redirect: Option<String>,
     /// The status code returned to the client upon successful upload. Valid values are 200, 201, and 204.
     pub success_action_status: Option<i32>,
+    /// The POST policy document that was included in the request.
+    pub policy: Option<PostPolicy>,
 }
 
 impl fmt::Debug for PostObjectInput {
@@ -15800,6 +15803,9 @@ impl fmt::Debug for PostObjectInput {
         }
         if let Some(ref val) = self.success_action_status {
             d.field("success_action_status", val);
+        }
+        if let Some(ref val) = self.policy {
+            d.field("policy", val);
         }
         d.finish_non_exhaustive()
     }
@@ -28249,6 +28255,8 @@ pub mod builders {
         success_action_redirect: Option<String>,
 
         success_action_status: Option<i32>,
+
+        policy: Option<PostPolicy>,
     }
 
     impl PostObjectInputBuilder {
@@ -28469,6 +28477,11 @@ pub mod builders {
 
         pub fn set_success_action_status(&mut self, field: Option<i32>) -> &mut Self {
             self.success_action_status = field;
+            self
+        }
+
+        pub fn set_policy(&mut self, field: Option<PostPolicy>) -> &mut Self {
+            self.policy = field;
             self
         }
 
@@ -28736,6 +28749,12 @@ pub mod builders {
             self
         }
 
+        #[must_use]
+        pub fn policy(mut self, field: Option<PostPolicy>) -> Self {
+            self.policy = field;
+            self
+        }
+
         pub fn build(self) -> Result<PostObjectInput, BuildError> {
             let acl = self.acl;
             let body = self.body;
@@ -28781,6 +28800,7 @@ pub mod builders {
             let write_offset_bytes = self.write_offset_bytes;
             let success_action_redirect = self.success_action_redirect;
             let success_action_status = self.success_action_status;
+            let policy = self.policy;
             Ok(PostObjectInput {
                 acl,
                 body,
@@ -28826,6 +28846,7 @@ pub mod builders {
                 write_offset_bytes,
                 success_action_redirect,
                 success_action_status,
+                policy,
             })
         }
     }
@@ -37613,6 +37634,7 @@ pub(crate) fn put_object_input_into_post_object_input(x: PutObjectInput) -> Post
         write_offset_bytes: x.write_offset_bytes,
         success_action_redirect: None,
         success_action_status: None,
+        policy: None,
     }
 }
 pub(crate) fn post_object_input_into_put_object_input(x: PostObjectInput) -> PutObjectInput {

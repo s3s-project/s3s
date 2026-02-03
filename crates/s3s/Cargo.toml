@@ -29,7 +29,7 @@ arrayvec = "0.7.6"
 async-trait = "0.1.89"
 atoi = { version = "2.0.0", default-features = false }
 base64-simd = "0.8.0"
-bytes = "1.11.0"
+bytes.workspace = true
 bytestring = "1.5.0"
 chrono = { version = "0.4.43", default-features = false }
 crc-fast = "1"
@@ -49,6 +49,7 @@ numeric_cast = "0.3.0"
 pin-project-lite = "0.2.16"
 quick-xml = { version = "0.37.5", features = ["serialize"] }
 serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
 serde_urlencoded = "0.7.1"
 sha1.workspace = true
 sha2.workspace = true

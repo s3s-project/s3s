@@ -23,7 +23,7 @@ binary = ["tokio/full", "dep:clap", "dep:tracing-subscriber", "dep:hyper-util"]
 [dependencies]
 async-trait = "0.1.89"
 base64-simd = "0.8.0"
-bytes = "1.11.0"
+bytes.workspace = true
 chrono = { version = "0.4.43", default-features = false, features = [
     "std",
     "clock",
