@@ -111,7 +111,7 @@ jobs:
   mint-proxy-minio:
     name: e2e (mint, s3s-proxy, minio)
     needs: skip-check
-    if: needs.skip-check.outputs.should_skip != 'true'
+    if: github.event_name != 'pull_request' && needs.skip-check.outputs.should_skip != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
