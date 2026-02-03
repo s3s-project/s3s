@@ -50,8 +50,8 @@ impl Region {
 
     /// Creates a new `Region` without validation.
     ///
-    /// # Safety
-    /// The caller must ensure the string is a valid region identifier.
+    /// # Note
+    /// The caller should ensure the string is a valid region identifier.
     /// This is useful when the region comes from a trusted source that has already been validated.
     #[must_use]
     pub fn new_unchecked(s: String) -> Self {

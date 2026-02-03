@@ -157,4 +157,3 @@ fn test_virtual_host_with_region() {
     assert_eq!(vh.bucket(), Some("my-bucket"));
     assert_eq!(vh.region.as_deref(), Some("eu-west-2"));
 }
-

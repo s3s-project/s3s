@@ -94,4 +94,3 @@ fn main() {
     println!("      _ => /* use default backend */,");
     println!("  }}");
 }
-
