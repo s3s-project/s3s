@@ -350,7 +350,7 @@ mod post_policy_test_helpers {
     #[async_trait::async_trait]
     impl crate::s3_trait::S3 for TestS3NoOp {}
 
-    /// Create a test config with custom post_object_max_file_size
+    /// Create a test config with custom `post_object_max_file_size`
     pub fn create_test_config(post_object_max_file_size: u64) -> Arc<dyn S3ConfigProvider> {
         let config = S3Config {
             post_object_max_file_size,
@@ -359,7 +359,7 @@ mod post_policy_test_helpers {
         Arc::new(StaticConfigProvider::new(Arc::new(config)))
     }
 
-    /// Create auth and CallContext for testing
+    /// Create auth and `CallContext` for testing
     pub fn create_test_context<'a>(
         s3: &'a Arc<dyn crate::s3_trait::S3>,
         config: &'a Arc<dyn S3ConfigProvider>,
@@ -376,7 +376,7 @@ mod post_policy_test_helpers {
         }
     }
 
-    /// Create a SimpleAuth for testing
+    /// Create a `SimpleAuth` for testing
     pub fn create_test_auth() -> SimpleAuth {
         let access_key = "AKIAIOSFODNN7EXAMPLE";
         let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
