@@ -313,10 +313,11 @@ async fn post_multipart_bucket_routes_to_post_object() {
     }
 }
 
-/// Test that policy max < config max results in using policy max for file size limit
-#[allow(clippy::too_many_lines)]
-#[tokio::test]
-async fn post_object_policy_max_smaller_than_config_max() {
+// Helper functions for POST policy resource exhaustion tests
+
+/// Helper to create a test S3 service that tracks POST calls
+#[cfg(test)]
+mod post_policy_test_helpers {
     use crate::S3Request;
     use crate::auth::{SecretKey, SimpleAuth};
     use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
@@ -329,12 +330,12 @@ async fn post_object_policy_max_smaller_than_config_max() {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
-    struct TestS3 {
-        post_calls: AtomicUsize,
+    pub struct TestS3WithPostTracking {
+        pub post_calls: AtomicUsize,
     }
 
     #[async_trait::async_trait]
-    impl crate::s3_trait::S3 for TestS3 {
+    impl crate::s3_trait::S3 for TestS3WithPostTracking {
         async fn post_object(
             &self,
             _req: S3Request<crate::dto::PostObjectInput>,
@@ -344,102 +345,142 @@ async fn post_object_policy_max_smaller_than_config_max() {
         }
     }
 
-    let test_s3 = Arc::new(TestS3 {
+    pub struct TestS3NoOp;
+
+    #[async_trait::async_trait]
+    impl crate::s3_trait::S3 for TestS3NoOp {}
+
+    /// Create a test config with custom post_object_max_file_size
+    pub fn create_test_config(post_object_max_file_size: u64) -> Arc<dyn S3ConfigProvider> {
+        let config = S3Config {
+            post_object_max_file_size,
+            ..Default::default()
+        };
+        Arc::new(StaticConfigProvider::new(Arc::new(config)))
+    }
+
+    /// Create auth and CallContext for testing
+    pub fn create_test_context<'a>(
+        s3: &'a Arc<dyn crate::s3_trait::S3>,
+        config: &'a Arc<dyn S3ConfigProvider>,
+        auth: &'a SimpleAuth,
+    ) -> CallContext<'a> {
+        CallContext {
+            s3,
+            config,
+            host: None,
+            auth: Some(auth),
+            access: None,
+            route: None,
+            validation: None,
+        }
+    }
+
+    /// Create a SimpleAuth for testing
+    pub fn create_test_auth() -> SimpleAuth {
+        let access_key = "AKIAIOSFODNN7EXAMPLE";
+        let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+        SimpleAuth::from_single(access_key, secret_key)
+    }
+
+    /// Build a POST object request with a policy
+    pub fn build_post_object_request(
+        policy_json: &str,
+        file_content: &str,
+        secret_key: &SecretKey,
+    ) -> Request {
+        let policy_b64 = base64_simd::STANDARD.encode_to_string(policy_json);
+
+        let boundary = "------------------------test12345678";
+        let bucket = "test-bucket";
+        let key = "test-key";
+        let amz_date = sig_v4::AmzDate::parse("20250101T000000Z").unwrap();
+        let region = "us-east-1";
+        let service = "s3";
+        let algorithm = "AWS4-HMAC-SHA256";
+        let credential = "AKIAIOSFODNN7EXAMPLE/20250101/us-east-1/s3/aws4_request";
+        let signature = sig_v4::calculate_signature(&policy_b64, secret_key, &amz_date, region, service);
+
+        let body = format!(
+            concat!(
+                "--{b}\r\n",
+                "Content-Disposition: form-data; name=\"x-amz-signature\"\r\n\r\n",
+                "{signature}\r\n",
+                "--{b}\r\n",
+                "Content-Disposition: form-data; name=\"bucket\"\r\n\r\n",
+                "{bucket}\r\n",
+                "--{b}\r\n",
+                "Content-Disposition: form-data; name=\"policy\"\r\n\r\n",
+                "{policy_b64}\r\n",
+                "--{b}\r\n",
+                "Content-Disposition: form-data; name=\"x-amz-algorithm\"\r\n\r\n",
+                "{algorithm}\r\n",
+                "--{b}\r\n",
+                "Content-Disposition: form-data; name=\"x-amz-credential\"\r\n\r\n",
+                "{credential}\r\n",
+                "--{b}\r\n",
+                "Content-Disposition: form-data; name=\"x-amz-date\"\r\n\r\n",
+                "{amz_date}\r\n",
+                "--{b}\r\n",
+                "Content-Disposition: form-data; name=\"key\"\r\n\r\n",
+                "{key}\r\n",
+                "--{b}\r\n",
+                "Content-Disposition: form-data; name=\"file\"; filename=\"test.txt\"\r\n",
+                "Content-Type: text/plain\r\n\r\n",
+                "{file_content}\r\n",
+                "--{b}--\r\n"
+            ),
+            amz_date = amz_date.fmt_iso8601(),
+            b = boundary,
+            signature = signature,
+            bucket = bucket,
+            policy_b64 = policy_b64,
+            algorithm = algorithm,
+            credential = credential,
+            key = key,
+            file_content = file_content,
+        );
+
+        Request::from(
+            hyper::Request::builder()
+                .method(Method::POST)
+                .uri(format!("http://localhost/{bucket}"))
+                .header(crate::header::HOST, "localhost")
+                .header(
+                    crate::header::CONTENT_TYPE,
+                    HeaderValue::from_str(&format!("multipart/form-data; boundary={boundary}")).unwrap(),
+                )
+                .body(Body::from(Bytes::from(body)))
+                .unwrap(),
+        )
+    }
+}
+
+/// Test that policy max < config max results in using policy max for file size limit
+#[tokio::test]
+async fn post_object_policy_max_smaller_than_config_max() {
+    use crate::auth::SecretKey;
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicUsize;
+
+    let test_s3 = Arc::new(post_policy_test_helpers::TestS3WithPostTracking {
         post_calls: AtomicUsize::new(0),
     });
     let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
 
     // Set config max to 1MB
-    let config = S3Config {
-        post_object_max_file_size: 1024 * 1024, // 1 MB
-        ..Default::default()
-    };
-    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(config)));
+    let config = post_policy_test_helpers::create_test_config(1024 * 1024);
 
-    let access_key = "AKIAIOSFODNN7EXAMPLE";
+    let auth = post_policy_test_helpers::create_test_auth();
+    let ccx = post_policy_test_helpers::create_test_context(&s3, &config, &auth);
+
     let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
-    let auth = SimpleAuth::from_single(access_key, secret_key.clone());
-
-    let ccx = CallContext {
-        s3: &s3,
-        config: &config,
-        host: None,
-        auth: Some(&auth),
-        access: None,
-        route: None,
-        validation: None,
-    };
 
     // Create a policy with content-length-range max of 100 bytes (< config max of 1MB)
-    // Policy: {"expiration":"2030-01-01T00:00:00.000Z","conditions":[["content-length-range",0,100]]}
     let policy_json = r#"{"expiration":"2030-01-01T00:00:00.000Z","conditions":[["content-length-range",0,100]]}"#;
-    let policy_b64 = base64_simd::STANDARD.encode_to_string(policy_json);
+    let file_content = "a".repeat(50); // 50 bytes (within policy limit of 100 bytes)
 
-    let boundary = "------------------------test12345678";
-    let bucket = "test-bucket";
-    let key = "test-key";
-    let amz_date = sig_v4::AmzDate::parse("20250101T000000Z").unwrap();
-    let region = "us-east-1";
-    let service = "s3";
-    let algorithm = "AWS4-HMAC-SHA256";
-    let credential = "AKIAIOSFODNN7EXAMPLE/20250101/us-east-1/s3/aws4_request";
-    let signature = sig_v4::calculate_signature(&policy_b64, &secret_key, &amz_date, region, service);
-
-    // Create a file with 50 bytes (within policy limit of 100 bytes)
-    let file_content = "a".repeat(50);
-
-    let body = format!(
-        concat!(
-            "--{b}\r\n",
-            "Content-Disposition: form-data; name=\"x-amz-signature\"\r\n\r\n",
-            "{signature}\r\n",
-            "--{b}\r\n",
-            "Content-Disposition: form-data; name=\"bucket\"\r\n\r\n",
-            "{bucket}\r\n",
-            "--{b}\r\n",
-            "Content-Disposition: form-data; name=\"policy\"\r\n\r\n",
-            "{policy_b64}\r\n",
-            "--{b}\r\n",
-            "Content-Disposition: form-data; name=\"x-amz-algorithm\"\r\n\r\n",
-            "{algorithm}\r\n",
-            "--{b}\r\n",
-            "Content-Disposition: form-data; name=\"x-amz-credential\"\r\n\r\n",
-            "{credential}\r\n",
-            "--{b}\r\n",
-            "Content-Disposition: form-data; name=\"x-amz-date\"\r\n\r\n",
-            "{amz_date}\r\n",
-            "--{b}\r\n",
-            "Content-Disposition: form-data; name=\"key\"\r\n\r\n",
-            "{key}\r\n",
-            "--{b}\r\n",
-            "Content-Disposition: form-data; name=\"file\"; filename=\"test.txt\"\r\n",
-            "Content-Type: text/plain\r\n\r\n",
-            "{file_content}\r\n",
-            "--{b}--\r\n"
-        ),
-        amz_date = amz_date.fmt_iso8601(),
-        b = boundary,
-        signature = signature,
-        bucket = bucket,
-        policy_b64 = policy_b64,
-        algorithm = algorithm,
-        credential = credential,
-        key = key,
-        file_content = file_content,
-    );
-
-    let mut req = Request::from(
-        hyper::Request::builder()
-            .method(Method::POST)
-            .uri(format!("http://localhost/{bucket}"))
-            .header(crate::header::HOST, "localhost")
-            .header(
-                crate::header::CONTENT_TYPE,
-                HeaderValue::from_str(&format!("multipart/form-data; boundary={boundary}")).unwrap(),
-            )
-            .body(Body::from(Bytes::from(body)))
-            .unwrap(),
-    );
+    let mut req = post_policy_test_helpers::build_post_object_request(policy_json, &file_content, &secret_key);
 
     // This should succeed because file size (50 bytes) is within policy limit (100 bytes)
     // The important part is that the aggregation limit used is 100 bytes (policy max), not 1MB (config max)
@@ -448,118 +489,28 @@ async fn post_object_policy_max_smaller_than_config_max() {
 }
 
 /// Test that file exceeding policy max but under config max is rejected
-#[allow(clippy::too_many_lines)]
 #[tokio::test]
 async fn post_object_file_exceeds_policy_max_but_under_config_max() {
-    use crate::auth::{SecretKey, SimpleAuth};
-    use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
-    use crate::http::{Body, Request};
-    use crate::ops::CallContext;
-    use crate::sig_v4;
-    use bytes::Bytes;
-    use hyper::Method;
-    use hyper::header::HeaderValue;
+    use crate::auth::SecretKey;
     use std::sync::Arc;
 
-    struct TestS3;
-
-    #[async_trait::async_trait]
-    impl crate::s3_trait::S3 for TestS3 {}
-
-    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(TestS3);
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
 
     // Set config max to 10KB
-    let config = S3Config {
-        post_object_max_file_size: 10 * 1024, // 10 KB
-        ..Default::default()
-    };
-    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(config)));
+    let config = post_policy_test_helpers::create_test_config(10 * 1024);
 
-    let access_key = "AKIAIOSFODNN7EXAMPLE";
+    let auth = post_policy_test_helpers::create_test_auth();
+    let ccx = post_policy_test_helpers::create_test_context(&s3, &config, &auth);
+
     let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
-    let auth = SimpleAuth::from_single(access_key, secret_key.clone());
-
-    let ccx = CallContext {
-        s3: &s3,
-        config: &config,
-        host: None,
-        auth: Some(&auth),
-        access: None,
-        route: None,
-        validation: None,
-    };
 
     // Create a policy with content-length-range max of 100 bytes
-    // Policy: {"expiration":"2030-01-01T00:00:00.000Z","conditions":[["content-length-range",0,100]]}
     let policy_json = r#"{"expiration":"2030-01-01T00:00:00.000Z","conditions":[["content-length-range",0,100]]}"#;
-    let policy_b64 = base64_simd::STANDARD.encode_to_string(policy_json);
-
-    let boundary = "------------------------test12345678";
-    let bucket = "test-bucket";
-    let key = "test-key";
-    let amz_date = sig_v4::AmzDate::parse("20250101T000000Z").unwrap();
-    let region = "us-east-1";
-    let service = "s3";
-    let algorithm = "AWS4-HMAC-SHA256";
-    let credential = "AKIAIOSFODNN7EXAMPLE/20250101/us-east-1/s3/aws4_request";
-    let signature = sig_v4::calculate_signature(&policy_b64, &secret_key, &amz_date, region, service);
-
     // Create a file with 150 bytes (exceeds policy max of 100 bytes, but under config max of 10KB)
     // This is the critical security test: file should be rejected before consuming memory
     let file_content = "a".repeat(150);
 
-    let body = format!(
-        concat!(
-            "--{b}\r\n",
-            "Content-Disposition: form-data; name=\"x-amz-signature\"\r\n\r\n",
-            "{signature}\r\n",
-            "--{b}\r\n",
-            "Content-Disposition: form-data; name=\"bucket\"\r\n\r\n",
-            "{bucket}\r\n",
-            "--{b}\r\n",
-            "Content-Disposition: form-data; name=\"policy\"\r\n\r\n",
-            "{policy_b64}\r\n",
-            "--{b}\r\n",
-            "Content-Disposition: form-data; name=\"x-amz-algorithm\"\r\n\r\n",
-            "{algorithm}\r\n",
-            "--{b}\r\n",
-            "Content-Disposition: form-data; name=\"x-amz-credential\"\r\n\r\n",
-            "{credential}\r\n",
-            "--{b}\r\n",
-            "Content-Disposition: form-data; name=\"x-amz-date\"\r\n\r\n",
-            "{amz_date}\r\n",
-            "--{b}\r\n",
-            "Content-Disposition: form-data; name=\"key\"\r\n\r\n",
-            "{key}\r\n",
-            "--{b}\r\n",
-            "Content-Disposition: form-data; name=\"file\"; filename=\"test.txt\"\r\n",
-            "Content-Type: text/plain\r\n\r\n",
-            "{file_content}\r\n",
-            "--{b}--\r\n"
-        ),
-        amz_date = amz_date.fmt_iso8601(),
-        b = boundary,
-        signature = signature,
-        bucket = bucket,
-        policy_b64 = policy_b64,
-        algorithm = algorithm,
-        credential = credential,
-        key = key,
-        file_content = file_content,
-    );
-
-    let mut req = Request::from(
-        hyper::Request::builder()
-            .method(Method::POST)
-            .uri(format!("http://localhost/{bucket}"))
-            .header(crate::header::HOST, "localhost")
-            .header(
-                crate::header::CONTENT_TYPE,
-                HeaderValue::from_str(&format!("multipart/form-data; boundary={boundary}")).unwrap(),
-            )
-            .body(Body::from(Bytes::from(body)))
-            .unwrap(),
-    );
+    let mut req = post_policy_test_helpers::build_post_object_request(policy_json, &file_content, &secret_key);
 
     // This should fail because file size (150 bytes) exceeds policy limit (100 bytes)
     // The key security improvement: file is rejected during aggregation (at 100 bytes limit),
@@ -581,132 +532,31 @@ async fn post_object_file_exceeds_policy_max_but_under_config_max() {
 }
 
 /// Test that policy max > config max results in using config max for file size limit
-#[allow(clippy::too_many_lines)]
 #[tokio::test]
 async fn post_object_policy_max_larger_than_config_max() {
-    use crate::S3Request;
-    use crate::auth::{SecretKey, SimpleAuth};
-    use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
-    use crate::http::{Body, Request};
-    use crate::ops::CallContext;
-    use crate::sig_v4;
-    use bytes::Bytes;
-    use hyper::Method;
-    use hyper::header::HeaderValue;
+    use crate::auth::SecretKey;
     use std::sync::Arc;
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::atomic::AtomicUsize;
 
-    struct TestS3 {
-        post_calls: AtomicUsize,
-    }
-
-    #[async_trait::async_trait]
-    impl crate::s3_trait::S3 for TestS3 {
-        async fn post_object(
-            &self,
-            _req: S3Request<crate::dto::PostObjectInput>,
-        ) -> crate::error::S3Result<crate::protocol::S3Response<crate::dto::PostObjectOutput>> {
-            self.post_calls.fetch_add(1, Ordering::SeqCst);
-            Ok(crate::protocol::S3Response::new(crate::dto::PostObjectOutput::default()))
-        }
-    }
-
-    let test_s3 = Arc::new(TestS3 {
+    let test_s3 = Arc::new(post_policy_test_helpers::TestS3WithPostTracking {
         post_calls: AtomicUsize::new(0),
     });
     let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
 
     // Set config max to 200 bytes (smaller than policy max)
-    let config = S3Config {
-        post_object_max_file_size: 200, // 200 bytes
-        ..Default::default()
-    };
-    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(config)));
+    let config = post_policy_test_helpers::create_test_config(200);
 
-    let access_key = "AKIAIOSFODNN7EXAMPLE";
+    let auth = post_policy_test_helpers::create_test_auth();
+    let ccx = post_policy_test_helpers::create_test_context(&s3, &config, &auth);
+
     let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
-    let auth = SimpleAuth::from_single(access_key, secret_key.clone());
-
-    let ccx = CallContext {
-        s3: &s3,
-        config: &config,
-        host: None,
-        auth: Some(&auth),
-        access: None,
-        route: None,
-        validation: None,
-    };
 
     // Create a policy with content-length-range max of 10KB (> config max of 200 bytes)
-    // Policy: {"expiration":"2030-01-01T00:00:00.000Z","conditions":[["content-length-range",0,10240]]}
     let policy_json = r#"{"expiration":"2030-01-01T00:00:00.000Z","conditions":[["content-length-range",0,10240]]}"#;
-    let policy_b64 = base64_simd::STANDARD.encode_to_string(policy_json);
-
-    let boundary = "------------------------test12345678";
-    let bucket = "test-bucket";
-    let key = "test-key";
-    let amz_date = sig_v4::AmzDate::parse("20250101T000000Z").unwrap();
-    let region = "us-east-1";
-    let service = "s3";
-    let algorithm = "AWS4-HMAC-SHA256";
-    let credential = "AKIAIOSFODNN7EXAMPLE/20250101/us-east-1/s3/aws4_request";
-    let signature = sig_v4::calculate_signature(&policy_b64, &secret_key, &amz_date, region, service);
-
     // Create a file with 150 bytes (within config max of 200 bytes, within policy max of 10KB)
     let file_content = "a".repeat(150);
 
-    let body = format!(
-        concat!(
-            "--{b}\r\n",
-            "Content-Disposition: form-data; name=\"x-amz-signature\"\r\n\r\n",
-            "{signature}\r\n",
-            "--{b}\r\n",
-            "Content-Disposition: form-data; name=\"bucket\"\r\n\r\n",
-            "{bucket}\r\n",
-            "--{b}\r\n",
-            "Content-Disposition: form-data; name=\"policy\"\r\n\r\n",
-            "{policy_b64}\r\n",
-            "--{b}\r\n",
-            "Content-Disposition: form-data; name=\"x-amz-algorithm\"\r\n\r\n",
-            "{algorithm}\r\n",
-            "--{b}\r\n",
-            "Content-Disposition: form-data; name=\"x-amz-credential\"\r\n\r\n",
-            "{credential}\r\n",
-            "--{b}\r\n",
-            "Content-Disposition: form-data; name=\"x-amz-date\"\r\n\r\n",
-            "{amz_date}\r\n",
-            "--{b}\r\n",
-            "Content-Disposition: form-data; name=\"key\"\r\n\r\n",
-            "{key}\r\n",
-            "--{b}\r\n",
-            "Content-Disposition: form-data; name=\"file\"; filename=\"test.txt\"\r\n",
-            "Content-Type: text/plain\r\n\r\n",
-            "{file_content}\r\n",
-            "--{b}--\r\n"
-        ),
-        amz_date = amz_date.fmt_iso8601(),
-        b = boundary,
-        signature = signature,
-        bucket = bucket,
-        policy_b64 = policy_b64,
-        algorithm = algorithm,
-        credential = credential,
-        key = key,
-        file_content = file_content,
-    );
-
-    let mut req = Request::from(
-        hyper::Request::builder()
-            .method(Method::POST)
-            .uri(format!("http://localhost/{bucket}"))
-            .header(crate::header::HOST, "localhost")
-            .header(
-                crate::header::CONTENT_TYPE,
-                HeaderValue::from_str(&format!("multipart/form-data; boundary={boundary}")).unwrap(),
-            )
-            .body(Body::from(Bytes::from(body)))
-            .unwrap(),
-    );
+    let mut req = post_policy_test_helpers::build_post_object_request(policy_json, &file_content, &secret_key);
 
     // This should succeed because file size (150 bytes) is within config max (200 bytes)
     // The aggregation limit used is min(policy_max=10KB, config_max=200) = 200 bytes
