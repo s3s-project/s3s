@@ -407,27 +407,51 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                     // POST object
                     debug!(?multipart);
 
-                    let file_stream = multipart.take_file_stream().expect("missing file stream");
+                    // Parse POST policy BEFORE reading file stream to prevent resource exhaustion
+                    // See https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-HTTPPOSTConstructPolicy.html
+                    let policy = if let Some(policy_b64) = multipart.find_field_value("policy") {
+                        let policy = crate::PostPolicy::from_base64(policy_b64)
+                            .map_err(|e| s3_error!(e, InvalidPolicyDocument, "failed to parse POST policy"))?;
+                        
+                        // Check policy expiration early to avoid reading file if policy is expired
+                        let now = time::OffsetDateTime::now_utc();
+                        let expiration_time: time::OffsetDateTime = policy.expiration.clone().into();
+                        if now >= expiration_time {
+                            return Err(S3Error::with_message(S3ErrorCode::AccessDenied, "Request has expired"));
+                        }
+                        
+                        Some(policy)
+                    } else {
+                        None
+                    };
+
+                    // Determine file size limit: use stricter of policy max or config max
+                    let config = ccx.config.snapshot();
+                    let max_file_size = if let Some(ref pol) = policy {
+                        if let Some((_min, max)) = pol.content_length_range() {
+                            // Use the minimum of policy max and config max to prevent resource exhaustion
+                            std::cmp::min(max, config.post_object_max_file_size)
+                        } else {
+                            config.post_object_max_file_size
+                        }
+                    } else {
+                        config.post_object_max_file_size
+                    };
+
                     // Aggregate file stream with size limit to get known length
                     // This is required because downstream handlers (like s3s-proxy) need content-length
-                    let config = ccx.config.snapshot();
-                    let vec_bytes = http::aggregate_file_stream_limited(file_stream, config.post_object_max_file_size)
+                    let file_stream = multipart.take_file_stream().expect("missing file stream");
+                    let vec_bytes = http::aggregate_file_stream_limited(file_stream, max_file_size)
                         .await
                         .map_err(|e| invalid_request!(e, "failed to read file stream"))?;
                     let file_size = vec_bytes.len() as u64;
                     let vec_stream = crate::stream::VecByteStream::new(vec_bytes);
                     req.s3ext.vec_stream = Some(vec_stream);
 
-                    // Parse and validate POST policy if present
-                    // See https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-HTTPPOSTConstructPolicy.html
-                    if let Some(policy_b64) = multipart.find_field_value("policy") {
-                        let policy = crate::PostPolicy::from_base64(policy_b64)
-                            .map_err(|e| s3_error!(e, InvalidPolicyDocument, "failed to parse POST policy"))?;
-
-                        // Validate the policy (expiration and conditions)
+                    // Validate the policy conditions (if policy exists)
+                    if let Some(policy) = policy {
                         let now = time::OffsetDateTime::now_utc();
                         policy.validate(multipart, file_size, now)?;
-
                         req.s3ext.post_policy = Some(policy);
                     }
 
