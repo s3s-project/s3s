@@ -413,14 +413,14 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                     let policy = if let Some(policy_b64) = multipart.find_field_value("policy") {
                         let policy = crate::PostPolicy::from_base64(policy_b64)
                             .map_err(|e| s3_error!(e, InvalidPolicyDocument, "failed to parse POST policy"))?;
-                        
+
                         // Check policy expiration early to avoid reading file if policy is expired
                         // Note: clone is necessary because Into<OffsetDateTime> consumes the Timestamp
                         let expiration_time: time::OffsetDateTime = policy.expiration.clone().into();
                         if now >= expiration_time {
                             return Err(S3Error::with_message(S3ErrorCode::AccessDenied, "Request has expired"));
                         }
-                        
+
                         Some(policy)
                     } else {
                         None
