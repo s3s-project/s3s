@@ -348,7 +348,7 @@ async fn post_object_policy_max_smaller_than_config_max() {
         post_calls: AtomicUsize::new(0),
     });
     let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
-    
+
     // Set config max to 1MB
     let mut config = S3Config::default();
     config.post_object_max_file_size = 1024 * 1024; // 1 MB
@@ -465,7 +465,7 @@ async fn post_object_file_exceeds_policy_max_but_under_config_max() {
     impl crate::s3_trait::S3 for TestS3 {}
 
     let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(TestS3);
-    
+
     // Set config max to 10KB
     let mut config = S3Config::default();
     config.post_object_max_file_size = 10 * 1024; // 10 KB
@@ -562,7 +562,7 @@ async fn post_object_file_exceeds_policy_max_but_under_config_max() {
     // not after reading the full 150 bytes (or potentially larger files)
     let result = super::prepare(&mut req, &ccx).await;
     assert!(result.is_err(), "expected error for file exceeding policy limit");
-    
+
     // Should get FileTooLarge or InvalidRequest error
     match result {
         Err(err) => {
@@ -612,7 +612,7 @@ async fn post_object_policy_max_larger_than_config_max() {
         post_calls: AtomicUsize::new(0),
     });
     let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
-    
+
     // Set config max to 200 bytes (smaller than policy max)
     let mut config = S3Config::default();
     config.post_object_max_file_size = 200; // 200 bytes
