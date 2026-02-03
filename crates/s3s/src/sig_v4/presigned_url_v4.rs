@@ -100,6 +100,20 @@ impl<'a> PresignedUrlV4<'a> {
             signature,
         })
     }
+
+    /// Returns the region from this presigned URL.
+    #[inline]
+    #[must_use]
+    pub fn region(&self) -> &str {
+        self.credential.aws_region
+    }
+
+    /// Returns the service from this presigned URL.
+    #[inline]
+    #[must_use]
+    pub fn service(&self) -> &str {
+        self.credential.aws_service
+    }
 }
 
 fn parse_expires(s: &str) -> Option<time::Duration> {

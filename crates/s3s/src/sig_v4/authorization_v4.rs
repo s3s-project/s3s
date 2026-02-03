@@ -62,6 +62,20 @@ impl<'a> CredentialV4<'a> {
             Ok(_) | Err(_) => Err(ParseCredentialError { _priv: () }),
         }
     }
+
+    /// Returns the region from this credential.
+    #[inline]
+    #[must_use]
+    pub fn region(&self) -> &str {
+        self.aws_region
+    }
+
+    /// Returns the service from this credential.
+    #[inline]
+    #[must_use]
+    pub fn service(&self) -> &str {
+        self.aws_service
+    }
 }
 
 impl<'a> AuthorizationV4<'a> {
@@ -73,6 +87,20 @@ impl<'a> AuthorizationV4<'a> {
             Ok(("", ans)) => Ok(ans),
             Ok(_) | Err(_) => Err(ParseAuthorizationError { _priv: () }),
         }
+    }
+
+    /// Returns the region from this authorization header.
+    #[inline]
+    #[must_use]
+    pub fn region(&self) -> &str {
+        self.credential.aws_region
+    }
+
+    /// Returns the service from this authorization header.
+    #[inline]
+    #[must_use]
+    pub fn service(&self) -> &str {
+        self.credential.aws_service
     }
 }
 
@@ -241,5 +269,25 @@ mod tests {
         assert_eq!(ans.credential.aws_service, "s3");
         assert_eq!(ans.signed_headers, &["host", "x-amz-content-sha256", "x-amz-date", "x-amz-user-agent"]);
         assert_eq!(ans.signature, "d2ff90c5a29855fd7c56251aa4c02c49a1bc258a8cc9c191ba3cfc037c5dab80");
+    }
+
+    #[test]
+    fn test_region_service_helpers() {
+        let auth = concat!(
+            "AWS4-HMAC-SHA256 ",
+            "Credential=AKIAIOSFODNN7EXAMPLE/20200921/us-west-2/s3/aws4_request,",
+            "SignedHeaders=host;x-amz-date,",
+            "Signature=7a7f7778618cadc05f112b44cca218e001a0a020c5c512d8aa2bca2afb713fad",
+        );
+
+        let ans = AuthorizationV4::parse(auth).unwrap();
+
+        // Test AuthorizationV4 helper methods
+        assert_eq!(ans.region(), "us-west-2");
+        assert_eq!(ans.service(), "s3");
+
+        // Test CredentialV4 helper methods
+        assert_eq!(ans.credential.region(), "us-west-2");
+        assert_eq!(ans.credential.service(), "s3");
     }
 }
