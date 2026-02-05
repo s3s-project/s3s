@@ -563,36 +563,50 @@ async fn post_object_policy_max_larger_than_config_max() {
 // Access Control Tests
 // ========================================
 
+// Helper module for access control tests
+mod access_control_test_helpers {
+    use crate::S3Request;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    pub struct TestS3WithGetObject {
+        pub get_object_calls: AtomicUsize,
+    }
+
+    impl TestS3WithGetObject {
+        pub fn new() -> Self {
+            Self {
+                get_object_calls: AtomicUsize::new(0),
+            }
+        }
+
+        pub fn get_call_count(&self) -> usize {
+            self.get_object_calls.load(Ordering::SeqCst)
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl crate::s3_trait::S3 for TestS3WithGetObject {
+        async fn get_object(
+            &self,
+            _req: S3Request<crate::dto::GetObjectInput>,
+        ) -> crate::error::S3Result<crate::protocol::S3Response<crate::dto::GetObjectOutput>> {
+            self.get_object_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(crate::protocol::S3Response::new(crate::dto::GetObjectOutput::default()))
+        }
+    }
+}
+
 /// Test S3 route denies anonymous access when auth is configured
 #[tokio::test]
 async fn test_s3_route_anonymous_access_denied() {
-    use crate::S3Request;
     use crate::auth::{SecretKey, SimpleAuth};
     use crate::config::{S3ConfigProvider, StaticConfigProvider};
     use crate::http::{Body, Request};
     use crate::ops::CallContext;
     use hyper::Method;
     use std::sync::Arc;
-    use std::sync::atomic::AtomicUsize;
 
-    struct TestS3 {
-        get_object_calls: AtomicUsize,
-    }
-
-    #[async_trait::async_trait]
-    impl crate::s3_trait::S3 for TestS3 {
-        async fn get_object(
-            &self,
-            _req: S3Request<crate::dto::GetObjectInput>,
-        ) -> crate::error::S3Result<crate::protocol::S3Response<crate::dto::GetObjectOutput>> {
-            self.get_object_calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            Ok(crate::protocol::S3Response::new(crate::dto::GetObjectOutput::default()))
-        }
-    }
-
-    let test_s3 = Arc::new(TestS3 {
-        get_object_calls: AtomicUsize::new(0),
-    });
+    let test_s3 = Arc::new(access_control_test_helpers::TestS3WithGetObject::new());
     let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
     let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
 
@@ -631,13 +645,12 @@ async fn test_s3_route_anonymous_access_denied() {
     }
 
     // Verify that the S3 service was never called
-    assert_eq!(test_s3.get_object_calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+    assert_eq!(test_s3.get_call_count(), 0);
 }
 
 /// Test S3 route with custom `S3Access` that allows anonymous access
 #[tokio::test]
 async fn test_s3_route_custom_access_allows_anonymous() {
-    use crate::S3Request;
     use crate::access::{S3Access, S3AccessContext};
     use crate::auth::{SecretKey, SimpleAuth};
     use crate::config::{S3ConfigProvider, StaticConfigProvider};
@@ -645,22 +658,6 @@ async fn test_s3_route_custom_access_allows_anonymous() {
     use crate::ops::CallContext;
     use hyper::Method;
     use std::sync::Arc;
-    use std::sync::atomic::AtomicUsize;
-
-    struct TestS3 {
-        get_object_calls: AtomicUsize,
-    }
-
-    #[async_trait::async_trait]
-    impl crate::s3_trait::S3 for TestS3 {
-        async fn get_object(
-            &self,
-            _req: S3Request<crate::dto::GetObjectInput>,
-        ) -> crate::error::S3Result<crate::protocol::S3Response<crate::dto::GetObjectOutput>> {
-            self.get_object_calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            Ok(crate::protocol::S3Response::new(crate::dto::GetObjectOutput::default()))
-        }
-    }
 
     /// Custom `S3Access` that allows anonymous access
     struct AnonymousAccess;
@@ -673,9 +670,7 @@ async fn test_s3_route_custom_access_allows_anonymous() {
         }
     }
 
-    let test_s3 = Arc::new(TestS3 {
-        get_object_calls: AtomicUsize::new(0),
-    });
+    let test_s3 = Arc::new(access_control_test_helpers::TestS3WithGetObject::new());
     let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
     let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
 
