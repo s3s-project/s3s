@@ -558,3 +558,404 @@ async fn post_object_policy_max_larger_than_config_max() {
     let result = super::prepare(&mut req, &ccx).await;
     assert!(result.is_ok(), "expected success for file within config limit");
 }
+
+// ========================================
+// Access Control Tests
+// ========================================
+
+/// Test S3 route denies anonymous access when auth is configured
+#[tokio::test]
+async fn test_s3_route_anonymous_access_denied() {
+    use crate::S3Request;
+    use crate::auth::{SecretKey, SimpleAuth};
+    use crate::config::{S3ConfigProvider, StaticConfigProvider};
+    use crate::http::{Body, Request};
+    use crate::ops::CallContext;
+    use hyper::Method;
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicUsize;
+
+    struct TestS3 {
+        get_object_calls: AtomicUsize,
+    }
+
+    #[async_trait::async_trait]
+    impl crate::s3_trait::S3 for TestS3 {
+        async fn get_object(
+            &self,
+            _req: S3Request<crate::dto::GetObjectInput>,
+        ) -> crate::error::S3Result<crate::protocol::S3Response<crate::dto::GetObjectOutput>> {
+            self.get_object_calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(crate::protocol::S3Response::new(crate::dto::GetObjectOutput::default()))
+        }
+    }
+
+    let test_s3 = Arc::new(TestS3 {
+        get_object_calls: AtomicUsize::new(0),
+    });
+    let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+
+    let access_key = "AKIAIOSFODNN7EXAMPLE";
+    let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+    let auth = SimpleAuth::from_single(access_key, secret_key);
+
+    let ccx = CallContext {
+        s3: &s3,
+        config: &config,
+        host: None,
+        auth: Some(&auth),
+        access: None,
+        route: None,
+        validation: None,
+    };
+
+    // Create an anonymous GET object request (no auth headers or query params)
+    let mut req = Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri("http://localhost/test-bucket/test-key.txt")
+            .header(crate::header::HOST, "localhost")
+            .body(Body::empty())
+            .unwrap(),
+    );
+
+    // This should fail with AccessDenied because the request has no authentication
+    let result = super::prepare(&mut req, &ccx).await;
+
+    match result {
+        Err(err) => {
+            assert_eq!(
+                *err.code(),
+                crate::error::S3ErrorCode::AccessDenied,
+                "Anonymous request should be denied"
+            );
+        }
+        Ok(_) => panic!("Anonymous request should have been denied"),
+    }
+
+    // Verify that the S3 service was never called
+    assert_eq!(test_s3.get_object_calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+}
+
+/// Test S3 route with custom S3Access that allows anonymous access
+#[tokio::test]
+async fn test_s3_route_custom_access_allows_anonymous() {
+    use crate::S3Request;
+    use crate::access::{S3Access, S3AccessContext};
+    use crate::auth::{SecretKey, SimpleAuth};
+    use crate::config::{S3ConfigProvider, StaticConfigProvider};
+    use crate::http::{Body, Request};
+    use crate::ops::CallContext;
+    use hyper::Method;
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicUsize;
+
+    struct TestS3 {
+        get_object_calls: AtomicUsize,
+    }
+
+    #[async_trait::async_trait]
+    impl crate::s3_trait::S3 for TestS3 {
+        async fn get_object(
+            &self,
+            _req: S3Request<crate::dto::GetObjectInput>,
+        ) -> crate::error::S3Result<crate::protocol::S3Response<crate::dto::GetObjectOutput>> {
+            self.get_object_calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(crate::protocol::S3Response::new(crate::dto::GetObjectOutput::default()))
+        }
+    }
+
+    /// Custom S3Access that allows anonymous access
+    struct AnonymousAccess;
+
+    #[async_trait::async_trait]
+    impl S3Access for AnonymousAccess {
+        async fn check(&self, _cx: &mut S3AccessContext<'_>) -> crate::error::S3Result<()> {
+            // Allow all access, including anonymous
+            Ok(())
+        }
+    }
+
+    let test_s3 = Arc::new(TestS3 {
+        get_object_calls: AtomicUsize::new(0),
+    });
+    let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+
+    let access_key = "AKIAIOSFODNN7EXAMPLE";
+    let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+    let auth = SimpleAuth::from_single(access_key, secret_key);
+
+    let anonymous_access = AnonymousAccess;
+
+    let ccx = CallContext {
+        s3: &s3,
+        config: &config,
+        host: None,
+        auth: Some(&auth),
+        access: Some(&anonymous_access),
+        route: None,
+        validation: None,
+    };
+
+    // Create an anonymous GET object request
+    let mut req = Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri("http://localhost/test-bucket/test-key.txt")
+            .header(crate::header::HOST, "localhost")
+            .body(Body::empty())
+            .unwrap(),
+    );
+
+    // This should pass access control because custom access allows anonymous
+    let result = super::prepare(&mut req, &ccx).await;
+
+    // Should succeed (or fail with an error other than AccessDenied)
+    match result {
+        Err(err) => {
+            assert_ne!(
+                *err.code(),
+                crate::error::S3ErrorCode::AccessDenied,
+                "Should not be denied when custom access control allows anonymous"
+            );
+        }
+        Ok(_) => {
+            // Success is expected
+        }
+    }
+}
+
+/// Test custom route denies anonymous access by default
+#[tokio::test]
+async fn test_custom_route_anonymous_access_denied() {
+    use crate::S3Request;
+    use crate::auth::{SecretKey, SimpleAuth};
+    use crate::config::{S3ConfigProvider, StaticConfigProvider};
+    use crate::http::{Body, Request};
+    use crate::ops::CallContext;
+    use crate::protocol::S3Response;
+    use crate::route::S3Route;
+    use hyper::{HeaderMap, Method, Uri};
+    use hyper::header::HeaderValue;
+    use hyper::http::Extensions;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct TestS3;
+
+    #[async_trait::async_trait]
+    impl crate::s3_trait::S3 for TestS3 {}
+
+    /// Custom route that uses default check_access (requires authentication)
+    #[derive(Debug, Clone)]
+    struct TestCustomRoute {
+        call_count: Arc<AtomicUsize>,
+    }
+
+    impl TestCustomRoute {
+        fn new() -> Self {
+            Self {
+                call_count: Arc::new(AtomicUsize::new(0)),
+            }
+        }
+
+        fn get_call_count(&self) -> usize {
+            self.call_count.load(Ordering::SeqCst)
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl S3Route for TestCustomRoute {
+        fn is_match(&self, method: &Method, uri: &Uri, headers: &HeaderMap, _: &mut Extensions) -> bool {
+            // Match POST requests to /custom-route
+            method == Method::POST
+                && uri.path() == "/custom-route"
+                && headers
+                    .get(hyper::header::CONTENT_TYPE)
+                    .map(|v| v.as_bytes() == b"application/x-custom")
+                    .unwrap_or(false)
+        }
+
+        // Use default check_access which requires authentication
+
+        async fn call(&self, _req: S3Request<Body>) -> crate::error::S3Result<S3Response<Body>> {
+            self.call_count.fetch_add(1, Ordering::SeqCst);
+            Ok(S3Response::new(Body::from("Custom route response".to_string())))
+        }
+    }
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(TestS3);
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+
+    let access_key = "AKIAIOSFODNN7EXAMPLE";
+    let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+    let auth = SimpleAuth::from_single(access_key, secret_key);
+
+    let custom_route = TestCustomRoute::new();
+
+    let ccx = CallContext {
+        s3: &s3,
+        config: &config,
+        host: None,
+        auth: Some(&auth),
+        access: None,
+        route: Some(&custom_route),
+        validation: None,
+    };
+
+    // Create an anonymous request to the custom route
+    let mut req = Request::from(
+        hyper::Request::builder()
+            .method(Method::POST)
+            .uri("http://localhost/custom-route")
+            .header(crate::header::HOST, "localhost")
+            .header(
+                hyper::header::CONTENT_TYPE,
+                HeaderValue::from_static("application/x-custom"),
+            )
+            .body(Body::empty())
+            .unwrap(),
+    );
+
+    // Call the operation (which will internally call prepare then check access on the custom route)
+    let result = super::call(&mut req, &ccx).await;
+
+    // call() serializes S3Errors into HTTP responses, so we check the status code
+    match result {
+        Ok(resp) => {
+            // AccessDenied should result in a 403 Forbidden response
+            assert_eq!(
+                resp.status,
+                StatusCode::FORBIDDEN,
+                "Anonymous request to custom route should return 403 Forbidden"
+            );
+        }
+        Err(err) => {
+            // Shouldn't get here for normal S3 errors
+            panic!("Unexpected error that wasn't serialized: {:?}", err);
+        }
+    }
+
+    // Verify that the custom route was never actually called (because access was denied)
+    assert_eq!(custom_route.get_call_count(), 0);
+}
+
+/// Test custom route that overrides check_access to allow anonymous access
+#[tokio::test]
+async fn test_custom_route_anonymous_access_allowed_when_overridden() {
+    use crate::S3Request;
+    use crate::auth::{SecretKey, SimpleAuth};
+    use crate::config::{S3ConfigProvider, StaticConfigProvider};
+    use crate::http::{Body, Request};
+    use crate::ops::CallContext;
+    use crate::protocol::S3Response;
+    use crate::route::S3Route;
+    use hyper::{HeaderMap, Method, Uri};
+    use hyper::header::HeaderValue;
+    use hyper::http::Extensions;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct TestS3;
+
+    #[async_trait::async_trait]
+    impl crate::s3_trait::S3 for TestS3 {}
+
+    /// Custom route that allows anonymous access
+    #[derive(Debug, Clone)]
+    struct AnonymousCustomRoute {
+        call_count: Arc<AtomicUsize>,
+    }
+
+    impl AnonymousCustomRoute {
+        fn new() -> Self {
+            Self {
+                call_count: Arc::new(AtomicUsize::new(0)),
+            }
+        }
+
+        fn get_call_count(&self) -> usize {
+            self.call_count.load(Ordering::SeqCst)
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl S3Route for AnonymousCustomRoute {
+        fn is_match(&self, method: &Method, uri: &Uri, headers: &HeaderMap, _: &mut Extensions) -> bool {
+            // Match GET requests to /public-route
+            method == Method::GET
+                && uri.path() == "/public-route"
+                && headers
+                    .get(hyper::header::CONTENT_TYPE)
+                    .map(|v| v.as_bytes() == b"application/x-public")
+                    .unwrap_or(false)
+        }
+
+        async fn check_access(&self, _req: &mut S3Request<Body>) -> crate::error::S3Result<()> {
+            // Allow anonymous access
+            Ok(())
+        }
+
+        async fn call(&self, _req: S3Request<Body>) -> crate::error::S3Result<S3Response<Body>> {
+            self.call_count.fetch_add(1, Ordering::SeqCst);
+            Ok(S3Response::new(Body::from("Public route response".to_string())))
+        }
+    }
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(TestS3);
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+
+    let access_key = "AKIAIOSFODNN7EXAMPLE";
+    let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+    let auth = SimpleAuth::from_single(access_key, secret_key);
+
+    // Use a custom route that allows anonymous access
+    let anonymous_route = AnonymousCustomRoute::new();
+
+    let ccx = CallContext {
+        s3: &s3,
+        config: &config,
+        host: None,
+        auth: Some(&auth),
+        access: None,
+        route: Some(&anonymous_route),
+        validation: None,
+    };
+
+    // Create an anonymous request to the public route
+    let mut req = Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri("http://localhost/public-route")
+            .header(crate::header::HOST, "localhost")
+            .header(
+                hyper::header::CONTENT_TYPE,
+                HeaderValue::from_static("application/x-public"),
+            )
+            .body(Body::empty())
+            .unwrap(),
+    );
+
+    // Call the operation (which will internally call prepare then check access on the custom route)
+    let result = super::call(&mut req, &ccx).await;
+
+    // This should succeed because the custom route allows anonymous access
+    match result {
+        Ok(resp) => {
+            // Should get a successful response (2xx status code)
+            assert!(
+                resp.status.is_success(),
+                "Anonymous request should be allowed when custom route permits it, got status: {:?}",
+                resp.status
+            );
+        }
+        Err(err) => {
+            panic!("Anonymous request should succeed on public route, got error: {:?}", err);
+        }
+    }
+
+    // Verify that the custom route was actually called
+    assert_eq!(anonymous_route.get_call_count(), 1);
+}
