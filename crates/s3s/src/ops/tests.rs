@@ -625,11 +625,7 @@ async fn test_s3_route_anonymous_access_denied() {
 
     match result {
         Err(err) => {
-            assert_eq!(
-                *err.code(),
-                crate::error::S3ErrorCode::AccessDenied,
-                "Anonymous request should be denied"
-            );
+            assert_eq!(*err.code(), crate::error::S3ErrorCode::AccessDenied, "Anonymous request should be denied");
         }
         Ok(_) => panic!("Anonymous request should have been denied"),
     }
@@ -638,7 +634,7 @@ async fn test_s3_route_anonymous_access_denied() {
     assert_eq!(test_s3.get_object_calls.load(std::sync::atomic::Ordering::SeqCst), 0);
 }
 
-/// Test S3 route with custom S3Access that allows anonymous access
+/// Test S3 route with custom `S3Access` that allows anonymous access
 #[tokio::test]
 async fn test_s3_route_custom_access_allows_anonymous() {
     use crate::S3Request;
@@ -666,7 +662,7 @@ async fn test_s3_route_custom_access_allows_anonymous() {
         }
     }
 
-    /// Custom S3Access that allows anonymous access
+    /// Custom `S3Access` that allows anonymous access
     struct AnonymousAccess;
 
     #[async_trait::async_trait]
@@ -737,9 +733,9 @@ async fn test_custom_route_anonymous_access_denied() {
     use crate::ops::CallContext;
     use crate::protocol::S3Response;
     use crate::route::S3Route;
-    use hyper::{HeaderMap, Method, Uri};
     use hyper::header::HeaderValue;
     use hyper::http::Extensions;
+    use hyper::{HeaderMap, Method, Uri};
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -748,7 +744,7 @@ async fn test_custom_route_anonymous_access_denied() {
     #[async_trait::async_trait]
     impl crate::s3_trait::S3 for TestS3 {}
 
-    /// Custom route that uses default check_access (requires authentication)
+    /// Custom route that uses default `check_access` (requires authentication)
     #[derive(Debug, Clone)]
     struct TestCustomRoute {
         call_count: Arc<AtomicUsize>,
@@ -774,8 +770,7 @@ async fn test_custom_route_anonymous_access_denied() {
                 && uri.path() == "/custom-route"
                 && headers
                     .get(hyper::header::CONTENT_TYPE)
-                    .map(|v| v.as_bytes() == b"application/x-custom")
-                    .unwrap_or(false)
+                    .is_some_and(|v| v.as_bytes() == b"application/x-custom")
         }
 
         // Use default check_access which requires authentication
@@ -811,10 +806,7 @@ async fn test_custom_route_anonymous_access_denied() {
             .method(Method::POST)
             .uri("http://localhost/custom-route")
             .header(crate::header::HOST, "localhost")
-            .header(
-                hyper::header::CONTENT_TYPE,
-                HeaderValue::from_static("application/x-custom"),
-            )
+            .header(hyper::header::CONTENT_TYPE, HeaderValue::from_static("application/x-custom"))
             .body(Body::empty())
             .unwrap(),
     );
@@ -834,7 +826,7 @@ async fn test_custom_route_anonymous_access_denied() {
         }
         Err(err) => {
             // Shouldn't get here for normal S3 errors
-            panic!("Unexpected error that wasn't serialized: {:?}", err);
+            panic!("Unexpected error that wasn't serialized: {err:?}");
         }
     }
 
@@ -842,7 +834,7 @@ async fn test_custom_route_anonymous_access_denied() {
     assert_eq!(custom_route.get_call_count(), 0);
 }
 
-/// Test custom route that overrides check_access to allow anonymous access
+/// Test custom route that overrides `check_access` to allow anonymous access
 #[tokio::test]
 async fn test_custom_route_anonymous_access_allowed_when_overridden() {
     use crate::S3Request;
@@ -852,9 +844,9 @@ async fn test_custom_route_anonymous_access_allowed_when_overridden() {
     use crate::ops::CallContext;
     use crate::protocol::S3Response;
     use crate::route::S3Route;
-    use hyper::{HeaderMap, Method, Uri};
     use hyper::header::HeaderValue;
     use hyper::http::Extensions;
+    use hyper::{HeaderMap, Method, Uri};
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -889,8 +881,7 @@ async fn test_custom_route_anonymous_access_allowed_when_overridden() {
                 && uri.path() == "/public-route"
                 && headers
                     .get(hyper::header::CONTENT_TYPE)
-                    .map(|v| v.as_bytes() == b"application/x-public")
-                    .unwrap_or(false)
+                    .is_some_and(|v| v.as_bytes() == b"application/x-public")
         }
 
         async fn check_access(&self, _req: &mut S3Request<Body>) -> crate::error::S3Result<()> {
@@ -930,10 +921,7 @@ async fn test_custom_route_anonymous_access_allowed_when_overridden() {
             .method(Method::GET)
             .uri("http://localhost/public-route")
             .header(crate::header::HOST, "localhost")
-            .header(
-                hyper::header::CONTENT_TYPE,
-                HeaderValue::from_static("application/x-public"),
-            )
+            .header(hyper::header::CONTENT_TYPE, HeaderValue::from_static("application/x-public"))
             .body(Body::empty())
             .unwrap(),
     );
@@ -952,7 +940,7 @@ async fn test_custom_route_anonymous_access_allowed_when_overridden() {
             );
         }
         Err(err) => {
-            panic!("Anonymous request should succeed on public route, got error: {:?}", err);
+            panic!("Anonymous request should succeed on public route, got error: {err:?}");
         }
     }
 
