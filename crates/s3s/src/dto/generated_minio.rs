@@ -12636,6 +12636,20 @@ impl ListObjectsInput {
 
 #[derive(Clone, Default, PartialEq)]
 pub struct ListObjectsOutput {
+    /// <p>The bucket name.</p>
+    pub name: Option<BucketName>,
+    /// <p>Keys that begin with the indicated prefix.</p>
+    pub prefix: Option<Prefix>,
+    /// <p>Indicates where in the bucket listing begins. Marker is included in the response if it
+    /// was sent with the request.</p>
+    pub marker: Option<Marker>,
+    /// <p>The maximum number of keys returned in the response body.</p>
+    pub max_keys: Option<MaxKeys>,
+    /// <p>A flag that indicates whether Amazon S3 returned all of the results that satisfied the search
+    /// criteria.</p>
+    pub is_truncated: Option<IsTruncated>,
+    /// <p>Metadata about each object returned.</p>
+    pub contents: Option<ObjectList>,
     /// <p>All of the keys (up to 1,000) rolled up in a common prefix count as a single return when
     /// calculating the number of returns. </p>
     /// <p>A response can contain <code>CommonPrefixes</code> only if you specify a
@@ -12652,14 +12666,24 @@ pub struct ListObjectsOutput {
     /// <code>notes/summer/</code>. All of the keys that roll up into a common prefix count as a
     /// single return when calculating the number of returns.</p>
     pub common_prefixes: Option<CommonPrefixList>,
-    /// <p>Metadata about each object returned.</p>
-    pub contents: Option<ObjectList>,
     /// <p>Causes keys that contain the same string between the prefix and the first occurrence of
     /// the delimiter to be rolled up into a single result element in the
     /// <code>CommonPrefixes</code> collection. These rolled-up keys are not returned elsewhere
     /// in the response. Each rolled-up result counts as only one return against the
     /// <code>MaxKeys</code> value.</p>
     pub delimiter: Option<Delimiter>,
+    /// <p>When the response is truncated (the <code>IsTruncated</code> element value in the
+    /// response is <code>true</code>), you can use the key name in this field as the
+    /// <code>marker</code> parameter in the subsequent request to get the next set of objects.
+    /// Amazon S3 lists objects in alphabetical order. </p>
+    /// <note>
+    /// <p>This element is returned only if you have the <code>delimiter</code> request
+    /// parameter specified. If the response does not include the <code>NextMarker</code>
+    /// element and it is truncated, you can use the value of the last <code>Key</code> element
+    /// in the response as the <code>marker</code> parameter in the subsequent request to get
+    /// the next set of object keys.</p>
+    /// </note>
+    pub next_marker: Option<NextMarker>,
     /// <p>Encoding type used by Amazon S3 to encode the <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html">object keys</a> in the response.
     /// Responses are encoded only in UTF-8. An object key can contain any Unicode character.
     /// However, the XML 1.0 parser can't parse certain characters, such as characters with an
@@ -12674,50 +12698,17 @@ pub struct ListObjectsOutput {
     /// <code>test_file%283%29.png</code>.</p>
     /// </note>
     pub encoding_type: Option<EncodingType>,
-    /// <p>A flag that indicates whether Amazon S3 returned all of the results that satisfied the search
-    /// criteria.</p>
-    pub is_truncated: Option<IsTruncated>,
-    /// <p>Indicates where in the bucket listing begins. Marker is included in the response if it
-    /// was sent with the request.</p>
-    pub marker: Option<Marker>,
-    /// <p>The maximum number of keys returned in the response body.</p>
-    pub max_keys: Option<MaxKeys>,
-    /// <p>The bucket name.</p>
-    pub name: Option<BucketName>,
-    /// <p>When the response is truncated (the <code>IsTruncated</code> element value in the
-    /// response is <code>true</code>), you can use the key name in this field as the
-    /// <code>marker</code> parameter in the subsequent request to get the next set of objects.
-    /// Amazon S3 lists objects in alphabetical order. </p>
-    /// <note>
-    /// <p>This element is returned only if you have the <code>delimiter</code> request
-    /// parameter specified. If the response does not include the <code>NextMarker</code>
-    /// element and it is truncated, you can use the value of the last <code>Key</code> element
-    /// in the response as the <code>marker</code> parameter in the subsequent request to get
-    /// the next set of object keys.</p>
-    /// </note>
-    pub next_marker: Option<NextMarker>,
-    /// <p>Keys that begin with the indicated prefix.</p>
-    pub prefix: Option<Prefix>,
     pub request_charged: Option<RequestCharged>,
 }
 
 impl fmt::Debug for ListObjectsOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut d = f.debug_struct("ListObjectsOutput");
-        if let Some(ref val) = self.common_prefixes {
-            d.field("common_prefixes", val);
+        if let Some(ref val) = self.name {
+            d.field("name", val);
         }
-        if let Some(ref val) = self.contents {
-            d.field("contents", val);
-        }
-        if let Some(ref val) = self.delimiter {
-            d.field("delimiter", val);
-        }
-        if let Some(ref val) = self.encoding_type {
-            d.field("encoding_type", val);
-        }
-        if let Some(ref val) = self.is_truncated {
-            d.field("is_truncated", val);
+        if let Some(ref val) = self.prefix {
+            d.field("prefix", val);
         }
         if let Some(ref val) = self.marker {
             d.field("marker", val);
@@ -12725,14 +12716,23 @@ impl fmt::Debug for ListObjectsOutput {
         if let Some(ref val) = self.max_keys {
             d.field("max_keys", val);
         }
-        if let Some(ref val) = self.name {
-            d.field("name", val);
+        if let Some(ref val) = self.is_truncated {
+            d.field("is_truncated", val);
+        }
+        if let Some(ref val) = self.contents {
+            d.field("contents", val);
+        }
+        if let Some(ref val) = self.common_prefixes {
+            d.field("common_prefixes", val);
+        }
+        if let Some(ref val) = self.delimiter {
+            d.field("delimiter", val);
         }
         if let Some(ref val) = self.next_marker {
             d.field("next_marker", val);
         }
-        if let Some(ref val) = self.prefix {
-            d.field("prefix", val);
+        if let Some(ref val) = self.encoding_type {
+            d.field("encoding_type", val);
         }
         if let Some(ref val) = self.request_charged {
             d.field("request_charged", val);
@@ -12889,6 +12889,41 @@ impl ListObjectsV2Input {
 
 #[derive(Clone, Default, PartialEq)]
 pub struct ListObjectsV2Output {
+    /// <p>The bucket name.</p>
+    pub name: Option<BucketName>,
+    /// <p>Keys that begin with the indicated prefix.</p>
+    /// <note>
+    /// <p>
+    /// <b>Directory buckets</b> - For directory buckets, only prefixes that end in a delimiter (<code>/</code>) are supported.</p>
+    /// </note>
+    pub prefix: Option<Prefix>,
+    /// <p>Sets the maximum number of keys returned in the response. By default, the action returns
+    /// up to 1,000 key names. The response might contain fewer keys but will never contain
+    /// more.</p>
+    pub max_keys: Option<MaxKeys>,
+    /// <p>
+    /// <code>KeyCount</code> is the number of keys returned with this request.
+    /// <code>KeyCount</code> will always be less than or equal to the <code>MaxKeys</code>
+    /// field. For example, if you ask for 50 keys, your result will include 50 keys or
+    /// fewer.</p>
+    pub key_count: Option<KeyCount>,
+    /// <p> If <code>ContinuationToken</code> was sent with the request, it is included in the
+    /// response. You can use the returned <code>ContinuationToken</code> for pagination of the
+    /// list response. You can use this <code>ContinuationToken</code> for pagination of the list
+    /// results. </p>
+    pub continuation_token: Option<Token>,
+    /// <p>Set to <code>false</code> if all of the results were returned. Set to <code>true</code>
+    /// if more keys are available to return. If the number of results exceeds that specified by
+    /// <code>MaxKeys</code>, all of the results might not be returned.</p>
+    pub is_truncated: Option<IsTruncated>,
+    /// <p>
+    /// <code>NextContinuationToken</code> is sent when <code>isTruncated</code> is true, which
+    /// means there are more keys in the bucket that can be listed. The next list requests to Amazon S3
+    /// can be continued with this <code>NextContinuationToken</code>.
+    /// <code>NextContinuationToken</code> is obfuscated and is not a real key</p>
+    pub next_continuation_token: Option<NextToken>,
+    /// <p>Metadata about each object returned.</p>
+    pub contents: Option<ObjectList>,
     /// <p>All of the keys (up to 1,000) that share the same prefix are grouped together. When
     /// counting the total numbers of returns by this API operation, this group of keys is
     /// considered as one item.</p>
@@ -12923,13 +12958,6 @@ pub struct ListObjectsV2Output {
     /// </ul>
     /// </note>
     pub common_prefixes: Option<CommonPrefixList>,
-    /// <p>Metadata about each object returned.</p>
-    pub contents: Option<ObjectList>,
-    /// <p> If <code>ContinuationToken</code> was sent with the request, it is included in the
-    /// response. You can use the returned <code>ContinuationToken</code> for pagination of the
-    /// list response. You can use this <code>ContinuationToken</code> for pagination of the list
-    /// results. </p>
-    pub continuation_token: Option<Token>,
     /// <p>Causes keys that contain the same string between the <code>prefix</code> and the first
     /// occurrence of the delimiter to be rolled up into a single result element in the
     /// <code>CommonPrefixes</code> collection. These rolled-up keys are not returned elsewhere
@@ -12947,53 +12975,43 @@ pub struct ListObjectsV2Output {
     /// <p>
     /// <code>Delimiter, Prefix, Key,</code> and <code>StartAfter</code>.</p>
     pub encoding_type: Option<EncodingType>,
-    /// <p>Set to <code>false</code> if all of the results were returned. Set to <code>true</code>
-    /// if more keys are available to return. If the number of results exceeds that specified by
-    /// <code>MaxKeys</code>, all of the results might not be returned.</p>
-    pub is_truncated: Option<IsTruncated>,
-    /// <p>
-    /// <code>KeyCount</code> is the number of keys returned with this request.
-    /// <code>KeyCount</code> will always be less than or equal to the <code>MaxKeys</code>
-    /// field. For example, if you ask for 50 keys, your result will include 50 keys or
-    /// fewer.</p>
-    pub key_count: Option<KeyCount>,
-    /// <p>Sets the maximum number of keys returned in the response. By default, the action returns
-    /// up to 1,000 key names. The response might contain fewer keys but will never contain
-    /// more.</p>
-    pub max_keys: Option<MaxKeys>,
-    /// <p>The bucket name.</p>
-    pub name: Option<BucketName>,
-    /// <p>
-    /// <code>NextContinuationToken</code> is sent when <code>isTruncated</code> is true, which
-    /// means there are more keys in the bucket that can be listed. The next list requests to Amazon S3
-    /// can be continued with this <code>NextContinuationToken</code>.
-    /// <code>NextContinuationToken</code> is obfuscated and is not a real key</p>
-    pub next_continuation_token: Option<NextToken>,
-    /// <p>Keys that begin with the indicated prefix.</p>
-    /// <note>
-    /// <p>
-    /// <b>Directory buckets</b> - For directory buckets, only prefixes that end in a delimiter (<code>/</code>) are supported.</p>
-    /// </note>
-    pub prefix: Option<Prefix>,
-    pub request_charged: Option<RequestCharged>,
     /// <p>If StartAfter was sent with the request, it is included in the response.</p>
     /// <note>
     /// <p>This functionality is not supported for directory buckets.</p>
     /// </note>
     pub start_after: Option<StartAfter>,
+    pub request_charged: Option<RequestCharged>,
 }
 
 impl fmt::Debug for ListObjectsV2Output {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut d = f.debug_struct("ListObjectsV2Output");
-        if let Some(ref val) = self.common_prefixes {
-            d.field("common_prefixes", val);
+        if let Some(ref val) = self.name {
+            d.field("name", val);
+        }
+        if let Some(ref val) = self.prefix {
+            d.field("prefix", val);
+        }
+        if let Some(ref val) = self.max_keys {
+            d.field("max_keys", val);
+        }
+        if let Some(ref val) = self.key_count {
+            d.field("key_count", val);
+        }
+        if let Some(ref val) = self.continuation_token {
+            d.field("continuation_token", val);
+        }
+        if let Some(ref val) = self.is_truncated {
+            d.field("is_truncated", val);
+        }
+        if let Some(ref val) = self.next_continuation_token {
+            d.field("next_continuation_token", val);
         }
         if let Some(ref val) = self.contents {
             d.field("contents", val);
         }
-        if let Some(ref val) = self.continuation_token {
-            d.field("continuation_token", val);
+        if let Some(ref val) = self.common_prefixes {
+            d.field("common_prefixes", val);
         }
         if let Some(ref val) = self.delimiter {
             d.field("delimiter", val);
@@ -13001,29 +13019,11 @@ impl fmt::Debug for ListObjectsV2Output {
         if let Some(ref val) = self.encoding_type {
             d.field("encoding_type", val);
         }
-        if let Some(ref val) = self.is_truncated {
-            d.field("is_truncated", val);
-        }
-        if let Some(ref val) = self.key_count {
-            d.field("key_count", val);
-        }
-        if let Some(ref val) = self.max_keys {
-            d.field("max_keys", val);
-        }
-        if let Some(ref val) = self.name {
-            d.field("name", val);
-        }
-        if let Some(ref val) = self.next_continuation_token {
-            d.field("next_continuation_token", val);
-        }
-        if let Some(ref val) = self.prefix {
-            d.field("prefix", val);
+        if let Some(ref val) = self.start_after {
+            d.field("start_after", val);
         }
         if let Some(ref val) = self.request_charged {
             d.field("request_charged", val);
-        }
-        if let Some(ref val) = self.start_after {
-            d.field("start_after", val);
         }
         d.finish_non_exhaustive()
     }
@@ -35701,25 +35701,25 @@ impl DtoExt for ListObjectsInput {
 }
 impl DtoExt for ListObjectsOutput {
     fn ignore_empty_strings(&mut self) {
+        if self.name.as_deref() == Some("") {
+            self.name = None;
+        }
+        if self.prefix.as_deref() == Some("") {
+            self.prefix = None;
+        }
+        if self.marker.as_deref() == Some("") {
+            self.marker = None;
+        }
         if self.delimiter.as_deref() == Some("") {
             self.delimiter = None;
+        }
+        if self.next_marker.as_deref() == Some("") {
+            self.next_marker = None;
         }
         if let Some(ref val) = self.encoding_type
             && val.as_str() == ""
         {
             self.encoding_type = None;
-        }
-        if self.marker.as_deref() == Some("") {
-            self.marker = None;
-        }
-        if self.name.as_deref() == Some("") {
-            self.name = None;
-        }
-        if self.next_marker.as_deref() == Some("") {
-            self.next_marker = None;
-        }
-        if self.prefix.as_deref() == Some("") {
-            self.prefix = None;
         }
         if let Some(ref val) = self.request_charged
             && val.as_str() == ""
@@ -35759,8 +35759,17 @@ impl DtoExt for ListObjectsV2Input {
 }
 impl DtoExt for ListObjectsV2Output {
     fn ignore_empty_strings(&mut self) {
+        if self.name.as_deref() == Some("") {
+            self.name = None;
+        }
+        if self.prefix.as_deref() == Some("") {
+            self.prefix = None;
+        }
         if self.continuation_token.as_deref() == Some("") {
             self.continuation_token = None;
+        }
+        if self.next_continuation_token.as_deref() == Some("") {
+            self.next_continuation_token = None;
         }
         if self.delimiter.as_deref() == Some("") {
             self.delimiter = None;
@@ -35770,22 +35779,13 @@ impl DtoExt for ListObjectsV2Output {
         {
             self.encoding_type = None;
         }
-        if self.name.as_deref() == Some("") {
-            self.name = None;
-        }
-        if self.next_continuation_token.as_deref() == Some("") {
-            self.next_continuation_token = None;
-        }
-        if self.prefix.as_deref() == Some("") {
-            self.prefix = None;
+        if self.start_after.as_deref() == Some("") {
+            self.start_after = None;
         }
         if let Some(ref val) = self.request_charged
             && val.as_str() == ""
         {
             self.request_charged = None;
-        }
-        if self.start_after.as_deref() == Some("") {
-            self.start_after = None;
         }
     }
 }
