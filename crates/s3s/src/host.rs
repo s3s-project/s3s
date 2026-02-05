@@ -8,7 +8,7 @@ use stdx::default::default;
 pub struct VirtualHost<'a> {
     domain: Cow<'a, str>,
     bucket: Option<Cow<'a, str>>,
-    // pub(crate) region: Option<Cow<'a, str>>,
+    region: Option<Cow<'a, str>>,
 }
 
 impl<'a> VirtualHost<'a> {
@@ -16,14 +16,50 @@ impl<'a> VirtualHost<'a> {
         Self {
             domain: domain.into(),
             bucket: None,
+            region: None,
         }
     }
 
-    pub fn with_bucket(domain: impl Into<Cow<'a, str>>, bucket: impl Into<Cow<'a, str>>) -> Self {
-        Self {
-            domain: domain.into(),
-            bucket: Some(bucket.into()),
-        }
+    /// Sets the bucket name for this virtual host.
+    ///
+    /// This method follows the builder pattern and returns `self` for method chaining.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use s3s::host::VirtualHost;
+    ///
+    /// let vh = VirtualHost::new("example.com")
+    ///     .with_bucket("my-bucket");
+    ///
+    /// assert_eq!(vh.bucket(), Some("my-bucket"));
+    /// ```
+    #[must_use]
+    pub fn with_bucket(mut self, bucket: impl Into<Cow<'a, str>>) -> Self {
+        self.bucket = Some(bucket.into());
+        self
+    }
+
+    /// Sets the AWS region for this virtual host.
+    ///
+    /// This method follows the builder pattern and returns `self` for method chaining.
+    /// The region represents the AWS region where the S3 bucket is located.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use s3s::host::VirtualHost;
+    ///
+    /// let vh = VirtualHost::new("example.com")
+    ///     .with_bucket("my-bucket")
+    ///     .with_region("us-west-2");
+    ///
+    /// assert_eq!(vh.region(), Some("us-west-2"));
+    /// ```
+    #[must_use]
+    pub fn with_region(mut self, region: impl Into<Cow<'a, str>>) -> Self {
+        self.region = Some(region.into());
+        self
     }
 
     #[inline]
@@ -36,6 +72,18 @@ impl<'a> VirtualHost<'a> {
     #[must_use]
     pub fn bucket(&self) -> Option<&str> {
         self.bucket.as_deref()
+    }
+
+    /// Returns the AWS region associated with this virtual host, if set.
+    ///
+    /// # Returns
+    ///
+    /// - `Some(&str)` - The region name if it was set using `with_region()`
+    /// - `None` - If no region was specified
+    #[inline]
+    #[must_use]
+    pub fn region(&self) -> Option<&str> {
+        self.region.as_deref()
     }
 }
 
@@ -96,7 +144,7 @@ fn parse_host_header<'a>(base_domain: &'a str, host: &'a str) -> Option<VirtualH
     }
 
     if let Some(bucket) = host.strip_suffix(base_domain).and_then(|h| h.strip_suffix('.')) {
-        return Some(VirtualHost::with_bucket(base_domain, bucket));
+        return Some(VirtualHost::new(base_domain).with_bucket(bucket));
     }
 
     None
@@ -133,7 +181,7 @@ impl S3Host for SingleDomain {
 
         if is_valid_domain(host) {
             let bucket = host.to_ascii_lowercase();
-            return Ok(VirtualHost::with_bucket(host, bucket));
+            return Ok(VirtualHost::new(host).with_bucket(bucket));
         }
 
         Err(s3_error!(InvalidRequest, "Invalid host header"))
@@ -194,7 +242,7 @@ impl S3Host for MultiDomain {
 
         if is_valid_domain(host) {
             let bucket = host.to_ascii_lowercase();
-            return Ok(VirtualHost::with_bucket(host, bucket));
+            return Ok(VirtualHost::new(host).with_bucket(bucket));
         }
 
         Err(s3_error!(InvalidRequest, "Invalid host header"))
@@ -290,5 +338,42 @@ mod tests {
         let vh = result.unwrap();
         assert_eq!(vh.domain(), "example.com");
         assert_eq!(vh.bucket(), Some("example.com.org"));
+    }
+
+    #[test]
+    fn virtual_host_builder() {
+        // Test basic construction
+        let vh = VirtualHost::new("example.com");
+        assert_eq!(vh.domain(), "example.com");
+        assert_eq!(vh.bucket(), None);
+        assert_eq!(vh.region(), None);
+
+        // Test with_bucket builder
+        let vh = VirtualHost::new("example.com").with_bucket("my-bucket");
+        assert_eq!(vh.domain(), "example.com");
+        assert_eq!(vh.bucket(), Some("my-bucket"));
+        assert_eq!(vh.region(), None);
+
+        // Test with_region builder
+        let vh = VirtualHost::new("example.com").with_region("us-west-2");
+        assert_eq!(vh.domain(), "example.com");
+        assert_eq!(vh.bucket(), None);
+        assert_eq!(vh.region(), Some("us-west-2"));
+
+        // Test chaining with_bucket and with_region
+        let vh = VirtualHost::new("example.com")
+            .with_bucket("my-bucket")
+            .with_region("us-east-1");
+        assert_eq!(vh.domain(), "example.com");
+        assert_eq!(vh.bucket(), Some("my-bucket"));
+        assert_eq!(vh.region(), Some("us-east-1"));
+
+        // Test chaining with_region and with_bucket (reversed order)
+        let vh = VirtualHost::new("example.com")
+            .with_region("eu-west-1")
+            .with_bucket("another-bucket");
+        assert_eq!(vh.domain(), "example.com");
+        assert_eq!(vh.bucket(), Some("another-bucket"));
+        assert_eq!(vh.region(), Some("eu-west-1"));
     }
 }
