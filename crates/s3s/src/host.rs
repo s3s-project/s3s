@@ -8,7 +8,7 @@ use stdx::default::default;
 pub struct VirtualHost<'a> {
     domain: Cow<'a, str>,
     bucket: Option<Cow<'a, str>>,
-    // pub(crate) region: Option<Cow<'a, str>>,
+    region: Option<Cow<'a, str>>,
 }
 
 impl<'a> VirtualHost<'a> {
@@ -16,14 +16,20 @@ impl<'a> VirtualHost<'a> {
         Self {
             domain: domain.into(),
             bucket: None,
+            region: None,
         }
     }
 
-    pub fn with_bucket(domain: impl Into<Cow<'a, str>>, bucket: impl Into<Cow<'a, str>>) -> Self {
-        Self {
-            domain: domain.into(),
-            bucket: Some(bucket.into()),
-        }
+    #[must_use]
+    pub fn with_bucket(mut self, bucket: impl Into<Cow<'a, str>>) -> Self {
+        self.bucket = Some(bucket.into());
+        self
+    }
+
+    #[must_use]
+    pub fn with_region(mut self, region: impl Into<Cow<'a, str>>) -> Self {
+        self.region = Some(region.into());
+        self
     }
 
     #[inline]
@@ -36,6 +42,12 @@ impl<'a> VirtualHost<'a> {
     #[must_use]
     pub fn bucket(&self) -> Option<&str> {
         self.bucket.as_deref()
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn region(&self) -> Option<&str> {
+        self.region.as_deref()
     }
 }
 
@@ -96,7 +108,7 @@ fn parse_host_header<'a>(base_domain: &'a str, host: &'a str) -> Option<VirtualH
     }
 
     if let Some(bucket) = host.strip_suffix(base_domain).and_then(|h| h.strip_suffix('.')) {
-        return Some(VirtualHost::with_bucket(base_domain, bucket));
+        return Some(VirtualHost::new(base_domain).with_bucket(bucket));
     }
 
     None
@@ -133,7 +145,7 @@ impl S3Host for SingleDomain {
 
         if is_valid_domain(host) {
             let bucket = host.to_ascii_lowercase();
-            return Ok(VirtualHost::with_bucket(host, bucket));
+            return Ok(VirtualHost::new(host).with_bucket(bucket));
         }
 
         Err(s3_error!(InvalidRequest, "Invalid host header"))
@@ -194,7 +206,7 @@ impl S3Host for MultiDomain {
 
         if is_valid_domain(host) {
             let bucket = host.to_ascii_lowercase();
-            return Ok(VirtualHost::with_bucket(host, bucket));
+            return Ok(VirtualHost::new(host).with_bucket(bucket));
         }
 
         Err(s3_error!(InvalidRequest, "Invalid host header"))
