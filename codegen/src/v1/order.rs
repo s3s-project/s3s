@@ -1,3 +1,5 @@
+/// Returns the desired order of struct members for specific shapes.
+/// See <https://github.com/s3s-project/s3s/pull/480>
 pub fn struct_member_order(shape_name: &str) -> Option<&'static [&'static str]> {
     match shape_name {
         "ListObjectsOutput" => Some(LIST_OBJECTS_OUTPUT_ORDER),
