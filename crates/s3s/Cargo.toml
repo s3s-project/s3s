@@ -55,7 +55,7 @@ sha1.workspace = true
 sha2.workspace = true
 smallvec.workspace = true
 thiserror.workspace = true
-time = { version = "0.3.46", features = ["formatting", "parsing", "macros"] }
+time = { version = "0.3.47", features = ["formatting", "parsing", "macros"] }
 tower = { version = "0.5.3", default-features = false }
 tracing.workspace = true
 transform-stream.workspace = true

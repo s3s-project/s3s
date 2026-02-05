@@ -47,7 +47,7 @@ s3s = { version = "0.13.0-alpha.2", path = "../s3s" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-time = "0.3.46"
+time = "0.3.47"
 tokio = { workspace = true, features = ["fs", "io-util"] }
 tokio-util = { version = "0.7.18", features = ["io"] }
 tracing.workspace = true
