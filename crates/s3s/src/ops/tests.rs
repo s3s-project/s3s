@@ -730,7 +730,7 @@ async fn test_custom_route_anonymous_access_denied() {
     use crate::route::S3Route;
     use hyper::header::HeaderValue;
     use hyper::http::Extensions;
-    use hyper::{HeaderMap, Method, Uri};
+    use hyper::{HeaderMap, Method, StatusCode, Uri};
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
