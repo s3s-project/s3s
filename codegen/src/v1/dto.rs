@@ -1,5 +1,6 @@
 use super::o;
 use super::ops::{Operations, SKIPPED_OPS, is_op_input};
+use super::order;
 use super::rust::codegen_doc;
 use super::smithy::SmithyTraitsExt;
 use super::{rust, smithy};
@@ -151,7 +152,25 @@ pub fn collect_rust_types(model: &smithy::Model, ops: &Operations) -> RustTypes 
             }
             smithy::Shape::Structure(shape) => {
                 let mut fields = Vec::new();
-                for (field_name, field) in &shape.members {
+                let member_list: Vec<(&str, &smithy::StructureMember)> =
+                    if let Some(order) = order::struct_member_order(&rs_shape_name) {
+                        let order_set: BTreeSet<&str> = order.iter().copied().collect();
+                        let mut list = Vec::new();
+                        for &name in order {
+                            if let Some(field) = shape.members.get(name) {
+                                list.push((name, field));
+                            }
+                        }
+                        for (name, field) in &shape.members {
+                            if !order_set.contains(name.as_str()) {
+                                list.push((name.as_str(), field));
+                            }
+                        }
+                        list
+                    } else {
+                        shape.members.iter().map(|(k, v)| (k.as_str(), v)).collect()
+                    };
+                for (field_name, field) in member_list {
                     let rs_field_name = if field_name == "Type" {
                         "type_".into()
                     } else {
@@ -212,7 +231,7 @@ pub fn collect_rust_types(model: &smithy::Model, ops: &Operations) -> RustTypes 
                         type_: field_type,
                         doc: field.traits.doc().map(o),
 
-                        camel_name: field_name.clone(),
+                        camel_name: field_name.to_owned(),
 
                         option_type,
                         default_value,

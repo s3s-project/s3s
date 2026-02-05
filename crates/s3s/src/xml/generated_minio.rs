@@ -6036,20 +6036,11 @@ impl SerializeContent for ListObjectVersionsOutput {
 
 impl SerializeContent for ListObjectsOutput {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(iter) = &self.common_prefixes {
-            s.flattened_list("CommonPrefixes", iter)?;
+        if let Some(ref val) = self.name {
+            s.content("Name", val)?;
         }
-        if let Some(iter) = &self.contents {
-            s.flattened_list("Contents", iter)?;
-        }
-        if let Some(ref val) = self.delimiter {
-            s.content("Delimiter", val)?;
-        }
-        if let Some(ref val) = self.encoding_type {
-            s.content("EncodingType", val)?;
-        }
-        if let Some(ref val) = self.is_truncated {
-            s.content("IsTruncated", val)?;
+        if let Some(ref val) = self.prefix {
+            s.content("Prefix", val)?;
         }
         if let Some(ref val) = self.marker {
             s.content("Marker", val)?;
@@ -6057,14 +6048,23 @@ impl SerializeContent for ListObjectsOutput {
         if let Some(ref val) = self.max_keys {
             s.content("MaxKeys", val)?;
         }
-        if let Some(ref val) = self.name {
-            s.content("Name", val)?;
+        if let Some(ref val) = self.is_truncated {
+            s.content("IsTruncated", val)?;
+        }
+        if let Some(iter) = &self.contents {
+            s.flattened_list("Contents", iter)?;
+        }
+        if let Some(iter) = &self.common_prefixes {
+            s.flattened_list("CommonPrefixes", iter)?;
+        }
+        if let Some(ref val) = self.delimiter {
+            s.content("Delimiter", val)?;
         }
         if let Some(ref val) = self.next_marker {
             s.content("NextMarker", val)?;
         }
-        if let Some(ref val) = self.prefix {
-            s.content("Prefix", val)?;
+        if let Some(ref val) = self.encoding_type {
+            s.content("EncodingType", val)?;
         }
         Ok(())
     }
@@ -6072,38 +6072,38 @@ impl SerializeContent for ListObjectsOutput {
 
 impl SerializeContent for ListObjectsV2Output {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(iter) = &self.common_prefixes {
-            s.flattened_list("CommonPrefixes", iter)?;
+        if let Some(ref val) = self.name {
+            s.content("Name", val)?;
+        }
+        if let Some(ref val) = self.prefix {
+            s.content("Prefix", val)?;
+        }
+        if let Some(ref val) = self.max_keys {
+            s.content("MaxKeys", val)?;
+        }
+        if let Some(ref val) = self.key_count {
+            s.content("KeyCount", val)?;
+        }
+        if let Some(ref val) = self.continuation_token {
+            s.content("ContinuationToken", val)?;
+        }
+        if let Some(ref val) = self.is_truncated {
+            s.content("IsTruncated", val)?;
+        }
+        if let Some(ref val) = self.next_continuation_token {
+            s.content("NextContinuationToken", val)?;
         }
         if let Some(iter) = &self.contents {
             s.flattened_list("Contents", iter)?;
         }
-        if let Some(ref val) = self.continuation_token {
-            s.content("ContinuationToken", val)?;
+        if let Some(iter) = &self.common_prefixes {
+            s.flattened_list("CommonPrefixes", iter)?;
         }
         if let Some(ref val) = self.delimiter {
             s.content("Delimiter", val)?;
         }
         if let Some(ref val) = self.encoding_type {
             s.content("EncodingType", val)?;
-        }
-        if let Some(ref val) = self.is_truncated {
-            s.content("IsTruncated", val)?;
-        }
-        if let Some(ref val) = self.key_count {
-            s.content("KeyCount", val)?;
-        }
-        if let Some(ref val) = self.max_keys {
-            s.content("MaxKeys", val)?;
-        }
-        if let Some(ref val) = self.name {
-            s.content("Name", val)?;
-        }
-        if let Some(ref val) = self.next_continuation_token {
-            s.content("NextContinuationToken", val)?;
-        }
-        if let Some(ref val) = self.prefix {
-            s.content("Prefix", val)?;
         }
         if let Some(ref val) = self.start_after {
             s.content("StartAfter", val)?;

@@ -8,6 +8,7 @@ mod error;
 mod headers;
 mod minio;
 mod ops;
+mod order;
 mod s3_trait;
 mod sts;
 mod xml;
