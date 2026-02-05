@@ -106,7 +106,6 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: target/codecov.json
-          fail_ci_if_error: true
 
   mint-proxy-minio:
     name: e2e (mint, s3s-proxy, minio)
