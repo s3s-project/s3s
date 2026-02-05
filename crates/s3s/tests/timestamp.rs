@@ -1,4 +1,4 @@
-//! Tests using the Smithy date_time_format_test_suite.json
+//! Tests using the Smithy `date_time_format_test_suite.json`
 //! From: <https://github.com/smithy-lang/smithy-rs/blob/main/rust-runtime/aws-smithy-types/test_data/date_time_format_test_suite.json>
 
 use s3s::dto::{Timestamp, TimestampFormat};
@@ -28,7 +28,7 @@ fn load_test_suite() -> TestSuite {
     serde_json::from_str(json).expect("failed to parse test suite")
 }
 
-/// Converts canonical_seconds (as string) and canonical_nanos into total nanoseconds.
+/// Converts `canonical_seconds` (as string) and `canonical_nanos` into total nanoseconds.
 fn canonical_to_nanos(canonical_seconds: &str, canonical_nanos: u32) -> i128 {
     let secs: i64 = canonical_seconds.parse().expect("invalid canonical_seconds");
     i128::from(secs) * 1_000_000_000 + i128::from(canonical_nanos)
@@ -39,13 +39,10 @@ fn parse_epoch_seconds() {
     let suite = load_test_suite();
 
     for case in suite.parse_epoch_seconds {
-        let smithy_value = match case.smithy_format_value.as_ref() {
-            Some(v) => v,
-            None => {
-                // Error cases without smithy_format_value - skip
-                assert!(case.error, "non-error case should have smithy_format_value: {}", case.iso8601);
-                continue;
-            }
+        let Some(smithy_value) = case.smithy_format_value.as_ref() else {
+            // Error cases without smithy_format_value - skip
+            assert!(case.error, "non-error case should have smithy_format_value: {}", case.iso8601);
+            continue;
         };
 
         let result = Timestamp::parse(TimestampFormat::EpochSeconds, smithy_value);
@@ -72,13 +69,10 @@ fn parse_http_date() {
     let suite = load_test_suite();
 
     for case in suite.parse_http_date {
-        let smithy_value = match case.smithy_format_value.as_ref() {
-            Some(v) => v,
-            None => {
-                // Error cases without smithy_format_value - skip
-                assert!(case.error, "non-error case should have smithy_format_value: {}", case.iso8601);
-                continue;
-            }
+        let Some(smithy_value) = case.smithy_format_value.as_ref() else {
+            // Error cases without smithy_format_value - skip
+            assert!(case.error, "non-error case should have smithy_format_value: {}", case.iso8601);
+            continue;
         };
 
         // s3s's RFC1123 format doesn't support fractional seconds, so skip those test cases
@@ -113,13 +107,10 @@ fn parse_date_time() {
     let suite = load_test_suite();
 
     for case in suite.parse_date_time {
-        let smithy_value = match case.smithy_format_value.as_ref() {
-            Some(v) => v,
-            None => {
-                // Error cases without smithy_format_value - skip
-                assert!(case.error, "non-error case should have smithy_format_value: {}", case.iso8601);
-                continue;
-            }
+        let Some(smithy_value) = case.smithy_format_value.as_ref() else {
+            // Error cases without smithy_format_value - skip
+            assert!(case.error, "non-error case should have smithy_format_value: {}", case.iso8601);
+            continue;
         };
 
         let result = Timestamp::parse(TimestampFormat::DateTime, smithy_value);
