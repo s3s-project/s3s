@@ -98,7 +98,7 @@ impl Timestamp {
             TimestampFormat::HttpDate => time::PrimitiveDateTime::parse(s, RFC1123)?.assume_utc(),
             TimestampFormat::EpochSeconds => match s.split_once('.') {
                 Some((secs, frac)) => {
-                    let secs: i64 = secs.parse::<u64>()?.try_into().map_err(|_| ParseTimestampError::Overflow)?;
+                    let secs: i64 = secs.parse()?;
                     let val: u32 = frac.parse::<u32>()?;
                     let mul: u32 = match frac.len() {
                         1 => 100_000_000,
@@ -112,11 +112,14 @@ impl Timestamp {
                         9 => 1,
                         _ => return Err(ParseTimestampError::Overflow),
                     };
-                    let nanos = i128::from(secs) * 1_000_000_000 + i128::from(val * mul);
+                    let nanos_part = i128::from(val * mul);
+                    // In Smithy epoch-seconds format, the fractional part is always positive.
+                    // For example, "-1.5" means -1 seconds + 0.5 fractional = -0.5 seconds total.
+                    let nanos = i128::from(secs) * 1_000_000_000 + nanos_part;
                     time::OffsetDateTime::from_unix_timestamp_nanos(nanos)?
                 }
                 None => {
-                    let secs: i64 = s.parse::<u64>()?.try_into().map_err(|_| ParseTimestampError::Overflow)?;
+                    let secs: i64 = s.parse()?;
                     time::OffsetDateTime::from_unix_timestamp(secs)?
                 }
             },
