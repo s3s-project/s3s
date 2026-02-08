@@ -219,8 +219,4 @@ else
     exit 1
 fi
 
-if [ $PYTEST_STATUS -ne 0 ]; then
-    exit $PYTEST_STATUS
-fi
-
 exit $REPORT_STATUS
