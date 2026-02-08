@@ -1113,3 +1113,113 @@ async fn test_custom_route_override_check_access_allows_unsigned_requests() {
     // Verify that the custom route was invoked
     assert_eq!(test_route.get_call_count(), 1, "Custom route should have been invoked");
 }
+
+/// Test custom route with default `check_access` denies unsigned requests even without auth provider
+///
+/// This test verifies a key difference between S3 operations and custom routes:
+/// - S3 operations skip access checks when `CallContext.auth` is `None`
+/// - Custom routes always call `check_access()`, and the default implementation denies
+///   requests without credentials, even when no auth provider is configured
+#[tokio::test]
+async fn test_custom_route_default_check_access_denies_unsigned_without_auth_provider() {
+    use crate::S3Request;
+    use crate::config::{S3ConfigProvider, StaticConfigProvider};
+    use crate::http::{Body, Request};
+    use crate::ops::CallContext;
+    use crate::protocol::S3Response;
+    use crate::route::S3Route;
+    use hyper::header::HeaderValue;
+    use hyper::http::Extensions;
+    use hyper::{HeaderMap, Method, StatusCode, Uri};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct TestS3;
+
+    #[async_trait::async_trait]
+    impl crate::s3_trait::S3 for TestS3 {}
+
+    /// Custom route that uses default `check_access` (requires credentials)
+    #[derive(Debug, Clone)]
+    struct TestRoute {
+        call_count: Arc<AtomicUsize>,
+    }
+
+    impl TestRoute {
+        fn new() -> Self {
+            Self {
+                call_count: Arc::new(AtomicUsize::new(0)),
+            }
+        }
+
+        fn get_call_count(&self) -> usize {
+            self.call_count.load(Ordering::SeqCst)
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl S3Route for TestRoute {
+        fn is_match(&self, method: &Method, uri: &Uri, headers: &HeaderMap, _: &mut Extensions) -> bool {
+            method == Method::POST
+                && uri.path() == "/auth-route"
+                && headers
+                    .get(hyper::header::CONTENT_TYPE)
+                    .is_some_and(|v| v.as_bytes() == b"application/x-auth")
+        }
+
+        // Use default check_access (requires credentials)
+
+        async fn call(&self, _req: S3Request<Body>) -> crate::error::S3Result<S3Response<Body>> {
+            self.call_count.fetch_add(1, Ordering::SeqCst);
+            Ok(S3Response::new(Body::from("Auth route response".to_string())))
+        }
+    }
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(TestS3);
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+
+    let test_route = TestRoute::new();
+
+    // No auth provider configured - but custom routes still check access
+    let ccx = CallContext {
+        s3: &s3,
+        config: &config,
+        host: None,
+        auth: None,
+        access: None,
+        route: Some(&test_route),
+        validation: None,
+    };
+
+    // Create an unsigned request to the custom route
+    let mut req = Request::from(
+        hyper::Request::builder()
+            .method(Method::POST)
+            .uri("http://localhost/auth-route")
+            .header(crate::header::HOST, "localhost")
+            .header(hyper::header::CONTENT_TYPE, HeaderValue::from_static("application/x-auth"))
+            .body(Body::empty())
+            .unwrap(),
+    );
+
+    // Call the operation - should fail because default check_access requires credentials
+    let result = super::call(&mut req, &ccx).await;
+
+    // Should return 403 Forbidden
+    match result {
+        Ok(resp) => {
+            assert_eq!(
+                resp.status,
+                StatusCode::FORBIDDEN,
+                "Unsigned request should be denied by default check_access, got status: {:?}",
+                resp.status
+            );
+        }
+        Err(err) => {
+            panic!("Expected 403 response, got error: {err:?}");
+        }
+    }
+
+    // Verify that the custom route handler was never invoked (access denied before dispatch)
+    assert_eq!(test_route.get_call_count(), 0, "Custom route handler should not have been invoked");
+}
