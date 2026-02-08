@@ -111,11 +111,9 @@ use tracing::{debug, error};
 /// builder.set_auth(SimpleAuth::from_single("ACCESS_KEY", "SECRET_KEY"));
 ///
 /// // Set custom configuration
-/// let config = Arc::new(StaticConfigProvider::new(Arc::new(S3Config {
-///     xml_max_body_size: 10 * 1024 * 1024,
-///     ..Default::default()
-/// })));
-/// builder.set_config(config);
+/// let mut custom_config = S3Config::default();
+/// custom_config.xml_max_body_size = 10 * 1024 * 1024;
+/// builder.set_config(Arc::new(StaticConfigProvider::new(Arc::new(custom_config))));
 ///
 /// let service = builder.build();
 /// ```
@@ -195,11 +193,9 @@ impl S3ServiceBuilder {
     /// }
     ///
     /// let mut builder = S3ServiceBuilder::new(MyS3);
-    /// let config = Arc::new(StaticConfigProvider::new(Arc::new(S3Config {
-    ///     xml_max_body_size: 10 * 1024 * 1024,
-    ///     ..Default::default()
-    /// })));
-    /// builder.set_config(config);
+    /// let mut custom_config = S3Config::default();
+    /// custom_config.xml_max_body_size = 10 * 1024 * 1024;
+    /// builder.set_config(Arc::new(StaticConfigProvider::new(Arc::new(custom_config))));
     /// ```
     pub fn set_config(&mut self, config: Arc<dyn S3ConfigProvider>) {
         self.config = Some(config);
@@ -216,7 +212,7 @@ impl S3ServiceBuilder {
     ///
     /// ```
     /// use s3s::service::S3ServiceBuilder;
-    /// use s3s::host::AwsHost;
+    /// use s3s::host::SingleDomain;
     /// use s3s::{S3, S3Request, S3Response, S3Result};
     /// use s3s::dto::{GetObjectInput, GetObjectOutput};
     ///
@@ -232,7 +228,7 @@ impl S3ServiceBuilder {
     /// }
     ///
     /// let mut builder = S3ServiceBuilder::new(MyS3);
-    /// builder.set_host(AwsHost::default());
+    /// builder.set_host(SingleDomain::new("s3.example.com").unwrap());
     /// ```
     pub fn set_host(&mut self, host: impl S3Host) {
         self.host = Some(Box::new(host));
@@ -282,7 +278,7 @@ impl S3ServiceBuilder {
     ///
     /// ```
     /// use s3s::service::S3ServiceBuilder;
-    /// use s3s::access::S3Access;
+    /// use s3s::access::{S3Access, S3AccessContext};
     /// use s3s::{S3, S3Request, S3Response, S3Result};
     /// use s3s::dto::{GetObjectInput, GetObjectOutput};
     ///
@@ -303,13 +299,7 @@ impl S3ServiceBuilder {
     ///
     /// #[async_trait::async_trait]
     /// impl S3Access for MyAccessControl {
-    ///     async fn check_access(
-    ///         &self,
-    ///         _credentials: &s3s::auth::S3Credentials,
-    ///         _op: s3s::S3Operation,
-    ///         _bucket: Option<&str>,
-    ///         _key: Option<&str>,
-    ///     ) -> s3s::S3Result<()> {
+    ///     async fn check(&self, _cx: &mut S3AccessContext<'_>) -> S3Result<()> {
     ///         // Your access control logic here
     ///         Ok(())
     ///     }
@@ -334,8 +324,10 @@ impl S3ServiceBuilder {
     /// ```
     /// use s3s::service::S3ServiceBuilder;
     /// use s3s::route::S3Route;
-    /// use s3s::{S3, S3Request, S3Response, S3Result};
+    /// use s3s::{S3, S3Request, S3Response, S3Result, Body};
     /// use s3s::dto::{GetObjectInput, GetObjectOutput};
+    /// use hyper::{HeaderMap, Method, Uri};
+    /// use hyper::http::Extensions;
     ///
     /// #[derive(Clone)]
     /// struct MyS3;
@@ -354,7 +346,13 @@ impl S3ServiceBuilder {
     ///
     /// #[async_trait::async_trait]
     /// impl S3Route for MyRoute {
-    ///     // Implement route handling
+    ///     fn is_match(&self, _method: &Method, _uri: &Uri, _headers: &HeaderMap, _extensions: &mut Extensions) -> bool {
+    ///         false
+    ///     }
+    ///
+    ///     async fn call(&self, _req: S3Request<Body>) -> S3Result<S3Response<Body>> {
+    ///         Err(s3s::s3_error!(NotImplemented))
+    ///     }
     /// }
     ///
     /// let mut builder = S3ServiceBuilder::new(MyS3);
@@ -391,7 +389,7 @@ impl S3ServiceBuilder {
     /// }
     ///
     /// let mut builder = S3ServiceBuilder::new(MyS3);
-    /// builder.set_validation(AwsNameValidation);
+    /// builder.set_validation(AwsNameValidation::new());
     /// ```
     pub fn set_validation(&mut self, validation: impl NameValidation) {
         self.validation = Some(Box::new(validation));
@@ -562,7 +560,7 @@ impl S3Service {
     ///
     /// ```no_run
     /// use s3s::service::S3ServiceBuilder;
-    /// use s3s::{S3, S3Request, S3Response, S3Result, HttpRequest};
+    /// use s3s::{S3, S3Request, S3Response, S3Result, HttpRequest, HttpError};
     /// use s3s::dto::{GetObjectInput, GetObjectOutput};
     /// use http::Request;
     /// use s3s::Body;
@@ -578,13 +576,14 @@ impl S3Service {
     ///     // Implement S3 operations
     /// }
     ///
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # async fn example() -> Result<(), HttpError> {
     /// let service = S3ServiceBuilder::new(MyS3).build();
     ///
     /// // Process a request (in a real scenario, this comes from a server)
     /// let http_req: HttpRequest = Request::builder()
     ///     .uri("/")
-    ///     .body(Body::empty())?;
+    ///     .body(Body::empty())
+    ///     .map_err(|e| HttpError::new(Box::new(e)))?;
     ///
     /// let response = service.call(http_req).await?;
     /// # Ok(())
