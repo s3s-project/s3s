@@ -9,20 +9,24 @@
 //! [`S3Access`] trait provides:
 //!
 //! - A general `check` method that, when authentication is configured, is called before
-//!   deserializing operation input for authenticated requests
+//!   deserializing operation input; note that per-request credentials may be absent
+//!   (for example, for unsigned or otherwise unauthenticated requests)
 //! - Per-operation methods for fine-grained control (e.g., `get_object`, `put_object`)
 //!
 //! > **Security note**
 //! >
-//! > `S3Access::check` (and per-operation access methods) are only invoked for requests
-//! > that have been authenticated by an auth provider. If no auth provider is configured
-//! > (i.e., the internal `CallContext.auth` is `None`), S3 operations skip access checks
-//! > entirely. In other words, calling [`S3ServiceBuilder::set_access`](crate::service::S3ServiceBuilder::set_access)
+//! > `S3Access::check` (and per-operation access methods) are only invoked when an auth
+//! > provider is configured. If no auth provider is configured (i.e., the internal
+//! > `CallContext.auth` is `None`), S3 operations skip access checks entirely. In other
+//! > words, calling [`S3ServiceBuilder::set_access`](crate::service::S3ServiceBuilder::set_access)
 //! > alone does *not* enforce authentication or authorization.
 //! >
-//! > To enforce authorization, you must configure authentication on `S3ServiceBuilder`
-//! > (so that requests populate `CallContext.auth`) and then attach your `S3Access`
-//! > implementation via `set_access(...)`.
+//! > When an auth provider is configured, access checks run for every request, even if
+//! > the request is not successfully authenticated (for example, unsigned requests or
+//! > requests with invalid credentials). In those cases,
+//! > [`S3AccessContext::credentials`](crate::access::S3AccessContext::credentials) may
+//! > return `None`, and your `S3Access` implementation is responsible for deciding
+//! > whether to allow or deny the operation.
 //!
 //! # Example
 //!

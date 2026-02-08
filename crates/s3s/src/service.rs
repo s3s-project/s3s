@@ -239,7 +239,8 @@ impl S3ServiceBuilder {
     /// The authentication provider verifies AWS Signature Version 4 or Version 2 signatures
     /// on incoming requests.
     ///
-    /// If not set, the service does not require authentication.
+    /// If not set, unsigned requests are allowed, but signed requests will fail with
+    /// `NotImplemented` ("This service has no authentication provider").
     ///
     /// # Example
     ///
@@ -272,11 +273,18 @@ impl S3ServiceBuilder {
     /// The access control provider performs authorization checks to determine if a
     /// request should be allowed based on the authenticated identity.
     ///
-    /// **Important**: Access control checks are only performed for authenticated requests.
-    /// You must also call [`set_auth`](Self::set_auth) to configure authentication, otherwise
-    /// access checks will be skipped entirely regardless of this setting.
+    /// **Important**: Access control checks are only performed when authentication is
+    /// configured. You must also call [`set_auth`](Self::set_auth) to configure
+    /// authentication; otherwise, access checks will be skipped entirely regardless of this
+    /// setting.
     ///
-    /// If not set, a default access check is performed that allows all authenticated requests.
+    /// When authentication is configured, access checks are still run for anonymous or
+    /// unsigned requests where `cx.credentials()` is `None`; the default access check will
+    /// then deny those requests.
+    ///
+    /// If not set, a default access check is performed that allows all authenticated
+    /// requests (i.e., when `cx.credentials()` is `Some(_)`) and denies anonymous/unsigned
+    /// requests.
     ///
     /// # Example
     ///
