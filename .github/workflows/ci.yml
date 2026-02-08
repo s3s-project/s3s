@@ -128,7 +128,7 @@ jobs:
   e2e-fs:
     name: e2e (s3s-e2e, s3s-fs)
     needs: skip-check
-    if: needs.skip-check.outputs.should_skip != 'true'
+    if: github.event_name != 'pull_request' && needs.skip-check.outputs.should_skip != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -144,7 +144,7 @@ jobs:
   e2e-minio:
     name: e2e (s3s-e2e, minio)
     needs: skip-check
-    if: needs.skip-check.outputs.should_skip != 'true'
+    if: github.event_name != 'pull_request' && needs.skip-check.outputs.should_skip != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -153,7 +153,7 @@ jobs:
       - run: just install s3s-e2e
       - run: ./scripts/e2e-minio.sh
 
-  e2e-s3tests:
+  s3tests-proxy-minio:
     name: e2e (s3-tests, s3s-proxy, minio)
     needs: skip-check
     if: github.event_name != 'pull_request' && needs.skip-check.outputs.should_skip != 'true'
@@ -174,3 +174,34 @@ jobs:
             ./target/s3-tests.log
             ./target/s3-tests.junit.xml
             ./target/s3s-proxy.log
+
+  status-check:
+    if: always()
+    needs:
+      - python
+      - rust
+      - cross-test
+      - wasm-test
+      - coverage
+      - e2e-fs
+      - e2e-minio
+      - mint-proxy-minio
+      - s3tests-proxy-minio
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check all jobs
+        run: |
+          # Check if any required job failed
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
+            echo "At least one required job failed"
+            exit 1
+          fi
+          
+          # Check if any required job was cancelled
+          if [[ "${{ contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
+            echo "At least one required job was cancelled"
+            exit 1
+          fi
+          
+          echo "All jobs passed or were skipped"
+          exit 0
