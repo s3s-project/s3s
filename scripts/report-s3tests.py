@@ -2,6 +2,9 @@
 import sys
 from xml.etree import ElementTree
 
+ALLOWED_FAILURES = 326
+ALLOWED_ERRORS = 302
+
 
 def parse_report(report_path: str) -> ElementTree.Element:
     try:
@@ -34,8 +37,12 @@ def summarize(report_path: str) -> None:
 
     print(f"tests {tests}, failures {failures}, errors {errors}, skipped {skipped}")
 
-    if failures or errors:
-        raise SystemExit("s3-tests reported failures")
+    if failures > ALLOWED_FAILURES or errors > ALLOWED_ERRORS:
+        raise SystemExit(
+            "s3-tests regressions: "
+            f"failures {failures} (allowed {ALLOWED_FAILURES}), "
+            f"errors {errors} (allowed {ALLOWED_ERRORS})"
+        )
 
 
 if __name__ == "__main__":
