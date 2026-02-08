@@ -21,6 +21,8 @@ use aws_sdk_s3::types::CompletedMultipartUpload;
 use aws_sdk_s3::types::CompletedPart;
 use aws_sdk_s3::types::CreateBucketConfiguration;
 
+use aws_sdk_s3::error::ProvideErrorMetadata;
+
 use anyhow::Result;
 use hyper::Method;
 use tokio::sync::Mutex;
@@ -1078,6 +1080,324 @@ async fn test_if_none_match_wildcard() -> Result<()> {
     // Cleanup
     delete_object(&c, bucket, key).await?;
     delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+/// Regression test for <https://github.com/s3s-project/s3s/issues/67>
+///
+/// `copy_object` should create parent directories when the destination key contains "/"
+#[tokio::test]
+#[tracing::instrument]
+async fn test_copy_object_nested_dst() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-copy-nested-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+
+    create_bucket(&c, bucket).await?;
+
+    // Put a file at the root level
+    let src_key = "source.txt";
+    let content = "copy me into a nested directory";
+    c.put_object()
+        .bucket(bucket)
+        .key(src_key)
+        .body(ByteStream::from_static(content.as_bytes()))
+        .send()
+        .await?;
+
+    // Copy to a nested destination with multiple levels of "/"
+    let dst_key = "deep/nested/path/destination.txt";
+    let copy_source = format!("{bucket}/{src_key}");
+    c.copy_object()
+        .bucket(bucket)
+        .key(dst_key)
+        .copy_source(copy_source)
+        .send()
+        .await?;
+
+    // Verify the copied file exists and has the correct content
+    let ans = c.get_object().bucket(bucket).key(dst_key).send().await?;
+    let body = ans.body.collect().await?.into_bytes();
+    assert_eq!(body.as_ref(), content.as_bytes());
+
+    // Cleanup
+    delete_object(&c, bucket, src_key).await?;
+    delete_object(&c, bucket, dst_key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+/// Regression test for <https://github.com/s3s-project/s3s/issues/112>
+///
+/// `list_objects_v2` prefix matching should use string-based matching (not `Path::starts_with`)
+/// and `start_after` should work correctly
+#[tokio::test]
+#[tracing::instrument]
+async fn test_list_objects_v2_start_after() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-start-after-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let content = "test content";
+    let keys = ["aaa.txt", "bbb.txt", "ccc.txt", "ddd.txt"];
+    for key in &keys {
+        c.put_object()
+            .bucket(bucket)
+            .key(*key)
+            .body(ByteStream::from_static(content.as_bytes()))
+            .send()
+            .await?;
+    }
+
+    // start_after="bbb.txt" should return only ccc.txt and ddd.txt
+    let result = c.list_objects_v2().bucket(bucket).start_after("bbb.txt").send().await?;
+
+    let contents: Vec<_> = result.contents().iter().filter_map(|obj| obj.key()).collect();
+    assert_eq!(contents, vec!["ccc.txt", "ddd.txt"]);
+
+    // Cleanup
+    for key in &keys {
+        delete_object(&c, bucket, key).await?;
+    }
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+/// Regression test for <https://github.com/s3s-project/s3s/issues/112>
+///
+/// Prefix matching must use string comparison, not `Path::starts_with` which is stricter.
+/// For example, prefix "dir/sub" should match key "dir/subdir/file.txt".
+#[tokio::test]
+#[tracing::instrument]
+async fn test_list_objects_v2_prefix_string_matching() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-prefix-match-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let content = "test";
+    let keys = ["dir/subdir/file1.txt", "dir/subother/file2.txt", "dir/other/file3.txt"];
+    for key in &keys {
+        c.put_object()
+            .bucket(bucket)
+            .key(*key)
+            .body(ByteStream::from_static(content.as_bytes()))
+            .send()
+            .await?;
+    }
+
+    // Prefix "dir/sub" should match "dir/subdir/..." and "dir/subother/..."
+    // but NOT "dir/other/..."
+    // Path::starts_with would fail here because it requires component boundaries
+    let result = c.list_objects_v2().bucket(bucket).prefix("dir/sub").send().await?;
+
+    let contents: Vec<_> = result.contents().iter().filter_map(|obj| obj.key()).collect();
+    assert_eq!(contents.len(), 2, "Expected 2 objects matching prefix 'dir/sub', got {contents:?}");
+    assert!(contents.contains(&"dir/subdir/file1.txt"));
+    assert!(contents.contains(&"dir/subother/file2.txt"));
+
+    // Cleanup
+    for key in &keys {
+        delete_object(&c, bucket, key).await?;
+    }
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+/// Regression test for <https://github.com/s3s-project/s3s/issues/116>
+///
+/// `put_object` should write atomically via a temp file to prevent incomplete writes.
+/// Verify that the file is fully written and readable after `put_object` completes.
+#[tokio::test]
+#[tracing::instrument]
+async fn test_put_object_atomic_write() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-atomic-write-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    // Write a reasonably sized object
+    let content = "x".repeat(1024 * 64); // 64 KB
+    let key = "atomic-test.bin";
+
+    c.put_object()
+        .bucket(bucket)
+        .key(key)
+        .body(ByteStream::from(content.clone().into_bytes()))
+        .send()
+        .await?;
+
+    // Read it back immediately and verify full content
+    let ans = c.get_object().bucket(bucket).key(key).send().await?;
+    let body = ans.body.collect().await?.into_bytes();
+    assert_eq!(body.len(), content.len(), "Content length mismatch");
+    assert_eq!(body.as_ref(), content.as_bytes(), "Content mismatch");
+
+    // Verify no temp files remain in the FS root
+    let entries: Vec<_> = fs::read_dir(FS_ROOT)?
+        .filter_map(Result::ok)
+        .filter(|e| {
+            let name = e.file_name();
+            let name = name.to_str().unwrap_or("");
+            name.starts_with(".tmp.") && name.ends_with(".internal.part")
+        })
+        .collect();
+    assert!(entries.is_empty(), "Leftover temp files found: {entries:?}");
+
+    // Cleanup
+    delete_object(&c, bucket, key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+/// Regression test for <https://github.com/s3s-project/s3s/issues/51>
+///
+/// Multipart `upload_id` should be bound to the credentials that created it.
+/// A different user should not be able to upload parts or complete the upload.
+#[tokio::test]
+#[tracing::instrument]
+#[allow(clippy::too_many_lines)]
+async fn test_multipart_upload_id_auth() -> Result<()> {
+    let _guard = serial().await;
+
+    // Create a service with two sets of credentials
+    let cred_user1 = Credentials::new("AKUSER1EXAMPLE", "secretkey1example", None, None, "user1");
+    let cred_user2 = Credentials::new("AKUSER2EXAMPLE", "secretkey2example", None, None, "user2");
+
+    let mut auth = SimpleAuth::new();
+    auth.register(cred_user1.access_key_id().to_string(), cred_user1.secret_access_key().into());
+    auth.register(cred_user2.access_key_id().to_string(), cred_user2.secret_access_key().into());
+
+    fs::create_dir_all(FS_ROOT).unwrap();
+    let fs = FileSystem::new(FS_ROOT).unwrap();
+    let service = {
+        let mut b = S3ServiceBuilder::new(fs);
+        b.set_auth(auth);
+        b.set_host(SingleDomain::new(DOMAIN_NAME).unwrap());
+        b.build()
+    };
+
+    // Create client for user1
+    let config_user1 = SdkConfig::builder()
+        .credentials_provider(SharedCredentialsProvider::new(cred_user1.clone()))
+        .http_client(s3s_aws::Client::from(service.clone()))
+        .region(Region::new(REGION))
+        .endpoint_url(format!("http://{DOMAIN_NAME}"))
+        .build();
+    let c1 = Client::new(&config_user1);
+
+    // Create client for user2
+    let config_user2 = SdkConfig::builder()
+        .credentials_provider(SharedCredentialsProvider::new(cred_user2))
+        .http_client(s3s_aws::Client::from(service))
+        .region(Region::new(REGION))
+        .endpoint_url(format!("http://{DOMAIN_NAME}"))
+        .build();
+    let c2 = Client::new(&config_user2);
+
+    let bucket = format!("test-multipart-auth-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    let key = "auth-test.txt";
+
+    // User1 creates bucket and starts multipart upload
+    create_bucket(&c1, bucket).await?;
+
+    let upload_id = {
+        let ans = c1.create_multipart_upload().bucket(bucket).key(key).send().await?;
+        ans.upload_id.unwrap()
+    };
+    let upload_id = upload_id.as_str();
+
+    // User2 tries to upload a part - should fail with AccessDenied
+    let result = c2
+        .upload_part()
+        .bucket(bucket)
+        .key(key)
+        .upload_id(upload_id)
+        .body(ByteStream::from_static(b"unauthorized part"))
+        .part_number(1)
+        .send()
+        .await;
+
+    let err = result.expect_err("Expected AccessDenied when user2 tries to upload part");
+    let service_err = err.into_service_error();
+    assert_eq!(
+        service_err.code(),
+        Some("AccessDenied"),
+        "Expected AccessDenied error code, got: {:?}",
+        service_err.code()
+    );
+
+    // User1 should be able to upload a part
+    let upload_parts = {
+        let body = ByteStream::from_static(b"authorized part");
+        let ans = c1
+            .upload_part()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(upload_id)
+            .body(body)
+            .part_number(1)
+            .send()
+            .await?;
+
+        vec![
+            CompletedPart::builder()
+                .e_tag(ans.e_tag.unwrap_or_default())
+                .part_number(1)
+                .build(),
+        ]
+    };
+
+    // User2 tries to complete the upload - should fail with AccessDenied
+    let upload = CompletedMultipartUpload::builder()
+        .set_parts(Some(upload_parts.clone()))
+        .build();
+    let result = c2
+        .complete_multipart_upload()
+        .bucket(bucket)
+        .key(key)
+        .multipart_upload(upload)
+        .upload_id(upload_id)
+        .send()
+        .await;
+
+    let err = result.expect_err("Expected AccessDenied when user2 tries to complete upload");
+    let service_err = err.into_service_error();
+    assert_eq!(
+        service_err.code(),
+        Some("AccessDenied"),
+        "Expected AccessDenied error code, got: {:?}",
+        service_err.code()
+    );
+
+    // User1 completes the upload
+    let upload = CompletedMultipartUpload::builder().set_parts(Some(upload_parts)).build();
+    c1.complete_multipart_upload()
+        .bucket(bucket)
+        .key(key)
+        .multipart_upload(upload)
+        .upload_id(upload_id)
+        .send()
+        .await?;
+
+    // Cleanup
+    delete_object(&c1, bucket, key).await?;
+    delete_bucket(&c1, bucket).await?;
 
     Ok(())
 }

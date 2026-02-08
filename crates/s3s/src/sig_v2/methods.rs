@@ -435,4 +435,103 @@ mod tests {
             assert_eq!(signature, presigned_url.signature);
         }
     }
+
+    /// Regression test for <https://github.com/s3s-project/s3s/issues/137>
+    ///
+    /// When `x-amz-date` is present:
+    /// - The Date field in the string-to-sign must be empty
+    /// - `x-amz-date` must be included in `CanonicalizedAmzHeaders`
+    /// - The URI path is used directly (not parsed into `S3Path`)
+    #[test]
+    fn regression_sig_v2_x_amz_date() {
+        let secret_key = SecretKey::from("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
+
+        // Path-style request with x-amz-date: date field must be empty,
+        // and x-amz-date must appear in canonicalized headers
+        let method = &Method::GET;
+        let uri_path = "/mybucket/myobject";
+        let headers = OrderedHeaders::from_slice_unchecked(&[
+            ("date", "Thu, 14 Mar 2024 12:00:00 +0000"),
+            ("x-amz-date", "Thu, 14 Mar 2024 12:00:00 +0000"),
+        ]);
+        let qs = None;
+        let vh_bucket = None;
+
+        let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket);
+
+        // Date field must be empty when x-amz-date is present
+        assert_eq!(
+            string_to_sign,
+            concat!(
+                "GET\n",
+                "\n",
+                "\n",
+                "\n", // empty date because x-amz-date is present
+                "x-amz-date:Thu, 14 Mar 2024 12:00:00 +0000\n",
+                "/mybucket/myobject",
+            )
+        );
+
+        // Sanity-check: a non-empty signature is produced for this input
+        let sig = calculate_signature(&secret_key, &string_to_sign);
+        assert!(!sig.is_empty());
+    }
+
+    /// Regression test for <https://github.com/s3s-project/s3s/issues/137>
+    ///
+    /// Virtual-hosted-style: bucket must be prepended to the canonicalized resource
+    #[test]
+    fn regression_sig_v2_virtual_hosted_bucket() {
+        let secret_key = SecretKey::from("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
+
+        // Virtual-hosted-style: URI path is "/key" and bucket is prepended
+        let method = &Method::GET;
+        let uri_path = "/myobject";
+        let headers = OrderedHeaders::from_slice_unchecked(&[("date", "Thu, 14 Mar 2024 12:00:00 +0000")]);
+        let qs = None;
+        let vh_bucket = Some("mybucket");
+
+        let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket);
+
+        assert_eq!(
+            string_to_sign,
+            concat!("GET\n", "\n", "\n", "Thu, 14 Mar 2024 12:00:00 +0000\n", "/mybucket/myobject",)
+        );
+
+        // Sanity-check: a non-empty signature is produced for this input
+        let sig = calculate_signature(&secret_key, &string_to_sign);
+        assert!(!sig.is_empty());
+    }
+
+    /// Regression test for <https://github.com/s3s-project/s3s/issues/137>
+    ///
+    /// `PresignedUrl` mode: Expires field must come from query string
+    #[test]
+    fn regression_sig_v2_presigned_expires() {
+        let secret_key = SecretKey::from("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
+
+        let method = &Method::GET;
+        let uri_path = "/myobject";
+        let headers = OrderedHeaders::from_slice_unchecked(&[("date", "Thu, 14 Mar 2024 12:00:00 +0000")]);
+        let qs = OrderedQs::from_vec_unchecked(vec![("Expires".into(), "1710417600".into())]);
+        let vh_bucket = Some("mybucket");
+
+        let string_to_sign = create_string_to_sign(Mode::PresignedUrl, method, uri_path, Some(&qs), &headers, vh_bucket);
+
+        // In presigned URL mode, the date line should be the Expires value from the query string
+        assert_eq!(
+            string_to_sign,
+            concat!(
+                "GET\n",
+                "\n",
+                "\n",
+                "1710417600\n", // Expires from query string, not Date header
+                "/mybucket/myobject",
+            )
+        );
+
+        // Sanity-check: a non-empty signature is produced for this input
+        let sig = calculate_signature(&secret_key, &string_to_sign);
+        assert!(!sig.is_empty());
+    }
 }
