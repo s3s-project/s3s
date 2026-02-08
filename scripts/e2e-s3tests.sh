@@ -29,8 +29,7 @@ cleanup() {
         fi
     fi
 
-    docker stop s3tests-minio || true
-    docker container rm s3tests-minio || true
+    reset_minio_container
 }
 
 trap cleanup EXIT
@@ -78,13 +77,17 @@ ensure_proxy_running() {
     fi
 }
 
+reset_minio_container() {
+    docker stop s3tests-minio || true
+    docker container rm s3tests-minio || true
+}
+
 if ! command -v s3s-proxy >/dev/null 2>&1; then
     echo "s3s-proxy is required; run: just install s3s-proxy"
     exit 1
 fi
 
-docker stop s3tests-minio || true
-docker container rm s3tests-minio || true
+reset_minio_container
 MINIO_CONTAINER_ID=$(docker run -d \
     --name s3tests-minio \
     -p 9000:9000 -p 9001:9001 \
