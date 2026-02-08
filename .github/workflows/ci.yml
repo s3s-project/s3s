@@ -176,6 +176,7 @@ jobs:
             ./target/s3s-proxy.log
 
   status-check:
+    if: always()
     needs:
       - python
       - rust
