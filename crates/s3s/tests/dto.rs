@@ -1,7 +1,8 @@
 use s3s::dto::{
     AnalyticsConfiguration, BucketLifecycleConfiguration, GetObjectInput, IntelligentTieringConfiguration,
-    InventoryConfiguration, LambdaFunctionConfiguration, MetadataTableConfiguration, MetricsConfiguration, QueueConfiguration,
-    ReplicationConfiguration, RequestPaymentConfiguration, TopicConfiguration,
+    InventoryConfiguration, LambdaFunctionConfiguration, ListObjectsV2Input, ListObjectsV2Output, MetadataTableConfiguration,
+    MetricsConfiguration, PutObjectOutput, QueueConfiguration, ReplicationConfiguration, RequestPaymentConfiguration,
+    TopicConfiguration,
 };
 
 #[test]
@@ -45,4 +46,28 @@ fn configuration_serialization() {
     let config = ReplicationConfiguration::default();
     let json = serde_json::to_string(&config).expect("should serialize");
     let _: ReplicationConfiguration = serde_json::from_str(&json).expect("should deserialize");
+}
+
+#[test]
+fn configuration_types_have_clone() {
+    let _ = BucketLifecycleConfiguration::default().clone();
+    let _ = ReplicationConfiguration::default().clone();
+
+    let _ = AnalyticsConfiguration::default().clone();
+    let _ = IntelligentTieringConfiguration::default().clone();
+    let _ = InventoryConfiguration::default().clone();
+    let _ = LambdaFunctionConfiguration::default().clone();
+    let _ = MetadataTableConfiguration::default().clone();
+    let _ = MetricsConfiguration::default().clone();
+    let _ = QueueConfiguration::default().clone();
+    let _ = RequestPaymentConfiguration::default().clone();
+    let _ = TopicConfiguration::default().clone();
+}
+
+#[test]
+fn operation_types_have_clone() {
+    let _ = GetObjectInput::default().clone();
+    let _ = ListObjectsV2Input::default().clone();
+    let _ = ListObjectsV2Output::default().clone();
+    let _ = PutObjectOutput::default().clone();
 }
