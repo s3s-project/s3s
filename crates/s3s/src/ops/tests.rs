@@ -634,17 +634,19 @@ async fn test_s3_route_anonymous_access_denied() {
             .unwrap(),
     );
 
-    // This should fail with AccessDenied because the request has no authentication
-    let result = super::prepare(&mut req, &ccx).await;
+    // This should fail with AccessDenied because the request has no authentication.
+    // Use `call` so that we exercise the full request lifecycle, and ensure that
+    // access is denied before the S3 backend is invoked.
+    let response = super::call(&mut req, &ccx).await.unwrap();
 
-    match result {
-        Err(err) => {
-            assert_eq!(*err.code(), crate::error::S3ErrorCode::AccessDenied, "Anonymous request should be denied");
-        }
-        Ok(_) => panic!("Anonymous request should have been denied"),
-    }
+    // Verify that the response indicates access is denied
+    assert_eq!(
+        response.status,
+        hyper::StatusCode::FORBIDDEN,
+        "Anonymous request should have been denied"
+    );
 
-    // Verify that the S3 service was never called
+    // Verify that the S3 service was never called (access was denied before dispatch)
     assert_eq!(test_s3.get_call_count(), 0);
 }
 
@@ -949,4 +951,166 @@ async fn test_custom_route_anonymous_access_allowed_when_overridden() {
 
     // Verify that the custom route was actually called
     assert_eq!(anonymous_route.get_call_count(), 1);
+}
+
+/// Test S3 route allows access when no auth is configured (simulates authenticated access path)
+#[tokio::test]
+async fn test_s3_route_no_auth_configured_allows_access() {
+    use crate::config::{S3ConfigProvider, StaticConfigProvider};
+    use crate::http::{Body, Request};
+    use crate::ops::CallContext;
+    use hyper::Method;
+    use std::sync::Arc;
+
+    let test_s3 = Arc::new(access_control_test_helpers::TestS3WithGetObject::new());
+    let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+
+    // No auth configured - access checks are skipped
+    let ccx = CallContext {
+        s3: &s3,
+        config: &config,
+        host: None,
+        auth: None,
+        access: None,
+        route: None,
+        validation: None,
+    };
+
+    // Create a request without authentication
+    let mut req = Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri("http://localhost/test-bucket/test-key.txt")
+            .header(crate::header::HOST, "localhost")
+            .body(Body::empty())
+            .unwrap(),
+    );
+
+    // Call the full operation which should succeed when no auth is configured
+    let result = super::call(&mut req, &ccx).await;
+
+    // Should succeed with a successful response
+    match result {
+        Ok(resp) => {
+            assert!(
+                resp.status.is_success(),
+                "Request should succeed when no auth is configured, got status: {:?}",
+                resp.status
+            );
+        }
+        Err(err) => {
+            panic!("Request should succeed when no auth is configured, got error: {err:?}");
+        }
+    }
+
+    // Verify that the S3 handler was invoked
+    assert_eq!(test_s3.get_call_count(), 1, "S3 handler should have been invoked");
+}
+
+/// Test custom route allows access when no auth is configured (simulates authenticated access path)
+#[tokio::test]
+async fn test_custom_route_no_auth_configured_allows_access() {
+    use crate::S3Request;
+    use crate::config::{S3ConfigProvider, StaticConfigProvider};
+    use crate::http::{Body, Request};
+    use crate::ops::CallContext;
+    use crate::protocol::S3Response;
+    use crate::route::S3Route;
+    use hyper::header::HeaderValue;
+    use hyper::http::Extensions;
+    use hyper::{HeaderMap, Method, Uri};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct TestS3;
+
+    #[async_trait::async_trait]
+    impl crate::s3_trait::S3 for TestS3 {}
+
+    /// Custom route for testing
+    #[derive(Debug, Clone)]
+    struct TestRoute {
+        call_count: Arc<AtomicUsize>,
+    }
+
+    impl TestRoute {
+        fn new() -> Self {
+            Self {
+                call_count: Arc::new(AtomicUsize::new(0)),
+            }
+        }
+
+        fn get_call_count(&self) -> usize {
+            self.call_count.load(Ordering::SeqCst)
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl S3Route for TestRoute {
+        fn is_match(&self, method: &Method, uri: &Uri, headers: &HeaderMap, _: &mut Extensions) -> bool {
+            method == Method::POST
+                && uri.path() == "/test-route"
+                && headers
+                    .get(hyper::header::CONTENT_TYPE)
+                    .is_some_and(|v| v.as_bytes() == b"application/x-test")
+        }
+
+        // Override check_access to allow access (simulating that the route handles its own auth)
+        async fn check_access(&self, _req: &mut S3Request<Body>) -> crate::error::S3Result<()> {
+            Ok(())
+        }
+
+        async fn call(&self, _req: S3Request<Body>) -> crate::error::S3Result<S3Response<Body>> {
+            self.call_count.fetch_add(1, Ordering::SeqCst);
+            Ok(S3Response::new(Body::from("Test route response".to_string())))
+        }
+    }
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(TestS3);
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+
+    let test_route = TestRoute::new();
+
+    // No auth configured - access checks are skipped
+    let ccx = CallContext {
+        s3: &s3,
+        config: &config,
+        host: None,
+        auth: None,
+        access: None,
+        route: Some(&test_route),
+        validation: None,
+    };
+
+    // Create a request to the custom route without authentication
+    let mut req = Request::from(
+        hyper::Request::builder()
+            .method(Method::POST)
+            .uri("http://localhost/test-route")
+            .header(crate::header::HOST, "localhost")
+            .header(hyper::header::CONTENT_TYPE, HeaderValue::from_static("application/x-test"))
+            .body(Body::empty())
+            .unwrap(),
+    );
+
+    // Call the operation which should succeed when no auth is configured
+    let result = super::call(&mut req, &ccx).await;
+
+    // Should succeed with a successful response
+    match result {
+        Ok(resp) => {
+            assert!(
+                resp.status.is_success(),
+                "Request should succeed when no auth is configured, got status: {:?}",
+                resp.status
+            );
+        }
+        Err(err) => {
+            panic!("Request should succeed when no auth is configured, got error: {err:?}");
+        }
+    }
+
+    // Verify that the custom route was invoked
+    assert_eq!(test_route.get_call_count(), 1, "Custom route should have been invoked");
 }
