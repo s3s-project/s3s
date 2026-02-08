@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 [Unreleased]: https://github.com/s3s-project/s3s/compare/v0.12.0...HEAD
 
+### Docker
+
++ Migrated Docker releases from Docker Hub to GitHub Container Registry (ghcr.io)
+
 ## [v0.12.0] - 2025-12-22
 
 [v0.12.0]: https://github.com/s3s-project/s3s/compare/v0.11.0...v0.12.0
