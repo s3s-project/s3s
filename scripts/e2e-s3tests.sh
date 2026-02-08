@@ -7,7 +7,6 @@ CONF_PATH="/tmp/s3tests.conf"
 REPORT_DIR="/tmp/s3s-s3tests-report"
 MINIO_DIR="/tmp/s3s-s3tests-minio"
 S3S_PROXY_PID=""
-MINIO_CONTAINER_ID=""
 
 if [ -z "${BASH_VERSION:-}" ]; then
     echo "this script must be run with bash"
@@ -47,7 +46,7 @@ wait_for_minio() {
         if curl -s -o /dev/null http://localhost:9000/minio/health/live; then
             return 0
         fi
-        sleep 1s
+        sleep 1
     done
     echo "minio did not become ready"
     return 1
@@ -59,7 +58,7 @@ wait_for_proxy() {
         if curl -s -o /dev/null http://localhost:8014/; then
             return 0
         fi
-        sleep 1s
+        sleep 1
     done
     echo "s3s-proxy did not become ready"
     return 1
