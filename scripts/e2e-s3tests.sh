@@ -195,7 +195,7 @@ if [ "${S3TEST_ARGS[0]:-}" = "--" ]; then
     S3TEST_ARGS=("${S3TEST_ARGS[@]:1}")
 fi
 if [ ${#S3TEST_ARGS[@]} -eq 0 ]; then
-    S3TEST_ARGS=(s3tests/functional/test_s3.py::test_bucket_list_empty)
+    S3TEST_ARGS=(s3tests/functional s3test_boto3/functional)
 fi
 
 pushd "$S3TESTS_DIR"
