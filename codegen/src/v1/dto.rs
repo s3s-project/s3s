@@ -660,7 +660,7 @@ pub fn codegen(rust_types: &RustTypes, ops: &Operations, patch: Option<Patch>) {
         g!();
     }
 
-    codegen_tests(ops);
+    codegen_tests(ops, rust_types);
     codegen_builders(rust_types, ops);
 
     codegen_dto_ext(rust_types);
@@ -979,13 +979,14 @@ fn codegen_struct_enum(ty: &rust::StructEnum, rust_types: &RustTypes, needs_serd
     g!("}}");
 }
 
-fn codegen_tests(ops: &Operations) {
+fn codegen_tests(ops: &Operations, rust_types: &RustTypes) {
     g([
         "#[cfg(test)]",
         "mod tests {",
         "use super::*;",
         "",
         "fn require_default<T: Default>() {}",
+        "fn require_clone<T: Clone>() {}",
         "",
     ]);
 
@@ -994,6 +995,24 @@ fn codegen_tests(ops: &Operations) {
         g!("fn test_default() {{");
         for op in ops.values() {
             g!("require_default::<{}>();", op.output);
+        }
+        g!("}}");
+    }
+
+    {
+        g!("#[test]");
+        g!("fn test_clone() {{");
+        for op in ops.values() {
+            if let Some(rust::Type::Struct(ty)) = rust_types.get(&op.input)
+                && can_derive_clone(ty, rust_types)
+            {
+                g!("require_clone::<{}>();", op.input);
+            }
+            if let Some(rust::Type::Struct(ty)) = rust_types.get(&op.output)
+                && can_derive_clone(ty, rust_types)
+            {
+                g!("require_clone::<{}>();", op.output);
+            }
         }
         g!("}}");
     }
