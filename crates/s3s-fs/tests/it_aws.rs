@@ -21,6 +21,8 @@ use aws_sdk_s3::types::CompletedMultipartUpload;
 use aws_sdk_s3::types::CompletedPart;
 use aws_sdk_s3::types::CreateBucketConfiguration;
 
+use aws_sdk_s3::error::ProvideErrorMetadata;
+
 use anyhow::Result;
 use hyper::Method;
 use tokio::sync::Mutex;
@@ -1268,6 +1270,7 @@ async fn test_put_object_atomic_write() -> Result<()> {
 /// A different user should not be able to upload parts or complete the upload.
 #[tokio::test]
 #[tracing::instrument]
+#[allow(clippy::too_many_lines)]
 async fn test_multipart_upload_id_auth() -> Result<()> {
     let _guard = serial().await;
 
@@ -1279,6 +1282,7 @@ async fn test_multipart_upload_id_auth() -> Result<()> {
     auth.register(cred_user1.access_key_id().to_string(), cred_user1.secret_access_key().into());
     auth.register(cred_user2.access_key_id().to_string(), cred_user2.secret_access_key().into());
 
+    fs::create_dir_all(FS_ROOT).unwrap();
     let fs = FileSystem::new(FS_ROOT).unwrap();
     let service = {
         let mut b = S3ServiceBuilder::new(fs);
@@ -1329,10 +1333,14 @@ async fn test_multipart_upload_id_auth() -> Result<()> {
         .send()
         .await;
 
-    assert!(result.is_err(), "Expected AccessDenied when user2 tries to upload part");
-    let error_str = format!("{:?}", result.unwrap_err());
-    debug!("Upload part by user2 failed (expected): {error_str}");
-    assert!(error_str.contains("AccessDenied"), "Expected AccessDenied error, got: {error_str}");
+    let err = result.expect_err("Expected AccessDenied when user2 tries to upload part");
+    let service_err = err.into_service_error();
+    assert_eq!(
+        service_err.code(),
+        Some("AccessDenied"),
+        "Expected AccessDenied error code, got: {:?}",
+        service_err.code()
+    );
 
     // User1 should be able to upload a part
     let upload_parts = {
@@ -1368,7 +1376,14 @@ async fn test_multipart_upload_id_auth() -> Result<()> {
         .send()
         .await;
 
-    assert!(result.is_err(), "Expected AccessDenied when user2 tries to complete upload");
+    let err = result.expect_err("Expected AccessDenied when user2 tries to complete upload");
+    let service_err = err.into_service_error();
+    assert_eq!(
+        service_err.code(),
+        Some("AccessDenied"),
+        "Expected AccessDenied error code, got: {:?}",
+        service_err.code()
+    );
 
     // User1 completes the upload
     let upload = CompletedMultipartUpload::builder().set_parts(Some(upload_parts)).build();

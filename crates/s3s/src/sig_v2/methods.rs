@@ -472,7 +472,7 @@ mod tests {
             )
         );
 
-        // Verify signature is deterministic
+        // Sanity-check: a non-empty signature is produced for this input
         let sig = calculate_signature(&secret_key, &string_to_sign);
         assert!(!sig.is_empty());
     }
@@ -498,6 +498,7 @@ mod tests {
             concat!("GET\n", "\n", "\n", "Thu, 14 Mar 2024 12:00:00 +0000\n", "/mybucket/myobject",)
         );
 
+        // Sanity-check: a non-empty signature is produced for this input
         let sig = calculate_signature(&secret_key, &string_to_sign);
         assert!(!sig.is_empty());
     }
@@ -529,6 +530,7 @@ mod tests {
             )
         );
 
+        // Sanity-check: a non-empty signature is produced for this input
         let sig = calculate_signature(&secret_key, &string_to_sign);
         assert!(!sig.is_empty());
     }
