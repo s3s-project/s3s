@@ -1155,12 +1155,7 @@ async fn test_list_objects_v2_start_after() -> Result<()> {
     }
 
     // start_after="bbb.txt" should return only ccc.txt and ddd.txt
-    let result = c
-        .list_objects_v2()
-        .bucket(bucket)
-        .start_after("bbb.txt")
-        .send()
-        .await?;
+    let result = c.list_objects_v2().bucket(bucket).start_after("bbb.txt").send().await?;
 
     let contents: Vec<_> = result.contents().iter().filter_map(|obj| obj.key()).collect();
     assert_eq!(contents, vec!["ccc.txt", "ddd.txt"]);
@@ -1202,12 +1197,7 @@ async fn test_list_objects_v2_prefix_string_matching() -> Result<()> {
     // Prefix "dir/sub" should match "dir/subdir/..." and "dir/subother/..."
     // but NOT "dir/other/..."
     // Path::starts_with would fail here because it requires component boundaries
-    let result = c
-        .list_objects_v2()
-        .bucket(bucket)
-        .prefix("dir/sub")
-        .send()
-        .await?;
+    let result = c.list_objects_v2().bucket(bucket).prefix("dir/sub").send().await?;
 
     let contents: Vec<_> = result.contents().iter().filter_map(|obj| obj.key()).collect();
     assert_eq!(contents.len(), 2, "Expected 2 objects matching prefix 'dir/sub', got {contents:?}");
@@ -1342,10 +1332,7 @@ async fn test_multipart_upload_id_auth() -> Result<()> {
     assert!(result.is_err(), "Expected AccessDenied when user2 tries to upload part");
     let error_str = format!("{:?}", result.unwrap_err());
     debug!("Upload part by user2 failed (expected): {error_str}");
-    assert!(
-        error_str.contains("AccessDenied"),
-        "Expected AccessDenied error, got: {error_str}"
-    );
+    assert!(error_str.contains("AccessDenied"), "Expected AccessDenied error, got: {error_str}");
 
     // User1 should be able to upload a part
     let upload_parts = {
@@ -1360,10 +1347,12 @@ async fn test_multipart_upload_id_auth() -> Result<()> {
             .send()
             .await?;
 
-        vec![CompletedPart::builder()
-            .e_tag(ans.e_tag.unwrap_or_default())
-            .part_number(1)
-            .build()]
+        vec![
+            CompletedPart::builder()
+                .e_tag(ans.e_tag.unwrap_or_default())
+                .part_number(1)
+                .build(),
+        ]
     };
 
     // User2 tries to complete the upload - should fail with AccessDenied

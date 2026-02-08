@@ -495,13 +495,7 @@ mod tests {
 
         assert_eq!(
             string_to_sign,
-            concat!(
-                "GET\n",
-                "\n",
-                "\n",
-                "Thu, 14 Mar 2024 12:00:00 +0000\n",
-                "/mybucket/myobject",
-            )
+            concat!("GET\n", "\n", "\n", "Thu, 14 Mar 2024 12:00:00 +0000\n", "/mybucket/myobject",)
         );
 
         let sig = calculate_signature(&secret_key, &string_to_sign);
