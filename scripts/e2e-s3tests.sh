@@ -192,7 +192,7 @@ secret_key = minioadmin
 EOF
 
 S3TEST_ARGS=("$@")
-if [ ${#S3TEST_ARGS[@]} -gt 0 ] && [ "${S3TEST_ARGS[0]}" = "--" ]; then
+if [ "${S3TEST_ARGS[0]:-}" = "--" ]; then
     S3TEST_ARGS=("${S3TEST_ARGS[@]:1}")
 fi
 if [ ${#S3TEST_ARGS[@]} -eq 0 ]; then
@@ -205,8 +205,7 @@ S3TEST_CONF="$CONF_PATH" \
     "$S3TESTS_DIR/.venv/bin/pytest" \
     "${S3TEST_ARGS[@]}" \
     --junitxml="$REPORT_DIR/junit.xml" | tee "$TARGET_DIR/s3-tests.log"
-PYTEST_STATUS=${PIPESTATUS[0]}
-set -e
+PYTEST_STATUS=${PIPESTATUS[0]}; set -e
 popd
 
 REPORT_STATUS=0
