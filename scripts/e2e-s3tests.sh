@@ -64,6 +64,20 @@ wait_for_proxy() {
     return 1
 }
 
+ensure_minio_running() {
+    if ! docker container inspect -f '{{.State.Running}}' "$MINIO_CONTAINER_ID" | grep -q true; then
+        echo "minio container did not stay running"
+        exit 1
+    fi
+}
+
+ensure_proxy_running() {
+    if ! kill -0 "$S3S_PROXY_PID" >/dev/null 2>&1; then
+        echo "s3s-proxy failed to start"
+        exit 1
+    fi
+}
+
 if ! command -v s3s-proxy >/dev/null 2>&1; then
     echo "s3s-proxy is required; run: just install s3s-proxy"
     exit 1
@@ -80,10 +94,7 @@ MINIO_CONTAINER_ID=$(docker run -d \
     minio/minio:latest server /data --console-address ":9001")
 
 wait_for_minio
-if ! docker container inspect -f '{{.State.Running}}' "$MINIO_CONTAINER_ID" | grep -q true; then
-    echo "minio container did not stay running"
-    exit 1
-fi
+ensure_minio_running
 
 export AWS_ACCESS_KEY_ID=minioadmin
 export AWS_SECRET_ACCESS_KEY=minioadmin
@@ -97,10 +108,8 @@ s3s-proxy \
 S3S_PROXY_PID=$!
 
 wait_for_proxy
-if ! kill -0 "$S3S_PROXY_PID" >/dev/null 2>&1; then
-    echo "s3s-proxy failed to start"
-    exit 1
-fi
+ensure_proxy_running
+ensure_minio_running
 
 rm -rf "$S3TESTS_DIR"
 git clone --depth 1 https://github.com/ceph/s3-tests.git "$S3TESTS_DIR"
