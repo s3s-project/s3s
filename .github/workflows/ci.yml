@@ -176,17 +176,15 @@ jobs:
             ./target/s3s-proxy.log
 
   status-check:
-    name: Status Check
-    if: always()
     needs:
       - python
       - rust
       - cross-test
       - wasm-test
       - coverage
-      - mint-proxy-minio
       - e2e-fs
       - e2e-minio
+      - mint-proxy-minio
       - s3tests-proxy-minio
     runs-on: ubuntu-latest
     steps:
