@@ -75,7 +75,6 @@ zeroize.workspace = true
 axum.workspace = true
 clap.workspace = true
 hyper-util = { workspace = true, features = ["server-auto", "server-graceful", "http1", "http2", "tokio"] }
-rustls-pemfile.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, features = ["full"] }
 tokio-rustls.workspace = true

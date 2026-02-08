@@ -28,8 +28,7 @@ use s3s::dto::{GetObjectInput, GetObjectOutput};
 use s3s::service::S3ServiceBuilder;
 use s3s::{S3, S3Request, S3Response, S3Result};
 
-use std::fs::File;
-use std::io::{self, BufReader};
+use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -37,6 +36,7 @@ use tokio::net::TcpListener;
 use tokio_rustls::TlsAcceptor;
 use tokio_rustls::rustls;
 use tokio_rustls::rustls::ServerConfig;
+use tokio_rustls::rustls::pki_types::pem::PemObject;
 use tokio_rustls::rustls::pki_types::{CertificateDer, PrivateKeyDer};
 
 use hyper_util::rt::{TokioExecutor, TokioIo};
@@ -57,9 +57,10 @@ impl S3 for DummyS3 {
 
 /// Load certificates from a PEM file
 fn load_certs(path: &Path) -> io::Result<Vec<CertificateDer<'static>>> {
-    let file = File::open(path)?;
-    let mut reader = BufReader::new(file);
-    let certs = rustls_pemfile::certs(&mut reader).collect::<Result<Vec<_>, _>>()?;
+    let certs = CertificateDer::pem_file_iter(path)
+        .map_err(io::Error::other)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(io::Error::other)?;
     if certs.is_empty() {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "No valid certificates found in file"));
     }
@@ -68,28 +69,7 @@ fn load_certs(path: &Path) -> io::Result<Vec<CertificateDer<'static>>> {
 
 /// Load private key from a PEM file
 fn load_private_key(path: &Path) -> io::Result<PrivateKeyDer<'static>> {
-    use rustls_pemfile::Item;
-
-    let file = File::open(path)?;
-    let mut reader = BufReader::new(file);
-
-    loop {
-        match rustls_pemfile::read_one(&mut reader)? {
-            Some(Item::Pkcs8Key(key)) => {
-                return Ok(PrivateKeyDer::Pkcs8(key));
-            }
-            Some(Item::Pkcs1Key(key)) => {
-                return Ok(PrivateKeyDer::Pkcs1(key));
-            }
-            Some(Item::Sec1Key(key)) => {
-                return Ok(PrivateKeyDer::Sec1(key));
-            }
-            Some(_) => {}
-            None => break,
-        }
-    }
-
-    Err(io::Error::new(io::ErrorKind::InvalidInput, "No valid private key found in file"))
+    PrivateKeyDer::from_pem_file(path).map_err(io::Error::other)
 }
 
 /// Create TLS server configuration from certificate and key files

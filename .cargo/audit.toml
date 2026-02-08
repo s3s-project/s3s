@@ -2,13 +2,3 @@
 # See: https://github.com/RustSec/rustsec/blob/main/cargo-audit/audit.toml.example
 
 [advisories]
-# Ignored advisories with reasons:
-# RUSTSEC-2025-0134: Transitive dependency 'rustls-pemfile' is marked
-# unmaintained; accepted temporarily due to upstream dependency chain
-# (hyper-rustls via aws-smithy). Re-evaluate and remove when aws-* deps
-# update or the advisory is resolved upstream.
-# RUSTSEC-2026-0002: Transitive dependency 'lru' has unsound IterMut
-# implementation that violates Stacked Borrows; accepted temporarily
-# due to upstream dependency chain (aws-sdk-s3). Re-evaluate and remove
-# when aws-sdk-s3 updates or the advisory is resolved upstream.
-ignore = ["RUSTSEC-2025-0134", "RUSTSEC-2026-0002"]
