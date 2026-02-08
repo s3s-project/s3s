@@ -946,7 +946,7 @@ async fn test_custom_route_anonymous_access_allowed_when_overridden() {
 }
 
 /// Test S3 route allows access when no auth provider is configured
-/// 
+///
 /// When `CallContext.auth` is `None`, access checks are skipped for S3 operations,
 /// allowing unsigned requests to succeed. This tests that behavior.
 #[tokio::test]
@@ -1004,7 +1004,7 @@ async fn test_s3_route_no_auth_provider_allows_unsigned_requests() {
 }
 
 /// Test custom route with overridden `check_access` allows unsigned requests
-/// 
+///
 /// Custom routes always call `check_access()`, even when no auth provider is configured.
 /// This test verifies that a custom route can override `check_access` to allow access
 /// without credentials, regardless of the auth provider configuration.
