@@ -96,13 +96,13 @@ Open a new terminal, then run the test suite
 
 ### Run Ceph s3-tests (E2E)
 
-Install `s3s-fs`
+Install `s3s-proxy`
 
 ```bash
-just install s3s-fs
+just install s3s-proxy
 ```
 
-Run a minimal Ceph `s3-tests` run against `s3s-fs`:
+Run a minimal Ceph `s3-tests` run against `s3s-proxy` (backed by MinIO):
 
 ```bash
 ./scripts/e2e-s3tests.sh
