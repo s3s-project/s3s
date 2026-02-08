@@ -700,22 +700,30 @@ async fn test_s3_route_custom_access_allows_anonymous() {
             .unwrap(),
     );
 
-    // This should pass access control because custom access allows anonymous
-    let result = super::prepare(&mut req, &ccx).await;
+    // Call the full operation which should pass access control and invoke the handler
+    let result = super::call(&mut req, &ccx).await;
 
-    // Should succeed (or fail with an error other than AccessDenied)
+    // Should succeed with a successful response
     match result {
-        Err(err) => {
-            assert_ne!(
-                *err.code(),
-                crate::error::S3ErrorCode::AccessDenied,
-                "Should not be denied when custom access control allows anonymous"
+        Ok(resp) => {
+            // Should get a successful response (2xx status code)
+            assert!(
+                resp.status.is_success(),
+                "Anonymous request should succeed when custom access control allows it, got status: {:?}",
+                resp.status
             );
         }
-        Ok(_) => {
-            // Success is expected
+        Err(err) => {
+            panic!("Anonymous request should succeed when custom access control allows it, got error: {err:?}");
         }
     }
+
+    // Verify that the S3 handler was actually invoked
+    assert_eq!(
+        test_s3.get_call_count(),
+        1,
+        "S3 handler should have been invoked once"
+    );
 }
 
 /// Test custom route denies anonymous access by default
