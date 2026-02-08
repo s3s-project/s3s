@@ -8,11 +8,6 @@ REPORT_DIR="/tmp/s3s-s3tests-report"
 MINIO_DIR="/tmp/s3s-s3tests-minio"
 S3S_PROXY_PID=""
 
-if [ -z "${BASH_VERSION:-}" ]; then
-    echo "this script must be run with bash"
-    exit 1
-fi
-
 mkdir -p "$TARGET_DIR"
 mkdir -p "$REPORT_DIR"
 mkdir -p "$MINIO_DIR"
@@ -65,7 +60,12 @@ wait_for_proxy() {
 }
 
 ensure_minio_running() {
-    if ! docker container inspect -f '{{.State.Running}}' "$MINIO_CONTAINER_ID" | grep -q true; then
+    local container_id="$1"
+    if [ -z "$container_id" ]; then
+        echo "minio container id missing"
+        exit 1
+    fi
+    if ! docker container inspect -f '{{.State.Running}}' "$container_id" | grep -q true; then
         echo "minio container did not stay running"
         exit 1
     fi
@@ -94,7 +94,7 @@ MINIO_CONTAINER_ID=$(docker run -d \
     minio/minio:latest server /data --console-address ":9001")
 
 wait_for_minio
-ensure_minio_running
+ensure_minio_running "$MINIO_CONTAINER_ID"
 
 export AWS_ACCESS_KEY_ID=minioadmin
 export AWS_SECRET_ACCESS_KEY=minioadmin
@@ -109,7 +109,7 @@ S3S_PROXY_PID=$!
 
 wait_for_proxy
 ensure_proxy_running
-ensure_minio_running
+ensure_minio_running "$MINIO_CONTAINER_ID"
 
 rm -rf "$S3TESTS_DIR"
 git clone --depth 1 https://github.com/ceph/s3-tests.git "$S3TESTS_DIR"
