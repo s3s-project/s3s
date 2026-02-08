@@ -34,6 +34,17 @@ cleanup() {
 
 trap cleanup EXIT
 
+check_docker() {
+    if ! command -v docker >/dev/null 2>&1; then
+        echo "docker is required to run minio"
+        exit 1
+    fi
+    if ! docker info >/dev/null 2>&1; then
+        echo "docker is not running"
+        exit 1
+    fi
+}
+
 wait_for_minio() {
     local attempt
     for attempt in {1..30}; do
@@ -87,14 +98,18 @@ if ! command -v s3s-proxy >/dev/null 2>&1; then
     exit 1
 fi
 
+check_docker
 reset_minio_container
-MINIO_CONTAINER_ID=$(docker run -d \
+if ! MINIO_CONTAINER_ID=$(docker run -d \
     --name s3tests-minio \
     -p 9000:9000 -p 9001:9001 \
     -e "MINIO_DOMAIN=localhost:9000" \
     -e "MINIO_HTTP_TRACE=1" \
     -v "$MINIO_DIR":/data \
-    minio/minio:latest server /data --console-address ":9001")
+    minio/minio:latest server /data --console-address ":9001"); then
+    echo "failed to start minio container"
+    exit 1
+fi
 
 wait_for_minio
 ensure_minio_running "$MINIO_CONTAINER_ID"
@@ -114,8 +129,13 @@ wait_for_proxy
 ensure_proxy_running
 ensure_minio_running "$MINIO_CONTAINER_ID"
 
-rm -rf "$S3TESTS_DIR"
-git clone --depth 1 https://github.com/ceph/s3-tests.git "$S3TESTS_DIR"
+if [ -d "$S3TESTS_DIR/.git" ]; then
+    git -C "$S3TESTS_DIR" fetch --depth 1 origin master
+    git -C "$S3TESTS_DIR" reset --hard origin/master
+else
+    rm -rf "$S3TESTS_DIR"
+    git clone --depth 1 https://github.com/ceph/s3-tests.git "$S3TESTS_DIR"
+fi
 python3 -m venv "$S3TESTS_DIR/.venv"
 "$S3TESTS_DIR/.venv/bin/pip" install -r "$S3TESTS_DIR/requirements.txt"
 
