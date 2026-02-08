@@ -454,7 +454,8 @@ impl S3ServiceBuilder {
 ///
 /// 1. Parses incoming HTTP requests
 /// 2. Validates authentication (if configured)
-/// 3. Authorizes the request (if both authentication and access control are configured)
+/// 3. Authorizes the request whenever authentication is enabled (using custom access
+///    control if configured, otherwise the default access check)
 /// 4. Routes to appropriate S3 operation or custom route
 /// 5. Invokes your S3 implementation
 /// 6. Converts responses back to HTTP
@@ -550,7 +551,8 @@ impl S3Service {
     ///
     /// 1. Parses the HTTP request
     /// 2. Authenticates the request (if authentication is configured)
-    /// 3. Authorizes the request (if both authentication and access control are configured)
+    /// 3. Authorizes the request whenever authentication is enabled (using custom access
+    ///    control if configured, otherwise the default access check)
     /// 4. Routes the request to the appropriate S3 operation
     /// 5. Invokes your S3 implementation
     /// 6. Converts the result to an HTTP response
@@ -560,7 +562,7 @@ impl S3Service {
     /// Returns an [`HttpError`] if the request cannot be processed. This could be due to:
     /// - Invalid HTTP request format
     /// - Authentication failure (if authentication is configured)
-    /// - Authorization failure (if authentication and access control are configured)
+    /// - Authorization failure (if authentication is configured)
     /// - S3 operation errors
     ///
     /// # Example
