@@ -157,7 +157,7 @@ jobs:
   e2e-s3tests:
     name: e2e (s3-tests, s3s-proxy, minio)
     needs: skip-check
-    if: needs.skip-check.outputs.should_skip != 'true'
+    if: github.event_name != 'pull_request' && needs.skip-check.outputs.should_skip != 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
