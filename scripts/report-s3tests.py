@@ -2,6 +2,7 @@
 import sys
 from xml.etree import ElementTree
 
+# Baseline results as of 2026-02-08; reduce these as compatibility improves.
 ALLOWED_FAILURES = 326
 ALLOWED_ERRORS = 302
 
