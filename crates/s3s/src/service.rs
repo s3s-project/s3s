@@ -52,7 +52,7 @@
 //!
 //! - **Config**: [`StaticConfigProvider::default()`]
 //! - **Auth**: None (no authentication required)
-//! - **Access**: None (no authorization checks)
+//! - **Access**: None (no custom access policy; when auth is enabled, uses the default access check that denies anonymous requests)
 //! - **Host**: None (assumes path-style requests)
 //! - **Route**: None (no custom routes)
 //! - **Validation**: None (uses AWS-compatible validation)
@@ -283,6 +283,7 @@ impl S3ServiceBuilder {
     /// ```
     /// use s3s::service::S3ServiceBuilder;
     /// use s3s::access::{S3Access, S3AccessContext};
+    /// use s3s::auth::SimpleAuth;
     /// use s3s::{S3, S3Request, S3Response, S3Result};
     /// use s3s::dto::{GetObjectInput, GetObjectOutput};
     ///
@@ -310,6 +311,8 @@ impl S3ServiceBuilder {
     /// }
     ///
     /// let mut builder = S3ServiceBuilder::new(MyS3);
+    /// // Note: access checks are only enforced if `set_auth` is also configured.
+    /// builder.set_auth(SimpleAuth::from_single("ACCESS_KEY", "SECRET_KEY"));
     /// builder.set_access(MyAccessControl);
     /// ```
     pub fn set_access(&mut self, access: impl S3Access) {
@@ -451,7 +454,7 @@ impl S3ServiceBuilder {
 ///
 /// 1. Parses incoming HTTP requests
 /// 2. Validates authentication (if configured)
-/// 3. Checks authorization (if configured)
+/// 3. Authorizes the request (if both authentication and access control are configured)
 /// 4. Routes to appropriate S3 operation or custom route
 /// 5. Invokes your S3 implementation
 /// 6. Converts responses back to HTTP

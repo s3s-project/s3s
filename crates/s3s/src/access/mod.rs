@@ -58,6 +58,7 @@
 //! ```
 //! use s3s::service::S3ServiceBuilder;
 //! use s3s::access::{S3Access, S3AccessContext};
+//! use s3s::auth::SimpleAuth;
 //! use s3s::{S3, S3Request, S3Response, S3Result};
 //! use s3s::dto::{GetObjectInput, GetObjectOutput};
 //!
@@ -82,6 +83,8 @@
 //! }
 //!
 //! let mut builder = S3ServiceBuilder::new(MyS3);
+//! // Configure both auth and access control for authorization to be enforced
+//! builder.set_auth(SimpleAuth::from_single("ACCESS_KEY", "SECRET_KEY"));
 //! builder.set_access(MyAccessControl);
 //! let service = builder.build();
 //! ```
