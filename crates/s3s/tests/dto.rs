@@ -48,26 +48,28 @@ fn configuration_serialization() {
     let _: ReplicationConfiguration = serde_json::from_str(&json).expect("should deserialize");
 }
 
+fn require_clone<T: Clone>() {}
+
 #[test]
 fn configuration_types_have_clone() {
-    let _ = BucketLifecycleConfiguration::default().clone();
-    let _ = ReplicationConfiguration::default().clone();
+    require_clone::<BucketLifecycleConfiguration>();
+    require_clone::<ReplicationConfiguration>();
 
-    let _ = AnalyticsConfiguration::default().clone();
-    let _ = IntelligentTieringConfiguration::default().clone();
-    let _ = InventoryConfiguration::default().clone();
-    let _ = LambdaFunctionConfiguration::default().clone();
-    let _ = MetadataTableConfiguration::default().clone();
-    let _ = MetricsConfiguration::default().clone();
-    let _ = QueueConfiguration::default().clone();
-    let _ = RequestPaymentConfiguration::default().clone();
-    let _ = TopicConfiguration::default().clone();
+    require_clone::<AnalyticsConfiguration>();
+    require_clone::<IntelligentTieringConfiguration>();
+    require_clone::<InventoryConfiguration>();
+    require_clone::<LambdaFunctionConfiguration>();
+    require_clone::<MetadataTableConfiguration>();
+    require_clone::<MetricsConfiguration>();
+    require_clone::<QueueConfiguration>();
+    require_clone::<RequestPaymentConfiguration>();
+    require_clone::<TopicConfiguration>();
 }
 
 #[test]
 fn operation_types_have_clone() {
-    let _ = GetObjectInput::default().clone();
-    let _ = ListObjectsV2Input::default().clone();
-    let _ = ListObjectsV2Output::default().clone();
-    let _ = PutObjectOutput::default().clone();
+    require_clone::<GetObjectInput>();
+    require_clone::<ListObjectsV2Input>();
+    require_clone::<ListObjectsV2Output>();
+    require_clone::<PutObjectOutput>();
 }
