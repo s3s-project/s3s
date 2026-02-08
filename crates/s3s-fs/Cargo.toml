@@ -62,7 +62,6 @@ aws-sdk-sts = { workspace = true, features = ["behavior-version-latest"] }
 futures-util.workspace = true
 hyper = { workspace = true, features = ["http1", "http2"] }
 hyper-util = { workspace = true, features = ["server-auto", "server-graceful", "http1", "http2", "tokio"] }
-once_cell.workspace = true
 opendal = { workspace = true, features = ["services-s3"] }
 s3s-aws = { version = "0.13.0-alpha.2", path = "../s3s-aws" }
 tokio = { workspace = true, features = ["full"] }
