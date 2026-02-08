@@ -130,7 +130,10 @@ ensure_proxy_running
 ensure_minio_running "$MINIO_CONTAINER_ID"
 
 if [ -d "$S3TESTS_DIR/.git" ]; then
-    default_branch=$(git -C "$S3TESTS_DIR" remote show origin | awk '/HEAD branch/ {print $NF}')
+    default_branch=$(git -C "$S3TESTS_DIR" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||')
+    if [ -z "$default_branch" ]; then
+        default_branch=$(git -C "$S3TESTS_DIR" remote show origin | awk '/HEAD branch/ {print $NF}')
+    fi
     if [ -z "$default_branch" ]; then
         default_branch="master"
     fi
@@ -215,7 +218,10 @@ popd
 REPORT_STATUS=0
 if [ -f "$REPORT_DIR/junit.xml" ]; then
     cp "$REPORT_DIR/junit.xml" "$TARGET_DIR/s3-tests.junit.xml"
-    python3 "$ROOT_DIR/scripts/report-s3tests.py" "$TARGET_DIR/s3-tests.junit.xml" || REPORT_STATUS=$?
+    set +e
+    python3 "$ROOT_DIR/scripts/report-s3tests.py" "$TARGET_DIR/s3-tests.junit.xml"
+    REPORT_STATUS=$?
+    set -e
 else
     echo "missing junit report at $REPORT_DIR/junit.xml"
     exit 1
