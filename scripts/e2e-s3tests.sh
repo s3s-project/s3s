@@ -19,14 +19,6 @@ fi
 cleanup() {
     if [ -n "$S3S_PROXY_PID" ]; then
         kill "$S3S_PROXY_PID" || true
-    else
-        local proxy_pids
-        proxy_pids=$(pgrep -x s3s-proxy || true)
-        if [ -n "$proxy_pids" ]; then
-            for pid in $proxy_pids; do
-                kill "$pid" || true
-            done
-        fi
     fi
 
     reset_minio_container
