@@ -15,7 +15,7 @@ ghcr.io/s3s-project/s3s
 
 ## Available Tags
 
-- **Version tags**: `v0.12.0`, `0.12.0`, `0.12`, `0` (for released versions)
+- **Version tags**: `0.12.0`, `0.12`, `0` (for released versions, generated from git tags like `v0.12.0`)
 - **`latest`**: Latest stable release
 - **`edge`**: Weekly builds from the main branch (updated every Sunday)
 
@@ -34,7 +34,7 @@ Images are built for the following platforms:
 docker pull ghcr.io/s3s-project/s3s:latest
 
 # Pull a specific version
-docker pull ghcr.io/s3s-project/s3s:v0.12.0
+docker pull ghcr.io/s3s-project/s3s:0.12.0
 
 # Pull the edge build
 docker pull ghcr.io/s3s-project/s3s:edge
