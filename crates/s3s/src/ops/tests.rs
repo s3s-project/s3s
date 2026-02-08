@@ -640,11 +640,7 @@ async fn test_s3_route_anonymous_access_denied() {
     let response = super::call(&mut req, &ccx).await.unwrap();
 
     // Verify that the response indicates access is denied
-    assert_eq!(
-        response.status,
-        hyper::StatusCode::FORBIDDEN,
-        "Anonymous request should have been denied"
-    );
+    assert_eq!(response.status, hyper::StatusCode::FORBIDDEN, "Anonymous request should have been denied");
 
     // Verify that the S3 service was never called (access was denied before dispatch)
     assert_eq!(test_s3.get_call_count(), 0);
@@ -721,11 +717,7 @@ async fn test_s3_route_custom_access_allows_anonymous() {
     }
 
     // Verify that the S3 handler was actually invoked
-    assert_eq!(
-        test_s3.get_call_count(),
-        1,
-        "S3 handler should have been invoked once"
-    );
+    assert_eq!(test_s3.get_call_count(), 1, "S3 handler should have been invoked once");
 }
 
 /// Test custom route denies anonymous access by default
