@@ -45,6 +45,12 @@ The data types, serialization and deserialization are generated from the smithy 
 
 It is up to the user to implement security enhancements such as **HTTP body length limit**, rate limit and back pressure.
 
+## Docker
+
+Docker images are available at [GitHub Container Registry (GHCR)](https://github.com/s3s-project/s3s/pkgs/container/s3s).
+
+See [Docker documentation](./docs/docker.md) for usage details.
+
 ## Contributing
 
 + [Development Guide](./CONTRIBUTING.md)
