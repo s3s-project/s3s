@@ -1,3 +1,62 @@
+//! S3 Service and Builder
+//!
+//! This module provides the core [`S3Service`] and [`S3ServiceBuilder`] types for creating
+//! S3-compatible HTTP services.
+//!
+//! # Overview
+//!
+//! [`S3Service`] is a hyper and tower service that handles S3 HTTP requests. It coordinates
+//! various components:
+//!
+//! - **S3 Implementation**: Your business logic implementing the [`S3`] trait
+//! - **Configuration**: Service settings via [`S3ConfigProvider`]
+//! - **Authentication**: Optional request signing verification via [`S3Auth`]
+//! - **Authorization**: Optional access control via [`S3Access`]
+//! - **Host Parsing**: Optional virtual host handling via [`S3Host`]
+//! - **Custom Routes**: Optional route interception via [`S3Route`]
+//! - **Validation**: Optional bucket/object name validation via [`NameValidation`]
+//!
+//! # Example
+//!
+//! ```
+//! use s3s::{S3, S3Request, S3Response, S3Result};
+//! use s3s::service::S3ServiceBuilder;
+//! use s3s::dto::{GetObjectInput, GetObjectOutput};
+//! use s3s::auth::SimpleAuth;
+//!
+//! #[derive(Clone)]
+//! struct MyS3;
+//!
+//! #[async_trait::async_trait]
+//! impl S3 for MyS3 {
+//!     // Implement S3 operations
+//! #   async fn get_object(&self, _req: S3Request<GetObjectInput>) -> S3Result<S3Response<GetObjectOutput>> {
+//! #       Err(s3s::s3_error!(NotImplemented))
+//! #   }
+//! }
+//!
+//! // Create a basic service
+//! let service = S3ServiceBuilder::new(MyS3).build();
+//!
+//! // Or configure it with authentication
+//! let mut builder = S3ServiceBuilder::new(MyS3);
+//! builder.set_auth(SimpleAuth::from_single("ACCESS_KEY", "SECRET_KEY"));
+//! let service = builder.build();
+//! ```
+//!
+//! # Builder Pattern
+//!
+//! [`S3ServiceBuilder`] uses the builder pattern to configure the service. All components
+//! are optional except for the [`S3`] implementation itself. If not provided, sensible
+//! defaults are used:
+//!
+//! - **Config**: [`StaticConfigProvider::default()`]
+//! - **Auth**: None (no authentication required)
+//! - **Access**: None (no authorization checks)
+//! - **Host**: None (assumes path-style requests)
+//! - **Route**: None (no custom routes)
+//! - **Validation**: None (uses AWS-compatible validation)
+
 use crate::access::S3Access;
 use crate::auth::S3Auth;
 use crate::config::{S3ConfigProvider, StaticConfigProvider};
@@ -16,6 +75,50 @@ use bytes::Bytes;
 use futures::future::BoxFuture;
 use tracing::{debug, error};
 
+/// Builder for [`S3Service`].
+///
+/// This builder allows you to configure an S3 service with various optional components
+/// before creating the final service instance.
+///
+/// # Example
+///
+/// ```
+/// use s3s::{S3, S3Request, S3Response, S3Result};
+/// use s3s::service::S3ServiceBuilder;
+/// use s3s::dto::{GetObjectInput, GetObjectOutput};
+/// use s3s::auth::SimpleAuth;
+/// use s3s::config::{S3Config, StaticConfigProvider};
+/// use std::sync::Arc;
+///
+/// #[derive(Clone)]
+/// struct MyS3;
+///
+/// #[async_trait::async_trait]
+/// impl S3 for MyS3 {
+/// #   async fn get_object(&self, _req: S3Request<GetObjectInput>) -> S3Result<S3Response<GetObjectOutput>> {
+/// #       Err(s3s::s3_error!(NotImplemented))
+/// #   }
+///     // Implement S3 operations
+/// }
+///
+/// // Create a basic service
+/// let service = S3ServiceBuilder::new(MyS3).build();
+///
+/// // Create a service with custom configuration
+/// let mut builder = S3ServiceBuilder::new(MyS3);
+///
+/// // Set authentication
+/// builder.set_auth(SimpleAuth::from_single("ACCESS_KEY", "SECRET_KEY"));
+///
+/// // Set custom configuration
+/// let config = Arc::new(StaticConfigProvider::new(Arc::new(S3Config {
+///     xml_max_body_size: 10 * 1024 * 1024,
+///     ..Default::default()
+/// })));
+/// builder.set_config(config);
+///
+/// let service = builder.build();
+/// ```
 pub struct S3ServiceBuilder {
     s3: Arc<dyn S3>,
     config: Option<Arc<dyn S3ConfigProvider>>,
@@ -27,6 +130,30 @@ pub struct S3ServiceBuilder {
 }
 
 impl S3ServiceBuilder {
+    /// Creates a new builder with the given S3 implementation.
+    ///
+    /// All other components are optional and can be set using the `set_*` methods.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use s3s::{S3, S3Request, S3Response, S3Result};
+    /// use s3s::service::S3ServiceBuilder;
+    /// use s3s::dto::{GetObjectInput, GetObjectOutput};
+    ///
+    /// #[derive(Clone)]
+    /// struct MyS3;
+    ///
+    /// #[async_trait::async_trait]
+    /// impl S3 for MyS3 {
+    /// #   async fn get_object(&self, _req: S3Request<GetObjectInput>) -> S3Result<S3Response<GetObjectOutput>> {
+    /// #       Err(s3s::s3_error!(NotImplemented))
+    /// #   }
+    ///     // Implement S3 operations
+    /// }
+    ///
+    /// let builder = S3ServiceBuilder::new(MyS3);
+    /// ```
     #[must_use]
     pub fn new(s3: impl S3) -> Self {
         Self {
@@ -40,30 +167,260 @@ impl S3ServiceBuilder {
         }
     }
 
+    /// Sets the configuration provider for the service.
+    ///
+    /// The configuration provider supplies runtime configuration values such as
+    /// maximum body sizes and other limits.
+    ///
+    /// If not set, defaults to [`StaticConfigProvider::default()`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use s3s::service::S3ServiceBuilder;
+    /// use s3s::config::{S3Config, StaticConfigProvider};
+    /// use s3s::{S3, S3Request, S3Response, S3Result};
+    /// use s3s::dto::{GetObjectInput, GetObjectOutput};
+    /// use std::sync::Arc;
+    ///
+    /// #[derive(Clone)]
+    /// struct MyS3;
+    ///
+    /// #[async_trait::async_trait]
+    /// impl S3 for MyS3 {
+    /// #   async fn get_object(&self, _req: S3Request<GetObjectInput>) -> S3Result<S3Response<GetObjectOutput>> {
+    /// #       Err(s3s::s3_error!(NotImplemented))
+    /// #   }
+    ///     // Implement S3 operations
+    /// }
+    ///
+    /// let mut builder = S3ServiceBuilder::new(MyS3);
+    /// let config = Arc::new(StaticConfigProvider::new(Arc::new(S3Config {
+    ///     xml_max_body_size: 10 * 1024 * 1024,
+    ///     ..Default::default()
+    /// })));
+    /// builder.set_config(config);
+    /// ```
     pub fn set_config(&mut self, config: Arc<dyn S3ConfigProvider>) {
         self.config = Some(config);
     }
 
+    /// Sets the host parser for the service.
+    ///
+    /// The host parser handles virtual-hosted-style requests by parsing the Host header
+    /// to extract bucket names and regions.
+    ///
+    /// If not set, the service assumes path-style requests.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use s3s::service::S3ServiceBuilder;
+    /// use s3s::host::AwsHost;
+    /// use s3s::{S3, S3Request, S3Response, S3Result};
+    /// use s3s::dto::{GetObjectInput, GetObjectOutput};
+    ///
+    /// #[derive(Clone)]
+    /// struct MyS3;
+    ///
+    /// #[async_trait::async_trait]
+    /// impl S3 for MyS3 {
+    /// #   async fn get_object(&self, _req: S3Request<GetObjectInput>) -> S3Result<S3Response<GetObjectOutput>> {
+    /// #       Err(s3s::s3_error!(NotImplemented))
+    /// #   }
+    ///     // Implement S3 operations
+    /// }
+    ///
+    /// let mut builder = S3ServiceBuilder::new(MyS3);
+    /// builder.set_host(AwsHost::default());
+    /// ```
     pub fn set_host(&mut self, host: impl S3Host) {
         self.host = Some(Box::new(host));
     }
 
+    /// Sets the authentication provider for the service.
+    ///
+    /// The authentication provider verifies AWS Signature Version 4 or Version 2 signatures
+    /// on incoming requests.
+    ///
+    /// If not set, the service does not require authentication.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use s3s::service::S3ServiceBuilder;
+    /// use s3s::auth::SimpleAuth;
+    /// use s3s::{S3, S3Request, S3Response, S3Result};
+    /// use s3s::dto::{GetObjectInput, GetObjectOutput};
+    ///
+    /// #[derive(Clone)]
+    /// struct MyS3;
+    ///
+    /// #[async_trait::async_trait]
+    /// impl S3 for MyS3 {
+    /// #   async fn get_object(&self, _req: S3Request<GetObjectInput>) -> S3Result<S3Response<GetObjectOutput>> {
+    /// #       Err(s3s::s3_error!(NotImplemented))
+    /// #   }
+    ///     // Implement S3 operations
+    /// }
+    ///
+    /// let mut builder = S3ServiceBuilder::new(MyS3);
+    /// builder.set_auth(SimpleAuth::from_single("ACCESS_KEY", "SECRET_KEY"));
+    /// ```
     pub fn set_auth(&mut self, auth: impl S3Auth) {
         self.auth = Some(Box::new(auth));
     }
 
+    /// Sets the access control provider for the service.
+    ///
+    /// The access control provider performs authorization checks to determine if a
+    /// request should be allowed based on the authenticated identity.
+    ///
+    /// If not set, no access control checks are performed (all authenticated requests are allowed).
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use s3s::service::S3ServiceBuilder;
+    /// use s3s::access::S3Access;
+    /// use s3s::{S3, S3Request, S3Response, S3Result};
+    /// use s3s::dto::{GetObjectInput, GetObjectOutput};
+    ///
+    /// #[derive(Clone)]
+    /// struct MyS3;
+    ///
+    /// #[async_trait::async_trait]
+    /// impl S3 for MyS3 {
+    /// #   async fn get_object(&self, _req: S3Request<GetObjectInput>) -> S3Result<S3Response<GetObjectOutput>> {
+    /// #       Err(s3s::s3_error!(NotImplemented))
+    /// #   }
+    ///     // Implement S3 operations
+    /// }
+    ///
+    /// // Custom access control implementation
+    /// #[derive(Clone)]
+    /// struct MyAccessControl;
+    ///
+    /// #[async_trait::async_trait]
+    /// impl S3Access for MyAccessControl {
+    ///     async fn check_access(
+    ///         &self,
+    ///         _credentials: &s3s::auth::S3Credentials,
+    ///         _op: s3s::S3Operation,
+    ///         _bucket: Option<&str>,
+    ///         _key: Option<&str>,
+    ///     ) -> s3s::S3Result<()> {
+    ///         // Your access control logic here
+    ///         Ok(())
+    ///     }
+    /// }
+    ///
+    /// let mut builder = S3ServiceBuilder::new(MyS3);
+    /// builder.set_access(MyAccessControl);
+    /// ```
     pub fn set_access(&mut self, access: impl S3Access) {
         self.access = Some(Box::new(access));
     }
 
+    /// Sets the custom route handler for the service.
+    ///
+    /// The route handler allows intercepting requests before they reach the S3 service,
+    /// useful for implementing custom endpoints or middleware.
+    ///
+    /// If not set, all requests are processed as S3 operations.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use s3s::service::S3ServiceBuilder;
+    /// use s3s::route::S3Route;
+    /// use s3s::{S3, S3Request, S3Response, S3Result};
+    /// use s3s::dto::{GetObjectInput, GetObjectOutput};
+    ///
+    /// #[derive(Clone)]
+    /// struct MyS3;
+    ///
+    /// #[async_trait::async_trait]
+    /// impl S3 for MyS3 {
+    /// #   async fn get_object(&self, _req: S3Request<GetObjectInput>) -> S3Result<S3Response<GetObjectOutput>> {
+    /// #       Err(s3s::s3_error!(NotImplemented))
+    /// #   }
+    ///     // Implement S3 operations
+    /// }
+    ///
+    /// // Custom route handler
+    /// #[derive(Clone)]
+    /// struct MyRoute;
+    ///
+    /// #[async_trait::async_trait]
+    /// impl S3Route for MyRoute {
+    ///     // Implement route handling
+    /// }
+    ///
+    /// let mut builder = S3ServiceBuilder::new(MyS3);
+    /// builder.set_route(MyRoute);
+    /// ```
     pub fn set_route(&mut self, route: impl S3Route) {
         self.route = Some(Box::new(route));
     }
 
+    /// Sets the name validation provider for the service.
+    ///
+    /// The name validation provider validates bucket and object names according to
+    /// specific rules (e.g., AWS-compatible, relaxed, etc.).
+    ///
+    /// If not set, uses AWS-compatible validation rules.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use s3s::service::S3ServiceBuilder;
+    /// use s3s::validation::{NameValidation, AwsNameValidation};
+    /// use s3s::{S3, S3Request, S3Response, S3Result};
+    /// use s3s::dto::{GetObjectInput, GetObjectOutput};
+    ///
+    /// #[derive(Clone)]
+    /// struct MyS3;
+    ///
+    /// #[async_trait::async_trait]
+    /// impl S3 for MyS3 {
+    /// #   async fn get_object(&self, _req: S3Request<GetObjectInput>) -> S3Result<S3Response<GetObjectOutput>> {
+    /// #       Err(s3s::s3_error!(NotImplemented))
+    /// #   }
+    ///     // Implement S3 operations
+    /// }
+    ///
+    /// let mut builder = S3ServiceBuilder::new(MyS3);
+    /// builder.set_validation(AwsNameValidation);
+    /// ```
     pub fn set_validation(&mut self, validation: impl NameValidation) {
         self.validation = Some(Box::new(validation));
     }
 
+    /// Builds the [`S3Service`] from this builder.
+    ///
+    /// This consumes the builder and returns the configured service ready to handle requests.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use s3s::service::S3ServiceBuilder;
+    /// use s3s::{S3, S3Request, S3Response, S3Result};
+    /// use s3s::dto::{GetObjectInput, GetObjectOutput};
+    ///
+    /// #[derive(Clone)]
+    /// struct MyS3;
+    ///
+    /// #[async_trait::async_trait]
+    /// impl S3 for MyS3 {
+    /// #   async fn get_object(&self, _req: S3Request<GetObjectInput>) -> S3Result<S3Response<GetObjectOutput>> {
+    /// #       Err(s3s::s3_error!(NotImplemented))
+    /// #   }
+    ///     // Implement S3 operations
+    /// }
+    ///
+    /// let service = S3ServiceBuilder::new(MyS3).build();
+    /// ```
     #[must_use]
     pub fn build(self) -> S3Service {
         let config = self.config.unwrap_or_else(|| Arc::new(StaticConfigProvider::default()));
@@ -81,6 +438,91 @@ impl S3ServiceBuilder {
     }
 }
 
+/// An S3-compatible HTTP service.
+///
+/// `S3Service` implements both [`hyper::service::Service`] and [`tower::Service`],
+/// making it compatible with the hyper and tower ecosystems.
+///
+/// # Overview
+///
+/// This service handles the complete lifecycle of S3 HTTP requests:
+///
+/// 1. Parses incoming HTTP requests
+/// 2. Validates authentication (if configured)
+/// 3. Checks authorization (if configured)
+/// 4. Routes to appropriate S3 operation or custom route
+/// 5. Invokes your S3 implementation
+/// 6. Converts responses back to HTTP
+///
+/// # Creating a Service
+///
+/// Use [`S3ServiceBuilder`] to create an `S3Service`:
+///
+/// ```
+/// use s3s::service::S3ServiceBuilder;
+/// use s3s::{S3, S3Request, S3Response, S3Result};
+/// use s3s::dto::{GetObjectInput, GetObjectOutput};
+///
+/// #[derive(Clone)]
+/// struct MyS3;
+///
+/// #[async_trait::async_trait]
+/// impl S3 for MyS3 {
+/// #   async fn get_object(&self, _req: S3Request<GetObjectInput>) -> S3Result<S3Response<GetObjectOutput>> {
+/// #       Err(s3s::s3_error!(NotImplemented))
+/// #   }
+///     // Implement S3 operations
+/// }
+///
+/// let service = S3ServiceBuilder::new(MyS3).build();
+/// ```
+///
+/// # Using with Hyper
+///
+/// ```no_run
+/// use s3s::service::S3ServiceBuilder;
+/// use s3s::{S3, S3Request, S3Response, S3Result};
+/// use s3s::dto::{GetObjectInput, GetObjectOutput};
+/// use hyper_util::rt::{TokioExecutor, TokioIo};
+/// use hyper_util::server::conn::auto::Builder as ConnBuilder;
+/// use tokio::net::TcpListener;
+///
+/// #[derive(Clone)]
+/// struct MyS3;
+///
+/// #[async_trait::async_trait]
+/// impl S3 for MyS3 {
+/// #   async fn get_object(&self, _req: S3Request<GetObjectInput>) -> S3Result<S3Response<GetObjectOutput>> {
+/// #       Err(s3s::s3_error!(NotImplemented))
+/// #   }
+///     // Implement S3 operations
+/// }
+///
+/// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+/// let service = S3ServiceBuilder::new(MyS3).build();
+/// let listener = TcpListener::bind("127.0.0.1:8014").await?;
+///
+/// loop {
+///     let (stream, _) = listener.accept().await?;
+///     let io = TokioIo::new(stream);
+///     let service = service.clone();
+///
+///     tokio::spawn(async move {
+///         let _ = ConnBuilder::new(TokioExecutor::new())
+///             .serve_connection(io, service)
+///             .await;
+///     });
+/// }
+/// # }
+/// ```
+///
+/// # Using with Tower/Axum
+///
+/// See the `axum` example in the examples directory for integration with Axum.
+///
+/// # Clone
+///
+/// `S3Service` is cheap to clone (uses `Arc` internally).
 #[derive(Clone)]
 pub struct S3Service {
     inner: Arc<Inner>,
@@ -97,7 +539,57 @@ struct Inner {
 }
 
 impl S3Service {
-    #[allow(clippy::missing_errors_doc)]
+    /// Processes an S3 HTTP request and returns an HTTP response.
+    ///
+    /// This is the main entry point for handling S3 requests. The method:
+    ///
+    /// 1. Parses the HTTP request
+    /// 2. Authenticates the request (if authentication is configured)
+    /// 3. Authorizes the request (if access control is configured)
+    /// 4. Routes the request to the appropriate S3 operation
+    /// 5. Invokes your S3 implementation
+    /// 6. Converts the result to an HTTP response
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`HttpError`] if the request cannot be processed. This could be due to:
+    /// - Invalid HTTP request format
+    /// - Authentication failure
+    /// - Authorization failure
+    /// - S3 operation errors
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use s3s::service::S3ServiceBuilder;
+    /// use s3s::{S3, S3Request, S3Response, S3Result, HttpRequest};
+    /// use s3s::dto::{GetObjectInput, GetObjectOutput};
+    /// use http::Request;
+    /// use s3s::Body;
+    ///
+    /// #[derive(Clone)]
+    /// struct MyS3;
+    ///
+    /// #[async_trait::async_trait]
+    /// impl S3 for MyS3 {
+    /// #   async fn get_object(&self, _req: S3Request<GetObjectInput>) -> S3Result<S3Response<GetObjectOutput>> {
+    /// #       Err(s3s::s3_error!(NotImplemented))
+    /// #   }
+    ///     // Implement S3 operations
+    /// }
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let service = S3ServiceBuilder::new(MyS3).build();
+    ///
+    /// // Process a request (in a real scenario, this comes from a server)
+    /// let http_req: HttpRequest = Request::builder()
+    ///     .uri("/")
+    ///     .body(Body::empty())?;
+    ///
+    /// let response = service.call(http_req).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
     #[tracing::instrument(
         level = "debug",
         skip(self, req),
