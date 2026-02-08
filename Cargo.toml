@@ -51,7 +51,7 @@ time = "0.3.47"
 # Utilities
 cfg-if = "1.0.4"
 const-str = "1.1.0"
-memchr = "2.7.6"
+memchr = "2.8.0"
 numeric_cast = "0.3.0"
 path-absolutize = "3.1.1"
 std-next = "0.1.9"
@@ -68,7 +68,7 @@ subtle = "2.6.1"
 zeroize = "1.8.2"
 
 # Error handling
-anyhow = "1.0.100"
+anyhow = "1.0.101"
 thiserror = "2.0.18"
 
 # Serialization
@@ -114,10 +114,10 @@ clap = { version = "4.5.57", features = ["derive"] }
 opendal = "0.55.0"
 
 # AWS SDK
-aws-config = { version = "1.8.12", default-features = false }
+aws-config = { version = "1.8.13", default-features = false }
 aws-credential-types = "1.2.11"
-aws-sdk-s3 = "1.121.0"
-aws-sdk-sts = "1.96.0"
+aws-sdk-s3 = "1.122.0"
+aws-sdk-sts = "1.97.0"
 aws-smithy-runtime-api = "1.11.3"
 aws-smithy-types = "1.4.3"
 aws-smithy-types-convert = "0.60.12"
