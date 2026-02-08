@@ -94,6 +94,25 @@ Open a new terminal, then run the test suite
 ./scripts/mint.sh | tee target/mint.log
 ```
 
+### Run Ceph s3-tests (E2E)
+
+Install `s3s-proxy`
+
+```bash
+just install s3s-proxy
+```
+
+Run a minimal Ceph `s3-tests` run against `s3s-proxy` (backed by MinIO):
+
+```bash
+./scripts/e2e-s3tests.sh
+```
+
+This script has additional prerequisites:
+
+- Docker must be installed and a local Docker daemon running (used to start MinIO).
+- Network access is required on first run so the script can clone the `ceph/s3-tests` repository.
+
 ## Git
 
 ### Commit Message

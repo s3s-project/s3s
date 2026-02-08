@@ -152,3 +152,25 @@ jobs:
       - run: docker pull minio/minio:latest
       - run: just install s3s-e2e
       - run: ./scripts/e2e-minio.sh
+
+  e2e-s3tests:
+    name: e2e (s3-tests, s3s-proxy, minio)
+    needs: skip-check
+    if: github.event_name != 'pull_request' && needs.skip-check.outputs.should_skip != 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
+      - run: docker pull minio/minio:latest
+      - run: just install s3s-proxy
+      - run: ./scripts/e2e-s3tests.sh
+      - uses: actions/upload-artifact@v6
+        with:
+          name: e2e-s3tests.logs
+          path: |
+            ./target/s3-tests.log
+            ./target/s3-tests.junit.xml
+            ./target/s3s-proxy.log
