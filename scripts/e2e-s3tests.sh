@@ -7,6 +7,11 @@ CONF_PATH="/tmp/s3tests.conf"
 REPORT_DIR="/tmp/s3s-s3tests-report"
 MINIO_DIR="/tmp/s3s-s3tests-minio"
 
+if [ -z "${BASH_VERSION:-}" ]; then
+    echo "this script must be run with bash"
+    exit 1
+fi
+
 mkdir -p "$TARGET_DIR"
 mkdir -p "$REPORT_DIR"
 mkdir -p "$MINIO_DIR"
@@ -30,6 +35,30 @@ cleanup() {
 
 trap cleanup EXIT
 
+wait_for_minio() {
+    local attempt
+    for attempt in {1..30}; do
+        if curl -s -o /dev/null http://localhost:9000/minio/health/live; then
+            return 0
+        fi
+        sleep 1s
+    done
+    echo "minio did not become ready"
+    return 1
+}
+
+wait_for_proxy() {
+    local attempt
+    for attempt in {1..30}; do
+        if curl -s -o /dev/null http://localhost:8014/; then
+            return 0
+        fi
+        sleep 1s
+    done
+    echo "s3s-proxy did not become ready"
+    return 1
+}
+
 if ! command -v s3s-proxy >/dev/null 2>&1; then
     echo "s3s-proxy is required; run: just install s3s-proxy"
     exit 1
@@ -45,7 +74,7 @@ docker run \
     -v "$MINIO_DIR":/data \
     minio/minio:latest server /data --console-address ":9001" &
 
-sleep 3s
+wait_for_minio
 
 export AWS_ACCESS_KEY_ID=minioadmin
 export AWS_SECRET_ACCESS_KEY=minioadmin
@@ -57,7 +86,7 @@ s3s-proxy \
     --domain        localhost:8014  \
     --endpoint-url  http://localhost:9000 | tee "$TARGET_DIR/s3s-proxy.log" &
 
-sleep 3s
+wait_for_proxy
 
 rm -rf "$S3TESTS_DIR"
 git clone --depth 1 https://github.com/ceph/s3-tests.git "$S3TESTS_DIR"
