@@ -6,6 +6,8 @@ S3TESTS_DIR="/tmp/s3-tests"
 CONF_PATH="/tmp/s3tests.conf"
 REPORT_DIR="/tmp/s3s-s3tests-report"
 MINIO_DIR="/tmp/s3s-s3tests-minio"
+S3S_PROXY_PID=""
+MINIO_CONTAINER_ID=""
 
 if [ -z "${BASH_VERSION:-}" ]; then
     echo "this script must be run with bash"
@@ -21,12 +23,16 @@ if [ -z "$RUST_LOG" ]; then
 fi
 
 cleanup() {
-    local proxy_pids
-    proxy_pids=$(pgrep -x s3s-proxy || true)
-    if [ -n "$proxy_pids" ]; then
-        for pid in $proxy_pids; do
-            kill "$pid" || true
-        done
+    if [ -n "$S3S_PROXY_PID" ]; then
+        kill "$S3S_PROXY_PID" || true
+    else
+        local proxy_pids
+        proxy_pids=$(pgrep -x s3s-proxy || true)
+        if [ -n "$proxy_pids" ]; then
+            for pid in $proxy_pids; do
+                kill "$pid" || true
+            done
+        fi
     fi
 
     docker stop s3tests-minio || true
@@ -66,15 +72,19 @@ fi
 
 docker stop s3tests-minio || true
 docker container rm s3tests-minio || true
-docker run \
+MINIO_CONTAINER_ID=$(docker run -d \
     --name s3tests-minio \
     -p 9000:9000 -p 9001:9001 \
     -e "MINIO_DOMAIN=localhost:9000" \
     -e "MINIO_HTTP_TRACE=1" \
     -v "$MINIO_DIR":/data \
-    minio/minio:latest server /data --console-address ":9001" &
+    minio/minio:latest server /data --console-address ":9001")
 
 wait_for_minio
+if ! docker container inspect -f '{{.State.Running}}' "$MINIO_CONTAINER_ID" | grep -q true; then
+    echo "minio container did not stay running"
+    exit 1
+fi
 
 export AWS_ACCESS_KEY_ID=minioadmin
 export AWS_SECRET_ACCESS_KEY=minioadmin
@@ -84,9 +94,14 @@ s3s-proxy \
     --host          localhost       \
     --port          8014            \
     --domain        localhost:8014  \
-    --endpoint-url  http://localhost:9000 | tee "$TARGET_DIR/s3s-proxy.log" &
+    --endpoint-url  http://localhost:9000 > "$TARGET_DIR/s3s-proxy.log" 2>&1 &
+S3S_PROXY_PID=$!
 
 wait_for_proxy
+if ! kill -0 "$S3S_PROXY_PID" >/dev/null 2>&1; then
+    echo "s3s-proxy failed to start"
+    exit 1
+fi
 
 rm -rf "$S3TESTS_DIR"
 git clone --depth 1 https://github.com/ceph/s3-tests.git "$S3TESTS_DIR"
