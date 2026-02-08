@@ -130,8 +130,8 @@ ensure_proxy_running
 ensure_minio_running "$MINIO_CONTAINER_ID"
 
 if [ -d "$S3TESTS_DIR/.git" ]; then
-    git -C "$S3TESTS_DIR" fetch --depth 1 origin master
-    git -C "$S3TESTS_DIR" reset --hard origin/master
+    git -C "$S3TESTS_DIR" fetch --depth 1 origin HEAD
+    git -C "$S3TESTS_DIR" reset --hard FETCH_HEAD
 else
     rm -rf "$S3TESTS_DIR"
     git clone --depth 1 https://github.com/ceph/s3-tests.git "$S3TESTS_DIR"
@@ -209,9 +209,9 @@ PYTEST_STATUS=${PIPESTATUS[0]}
 set -e
 popd
 
+REPORT_STATUS=0
 if [ -f "$REPORT_DIR/junit.xml" ]; then
     cp "$REPORT_DIR/junit.xml" "$TARGET_DIR/s3-tests.junit.xml"
-    REPORT_STATUS=0
     python3 "$ROOT_DIR/scripts/report-s3tests.py" "$TARGET_DIR/s3-tests.junit.xml" || REPORT_STATUS=$?
 else
     echo "missing junit report at $REPORT_DIR/junit.xml"
