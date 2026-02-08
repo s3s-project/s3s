@@ -164,7 +164,7 @@ pub trait S3Route: Send + Sync + 'static {
 
     /// Checks access permissions for the request.
     ///
-    /// This method is called after `is_match` returns true and before `call` is invoked.
+    /// This method is called after [`is_match`](Self::is_match) returns true and before [`call`](Self::call) is invoked.
     /// The default implementation requires valid credentials (returns error if credentials are None).
     ///
     /// Override this method to implement custom access control for your route.

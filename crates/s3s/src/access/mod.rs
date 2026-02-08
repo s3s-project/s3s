@@ -30,7 +30,7 @@
 //!                 let path = cx.s3_path();
 //!                 
 //!                 // Implement your access control logic here
-//!                 tracing::info!("User {} accessing {} on {:?}", 
+//!                 tracing::info!("User {} accessing {} on {:?}",
 //!                     creds.access_key, op_name, path);
 //!                 Ok(())
 //!             }
