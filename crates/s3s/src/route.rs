@@ -8,7 +8,7 @@
 //! Custom routes allow you to:
 //!
 //! - Handle non-S3 endpoints (e.g., health checks, metrics)
-//! - Implement custom authentication flows (e.g., STS AssumeRole)
+//! - Implement custom authentication flows (e.g., STS `AssumeRole`)
 //! - Add middleware-like functionality
 //! - Route specific requests to custom handlers
 //!
@@ -41,7 +41,7 @@
 //! }
 //! ```
 //!
-//! # Integration with S3Service
+//! # Integration with `S3Service`
 //!
 //! ```
 //! use s3s::service::S3ServiceBuilder;

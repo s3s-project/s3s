@@ -53,7 +53,7 @@
 //! }
 //! ```
 //!
-//! # Integration with S3Service
+//! # Integration with `S3Service`
 //!
 //! ```
 //! use s3s::service::S3ServiceBuilder;
