@@ -24,12 +24,9 @@ binary = ["tokio/full", "dep:clap", "dep:tracing-subscriber", "dep:hyper-util"]
 async-trait.workspace = true
 base64-simd.workspace = true
 bytes.workspace = true
-chrono = { version = "0.4.43", default-features = false, features = [
-    "std",
-    "clock",
-] }
+chrono = { workspace = true, default-features = false, features = ["std", "clock"] }
 clap = { workspace = true, optional = true }
-crc32c = "0.6.8"
+crc32c.workspace = true
 futures.workspace = true
 hex-simd.workspace = true
 hyper-util = { workspace = true, optional = true, features = [
@@ -39,34 +36,34 @@ hyper-util = { workspace = true, optional = true, features = [
     "http2",
     "tokio",
 ] }
-mime = "0.3.17"
-std-next.workspace = true
+mime.workspace = true
 numeric_cast.workspace = true
-path-absolutize = "3.1.1"
+path-absolutize.workspace = true
 s3s = { version = "0.13.0-alpha.2", path = "../s3s" }
 serde.workspace = true
 serde_json.workspace = true
+std-next.workspace = true
 thiserror.workspace = true
-time = "0.3.47"
+time.workspace = true
 tokio = { workspace = true, features = ["fs", "io-util"] }
-tokio-util = { version = "0.7.18", features = ["io"] }
+tokio-util = { workspace = true, features = ["io"] }
 tracing.workspace = true
-tracing-error = "0.2.1"
+tracing-error.workspace = true
 tracing-subscriber = { workspace = true, optional = true }
 transform-stream.workspace = true
-uuid = { version = "1.20.0", features = ["v4"] }
+uuid = { workspace = true, features = ["v4"] }
 
 [dev-dependencies]
-anyhow = { version = "1.0.100", features = ["backtrace"] }
+anyhow = { workspace = true, features = ["backtrace"] }
 aws-config.workspace = true
 aws-credential-types = { workspace = true, features = ["test-util"] }
 aws-sdk-s3 = { workspace = true, features = ["behavior-version-latest"] }
 aws-sdk-sts = { workspace = true, features = ["behavior-version-latest"] }
-futures-util = "0.3.31"
+futures-util.workspace = true
 hyper = { workspace = true, features = ["http1", "http2"] }
 hyper-util = { workspace = true, features = ["server-auto", "server-graceful", "http1", "http2", "tokio"] }
-once_cell = "1.21.3"
-opendal = { version = "0.55.0", features = ["services-s3"] }
+once_cell.workspace = true
+opendal = { workspace = true, features = ["services-s3"] }
 s3s-aws = { version = "0.13.0-alpha.2", path = "../s3s-aws" }
 tokio = { workspace = true, features = ["full"] }
 tracing-subscriber.workspace = true
