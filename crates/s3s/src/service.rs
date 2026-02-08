@@ -272,7 +272,11 @@ impl S3ServiceBuilder {
     /// The access control provider performs authorization checks to determine if a
     /// request should be allowed based on the authenticated identity.
     ///
-    /// If not set, no access control checks are performed (all authenticated requests are allowed).
+    /// **Important**: Access control checks are only performed for authenticated requests.
+    /// You must also call [`set_auth`](Self::set_auth) to configure authentication, otherwise
+    /// access checks will be skipped entirely regardless of this setting.
+    ///
+    /// If not set, a default access check is performed that allows all authenticated requests.
     ///
     /// # Example
     ///
@@ -543,7 +547,7 @@ impl S3Service {
     ///
     /// 1. Parses the HTTP request
     /// 2. Authenticates the request (if authentication is configured)
-    /// 3. Authorizes the request (if access control is configured)
+    /// 3. Authorizes the request (if both authentication and access control are configured)
     /// 4. Routes the request to the appropriate S3 operation
     /// 5. Invokes your S3 implementation
     /// 6. Converts the result to an HTTP response
@@ -552,8 +556,8 @@ impl S3Service {
     ///
     /// Returns an [`HttpError`] if the request cannot be processed. This could be due to:
     /// - Invalid HTTP request format
-    /// - Authentication failure
-    /// - Authorization failure
+    /// - Authentication failure (if authentication is configured)
+    /// - Authorization failure (if authentication and access control are configured)
     /// - S3 operation errors
     ///
     /// # Example

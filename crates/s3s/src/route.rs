@@ -30,6 +30,11 @@
 //!         method == Method::GET && uri.path() == "/health"
 //!     }
 //!
+//!     // Override to allow unauthenticated health checks
+//!     async fn check_access(&self, _req: &mut S3Request<Body>) -> S3Result<()> {
+//!         Ok(())
+//!     }
+//!
 //!     async fn call(&self, _req: S3Request<Body>) -> S3Result<S3Response<Body>> {
 //!         Ok(S3Response::new(Body::from("OK".to_string())))
 //!     }

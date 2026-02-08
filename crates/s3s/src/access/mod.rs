@@ -8,8 +8,21 @@
 //! The access control system allows you to authorize or deny S3 operations. The generated
 //! [`S3Access`] trait provides:
 //!
-//! - A general `check` method that is called before deserializing operation input
+//! - A general `check` method that, when authentication is configured, is called before
+//!   deserializing operation input for authenticated requests
 //! - Per-operation methods for fine-grained control (e.g., `get_object`, `put_object`)
+//!
+//! > **Security note**
+//! >
+//! > `S3Access::check` (and per-operation access methods) are only invoked for requests
+//! > that have been authenticated by an auth provider. If no auth provider is configured
+//! > (i.e., the internal `CallContext.auth` is `None`), S3 operations skip access checks
+//! > entirely. In other words, calling [`S3ServiceBuilder::set_access`](crate::service::S3ServiceBuilder::set_access)
+//! > alone does *not* enforce authentication or authorization.
+//! >
+//! > To enforce authorization, you must configure authentication on `S3ServiceBuilder`
+//! > (so that requests populate `CallContext.auth`) and then attach your `S3Access`
+//! > implementation via `set_access(...)`.
 //!
 //! # Example
 //!
