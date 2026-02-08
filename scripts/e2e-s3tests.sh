@@ -195,7 +195,7 @@ if [ "${S3TEST_ARGS[0]:-}" = "--" ]; then
     S3TEST_ARGS=("${S3TEST_ARGS[@]:1}")
 fi
 if [ ${#S3TEST_ARGS[@]} -eq 0 ]; then
-    S3TEST_ARGS=(s3tests/functional s3test_boto3/functional)
+    S3TEST_ARGS=(s3tests)
 fi
 
 pushd "$S3TESTS_DIR"
