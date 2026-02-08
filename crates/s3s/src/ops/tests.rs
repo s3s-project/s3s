@@ -945,9 +945,12 @@ async fn test_custom_route_anonymous_access_allowed_when_overridden() {
     assert_eq!(anonymous_route.get_call_count(), 1);
 }
 
-/// Test S3 route allows access when no auth is configured (simulates authenticated access path)
+/// Test S3 route allows access when no auth provider is configured
+/// 
+/// When `CallContext.auth` is `None`, access checks are skipped for S3 operations,
+/// allowing unsigned requests to succeed. This tests that behavior.
 #[tokio::test]
-async fn test_s3_route_no_auth_configured_allows_access() {
+async fn test_s3_route_no_auth_provider_allows_unsigned_requests() {
     use crate::config::{S3ConfigProvider, StaticConfigProvider};
     use crate::http::{Body, Request};
     use crate::ops::CallContext;
@@ -958,7 +961,7 @@ async fn test_s3_route_no_auth_configured_allows_access() {
     let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
     let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
 
-    // No auth configured - access checks are skipped
+    // No auth provider configured - access checks are skipped for S3 operations
     let ccx = CallContext {
         s3: &s3,
         config: &config,
@@ -969,7 +972,7 @@ async fn test_s3_route_no_auth_configured_allows_access() {
         validation: None,
     };
 
-    // Create a request without authentication
+    // Create an unsigned request
     let mut req = Request::from(
         hyper::Request::builder()
             .method(Method::GET)
@@ -979,7 +982,7 @@ async fn test_s3_route_no_auth_configured_allows_access() {
             .unwrap(),
     );
 
-    // Call the full operation which should succeed when no auth is configured
+    // Call the full operation which should succeed when no auth provider is configured
     let result = super::call(&mut req, &ccx).await;
 
     // Should succeed with a successful response
@@ -987,12 +990,12 @@ async fn test_s3_route_no_auth_configured_allows_access() {
         Ok(resp) => {
             assert!(
                 resp.status.is_success(),
-                "Request should succeed when no auth is configured, got status: {:?}",
+                "Unsigned request should succeed when no auth provider is configured, got status: {:?}",
                 resp.status
             );
         }
         Err(err) => {
-            panic!("Request should succeed when no auth is configured, got error: {err:?}");
+            panic!("Unsigned request should succeed when no auth provider is configured, got error: {err:?}");
         }
     }
 
@@ -1000,9 +1003,13 @@ async fn test_s3_route_no_auth_configured_allows_access() {
     assert_eq!(test_s3.get_call_count(), 1, "S3 handler should have been invoked");
 }
 
-/// Test custom route allows access when no auth is configured (simulates authenticated access path)
+/// Test custom route with overridden `check_access` allows unsigned requests
+/// 
+/// Custom routes always call `check_access()`, even when no auth provider is configured.
+/// This test verifies that a custom route can override `check_access` to allow access
+/// without credentials, regardless of the auth provider configuration.
 #[tokio::test]
-async fn test_custom_route_no_auth_configured_allows_access() {
+async fn test_custom_route_override_check_access_allows_unsigned_requests() {
     use crate::S3Request;
     use crate::config::{S3ConfigProvider, StaticConfigProvider};
     use crate::http::{Body, Request};
@@ -1048,7 +1055,7 @@ async fn test_custom_route_no_auth_configured_allows_access() {
                     .is_some_and(|v| v.as_bytes() == b"application/x-test")
         }
 
-        // Override check_access to allow access (simulating that the route handles its own auth)
+        // Override check_access to allow access without credentials
         async fn check_access(&self, _req: &mut S3Request<Body>) -> crate::error::S3Result<()> {
             Ok(())
         }
@@ -1064,7 +1071,7 @@ async fn test_custom_route_no_auth_configured_allows_access() {
 
     let test_route = TestRoute::new();
 
-    // No auth configured - access checks are skipped
+    // Custom route's check_access is always called, even without an auth provider
     let ccx = CallContext {
         s3: &s3,
         config: &config,
@@ -1075,7 +1082,7 @@ async fn test_custom_route_no_auth_configured_allows_access() {
         validation: None,
     };
 
-    // Create a request to the custom route without authentication
+    // Create an unsigned request to the custom route
     let mut req = Request::from(
         hyper::Request::builder()
             .method(Method::POST)
@@ -1086,7 +1093,7 @@ async fn test_custom_route_no_auth_configured_allows_access() {
             .unwrap(),
     );
 
-    // Call the operation which should succeed when no auth is configured
+    // Call the operation which should succeed because check_access is overridden to allow it
     let result = super::call(&mut req, &ccx).await;
 
     // Should succeed with a successful response
@@ -1094,12 +1101,12 @@ async fn test_custom_route_no_auth_configured_allows_access() {
         Ok(resp) => {
             assert!(
                 resp.status.is_success(),
-                "Request should succeed when no auth is configured, got status: {:?}",
+                "Unsigned request should succeed with overridden check_access, got status: {:?}",
                 resp.status
             );
         }
         Err(err) => {
-            panic!("Request should succeed when no auth is configured, got error: {err:?}");
+            panic!("Unsigned request should succeed with overridden check_access, got error: {err:?}");
         }
     }
 
