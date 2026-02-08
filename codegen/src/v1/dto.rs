@@ -1003,15 +1003,15 @@ fn codegen_tests(ops: &Operations, rust_types: &RustTypes) {
         g!("#[test]");
         g!("fn test_clone() {{");
         for op in ops.values() {
-            if let Some(rust::Type::Struct(ty)) = rust_types.get(&op.input) {
-                if can_derive_clone(ty, rust_types) {
-                    g!("require_clone::<{}>();", op.input);
-                }
+            if let Some(rust::Type::Struct(ty)) = rust_types.get(&op.input)
+                && can_derive_clone(ty, rust_types)
+            {
+                g!("require_clone::<{}>();", op.input);
             }
-            if let Some(rust::Type::Struct(ty)) = rust_types.get(&op.output) {
-                if can_derive_clone(ty, rust_types) {
-                    g!("require_clone::<{}>();", op.output);
-                }
+            if let Some(rust::Type::Struct(ty)) = rust_types.get(&op.output)
+                && can_derive_clone(ty, rust_types)
+            {
+                g!("require_clone::<{}>();", op.output);
             }
         }
         g!("}}");
