@@ -130,8 +130,12 @@ ensure_proxy_running
 ensure_minio_running "$MINIO_CONTAINER_ID"
 
 if [ -d "$S3TESTS_DIR/.git" ]; then
-    git -C "$S3TESTS_DIR" fetch --depth 1 origin HEAD
-    git -C "$S3TESTS_DIR" reset --hard FETCH_HEAD
+    default_branch=$(git -C "$S3TESTS_DIR" remote show origin | awk '/HEAD branch/ {print $NF}')
+    if [ -z "$default_branch" ]; then
+        default_branch="master"
+    fi
+    git -C "$S3TESTS_DIR" fetch --depth 1 origin "$default_branch"
+    git -C "$S3TESTS_DIR" reset --hard "origin/$default_branch"
 else
     rm -rf "$S3TESTS_DIR"
     git clone --depth 1 https://github.com/ceph/s3-tests.git "$S3TESTS_DIR"
@@ -204,8 +208,8 @@ set +e
 S3TEST_CONF="$CONF_PATH" \
     "$S3TESTS_DIR/.venv/bin/pytest" \
     "${S3TEST_ARGS[@]}" \
-    --junitxml="$REPORT_DIR/junit.xml" | tee "$TARGET_DIR/s3-tests.log"
-PYTEST_STATUS=${PIPESTATUS[0]}; set -e
+    --junitxml="$REPORT_DIR/junit.xml" > "$TARGET_DIR/s3-tests.log" 2>&1
+PYTEST_STATUS=$?; set -e
 popd
 
 REPORT_STATUS=0
