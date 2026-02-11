@@ -449,6 +449,92 @@ mod post_policy_test_helpers {
                 .unwrap(),
         )
     }
+
+    /// Build a POST object request whose body is split into many small chunks.
+    ///
+    /// This ensures that `aggregate_file_stream_limited` returns a `Vec<Bytes>`
+    /// with multiple entries, so tests can distinguish between
+    /// `vec_bytes.len()` (chunk count) and the total byte count.
+    pub fn build_post_object_request_chunked(
+        policy_json: &str,
+        file_content: &str,
+        secret_key: &SecretKey,
+        chunk_size: usize,
+    ) -> Request {
+        let policy_b64 = base64_simd::STANDARD.encode_to_string(policy_json);
+
+        let boundary = "------------------------test12345678";
+        let bucket = "test-bucket";
+        let key = "test-key";
+        let amz_date = sig_v4::AmzDate::parse("20250101T000000Z").unwrap();
+        let region = "us-east-1";
+        let service = "s3";
+        let algorithm = "AWS4-HMAC-SHA256";
+        let credential = "AKIAIOSFODNN7EXAMPLE/20250101/us-east-1/s3/aws4_request";
+        let signature = sig_v4::calculate_signature(&policy_b64, secret_key, &amz_date, region, service);
+
+        let body = format!(
+            concat!(
+                "--{b}\r\n",
+                "Content-Disposition: form-data; name=\"x-amz-signature\"\r\n\r\n",
+                "{signature}\r\n",
+                "--{b}\r\n",
+                "Content-Disposition: form-data; name=\"bucket\"\r\n\r\n",
+                "{bucket}\r\n",
+                "--{b}\r\n",
+                "Content-Disposition: form-data; name=\"policy\"\r\n\r\n",
+                "{policy_b64}\r\n",
+                "--{b}\r\n",
+                "Content-Disposition: form-data; name=\"x-amz-algorithm\"\r\n\r\n",
+                "{algorithm}\r\n",
+                "--{b}\r\n",
+                "Content-Disposition: form-data; name=\"x-amz-credential\"\r\n\r\n",
+                "{credential}\r\n",
+                "--{b}\r\n",
+                "Content-Disposition: form-data; name=\"x-amz-date\"\r\n\r\n",
+                "{amz_date}\r\n",
+                "--{b}\r\n",
+                "Content-Disposition: form-data; name=\"key\"\r\n\r\n",
+                "{key}\r\n",
+                "--{b}\r\n",
+                "Content-Disposition: form-data; name=\"file\"; filename=\"test.txt\"\r\n",
+                "Content-Type: text/plain\r\n\r\n",
+                "{file_content}\r\n",
+                "--{b}--\r\n"
+            ),
+            amz_date = amz_date.fmt_iso8601(),
+            b = boundary,
+            signature = signature,
+            bucket = bucket,
+            policy_b64 = policy_b64,
+            algorithm = algorithm,
+            credential = credential,
+            key = key,
+            file_content = file_content,
+        );
+
+        // Split the body into small chunks to simulate a multi-chunk stream
+        let body_bytes: Vec<u8> = body.into_bytes();
+        let chunks: Vec<Result<http_body::Frame<Bytes>, std::convert::Infallible>> = body_bytes
+            .chunks(chunk_size)
+            .map(|c| Ok(http_body::Frame::data(Bytes::copy_from_slice(c))))
+            .collect();
+
+        let stream_body = http_body_util::StreamBody::new(futures::stream::iter(chunks));
+
+        Request::from(
+            hyper::Request::builder()
+                .method(Method::POST)
+                .uri(format!("http://localhost/{bucket}"))
+                .header(crate::header::HOST, "localhost")
+                .header(
+                    crate::header::CONTENT_TYPE,
+                    HeaderValue::from_str(&format!("multipart/form-data; boundary={boundary}")).unwrap(),
+                )
+                .body(Body::http_body(stream_body))
+                .unwrap(),
+        )
+    }
 }
 
 /// Test that policy max < config max results in using policy max for file size limit
@@ -1231,10 +1317,13 @@ async fn test_custom_route_default_check_access_denies_unsigned_without_auth_pro
 /// instead of summing the byte lengths of all chunks.
 /// This caused `content-length-range` policy validation to use a wrong value.
 ///
-/// This test exercises the actual `prepare` POST-object code path to ensure
-/// that the `file_size` calculation is based on the total number of bytes in
-/// the aggregated stream rather than the number of chunks, so it remains
-/// correct even when the file stream yields multiple chunks.
+/// This test uses `build_post_object_request_chunked` to split the HTTP body
+/// into many small chunks (1 KiB each). With a 30 KB file the multipart body
+/// stream yields ~30 chunks, so `aggregate_file_stream_limited` returns a
+/// `Vec<Bytes>` with ~30 entries. The buggy `vec_bytes.len()` would report
+/// the file size as ~30, which is below the policy minimum of 100 and would
+/// cause the request to be rejected. The correct code sums the byte lengths
+/// and reports 30 000, which passes the `[100, 50000]` range check.
 #[tokio::test]
 async fn post_policy_file_size_is_total_bytes_not_chunk_count() {
     use crate::auth::SecretKey;
@@ -1254,30 +1343,28 @@ async fn post_policy_file_size_is_total_bytes_not_chunk_count() {
     // This will accept files between 100 and 50000 bytes
     let policy_json = r#"{"expiration":"2030-01-01T00:00:00.000Z","conditions":[["content-length-range",100,50000]]}"#;
 
-    // Create a 30KB file (30,000 bytes) within policy limits
+    // Create a 30 KB file (30 000 bytes) within policy limits.
+    // Use 1 KiB chunks so the body stream yields ~30 chunks for the file part.
+    // With the buggy code (vec_bytes.len()), file_size would be ~30 (chunk count),
+    // which is < 100 (policy minimum) and would incorrectly fail.
     let file_content = "a".repeat(30_000);
+    let chunk_size = 1024;
 
-    let mut req = post_policy_test_helpers::build_post_object_request(policy_json, &file_content, &secret_key);
+    let mut req =
+        post_policy_test_helpers::build_post_object_request_chunked(policy_json, &file_content, &secret_key, chunk_size);
 
-    // Exercise the prepare code path, which should:
-    // 1. Parse the policy
-    // 2. Aggregate the file stream (possibly into multiple chunks)
-    // 3. Calculate file_size correctly as sum of chunk lengths (not chunk count)
-    // 4. Validate the policy conditions using the correct file_size
     let result = super::prepare(&mut req, &ccx).await;
 
-    // This should succeed because:
-    // - The file is 30,000 bytes, which is within [100, 50000]
-    // - If the buggy code (vec_bytes.len()) were still in place, it might use
-    //   the chunk count instead of 30,000, which would likely be < 100 and fail
-    assert!(
-        result.is_ok(),
-        "POST object with 30KB file should pass content-length-range [100, 50000] validation"
-    );
+    // This must succeed: the file is 30 000 bytes, within [100, 50000].
+    match result {
+        Ok(_) => {}
+        Err(err) => panic!("POST object with 30 KB file should pass content-length-range [100, 50000] validation, got: {err:?}"),
+    }
 
     // Now test with a file that's too small (should fail)
     let small_file_content = "a".repeat(50); // 50 bytes, less than minimum of 100
-    let mut req_small = post_policy_test_helpers::build_post_object_request(policy_json, &small_file_content, &secret_key);
+    let mut req_small =
+        post_policy_test_helpers::build_post_object_request_chunked(policy_json, &small_file_content, &secret_key, chunk_size);
 
     let result_small = super::prepare(&mut req_small, &ccx).await;
     match result_small {
