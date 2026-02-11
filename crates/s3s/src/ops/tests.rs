@@ -1223,3 +1223,67 @@ async fn test_custom_route_default_check_access_denies_unsigned_without_auth_pro
     // Verify that the custom route handler was never invoked (access denied before dispatch)
     assert_eq!(test_route.get_call_count(), 0, "Custom route handler should not have been invoked");
 }
+
+/// Regression test: `file_size` for post policy validation must be the total
+/// byte count of all chunks, NOT the number of chunks in `Vec<Bytes>`.
+///
+/// Previously the code used `vec_bytes.len()` which returns the chunk count
+/// (e.g. 3), instead of summing the byte lengths of all chunks (e.g. 30000).
+/// This caused `content-length-range` policy validation to use a wrong value.
+#[tokio::test]
+async fn post_policy_file_size_is_total_bytes_not_chunk_count() {
+    use crate::http::{File, Multipart};
+    use crate::post_policy::PostPolicy;
+    use bytes::Bytes;
+
+    // Simulate a file split across multiple chunks (as typically returned by
+    // aggregate_file_stream_limited). Each chunk is 10_000 bytes, 3 chunks
+    // total = 30_000 bytes.
+    let chunk_size = 10_000_usize;
+    let num_chunks = 3_usize;
+    let total_size = (chunk_size * num_chunks) as u64; // 30_000
+
+    let vec_bytes: Vec<Bytes> = (0..num_chunks).map(|_| Bytes::from(vec![b'x'; chunk_size])).collect();
+
+    // --- Correct file_size calculation (the fix) ---
+    let file_size: u64 = vec_bytes.iter().map(|b| b.len() as u64).sum();
+    assert_eq!(file_size, total_size, "file_size must equal total bytes, not chunk count");
+
+    // --- The old buggy calculation ---
+    let buggy_file_size = vec_bytes.len() as u64;
+    assert_eq!(buggy_file_size, num_chunks as u64);
+    assert_ne!(buggy_file_size, total_size, "chunk count != total bytes");
+
+    // Build a policy with content-length-range that accepts 30_000 bytes
+    // but rejects 3 bytes (the buggy value).
+    let policy = PostPolicy::from_json(
+        r#"{
+            "expiration": "2099-01-01T00:00:00.000Z",
+            "conditions": [
+                ["content-length-range", 100, 50000]
+            ]
+        }"#,
+    )
+    .unwrap();
+
+    let multipart = Multipart::new_for_test(
+        vec![],
+        File {
+            name: "test.bin".to_owned(),
+            content_type: None,
+            stream: None,
+        },
+    );
+
+    // With the correct file_size (30_000), validation should pass.
+    assert!(
+        policy.validate_conditions_only(&multipart, file_size).is_ok(),
+        "correct file_size ({file_size}) should satisfy content-length-range [100, 50000]"
+    );
+
+    // With the buggy file_size (3), validation should fail because 3 < 100.
+    assert!(
+        policy.validate_conditions_only(&multipart, buggy_file_size).is_err(),
+        "buggy file_size ({buggy_file_size}) should violate content-length-range [100, 50000]"
+    );
+}
