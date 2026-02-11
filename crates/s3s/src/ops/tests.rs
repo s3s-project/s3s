@@ -1240,32 +1240,32 @@ async fn post_policy_file_size_is_total_bytes_not_chunk_count() {
     use std::sync::Arc;
 
     let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
-    
+
     // Set config max to 1MB to allow our test file
     let config = post_policy_test_helpers::create_test_config(1024 * 1024);
-    
+
     let auth = post_policy_test_helpers::create_test_auth();
     let ccx = post_policy_test_helpers::create_test_context(&s3, &config, &auth);
-    
+
     let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
-    
+
     // Create a policy with content-length-range [100, 50000]
     // This will accept files between 100 and 50000 bytes
     let policy_json = r#"{"expiration":"2030-01-01T00:00:00.000Z","conditions":[["content-length-range",100,50000]]}"#;
-    
+
     // Create a 30KB file (30,000 bytes) - large enough to potentially be split into
     // multiple chunks during stream processing, but within policy limits
     let file_content = "a".repeat(30_000);
-    
+
     let mut req = post_policy_test_helpers::build_post_object_request(policy_json, &file_content, &secret_key);
-    
+
     // Exercise the prepare code path, which should:
     // 1. Parse the policy
     // 2. Aggregate the file stream (possibly into multiple chunks)
     // 3. Calculate file_size correctly as sum of chunk lengths (not chunk count)
     // 4. Validate the policy conditions using the correct file_size
     let result = super::prepare(&mut req, &ccx).await;
-    
+
     // This should succeed because:
     // - The file is 30,000 bytes, which is within [100, 50000]
     // - If the buggy code (vec_bytes.len()) were still in place, it might use
@@ -1274,11 +1274,11 @@ async fn post_policy_file_size_is_total_bytes_not_chunk_count() {
         result.is_ok(),
         "POST object with 30KB file should pass content-length-range [100, 50000] validation"
     );
-    
+
     // Now test with a file that's too small (should fail)
     let small_file_content = "a".repeat(50); // 50 bytes, less than minimum of 100
     let mut req_small = post_policy_test_helpers::build_post_object_request(policy_json, &small_file_content, &secret_key);
-    
+
     let result_small = super::prepare(&mut req_small, &ccx).await;
     assert!(
         result_small.is_err(),

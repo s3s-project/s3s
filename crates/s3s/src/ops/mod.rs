@@ -451,7 +451,7 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                     let file_size: u64 = vec_bytes
                         .iter()
                         .map(|b| b.len() as u64)
-                        .fold(0u64, |acc, len| acc.saturating_add(len))
+                        .fold(0u64, u64::saturating_add)
                         .min(max_file_size);
                     let vec_stream = crate::stream::VecByteStream::new(vec_bytes);
                     req.s3ext.vec_stream = Some(vec_stream);
