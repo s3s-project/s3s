@@ -447,7 +447,8 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                     let vec_bytes = http::aggregate_file_stream_limited(file_stream, max_file_size)
                         .await
                         .map_err(|e| invalid_request!(e, "failed to read file stream"))?;
-                    let file_size: u64 = vec_bytes.iter().map(|b| b.len() as u64).sum();
+                    // Use saturating_add to prevent overflow in release builds (security-relevant for content-length-range validation)
+                    let file_size: u64 = vec_bytes.iter().map(|b| b.len() as u64).fold(0u64, u64::saturating_add);
                     let vec_stream = crate::stream::VecByteStream::new(vec_bytes);
                     req.s3ext.vec_stream = Some(vec_stream);
 
