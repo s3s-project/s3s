@@ -1232,8 +1232,9 @@ async fn test_custom_route_default_check_access_denies_unsigned_without_auth_pro
 /// This caused `content-length-range` policy validation to use a wrong value.
 ///
 /// This test exercises the actual `prepare` POST-object code path to ensure
-/// that the file_size calculation is correct when the file stream yields
-/// multiple chunks during aggregation.
+/// that the `file_size` calculation is based on the total number of bytes in
+/// the aggregated stream rather than the number of chunks, so it remains
+/// correct even when the file stream yields multiple chunks.
 #[tokio::test]
 async fn post_policy_file_size_is_total_bytes_not_chunk_count() {
     use crate::auth::SecretKey;
@@ -1253,8 +1254,7 @@ async fn post_policy_file_size_is_total_bytes_not_chunk_count() {
     // This will accept files between 100 and 50000 bytes
     let policy_json = r#"{"expiration":"2030-01-01T00:00:00.000Z","conditions":[["content-length-range",100,50000]]}"#;
 
-    // Create a 30KB file (30,000 bytes) - large enough to potentially be split into
-    // multiple chunks during stream processing, but within policy limits
+    // Create a 30KB file (30,000 bytes) within policy limits
     let file_content = "a".repeat(30_000);
 
     let mut req = post_policy_test_helpers::build_post_object_request(policy_json, &file_content, &secret_key);
@@ -1280,8 +1280,19 @@ async fn post_policy_file_size_is_total_bytes_not_chunk_count() {
     let mut req_small = post_policy_test_helpers::build_post_object_request(policy_json, &small_file_content, &secret_key);
 
     let result_small = super::prepare(&mut req_small, &ccx).await;
-    assert!(
-        result_small.is_err(),
-        "POST object with 50-byte file should fail content-length-range [100, 50000] validation"
-    );
+    match result_small {
+        Err(err) => {
+            assert_eq!(
+                *err.code(),
+                crate::error::S3ErrorCode::InvalidPolicyDocument,
+                "Expected InvalidPolicyDocument error for content-length-range violation"
+            );
+            let msg = err.message().unwrap_or("");
+            assert!(
+                msg.contains("File size 50") && msg.contains("not within the allowed range [100, 50000]"),
+                "Error message should mention file size 50 and range [100, 50000], got: {msg}"
+            );
+        }
+        Ok(_) => panic!("POST object with 50-byte file should fail content-length-range [100, 50000] validation"),
+    }
 }
