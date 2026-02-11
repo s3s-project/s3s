@@ -1228,62 +1228,60 @@ async fn test_custom_route_default_check_access_denies_unsigned_without_auth_pro
 /// byte count of all chunks, NOT the number of chunks in `Vec<Bytes>`.
 ///
 /// Previously the code used `vec_bytes.len()` which returns the chunk count
-/// (e.g. 3), instead of summing the byte lengths of all chunks (e.g. 30000).
+/// instead of summing the byte lengths of all chunks.
 /// This caused `content-length-range` policy validation to use a wrong value.
+///
+/// This test exercises the actual `prepare` POST-object code path to ensure
+/// that the file_size calculation is correct when the file stream yields
+/// multiple chunks during aggregation.
 #[tokio::test]
 async fn post_policy_file_size_is_total_bytes_not_chunk_count() {
-    use crate::http::{File, Multipart};
-    use crate::post_policy::PostPolicy;
-    use bytes::Bytes;
+    use crate::auth::SecretKey;
+    use std::sync::Arc;
 
-    // Simulate a file split across multiple chunks (as typically returned by
-    // aggregate_file_stream_limited). Each chunk is 10_000 bytes, 3 chunks
-    // total = 30_000 bytes.
-    let chunk_size = 10_000_usize;
-    let num_chunks = 3_usize;
-    let total_size = (chunk_size * num_chunks) as u64; // 30_000
-
-    let vec_bytes: Vec<Bytes> = (0..num_chunks).map(|_| Bytes::from(vec![b'x'; chunk_size])).collect();
-
-    // --- Correct file_size calculation (the fix) ---
-    let file_size: u64 = vec_bytes.iter().map(|b| b.len() as u64).sum();
-    assert_eq!(file_size, total_size, "file_size must equal total bytes, not chunk count");
-
-    // --- The old buggy calculation ---
-    let buggy_file_size = vec_bytes.len() as u64;
-    assert_eq!(buggy_file_size, num_chunks as u64);
-    assert_ne!(buggy_file_size, total_size, "chunk count != total bytes");
-
-    // Build a policy with content-length-range that accepts 30_000 bytes
-    // but rejects 3 bytes (the buggy value).
-    let policy = PostPolicy::from_json(
-        r#"{
-            "expiration": "2099-01-01T00:00:00.000Z",
-            "conditions": [
-                ["content-length-range", 100, 50000]
-            ]
-        }"#,
-    )
-    .unwrap();
-
-    let multipart = Multipart::new_for_test(
-        vec![],
-        File {
-            name: "test.bin".to_owned(),
-            content_type: None,
-            stream: None,
-        },
-    );
-
-    // With the correct file_size (30_000), validation should pass.
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+    
+    // Set config max to 1MB to allow our test file
+    let config = post_policy_test_helpers::create_test_config(1024 * 1024);
+    
+    let auth = post_policy_test_helpers::create_test_auth();
+    let ccx = post_policy_test_helpers::create_test_context(&s3, &config, &auth);
+    
+    let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+    
+    // Create a policy with content-length-range [100, 50000]
+    // This will accept files between 100 and 50000 bytes
+    let policy_json = r#"{"expiration":"2030-01-01T00:00:00.000Z","conditions":[["content-length-range",100,50000]]}"#;
+    
+    // Create a 30KB file (30,000 bytes) - large enough to potentially be split into
+    // multiple chunks during stream processing, but within policy limits
+    let file_content = "a".repeat(30_000);
+    
+    let mut req = post_policy_test_helpers::build_post_object_request(policy_json, &file_content, &secret_key);
+    
+    // Exercise the prepare code path, which should:
+    // 1. Parse the policy
+    // 2. Aggregate the file stream (possibly into multiple chunks)
+    // 3. Calculate file_size correctly as sum of chunk lengths (not chunk count)
+    // 4. Validate the policy conditions using the correct file_size
+    let result = super::prepare(&mut req, &ccx).await;
+    
+    // This should succeed because:
+    // - The file is 30,000 bytes, which is within [100, 50000]
+    // - If the buggy code (vec_bytes.len()) were still in place, it might use
+    //   the chunk count instead of 30,000, which would likely be < 100 and fail
     assert!(
-        policy.validate_conditions_only(&multipart, file_size).is_ok(),
-        "correct file_size ({file_size}) should satisfy content-length-range [100, 50000]"
+        result.is_ok(),
+        "POST object with 30KB file should pass content-length-range [100, 50000] validation"
     );
-
-    // With the buggy file_size (3), validation should fail because 3 < 100.
+    
+    // Now test with a file that's too small (should fail)
+    let small_file_content = "a".repeat(50); // 50 bytes, less than minimum of 100
+    let mut req_small = post_policy_test_helpers::build_post_object_request(policy_json, &small_file_content, &secret_key);
+    
+    let result_small = super::prepare(&mut req_small, &ccx).await;
     assert!(
-        policy.validate_conditions_only(&multipart, buggy_file_size).is_err(),
-        "buggy file_size ({buggy_file_size}) should violate content-length-range [100, 50000]"
+        result_small.is_err(),
+        "POST object with 50-byte file should fail content-length-range [100, 50000] validation"
     );
 }
