@@ -333,7 +333,7 @@ impl RawCondition {
 /// Normalize field name by removing '$' prefix and converting to lowercase
 fn normalize_field_name(field: &str) -> String {
     let field = field.strip_prefix('$').unwrap_or(field);
-    field.to_string()
+    field.to_ascii_lowercase()
 }
 
 #[cfg(test)]
