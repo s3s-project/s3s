@@ -317,6 +317,8 @@ async fn post_multipart_bucket_routes_to_post_object() {
 
 /// Helper to create a test S3 service that tracks POST calls
 mod post_policy_test_helpers {
+    use std::fmt::Write;
+
     use crate::S3Request;
     use crate::auth::{SecretKey, SimpleAuth};
     use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
@@ -382,8 +384,48 @@ mod post_policy_test_helpers {
         SimpleAuth::from_single(access_key, secret_key)
     }
 
+    pub fn build_multipart_fields(list: &[(&str, &str)], boundary: &str) -> String {
+        let mut d = String::new();
+        for (name, value) in list {
+            write!(
+                &mut d,
+                "--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n{value}\r\n"
+            )
+            .unwrap();
+        }
+        d
+    }
+
+    pub fn build_multipart_file_field(
+        field_name: &str,
+        filename: &str,
+        content_type: &str,
+        file_content: &str,
+        boundary: &str,
+    ) -> String {
+        format!(
+            concat!(
+                "--{boundary}\r\n",
+                "Content-Disposition: form-data; name=\"{field_name}\"; filename=\"{filename}\"\r\n",
+                "Content-Type: {content_type}\r\n\r\n",
+                "{file_content}\r\n",
+                "--{boundary}--\r\n",
+            ),
+            boundary = boundary,
+            field_name = field_name,
+            filename = filename,
+            content_type = content_type,
+            file_content = file_content,
+        )
+    }
+
     /// Build a POST object request with a policy
-    pub fn build_post_object_request(policy_json: &str, file_content: &str, secret_key: &SecretKey) -> Request {
+    pub fn build_post_object_request(
+        policy_json: &str,
+        file_content: &str,
+        secret_key: &SecretKey,
+        with_content_type: bool,
+    ) -> Request {
         let policy_b64 = base64_simd::STANDARD.encode_to_string(policy_json);
 
         let boundary = "------------------------test12345678";
@@ -392,49 +434,30 @@ mod post_policy_test_helpers {
         let amz_date = sig_v4::AmzDate::parse("20250101T000000Z").unwrap();
         let region = "us-east-1";
         let service = "s3";
+        let content_type = "text/plain";
         let algorithm = "AWS4-HMAC-SHA256";
         let credential = "AKIAIOSFODNN7EXAMPLE/20250101/us-east-1/s3/aws4_request";
         let signature = sig_v4::calculate_signature(&policy_b64, secret_key, &amz_date, region, service);
+        let amz_date_str = amz_date.fmt_iso8601();
 
-        let body = format!(
-            concat!(
-                "--{b}\r\n",
-                "Content-Disposition: form-data; name=\"x-amz-signature\"\r\n\r\n",
-                "{signature}\r\n",
-                "--{b}\r\n",
-                "Content-Disposition: form-data; name=\"bucket\"\r\n\r\n",
-                "{bucket}\r\n",
-                "--{b}\r\n",
-                "Content-Disposition: form-data; name=\"policy\"\r\n\r\n",
-                "{policy_b64}\r\n",
-                "--{b}\r\n",
-                "Content-Disposition: form-data; name=\"x-amz-algorithm\"\r\n\r\n",
-                "{algorithm}\r\n",
-                "--{b}\r\n",
-                "Content-Disposition: form-data; name=\"x-amz-credential\"\r\n\r\n",
-                "{credential}\r\n",
-                "--{b}\r\n",
-                "Content-Disposition: form-data; name=\"x-amz-date\"\r\n\r\n",
-                "{amz_date}\r\n",
-                "--{b}\r\n",
-                "Content-Disposition: form-data; name=\"key\"\r\n\r\n",
-                "{key}\r\n",
-                "--{b}\r\n",
-                "Content-Disposition: form-data; name=\"file\"; filename=\"test.txt\"\r\n",
-                "Content-Type: text/plain\r\n\r\n",
-                "{file_content}\r\n",
-                "--{b}--\r\n"
-            ),
-            amz_date = amz_date.fmt_iso8601(),
-            b = boundary,
-            signature = signature,
-            bucket = bucket,
-            policy_b64 = policy_b64,
-            algorithm = algorithm,
-            credential = credential,
-            key = key,
-            file_content = file_content,
-        );
+        let fields = {
+            let mut f = vec![
+                ("x-amz-signature", signature.as_str()),
+                ("bucket", bucket),
+                ("policy", policy_b64.as_str()),
+                ("x-amz-algorithm", algorithm),
+                ("x-amz-credential", credential),
+                ("x-amz-date", amz_date_str.as_str()),
+                ("key", key),
+            ];
+            if with_content_type {
+                f.push(("Content-Type", content_type));
+            }
+            f
+        };
+
+        let body = build_multipart_fields(&fields, boundary)
+            + build_multipart_file_field("file", "test.txt", content_type, file_content, boundary).as_str();
 
         Request::from(
             hyper::Request::builder()
@@ -469,49 +492,23 @@ mod post_policy_test_helpers {
         let amz_date = sig_v4::AmzDate::parse("20250101T000000Z").unwrap();
         let region = "us-east-1";
         let service = "s3";
+        let content_type = "text/plain";
         let algorithm = "AWS4-HMAC-SHA256";
         let credential = "AKIAIOSFODNN7EXAMPLE/20250101/us-east-1/s3/aws4_request";
         let signature = sig_v4::calculate_signature(&policy_b64, secret_key, &amz_date, region, service);
 
-        let body = format!(
-            concat!(
-                "--{b}\r\n",
-                "Content-Disposition: form-data; name=\"x-amz-signature\"\r\n\r\n",
-                "{signature}\r\n",
-                "--{b}\r\n",
-                "Content-Disposition: form-data; name=\"bucket\"\r\n\r\n",
-                "{bucket}\r\n",
-                "--{b}\r\n",
-                "Content-Disposition: form-data; name=\"policy\"\r\n\r\n",
-                "{policy_b64}\r\n",
-                "--{b}\r\n",
-                "Content-Disposition: form-data; name=\"x-amz-algorithm\"\r\n\r\n",
-                "{algorithm}\r\n",
-                "--{b}\r\n",
-                "Content-Disposition: form-data; name=\"x-amz-credential\"\r\n\r\n",
-                "{credential}\r\n",
-                "--{b}\r\n",
-                "Content-Disposition: form-data; name=\"x-amz-date\"\r\n\r\n",
-                "{amz_date}\r\n",
-                "--{b}\r\n",
-                "Content-Disposition: form-data; name=\"key\"\r\n\r\n",
-                "{key}\r\n",
-                "--{b}\r\n",
-                "Content-Disposition: form-data; name=\"file\"; filename=\"test.txt\"\r\n",
-                "Content-Type: text/plain\r\n\r\n",
-                "{file_content}\r\n",
-                "--{b}--\r\n"
-            ),
-            amz_date = amz_date.fmt_iso8601(),
-            b = boundary,
-            signature = signature,
-            bucket = bucket,
-            policy_b64 = policy_b64,
-            algorithm = algorithm,
-            credential = credential,
-            key = key,
-            file_content = file_content,
-        );
+        let body = build_multipart_fields(
+            &[
+                ("x-amz-signature", &signature),
+                ("bucket", bucket),
+                ("policy", &policy_b64),
+                ("x-amz-algorithm", algorithm),
+                ("x-amz-credential", credential),
+                ("x-amz-date", &amz_date.fmt_iso8601()),
+                ("key", key),
+            ],
+            boundary,
+        ) + &build_multipart_file_field("file", "test.txt", content_type, file_content, boundary);
 
         // Split the body into small chunks to simulate a multi-chunk stream
         let body_bytes: Vec<u8> = body.into_bytes();
@@ -558,15 +555,46 @@ async fn post_object_policy_max_smaller_than_config_max() {
     let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
 
     // Create a policy with content-length-range max of 100 bytes (< config max of 1MB)
-    let policy_json = r#"{"expiration":"2030-01-01T00:00:00.000Z","conditions":[["content-length-range",0,100]]}"#;
+    let policy_json = r#"{"expiration":"2030-01-01T00:00:00.000Z","conditions":[["content-length-range",0,100], ["eq", "$Content-Type", "text/plain"]]}"#;
     let file_content = "a".repeat(50); // 50 bytes (within policy limit of 100 bytes)
 
-    let mut req = post_policy_test_helpers::build_post_object_request(policy_json, &file_content, &secret_key);
+    let mut req = post_policy_test_helpers::build_post_object_request(policy_json, &file_content, &secret_key, true);
 
     // This should succeed because file size (50 bytes) is within policy limit (100 bytes)
     // The important part is that the aggregation limit used is 100 bytes (policy max), not 1MB (config max)
     let result = super::prepare(&mut req, &ccx).await;
     assert!(result.is_ok(), "expected success for file within policy limit");
+}
+
+#[tokio::test]
+async fn post_object_without_content_type_field_but_with_policy() {
+    use crate::auth::SecretKey;
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicUsize;
+
+    let test_s3 = Arc::new(post_policy_test_helpers::TestS3WithPostTracking {
+        post_calls: AtomicUsize::new(0),
+    });
+    let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
+
+    // Set config max to 1MB
+    let config = post_policy_test_helpers::create_test_config(1024 * 1024);
+
+    let auth = post_policy_test_helpers::create_test_auth();
+    let ccx = post_policy_test_helpers::create_test_context(&s3, &config, &auth);
+
+    let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+
+    // Create a policy with content-length-range max of 100 bytes (< config max of 1MB)
+    let policy_json = r#"{"expiration":"2030-01-01T00:00:00.000Z","conditions":[["content-length-range",0,100], ["eq", "$Content-Type", "text/plain"]]}"#;
+    let file_content = "a".repeat(50); // 50 bytes (within policy limit of 100 bytes)
+
+    let mut req = post_policy_test_helpers::build_post_object_request(policy_json, &file_content, &secret_key, false);
+
+    // This should succeed because file size (50 bytes) is within policy limit (100 bytes)
+    // The important part is that the aggregation limit used is 100 bytes (policy max), not 1MB (config max)
+    let result = super::prepare(&mut req, &ccx).await;
+    assert!(result.is_err(), "expected error for missing Content-Type field required by policy");
 }
 
 /// Test that file exceeding policy max but under config max is rejected
@@ -591,7 +619,7 @@ async fn post_object_file_exceeds_policy_max_but_under_config_max() {
     // This is the critical security test: file should be rejected before consuming memory
     let file_content = "a".repeat(150);
 
-    let mut req = post_policy_test_helpers::build_post_object_request(policy_json, &file_content, &secret_key);
+    let mut req = post_policy_test_helpers::build_post_object_request(policy_json, &file_content, &secret_key, false);
 
     // This should fail because file size (150 bytes) exceeds policy limit (100 bytes)
     // The key security improvement: file is rejected during aggregation (at 100 bytes limit),
@@ -637,7 +665,7 @@ async fn post_object_policy_max_larger_than_config_max() {
     // Create a file with 150 bytes (within config max of 200 bytes, within policy max of 10KB)
     let file_content = "a".repeat(150);
 
-    let mut req = post_policy_test_helpers::build_post_object_request(policy_json, &file_content, &secret_key);
+    let mut req = post_policy_test_helpers::build_post_object_request(policy_json, &file_content, &secret_key, true);
 
     // This should succeed because file size (150 bytes) is within config max (200 bytes)
     // The aggregation limit used is min(policy_max=10KB, config_max=200) = 200 bytes

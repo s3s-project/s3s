@@ -186,10 +186,7 @@ impl PostPolicy {
                 multipart.find_field_value("bucket").map(String::from)
             }
             "key" => multipart.find_field_value("key").map(String::from),
-            "content-type" => {
-                // Content-Type of the file
-                multipart.file.content_type.clone()
-            }
+            "Content-Type" => multipart.find_field_value("content-type").map(String::from),
             _ => {
                 // For other fields, look in multipart fields (already lowercase)
                 multipart.find_field_value(field).map(String::from)
@@ -336,7 +333,7 @@ impl RawCondition {
 /// Normalize field name by removing '$' prefix and converting to lowercase
 fn normalize_field_name(field: &str) -> String {
     let field = field.strip_prefix('$').unwrap_or(field);
-    field.to_ascii_lowercase()
+    field.to_string()
 }
 
 #[cfg(test)]
@@ -456,9 +453,9 @@ mod tests {
     #[test]
     fn test_normalize_field_name() {
         assert_eq!(normalize_field_name("$bucket"), "bucket");
-        assert_eq!(normalize_field_name("$Key"), "key");
+        assert_eq!(normalize_field_name("$Key"), "Key");
         assert_eq!(normalize_field_name("bucket"), "bucket");
-        assert_eq!(normalize_field_name("X-Amz-Meta-Custom"), "x-amz-meta-custom");
+        assert_eq!(normalize_field_name("X-Amz-Meta-Custom"), "X-Amz-Meta-Custom");
     }
 
     #[test]
@@ -493,7 +490,10 @@ mod tests {
     fn create_test_multipart(fields: Vec<(&str, &str)>, content_type: Option<&str>) -> Multipart {
         use crate::http::File;
 
-        let fields: Vec<(String, String)> = fields.into_iter().map(|(k, v)| (k.to_owned(), v.to_owned())).collect();
+        let fields: Vec<(String, String)> = fields
+            .into_iter()
+            .map(|(k, v)| (k.to_ascii_lowercase(), v.to_owned()))
+            .collect();
 
         let file = File {
             name: "test.txt".to_owned(),
@@ -622,10 +622,34 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_condition_content_type() {
+    fn test_validate_condition_file_content_type() {
         let multipart = create_test_multipart(vec![], Some("image/jpeg"));
         let condition = PostPolicyCondition::Eq {
-            field: "content-type".to_owned(),
+            field: "Content-Type".to_owned(),
+            value: "image/jpeg".to_owned(),
+        };
+
+        let result = PostPolicy::validate_condition(&condition, &multipart, 0);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_condition_field_content_type() {
+        let multipart = create_test_multipart(vec![("Content-Type", "image/jpg")], Some("image/jpeg"));
+        let condition = PostPolicyCondition::Eq {
+            field: "Content-Type".to_owned(),
+            value: "image/jpeg".to_owned(),
+        };
+
+        let result = PostPolicy::validate_condition(&condition, &multipart, 0);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_condition_field_content_type_right() {
+        let multipart = create_test_multipart(vec![("Content-Type", "image/jpeg")], Some("image/jpg"));
+        let condition = PostPolicyCondition::Eq {
+            field: "Content-Type".to_owned(),
             value: "image/jpeg".to_owned(),
         };
 
