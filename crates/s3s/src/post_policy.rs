@@ -492,7 +492,7 @@ mod tests {
 
         let fields: Vec<(String, String)> = fields
             .into_iter()
-            .map(|(k, v)| (k.to_ascii_lowercase(), v.to_owned()))
+            .map(|(k, v)| (k.to_owned(), v.to_owned()))
             .collect();
 
         let file = File {
