@@ -178,20 +178,7 @@ impl PostPolicy {
     }
 
     fn get_field_value(field: &str, multipart: &Multipart) -> Option<String> {
-        // Special handling for certain fields
-        match field {
-            "bucket" => {
-                // bucket is typically in the URL path, not in multipart fields
-                // For POST object, bucket comes from the endpoint URL
-                multipart.find_field_value("bucket").map(String::from)
-            }
-            "key" => multipart.find_field_value("key").map(String::from),
-            "Content-Type" => multipart.find_field_value("content-type").map(String::from),
-            _ => {
-                // For other fields, look in multipart fields (already lowercase)
-                multipart.find_field_value(field).map(String::from)
-            }
-        }
+        multipart.find_field_value(field).map(String::from)
     }
 
     /// Get the content-length-range condition if present
