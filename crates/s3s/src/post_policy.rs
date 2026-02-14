@@ -440,9 +440,9 @@ mod tests {
     #[test]
     fn test_normalize_field_name() {
         assert_eq!(normalize_field_name("$bucket"), "bucket");
-        assert_eq!(normalize_field_name("$Key"), "Key");
+        assert_eq!(normalize_field_name("$Key"), "key");
         assert_eq!(normalize_field_name("bucket"), "bucket");
-        assert_eq!(normalize_field_name("X-Amz-Meta-Custom"), "X-Amz-Meta-Custom");
+        assert_eq!(normalize_field_name("X-Amz-Meta-Custom"), "x-amz-meta-custom");
     }
 
     #[test]
@@ -477,10 +477,7 @@ mod tests {
     fn create_test_multipart(fields: Vec<(&str, &str)>, content_type: Option<&str>) -> Multipart {
         use crate::http::File;
 
-        let fields: Vec<(String, String)> = fields
-            .into_iter()
-            .map(|(k, v)| (k.to_owned(), v.to_owned()))
-            .collect();
+        let fields: Vec<(String, String)> = fields.into_iter().map(|(k, v)| (k.to_owned(), v.to_owned())).collect();
 
         let file = File {
             name: "test.txt".to_owned(),
@@ -624,7 +621,7 @@ mod tests {
     fn test_validate_condition_field_content_type() {
         let multipart = create_test_multipart(vec![("Content-Type", "image/jpg")], Some("image/jpeg"));
         let condition = PostPolicyCondition::Eq {
-            field: "Content-Type".to_owned(),
+            field: "content-type".to_owned(),
             value: "image/jpeg".to_owned(),
         };
 
@@ -636,7 +633,7 @@ mod tests {
     fn test_validate_condition_field_content_type_right() {
         let multipart = create_test_multipart(vec![("Content-Type", "image/jpeg")], Some("image/jpg"));
         let condition = PostPolicyCondition::Eq {
-            field: "Content-Type".to_owned(),
+            field: "content-type".to_owned(),
             value: "image/jpeg".to_owned(),
         };
 
