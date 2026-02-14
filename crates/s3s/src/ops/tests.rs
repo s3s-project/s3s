@@ -591,8 +591,8 @@ async fn post_object_without_content_type_field_but_with_policy() {
 
     let mut req = post_policy_test_helpers::build_post_object_request(policy_json, &file_content, &secret_key, false);
 
-    // This should succeed because file size (50 bytes) is within policy limit (100 bytes)
-    // The important part is that the aggregation limit used is 100 bytes (policy max), not 1MB (config max)
+    // This should fail because the request omits the Content-Type form field required by the policy,
+    // even though the file size (50 bytes) is within the policy's content-length-range limit (0–100 bytes).
     let result = super::prepare(&mut req, &ccx).await;
     assert!(result.is_err(), "expected error for missing Content-Type field required by policy");
 }
