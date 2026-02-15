@@ -596,9 +596,11 @@ async fn post_object_without_content_type_field_but_with_policy() {
     let result = super::prepare(&mut req, &ccx).await;
 
     // Assert that we get the specific policy error for the missing Content-Type field.
-    let err = result.expect_err("expected error for missing Content-Type field required by policy");
+    let Err(err) = result else {
+        panic!("expected error for missing Content-Type field required by policy")
+    };
     assert_eq!(
-        err.code(),
+        *err.code(),
         S3ErrorCode::InvalidPolicyDocument,
         "unexpected error code for missing Content-Type field required by policy"
     );
