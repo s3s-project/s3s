@@ -609,7 +609,7 @@ mod tests {
     fn test_validate_condition_file_content_type() {
         let multipart = create_test_multipart(vec![], Some("image/jpeg"));
         let condition = PostPolicyCondition::Eq {
-            field: "Content-Type".to_owned(),
+            field: "content-type".to_owned(),
             value: "image/jpeg".to_owned(),
         };
 
