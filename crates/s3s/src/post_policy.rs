@@ -143,7 +143,7 @@ impl PostPolicy {
         match condition {
             PostPolicyCondition::Eq { field, value } => {
                 let actual = Self::get_field_value(field, multipart);
-                if actual.as_deref() != Some(value.as_str()) {
+                if actual != Some(value.as_str()) {
                     return Err(S3Error::with_message(
                         S3ErrorCode::InvalidPolicyDocument,
                         format!(
@@ -155,7 +155,7 @@ impl PostPolicy {
             }
             PostPolicyCondition::StartsWith { field, prefix } => {
                 let actual = Self::get_field_value(field, multipart);
-                let actual_str = actual.as_deref().unwrap_or("");
+                let actual_str = actual.unwrap_or("");
                 if !actual_str.starts_with(prefix.as_str()) {
                     return Err(S3Error::with_message(
                         S3ErrorCode::InvalidPolicyDocument,
@@ -177,8 +177,8 @@ impl PostPolicy {
         Ok(())
     }
 
-    fn get_field_value(field: &str, multipart: &Multipart) -> Option<String> {
-        multipart.find_field_value(field).map(String::from)
+    fn get_field_value<'a>(field: &str, multipart: &'a Multipart) -> Option<&'a str> {
+        multipart.find_field_value(field)
     }
 
     /// Get the content-length-range condition if present
