@@ -594,7 +594,27 @@ async fn post_object_without_content_type_field_but_with_policy() {
     // This should fail because the request omits the Content-Type form field required by the policy,
     // even though the file size (50 bytes) is within the policy's content-length-range limit (0–100 bytes).
     let result = super::prepare(&mut req, &ccx).await;
-    assert!(result.is_err(), "expected error for missing Content-Type field required by policy");
+
+    // Assert that we get the specific policy error for the missing Content-Type field.
+    let err = result.expect_err("expected error for missing Content-Type field required by policy");
+    assert_eq!(
+        err.code(),
+        S3ErrorCode::InvalidPolicyDocument,
+        "unexpected error code for missing Content-Type field required by policy"
+    );
+
+    // The error message (or debug representation) should indicate that the `eq` condition
+    // on Content-Type failed because the field was missing or mismatched.
+    let msg = format!("{err:?}");
+    let msg_lower = msg.to_lowercase();
+    assert!(
+        msg_lower.contains("content-type") || msg_lower.contains("content type"),
+        "error message should mention Content-Type requirement, got: {msg}"
+    );
+    assert!(
+        msg_lower.contains("eq"),
+        "error message should indicate failure of the `eq` condition, got: {msg}"
+    );
 }
 
 /// Test that file exceeding policy max but under config max is rejected
