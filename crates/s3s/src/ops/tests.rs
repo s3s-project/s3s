@@ -34,6 +34,110 @@ use super::*;
 //     }
 // }
 
+/// Verifies that when an anonymous (unauthenticated) request is processed, the `None`
+/// branch of the credential match **explicitly clears** `region` and `service`.
+///
+/// This is a regression guard for the fix to Problem 1: previously only `credentials`
+/// was cleared, leaving stale values if the fields had been pre-set.
+#[tokio::test]
+async fn anonymous_request_clears_region_and_service() {
+    use crate::config::{S3ConfigProvider, StaticConfigProvider};
+    use crate::http::{Body, Request};
+    use std::sync::Arc;
+
+    struct NoOpS3;
+    #[async_trait::async_trait]
+    impl crate::s3_trait::S3 for NoOpS3 {}
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(NoOpS3);
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+    let ccx = CallContext {
+        s3: &s3,
+        config: &config,
+        host: None,
+        auth: None,
+        access: None,
+        route: None,
+        validation: None,
+    };
+
+    let mut req = Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri("http://localhost/test-bucket/test-key")
+            .body(Body::empty())
+            .unwrap(),
+    );
+
+    // Pre-populate the fields to simulate hypothetical stale state and confirm
+    // the explicit clearing in the None branch.
+    req.s3ext.region = Some("leftover-region".into());
+    req.s3ext.service = Some("leftover-service".into());
+
+    // Auth processing (and thus field assignment) happens before route resolution,
+    // so the fields are cleared regardless of whether prepare() succeeds overall.
+    let _ = super::prepare(&mut req, &ccx).await;
+
+    assert_eq!(req.s3ext.region, None, "anonymous request must clear region");
+    assert_eq!(req.s3ext.service, None, "anonymous request must clear service");
+}
+
+/// Verifies that when the signature credential carries no region (`SigV2` or anonymous)
+/// the region from `VirtualHost` (provided by `S3Host`) is used as a fallback.
+///
+/// Covers the `VirtualHost` region integration added in Problem 3.
+#[tokio::test]
+async fn vh_region_fallback_for_anonymous_request() {
+    use crate::config::{S3ConfigProvider, StaticConfigProvider};
+    use crate::error::S3Result;
+    use crate::host::{S3Host, VirtualHost};
+    use crate::http::{Body, Request};
+    use std::sync::Arc;
+
+    struct NoOpS3;
+    #[async_trait::async_trait]
+    impl crate::s3_trait::S3 for NoOpS3 {}
+
+    /// A test `S3Host` that always emits region "us-west-2" regardless of the Host value.
+    struct RegionHost;
+    impl S3Host for RegionHost {
+        fn parse_host_header<'a>(&'a self, _host: &'a str) -> S3Result<VirtualHost<'a>> {
+            Ok(VirtualHost::new("example.com").with_bucket("bucket").with_region("us-west-2"))
+        }
+    }
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(NoOpS3);
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+    let host = RegionHost;
+    let ccx = CallContext {
+        s3: &s3,
+        config: &config,
+        host: Some(&host),
+        auth: None,
+        access: None,
+        route: None,
+        validation: None,
+    };
+
+    // Virtual-hosted style request: Host header "bucket.example.com", path is the key.
+    let mut req = Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri("http://bucket.example.com/test-key")
+            .header(crate::header::HOST, "bucket.example.com")
+            .body(Body::empty())
+            .unwrap(),
+    );
+
+    let _ = super::prepare(&mut req, &ccx).await;
+
+    assert_eq!(
+        req.s3ext.region.as_deref(),
+        Some("us-west-2"),
+        "S3Host region should be the fallback when credential provides no region"
+    );
+}
+
 #[test]
 fn error_custom_headers() {
     fn redirect307(location: &str) -> S3Error {

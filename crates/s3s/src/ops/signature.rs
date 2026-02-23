@@ -727,4 +727,121 @@ mod tests {
         // STS requests are typically small (under 2KB for AssumeRole)
         // 8KB provides a good safety margin
     }
+
+    /// V4 presigned URL with an unknown service name must be rejected as `NotImplemented`.
+    ///
+    /// Covers the service whitelist fix in `v4_check_presigned_url`.
+    #[tokio::test]
+    async fn v4_presigned_url_rejects_unknown_service() {
+        use crate::S3ErrorCode;
+        use crate::auth::SecretKey;
+        use crate::config::{S3ConfigProvider, StaticConfigProvider};
+        use std::sync::Arc;
+
+        // Credential scope uses "custom-svc" instead of the allowed "s3" or "sts".
+        // The date is old (2013) with a huge Expires so the expiry check does not fire first.
+        let qs = OrderedQs::parse(concat!(
+            "X-Amz-Algorithm=AWS4-HMAC-SHA256",
+            "&X-Amz-Credential=AKIAIOSFODNN7EXAMPLE%2F20130524%2Fus-east-1%2Fcustom-svc%2Faws4_request",
+            "&X-Amz-Date=20130524T000000Z",
+            "&X-Amz-Expires=999999999",
+            "&X-Amz-SignedHeaders=host",
+            // Signature must be 64 lowercase hex chars to pass PresignedUrlV4::parse.
+            "&X-Amz-Signature=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ))
+        .unwrap();
+
+        let access_key = "AKIAIOSFODNN7EXAMPLE";
+        let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+        let auth = crate::auth::SimpleAuth::from_single(access_key, secret_key);
+        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+
+        let method = Method::GET;
+        let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+        let mut body = Body::empty();
+
+        let mut cx = SignatureContext {
+            auth: Some(&auth),
+            config: &config,
+            req_version: ::http::Version::HTTP_11,
+            req_method: &method,
+            req_uri: &uri,
+            req_body: &mut body,
+            qs: Some(&qs),
+            hs: OrderedHeaders::from_slice_unchecked(&[]),
+            decoded_uri_path: "/test.txt".to_owned(),
+            vh_bucket: None,
+            content_length: None,
+            mime: None,
+            decoded_content_length: None,
+            transformed_body: None,
+            multipart: None,
+            trailing_headers: None,
+        };
+
+        let err = cx.v4_check_presigned_url().await.expect_err("unknown service must be rejected");
+        assert_eq!(err.code(), &S3ErrorCode::NotImplemented);
+    }
+
+    /// `SigV2` does not carry region in the credential scope, so `CredentialsExt.region`
+    /// must always be `None` and `service` must always be `Some("s3")`.
+    ///
+    /// Covers the documented `SigV2` behavior (`VirtualHost` region fallback relies on this).
+    #[tokio::test]
+    async fn v2_header_auth_returns_no_region() {
+        use crate::auth::SecretKey;
+        use crate::config::{S3ConfigProvider, StaticConfigProvider};
+        use std::sync::Arc;
+
+        let access_key = "AKIAIOSFODNN7EXAMPLE";
+        let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+        let auth = crate::auth::SimpleAuth::from_single(access_key, secret_key.clone());
+        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+
+        let date = "Fri, 24 Jan 2030 12:00:00 +0000";
+        let hs = OrderedHeaders::from_slice_unchecked(&[("date", date), ("host", "s3.amazonaws.com")]);
+
+        let method = Method::GET;
+        let uri = Uri::from_static("https://s3.amazonaws.com/test-bucket/test-key");
+        let mut body = Body::empty();
+
+        // Compute the expected signature using the same logic as the verification path.
+        let string_to_sign = crate::sig_v2::create_string_to_sign(
+            crate::sig_v2::Mode::HeaderAuth,
+            &method,
+            "/test-bucket/test-key",
+            None,
+            &hs,
+            None,
+        );
+        let signature = crate::sig_v2::calculate_signature(&secret_key, &string_to_sign);
+
+        let auth_v2 = AuthorizationV2 {
+            access_key,
+            signature: &signature,
+        };
+
+        let mut cx = SignatureContext {
+            auth: Some(&auth),
+            config: &config,
+            req_version: ::http::Version::HTTP_11,
+            req_method: &method,
+            req_uri: &uri,
+            req_body: &mut body,
+            qs: None,
+            hs,
+            decoded_uri_path: "/test-bucket/test-key".to_owned(),
+            vh_bucket: None,
+            content_length: None,
+            mime: None,
+            decoded_content_length: None,
+            transformed_body: None,
+            multipart: None,
+            trailing_headers: None,
+        };
+
+        let cred = cx.v2_check_header_auth(auth_v2).await.expect("valid SigV2 auth should succeed");
+        assert_eq!(cred.region, None, "SigV2 carries no region");
+        assert_eq!(cred.service.as_deref(), Some("s3"), "SigV2 service is always 's3'");
+    }
 }
