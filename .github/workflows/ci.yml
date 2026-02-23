@@ -141,6 +141,35 @@ jobs:
           name: e2e-fs.logs
           path: ./target/s3s-fs.log
 
+  e2e-boto3-fs:
+    name: e2e (boto3, s3s-fs)
+    needs: skip-check
+    if: github.event_name != 'pull_request' && needs.skip-check.outputs.should_skip != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
+      - run: uv sync
+      - run: just install s3s-fs
+      - run: ./scripts/e2e-boto3-fs.sh
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: e2e-boto3-fs.logs
+          path: ./target/s3s-fs-boto3.log
+
+  e2e-boto3-minio:
+    name: e2e (boto3, minio)
+    needs: skip-check
+    if: github.event_name != 'pull_request' && needs.skip-check.outputs.should_skip != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
+      - run: uv sync
+      - run: docker pull minio/minio:latest
+      - run: ./scripts/e2e-boto3-minio.sh
+
   e2e-minio:
     name: e2e (s3s-e2e, minio)
     needs: skip-check
@@ -184,6 +213,8 @@ jobs:
       - wasm-test
       - coverage
       - e2e-fs
+      - e2e-boto3-fs
+      - e2e-boto3-minio
       - e2e-minio
       - mint-proxy-minio
       - s3tests-proxy-minio
