@@ -382,7 +382,7 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                     // signature check). Log a debug warning if they disagree so that
                     // misconfigured clients or hosts are visible in traces.
                     if let (Some(cred_region), Some(host_region)) = (&cred_region, &vh_region)
-                        && cred_region != host_region.as_str()
+                        && cred_region.as_str() != host_region.as_str()
                     {
                         debug!(
                             cred_region = %cred_region,

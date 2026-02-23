@@ -96,18 +96,6 @@ impl FromStr for Region {
     }
 }
 
-impl PartialEq<str> for Region {
-    fn eq(&self, other: &str) -> bool {
-        *self.0 == *other
-    }
-}
-
-impl PartialEq<&str> for Region {
-    fn eq(&self, other: &&str) -> bool {
-        *self.0 == **other
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -165,12 +153,5 @@ mod tests {
         let r: Region = "ap-south-1".parse().unwrap();
         let s = r.into_boxed_str();
         assert_eq!(&*s, "ap-south-1");
-    }
-
-    #[test]
-    fn partial_eq_str() {
-        let r: Region = "us-east-1".parse().unwrap();
-        assert!(r == "us-east-1");
-        assert!(r == *"us-east-1");
     }
 }
