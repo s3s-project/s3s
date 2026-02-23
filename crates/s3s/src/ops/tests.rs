@@ -649,13 +649,13 @@ async fn post_object_file_exceeds_policy_max_but_under_config_max() {
     let result = super::prepare(&mut req, &ccx).await;
     assert!(result.is_err(), "expected error for file exceeding policy limit");
 
-    // MultipartError::FileTooLarge is wrapped into InvalidRequest by the invalid_request! macro
+    // MultipartError::FileTooLarge is mapped to EntityTooLarge
     match result {
         Err(err) => {
             let code = err.code();
             assert!(
-                matches!(code, crate::error::S3ErrorCode::InvalidRequest),
-                "expected InvalidRequest error, got {code:?}",
+                matches!(code, crate::error::S3ErrorCode::EntityTooLarge),
+                "expected EntityTooLarge error, got {code:?}",
             );
         }
         Ok(_) => panic!("expected error for file exceeding policy limit"),
@@ -693,6 +693,44 @@ async fn post_object_policy_max_larger_than_config_max() {
     // The aggregation limit used is min(policy_max=10KB, config_max=200) = 200 bytes
     let result = super::prepare(&mut req, &ccx).await;
     assert!(result.is_ok(), "expected success for file within config limit");
+}
+
+/// Regression test for rustfs/rustfs#984:
+/// POST Object with content-length-range [0, 10] should reject files larger than 10 bytes
+/// with `EntityTooLarge` error code.
+#[tokio::test]
+async fn post_object_content_length_range_rejects_oversized_file() {
+    use crate::auth::SecretKey;
+    use std::sync::Arc;
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+
+    let config = post_policy_test_helpers::create_test_config(5 * 1024 * 1024 * 1024);
+
+    let auth = post_policy_test_helpers::create_test_auth();
+    let ccx = post_policy_test_helpers::create_test_context(&s3, &config, &auth);
+
+    let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+
+    // Exact scenario from the issue: content-length-range [0, 10]
+    let policy_json = r#"{"expiration":"2030-01-01T00:00:00.000Z","conditions":[["content-length-range",0,10]]}"#;
+    // File content is much larger than 10 bytes
+    let file_content = "very long contents, longer than 10 bytes";
+
+    let mut req = post_policy_test_helpers::build_post_object_request(policy_json, file_content, &secret_key, false);
+
+    let result = super::prepare(&mut req, &ccx).await;
+    assert!(result.is_err(), "expected error for file exceeding content-length-range");
+
+    let Err(err) = result else {
+        panic!("expected error for file exceeding content-length-range");
+    };
+    assert_eq!(
+        *err.code(),
+        crate::error::S3ErrorCode::EntityTooLarge,
+        "expected EntityTooLarge error, got {:?}",
+        err.code()
+    );
 }
 
 // ========================================
@@ -1421,13 +1459,13 @@ async fn post_policy_file_size_is_total_bytes_not_chunk_count() {
         Err(err) => {
             assert_eq!(
                 *err.code(),
-                crate::error::S3ErrorCode::InvalidPolicyDocument,
-                "Expected InvalidPolicyDocument error for content-length-range violation"
+                crate::error::S3ErrorCode::EntityTooSmall,
+                "Expected EntityTooSmall error for content-length-range violation"
             );
             let msg = err.message().unwrap_or("");
             assert!(
-                msg.contains("File size 50") && msg.contains("not within the allowed range [100, 50000]"),
-                "Error message should mention file size 50 and range [100, 50000], got: {msg}"
+                msg.contains("smaller than the minimum"),
+                "Error message should mention file is too small, got: {msg}"
             );
         }
         Ok(_) => panic!("POST object with 50-byte file should fail content-length-range [100, 50000] validation"),

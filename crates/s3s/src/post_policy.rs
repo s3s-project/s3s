@@ -166,10 +166,13 @@ impl PostPolicy {
                 }
             }
             PostPolicyCondition::ContentLengthRange { min, max } => {
-                if file_size < *min || file_size > *max {
-                    return Err(S3Error::with_message(
-                        S3ErrorCode::InvalidPolicyDocument,
-                        format!("File size {file_size} is not within the allowed range [{min}, {max}]"),
+                if file_size > *max {
+                    return Err(s3_error!(EntityTooLarge, "Your proposed upload exceeds the maximum allowed object size."));
+                }
+                if file_size < *min {
+                    return Err(s3_error!(
+                        EntityTooSmall,
+                        "Your proposed upload is smaller than the minimum allowed object size."
                     ));
                 }
             }
@@ -589,7 +592,7 @@ mod tests {
         let result = PostPolicy::validate_condition(&condition, &multipart, 99);
         assert!(result.is_err());
         if let Err(e) = result {
-            assert!(matches!(e.code(), S3ErrorCode::InvalidPolicyDocument));
+            assert!(matches!(e.code(), S3ErrorCode::EntityTooSmall));
         }
     }
 
@@ -601,7 +604,7 @@ mod tests {
         let result = PostPolicy::validate_condition(&condition, &multipart, 1001);
         assert!(result.is_err());
         if let Err(e) = result {
-            assert!(matches!(e.code(), S3ErrorCode::InvalidPolicyDocument));
+            assert!(matches!(e.code(), S3ErrorCode::EntityTooLarge));
         }
     }
 
