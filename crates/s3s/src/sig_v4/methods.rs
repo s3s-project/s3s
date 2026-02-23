@@ -266,7 +266,7 @@ pub fn create_string_to_sign(canonical_request: &str, amz_date: &AmzDate, region
         // <CredentialScope>\n
         ans.push_str(&amz_date.fmt_date());
         ans.push('/');
-        ans.push_str(region); // TODO: use a `Region` type
+        ans.push_str(region);
         ans.push('/');
         ans.push_str(service);
         ans.push_str("/aws4_request\n");
@@ -300,7 +300,7 @@ pub fn create_chunk_string_to_sign(
     {
         ans.push_str(&amz_date.fmt_date());
         ans.push('/');
-        ans.push_str(region); // TODO: use a `Region` type
+        ans.push_str(region);
         ans.push('/');
         ans.push_str(service);
         ans.push_str("/aws4_request\n");
@@ -386,7 +386,7 @@ pub fn calculate_signature(
     drop(secret);
 
     // DateRegionKey
-    let date_region_key = hmac_sha256(date_key, region); // TODO: use a `Region` type
+    let date_region_key = hmac_sha256(date_key, region);
 
     // DateRegionServiceKey
     let date_region_service_key = hmac_sha256(date_region_key, service);

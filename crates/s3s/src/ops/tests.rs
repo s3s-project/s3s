@@ -71,7 +71,7 @@ async fn anonymous_request_clears_region_and_service() {
 
     // Pre-populate the fields to simulate hypothetical stale state and confirm
     // the explicit clearing in the None branch.
-    req.s3ext.region = Some("leftover-region".into());
+    req.s3ext.region = Some("leftover-region".parse().unwrap());
     req.s3ext.service = Some("leftover-service".into());
 
     // Auth processing (and thus field assignment) happens before route resolution,
@@ -132,7 +132,7 @@ async fn vh_region_fallback_for_anonymous_request() {
     let _ = super::prepare(&mut req, &ccx).await;
 
     assert_eq!(
-        req.s3ext.region.as_deref(),
+        req.s3ext.region.as_ref().map(crate::region::Region::as_str),
         Some("us-west-2"),
         "S3Host region should be the fallback when credential provides no region"
     );

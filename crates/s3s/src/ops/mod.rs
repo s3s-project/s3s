@@ -370,12 +370,19 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                         secret_key: cred.secret_key,
                     });
 
+                    let cred_region = cred
+                        .region
+                        .filter(|s| !s.is_empty())
+                        .map(|s| crate::region::Region::new(s.into()))
+                        .transpose()
+                        .map_err(|e| invalid_request!("invalid credential region: {e}"))?;
+
                     // When both the signature credential and S3Host supply a region,
                     // the credential region is authoritative (it was verified by the
                     // signature check). Log a debug warning if they disagree so that
                     // misconfigured clients or hosts are visible in traces.
-                    if let (Some(cred_region), Some(host_region)) = (&cred.region, &vh_region)
-                        && cred_region != host_region
+                    if let (Some(cred_region), Some(host_region)) = (&cred_region, &vh_region)
+                        && cred_region != host_region.as_str()
                     {
                         debug!(
                             cred_region = %cred_region,
@@ -385,7 +392,7 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                         );
                     }
 
-                    req.s3ext.region = cred.region;
+                    req.s3ext.region = cred_region;
                     req.s3ext.service = cred.service;
                 }
                 None => {
@@ -398,7 +405,11 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
             // Fallback: if no region was determined from the signature credential
             // (anonymous requests, SigV2), use the region provided by S3Host.
             if req.s3ext.region.is_none() {
-                req.s3ext.region = vh_region;
+                req.s3ext.region = vh_region
+                    .filter(|s| !s.is_empty())
+                    .map(|s| crate::region::Region::new(s.into()))
+                    .transpose()
+                    .map_err(|e| invalid_request!("invalid host region: {e}"))?;
             }
         }
 

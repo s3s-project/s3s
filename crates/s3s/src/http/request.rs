@@ -7,6 +7,7 @@ use crate::auth::Credentials;
 use crate::path::S3Path;
 use crate::post_policy::PostPolicy;
 use crate::protocol::TrailingHeaders;
+use crate::region::Region;
 use crate::stream::VecByteStream;
 
 use hyper::HeaderMap;
@@ -33,7 +34,7 @@ pub(crate) struct S3Extensions {
     pub vec_stream: Option<VecByteStream>,
 
     pub credentials: Option<Credentials>,
-    pub region: Option<String>,
+    pub region: Option<Region>,
     pub service: Option<String>,
     pub trailing_headers: Option<TrailingHeaders>,
 

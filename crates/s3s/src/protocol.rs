@@ -1,6 +1,7 @@
 use crate::Body;
 use crate::StdError;
 use crate::auth::Credentials;
+use crate::region::Region;
 
 use http::Extensions;
 use http::HeaderMap;
@@ -97,7 +98,7 @@ pub struct S3Request<T> {
     pub credentials: Option<Credentials>,
 
     /// S3 requested region.
-    pub region: Option<String>,
+    pub region: Option<Region>,
 
     /// S3 requested service.
     pub service: Option<String>,
