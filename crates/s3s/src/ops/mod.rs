@@ -288,6 +288,7 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
         let host_header = extract_host(req)?;
         let vh;
         let vh_bucket;
+        let vh_region;
         {
             let default_validation = &const { AwsNameValidation::new() };
             let validation = ccx.validation.unwrap_or(default_validation);
@@ -302,6 +303,7 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                     debug!(?vh);
 
                     vh_bucket = vh.bucket();
+                    vh_region = vh.region().map(str::to_owned);
                     break 'parse crate::path::parse_virtual_hosted_style_with_validation(
                         vh_bucket,
                         &decoded_uri_path,
@@ -311,6 +313,7 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
 
                 debug!(?decoded_uri_path, "parsing path-style request");
                 vh_bucket = None;
+                vh_region = None;
                 crate::path::parse_path_style_with_validation(&decoded_uri_path, validation)
             };
 
@@ -366,12 +369,36 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                         access_key: cred.access_key,
                         secret_key: cred.secret_key,
                     });
+
+                    // When both the signature credential and S3Host supply a region,
+                    // the credential region is authoritative (it was verified by the
+                    // signature check). Log a debug warning if they disagree so that
+                    // misconfigured clients or hosts are visible in traces.
+                    if let (Some(cred_region), Some(host_region)) = (&cred.region, &vh_region)
+                        && cred_region != host_region
+                    {
+                        debug!(
+                            cred_region = %cred_region,
+                            host_region = %host_region,
+                            "credential region and virtual-host region differ; \
+                             using credential region"
+                        );
+                    }
+
                     req.s3ext.region = cred.region;
                     req.s3ext.service = cred.service;
                 }
                 None => {
                     req.s3ext.credentials = None;
+                    req.s3ext.region = None;
+                    req.s3ext.service = None;
                 }
+            }
+
+            // Fallback: if no region was determined from the signature credential
+            // (anonymous requests, SigV2), use the region provided by S3Host.
+            if req.s3ext.region.is_none() {
+                req.s3ext.region = vh_region;
             }
         }
 

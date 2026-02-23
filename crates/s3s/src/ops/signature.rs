@@ -203,6 +203,10 @@ impl SignatureContext<'_> {
         let region = credential.aws_region;
         let service = credential.aws_service;
 
+        if !matches!(service, "s3" | "sts") {
+            return Err(s3_error!(NotImplemented, "unknown service"));
+        }
+
         let string_to_sign = info.policy;
         let signature = sig_v4::calculate_signature(string_to_sign, &secret_key, &amz_date, region, service);
 
@@ -271,6 +275,10 @@ impl SignatureContext<'_> {
 
         let region = presigned_url.credential.aws_region;
         let service = presigned_url.credential.aws_service;
+
+        if !matches!(service, "s3" | "sts") {
+            return Err(s3_error!(NotImplemented, "unknown service"));
+        }
 
         let signature = {
             let headers = self.hs.find_multiple_with_on_missing(&presigned_url.signed_headers, |name| {
@@ -453,8 +461,8 @@ impl SignatureContext<'_> {
                 mem::take(self.req_body),
                 signature.into(),
                 amz_date,
-                authorization.credential.aws_region.into(),
-                authorization.credential.aws_service.into(),
+                region.into(),
+                service.into(),
                 secret_key.clone(),
                 decoded_content_length,
                 unsigned,
