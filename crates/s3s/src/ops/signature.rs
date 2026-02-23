@@ -204,7 +204,11 @@ impl SignatureContext<'_> {
         let service = credential.aws_service;
 
         if !matches!(service, "s3" | "sts") {
-            return Err(s3_error!(NotImplemented, "unknown service"));
+            return Err(s3_error!(
+                NotImplemented,
+                "unknown service '{}' in credential scope; expected 's3' or 'sts'",
+                service,
+            ));
         }
 
         let string_to_sign = info.policy;
@@ -277,7 +281,11 @@ impl SignatureContext<'_> {
         let service = presigned_url.credential.aws_service;
 
         if !matches!(service, "s3" | "sts") {
-            return Err(s3_error!(NotImplemented, "unknown service"));
+            return Err(s3_error!(
+                NotImplemented,
+                "unknown service '{}' in credential scope; expected 's3' or 'sts'",
+                service,
+            ));
         }
 
         let signature = {
@@ -332,7 +340,11 @@ impl SignatureContext<'_> {
         let service = authorization.credential.aws_service;
 
         if !matches!(service, "s3" | "sts") {
-            return Err(s3_error!(NotImplemented, "unknown service"));
+            return Err(s3_error!(
+                NotImplemented,
+                "unknown service '{}' in credential scope; expected 's3' or 'sts'",
+                service,
+            ));
         }
 
         let auth = require_auth(self.auth)?;
@@ -779,7 +791,10 @@ mod tests {
             trailing_headers: None,
         };
 
-        let err = cx.v4_check_presigned_url().await.expect_err("unknown service must be rejected");
+        let err = cx
+            .v4_check_presigned_url()
+            .await
+            .expect_err("unknown service must be rejected");
         assert_eq!(err.code(), &S3ErrorCode::NotImplemented);
     }
 
@@ -840,7 +855,10 @@ mod tests {
             trailing_headers: None,
         };
 
-        let cred = cx.v2_check_header_auth(auth_v2).await.expect("valid SigV2 auth should succeed");
+        let cred = cx
+            .v2_check_header_auth(auth_v2)
+            .await
+            .expect("valid SigV2 auth should succeed");
         assert_eq!(cred.region, None, "SigV2 carries no region");
         assert_eq!(cred.service.as_deref(), Some("s3"), "SigV2 service is always 's3'");
     }
