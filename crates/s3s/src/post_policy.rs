@@ -9,6 +9,7 @@ use crate::dto::Timestamp;
 use crate::dto::TimestampFormat;
 use crate::http::Multipart;
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 
 use serde::Deserialize;
@@ -117,7 +118,7 @@ impl PostPolicy {
         }
 
         // Check all conditions
-        self.validate_conditions_only(multipart, file_size)
+        self.validate_conditions_only(multipart, file_size, None)
     }
 
     /// Validate only the policy conditions, skipping the expiration check
@@ -127,35 +128,45 @@ impl PostPolicy {
     /// # Arguments
     /// * `multipart` - The multipart form data
     /// * `file_size` - The size of the uploaded file in bytes
+    /// * `url_bucket` - The bucket name from the URL path. Used to validate
+    ///   the `bucket` condition when it is not present in the form fields.
+    ///   Clients like boto3 add a `{"bucket": "..."}` condition to the policy
+    ///   but do not include `bucket` in the form fields because the bucket is
+    ///   already determined by the URL.
     ///
     /// # Errors
     /// Returns `InvalidPolicyDocument` if any condition is not satisfied
-    pub fn validate_conditions_only(&self, multipart: &Multipart, file_size: u64) -> S3Result<()> {
+    pub fn validate_conditions_only(&self, multipart: &Multipart, file_size: u64, url_bucket: Option<&str>) -> S3Result<()> {
         // Check all conditions
         for condition in &self.conditions {
-            Self::validate_condition(condition, multipart, file_size)?;
+            Self::validate_condition(condition, multipart, file_size, url_bucket)?;
         }
 
         Ok(())
     }
 
-    fn validate_condition(condition: &PostPolicyCondition, multipart: &Multipart, file_size: u64) -> S3Result<()> {
+    fn validate_condition(
+        condition: &PostPolicyCondition,
+        multipart: &Multipart,
+        file_size: u64,
+        url_bucket: Option<&str>,
+    ) -> S3Result<()> {
         match condition {
             PostPolicyCondition::Eq { field, value } => {
-                let actual = Self::get_field_value(field, multipart);
-                if actual != Some(value.as_str()) {
+                let actual = Self::get_field_value(field, multipart, url_bucket);
+                if actual.as_deref() != Some(value.as_str()) {
                     return Err(S3Error::with_message(
                         S3ErrorCode::InvalidPolicyDocument,
                         format!(
                             "Policy condition 'eq' for field '{field}' failed: expected '{value}', got '{}'",
-                            actual.unwrap_or_default()
+                            actual.as_deref().unwrap_or_default()
                         ),
                     ));
                 }
             }
             PostPolicyCondition::StartsWith { field, prefix } => {
-                let actual = Self::get_field_value(field, multipart);
-                let actual_str = actual.unwrap_or("");
+                let actual = Self::get_field_value(field, multipart, url_bucket);
+                let actual_str = actual.as_deref().unwrap_or("");
                 if !actual_str.starts_with(prefix.as_str()) {
                     return Err(S3Error::with_message(
                         S3ErrorCode::InvalidPolicyDocument,
@@ -180,8 +191,21 @@ impl PostPolicy {
         Ok(())
     }
 
-    fn get_field_value<'a>(field: &str, multipart: &'a Multipart) -> Option<&'a str> {
-        multipart.find_field_value(field)
+    /// Get the value for a policy condition field.
+    ///
+    /// First checks the multipart form fields. For the `bucket` field,
+    /// falls back to the URL path bucket if not found in form fields.
+    fn get_field_value<'a>(field: &str, multipart: &'a Multipart, url_bucket: Option<&'a str>) -> Option<Cow<'a, str>> {
+        if let Some(val) = multipart.find_field_value(field) {
+            return Some(Cow::Borrowed(val));
+        }
+        // The "bucket" field is not a standard form field; it is determined by
+        // the URL path. Clients like boto3 add a bucket condition to the policy
+        // but do not include it in the form fields.
+        if field == "bucket" {
+            return url_bucket.map(Cow::Borrowed);
+        }
+        None
     }
 
     /// Get the content-length-range condition if present
@@ -499,7 +523,7 @@ mod tests {
             value: "mybucket".to_owned(),
         };
 
-        let result = PostPolicy::validate_condition(&condition, &multipart, 0);
+        let result = PostPolicy::validate_condition(&condition, &multipart, 0, None);
         assert!(result.is_ok());
     }
 
@@ -511,7 +535,7 @@ mod tests {
             value: "wrongbucket".to_owned(),
         };
 
-        let result = PostPolicy::validate_condition(&condition, &multipart, 0);
+        let result = PostPolicy::validate_condition(&condition, &multipart, 0, None);
         assert!(result.is_err());
         if let Err(e) = result {
             assert!(matches!(e.code(), S3ErrorCode::InvalidPolicyDocument));
@@ -526,7 +550,7 @@ mod tests {
             prefix: "user/".to_owned(),
         };
 
-        let result = PostPolicy::validate_condition(&condition, &multipart, 0);
+        let result = PostPolicy::validate_condition(&condition, &multipart, 0, None);
         assert!(result.is_ok());
     }
 
@@ -538,7 +562,7 @@ mod tests {
             prefix: String::new(),
         };
 
-        let result = PostPolicy::validate_condition(&condition, &multipart, 0);
+        let result = PostPolicy::validate_condition(&condition, &multipart, 0, None);
         assert!(result.is_ok());
     }
 
@@ -550,7 +574,7 @@ mod tests {
             prefix: "user/".to_owned(),
         };
 
-        let result = PostPolicy::validate_condition(&condition, &multipart, 0);
+        let result = PostPolicy::validate_condition(&condition, &multipart, 0, None);
         assert!(result.is_err());
         if let Err(e) = result {
             assert!(matches!(e.code(), S3ErrorCode::InvalidPolicyDocument));
@@ -562,7 +586,7 @@ mod tests {
         let multipart = create_test_multipart(vec![], None);
         let condition = PostPolicyCondition::ContentLengthRange { min: 100, max: 1000 };
 
-        let result = PostPolicy::validate_condition(&condition, &multipart, 500);
+        let result = PostPolicy::validate_condition(&condition, &multipart, 500, None);
         assert!(result.is_ok());
     }
 
@@ -571,7 +595,7 @@ mod tests {
         let multipart = create_test_multipart(vec![], None);
         let condition = PostPolicyCondition::ContentLengthRange { min: 100, max: 1000 };
 
-        let result = PostPolicy::validate_condition(&condition, &multipart, 100);
+        let result = PostPolicy::validate_condition(&condition, &multipart, 100, None);
         assert!(result.is_ok());
     }
 
@@ -580,7 +604,7 @@ mod tests {
         let multipart = create_test_multipart(vec![], None);
         let condition = PostPolicyCondition::ContentLengthRange { min: 100, max: 1000 };
 
-        let result = PostPolicy::validate_condition(&condition, &multipart, 1000);
+        let result = PostPolicy::validate_condition(&condition, &multipart, 1000, None);
         assert!(result.is_ok());
     }
 
@@ -589,7 +613,7 @@ mod tests {
         let multipart = create_test_multipart(vec![], None);
         let condition = PostPolicyCondition::ContentLengthRange { min: 100, max: 1000 };
 
-        let result = PostPolicy::validate_condition(&condition, &multipart, 99);
+        let result = PostPolicy::validate_condition(&condition, &multipart, 99, None);
         assert!(result.is_err());
         if let Err(e) = result {
             assert!(matches!(e.code(), S3ErrorCode::EntityTooSmall));
@@ -601,7 +625,7 @@ mod tests {
         let multipart = create_test_multipart(vec![], None);
         let condition = PostPolicyCondition::ContentLengthRange { min: 100, max: 1000 };
 
-        let result = PostPolicy::validate_condition(&condition, &multipart, 1001);
+        let result = PostPolicy::validate_condition(&condition, &multipart, 1001, None);
         assert!(result.is_err());
         if let Err(e) = result {
             assert!(matches!(e.code(), S3ErrorCode::EntityTooLarge));
@@ -616,7 +640,7 @@ mod tests {
             value: "image/jpeg".to_owned(),
         };
 
-        let result = PostPolicy::validate_condition(&condition, &multipart, 0);
+        let result = PostPolicy::validate_condition(&condition, &multipart, 0, None);
         assert!(result.is_err());
     }
 
@@ -628,7 +652,7 @@ mod tests {
             value: "image/jpeg".to_owned(),
         };
 
-        let result = PostPolicy::validate_condition(&condition, &multipart, 0);
+        let result = PostPolicy::validate_condition(&condition, &multipart, 0, None);
         assert!(result.is_err());
     }
 
@@ -640,7 +664,7 @@ mod tests {
             value: "image/jpeg".to_owned(),
         };
 
-        let result = PostPolicy::validate_condition(&condition, &multipart, 0);
+        let result = PostPolicy::validate_condition(&condition, &multipart, 0, None);
         assert!(result.is_ok());
     }
 
@@ -652,10 +676,79 @@ mod tests {
             value: "mybucket".to_owned(),
         };
 
-        let result = PostPolicy::validate_condition(&condition, &multipart, 0);
+        let result = PostPolicy::validate_condition(&condition, &multipart, 0, None);
         assert!(result.is_err());
         if let Err(e) = result {
             assert!(matches!(e.code(), S3ErrorCode::InvalidPolicyDocument));
         }
+    }
+
+    /// Regression test for <https://github.com/rustfs/rustfs/issues/1785>
+    /// Bucket condition should be validated against `url_bucket` when not in form fields.
+    #[test]
+    fn test_validate_bucket_condition_from_url() {
+        // No "bucket" field in form data (like boto3 presigned POST)
+        let multipart = create_test_multipart(vec![("key", "mykey")], None);
+        let condition = PostPolicyCondition::Eq {
+            field: "bucket".to_owned(),
+            value: "mybucket".to_owned(),
+        };
+
+        // With matching url_bucket -> should succeed
+        let result = PostPolicy::validate_condition(&condition, &multipart, 0, Some("mybucket"));
+        assert!(result.is_ok());
+    }
+
+    /// Regression test for <https://github.com/rustfs/rustfs/issues/1785>
+    /// Bucket condition should fail when `url_bucket` doesn't match.
+    #[test]
+    fn test_validate_bucket_condition_from_url_mismatch() {
+        let multipart = create_test_multipart(vec![("key", "mykey")], None);
+        let condition = PostPolicyCondition::Eq {
+            field: "bucket".to_owned(),
+            value: "mybucket".to_owned(),
+        };
+
+        // With mismatching url_bucket -> should fail
+        let result = PostPolicy::validate_condition(&condition, &multipart, 0, Some("wrongbucket"));
+        assert!(result.is_err());
+        if let Err(e) = result {
+            assert!(matches!(e.code(), S3ErrorCode::InvalidPolicyDocument));
+        }
+    }
+
+    /// Regression test for <https://github.com/rustfs/rustfs/issues/1785>
+    /// Form field bucket takes precedence over `url_bucket`.
+    #[test]
+    fn test_validate_bucket_condition_form_field_takes_precedence() {
+        // "bucket" IS in form data
+        let multipart = create_test_multipart(vec![("bucket", "form-bucket"), ("key", "mykey")], None);
+        let condition = PostPolicyCondition::Eq {
+            field: "bucket".to_owned(),
+            value: "form-bucket".to_owned(),
+        };
+
+        // Form field should take precedence over url_bucket
+        let result = PostPolicy::validate_condition(&condition, &multipart, 0, Some("url-bucket"));
+        assert!(result.is_ok());
+    }
+
+    /// Regression test for <https://github.com/rustfs/rustfs/issues/1785>
+    /// `validate_conditions_only` with `url_bucket` should work for boto3-style policies.
+    #[test]
+    fn test_validate_conditions_only_with_url_bucket() {
+        let json = r#"{
+            "expiration": "2030-01-01T00:00:00.000Z",
+            "conditions": [
+                {"bucket": "mybucket"},
+                ["eq", "$key", "mykey"]
+            ]
+        }"#;
+        let policy = PostPolicy::from_json(json).unwrap();
+
+        // No bucket in form fields, but url_bucket matches
+        let multipart = create_test_multipart(vec![("key", "mykey")], None);
+        let result = policy.validate_conditions_only(&multipart, 0, Some("mybucket"));
+        assert!(result.is_ok());
     }
 }

@@ -442,7 +442,7 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
         {
             match s3_path {
                 S3Path::Root => return Err(unknown_operation()),
-                S3Path::Bucket { .. } => {
+                S3Path::Bucket { bucket } => {
                     // POST object
                     debug!(?multipart);
 
@@ -497,8 +497,10 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
 
                     // Validate the policy conditions (if policy exists)
                     // Note: expiration was already checked above before reading the file
+                    // Pass the URL bucket so that the "bucket" condition can be validated
+                    // even when clients (like boto3) don't include it in form fields.
                     if let Some(policy) = policy {
-                        policy.validate_conditions_only(multipart, file_size)?;
+                        policy.validate_conditions_only(multipart, file_size, Some(bucket))?;
                         req.s3ext.post_policy = Some(policy);
                     }
 
