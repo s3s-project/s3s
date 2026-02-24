@@ -411,15 +411,14 @@ mod tests {
 
     #[test]
     fn test_parse_invalid_base64() {
-        let result = PostPolicy::from_base64("not-valid-base64!!!");
-        assert!(result.is_err());
+        PostPolicy::from_base64("not-valid-base64!!!").unwrap_err();
     }
 
     #[test]
     fn test_parse_invalid_json() {
         let encoded = base64_simd::STANDARD.encode_to_string("{invalid json}");
-        let result = PostPolicy::from_base64(&encoded);
-        assert!(result.is_err());
+        let error = PostPolicy::from_base64(&encoded).unwrap_err();
+        assert!(matches!(error, PostPolicyError::Json(_)));
     }
 
     #[test]
@@ -533,11 +532,8 @@ mod tests {
             value: "wrongbucket".to_owned(),
         };
 
-        let result = PostPolicy::validate_condition(&condition, &multipart, 0, None);
-        assert!(result.is_err());
-        if let Err(e) = result {
-            assert!(matches!(e.code(), S3ErrorCode::InvalidPolicyDocument));
-        }
+        let e = PostPolicy::validate_condition(&condition, &multipart, 0, None).unwrap_err();
+        assert!(matches!(e.code(), S3ErrorCode::InvalidPolicyDocument));
     }
 
     #[test]
@@ -572,11 +568,8 @@ mod tests {
             prefix: "user/".to_owned(),
         };
 
-        let result = PostPolicy::validate_condition(&condition, &multipart, 0, None);
-        assert!(result.is_err());
-        if let Err(e) = result {
-            assert!(matches!(e.code(), S3ErrorCode::InvalidPolicyDocument));
-        }
+        let e = PostPolicy::validate_condition(&condition, &multipart, 0, None).unwrap_err();
+        assert!(matches!(e.code(), S3ErrorCode::InvalidPolicyDocument));
     }
 
     #[test]
@@ -611,11 +604,8 @@ mod tests {
         let multipart = create_test_multipart(vec![], None);
         let condition = PostPolicyCondition::ContentLengthRange { min: 100, max: 1000 };
 
-        let result = PostPolicy::validate_condition(&condition, &multipart, 99, None);
-        assert!(result.is_err());
-        if let Err(e) = result {
-            assert!(matches!(e.code(), S3ErrorCode::EntityTooSmall));
-        }
+        let e = PostPolicy::validate_condition(&condition, &multipart, 99, None).unwrap_err();
+        assert!(matches!(e.code(), S3ErrorCode::EntityTooSmall));
     }
 
     #[test]
@@ -623,11 +613,8 @@ mod tests {
         let multipart = create_test_multipart(vec![], None);
         let condition = PostPolicyCondition::ContentLengthRange { min: 100, max: 1000 };
 
-        let result = PostPolicy::validate_condition(&condition, &multipart, 1001, None);
-        assert!(result.is_err());
-        if let Err(e) = result {
-            assert!(matches!(e.code(), S3ErrorCode::EntityTooLarge));
-        }
+        let e = PostPolicy::validate_condition(&condition, &multipart, 1001, None).unwrap_err();
+        assert!(matches!(e.code(), S3ErrorCode::EntityTooLarge));
     }
 
     #[test]
@@ -638,8 +625,8 @@ mod tests {
             value: "image/jpeg".to_owned(),
         };
 
-        let result = PostPolicy::validate_condition(&condition, &multipart, 0, None);
-        assert!(result.is_err());
+        let e = PostPolicy::validate_condition(&condition, &multipart, 0, None).unwrap_err();
+        assert!(matches!(e.code(), S3ErrorCode::InvalidPolicyDocument));
     }
 
     #[test]
@@ -650,8 +637,8 @@ mod tests {
             value: "image/jpeg".to_owned(),
         };
 
-        let result = PostPolicy::validate_condition(&condition, &multipart, 0, None);
-        assert!(result.is_err());
+        let e = PostPolicy::validate_condition(&condition, &multipart, 0, None).unwrap_err();
+        assert!(matches!(e.code(), S3ErrorCode::InvalidPolicyDocument));
     }
 
     #[test]
@@ -674,11 +661,8 @@ mod tests {
             value: "mybucket".to_owned(),
         };
 
-        let result = PostPolicy::validate_condition(&condition, &multipart, 0, None);
-        assert!(result.is_err());
-        if let Err(e) = result {
-            assert!(matches!(e.code(), S3ErrorCode::InvalidPolicyDocument));
-        }
+        let e = PostPolicy::validate_condition(&condition, &multipart, 0, None).unwrap_err();
+        assert!(matches!(e.code(), S3ErrorCode::InvalidPolicyDocument));
     }
 
     /// Regression test for <https://github.com/rustfs/rustfs/issues/1785>
@@ -708,11 +692,8 @@ mod tests {
         };
 
         // With mismatching url_bucket -> should fail
-        let result = PostPolicy::validate_condition(&condition, &multipart, 0, Some("wrongbucket"));
-        assert!(result.is_err());
-        if let Err(e) = result {
-            assert!(matches!(e.code(), S3ErrorCode::InvalidPolicyDocument));
-        }
+        let e = PostPolicy::validate_condition(&condition, &multipart, 0, Some("wrongbucket")).unwrap_err();
+        assert!(matches!(e.code(), S3ErrorCode::InvalidPolicyDocument));
     }
 
     /// When both a `bucket` form field and `url_bucket` are present but conflict,
@@ -727,11 +708,8 @@ mod tests {
         };
 
         // Conflict between form field and url_bucket must be rejected outright
-        let result = PostPolicy::validate_condition(&condition, &multipart, 0, Some("url-bucket"));
-        assert!(result.is_err());
-        if let Err(e) = result {
-            assert!(matches!(e.code(), S3ErrorCode::InvalidPolicyDocument));
-        }
+        let e = PostPolicy::validate_condition(&condition, &multipart, 0, Some("url-bucket")).unwrap_err();
+        assert!(matches!(e.code(), S3ErrorCode::InvalidPolicyDocument));
     }
 
     /// Regression test for <https://github.com/rustfs/rustfs/issues/1785>
@@ -751,5 +729,112 @@ mod tests {
         let multipart = create_test_multipart(vec![("key", "mykey")], None);
         let result = policy.validate_conditions_only(&multipart, 0, Some("mybucket"));
         assert!(result.is_ok());
+    }
+
+    // Tests for RawCondition parsing error branches
+
+    // Helper function to test multiple invalid JSON strings that should return InvalidCondition
+    fn assert_invalid_condition(json_samples: &[&str]) {
+        for json in json_samples {
+            let error = PostPolicy::from_json(json).unwrap_err();
+            assert!(
+                matches!(error, PostPolicyError::InvalidCondition),
+                "Expected InvalidCondition for: {json}"
+            );
+        }
+    }
+
+    // Helper function to test multiple invalid JSON strings that should return Json error
+    fn assert_json_error(json_samples: &[&str]) {
+        for json in json_samples {
+            let error = PostPolicy::from_json(json).unwrap_err();
+            assert!(matches!(error, PostPolicyError::Json(_)), "Expected Json error for: {json}");
+        }
+    }
+
+    #[test]
+    fn test_parse_array_condition_errors() {
+        let invalid_jsons = vec![
+            // Empty array
+            r#"{"expiration": "2030-01-01T00:00:00.000Z", "conditions": [[]]}"#,
+            // Operator not string
+            r#"{"expiration": "2030-01-01T00:00:00.000Z", "conditions": [[123, "$key", "value"]]}"#,
+            // Unknown operator
+            r#"{"expiration": "2030-01-01T00:00:00.000Z", "conditions": [["unknown-op", "$key", "value"]]}"#,
+        ];
+        assert_invalid_condition(&invalid_jsons);
+    }
+
+    #[test]
+    fn test_parse_eq_condition_errors() {
+        let invalid_jsons = vec![
+            // Insufficient items
+            r#"{"expiration": "2030-01-01T00:00:00.000Z", "conditions": [["eq", "$key"]]}"#,
+            // Field not string
+            r#"{"expiration": "2030-01-01T00:00:00.000Z", "conditions": [["eq", 123, "value"]]}"#,
+            // Value not string
+            r#"{"expiration": "2030-01-01T00:00:00.000Z", "conditions": [["eq", "$key", 123]]}"#,
+        ];
+        assert_invalid_condition(&invalid_jsons);
+    }
+
+    #[test]
+    fn test_parse_starts_with_condition_errors() {
+        let invalid_jsons = vec![
+            // Insufficient items
+            r#"{"expiration": "2030-01-01T00:00:00.000Z", "conditions": [["starts-with", "$key"]]}"#,
+            // Field not string
+            r#"{"expiration": "2030-01-01T00:00:00.000Z", "conditions": [["starts-with", 123, "prefix"]]}"#,
+            // Prefix not string
+            r#"{"expiration": "2030-01-01T00:00:00.000Z", "conditions": [["starts-with", "$key", 123]]}"#,
+        ];
+        assert_invalid_condition(&invalid_jsons);
+    }
+
+    #[test]
+    fn test_parse_content_length_range_condition_errors() {
+        let invalid_jsons = vec![
+            // Insufficient items
+            r#"{"expiration": "2030-01-01T00:00:00.000Z", "conditions": [["content-length-range", 100]]}"#,
+            // Min not number
+            r#"{"expiration": "2030-01-01T00:00:00.000Z", "conditions": [["content-length-range", "100", 1000]]}"#,
+            // Max not number
+            r#"{"expiration": "2030-01-01T00:00:00.000Z", "conditions": [["content-length-range", 100, "1000"]]}"#,
+        ];
+        assert_invalid_condition(&invalid_jsons);
+    }
+
+    #[test]
+    fn test_parse_object_condition_errors() {
+        let invalid_jsons = vec![
+            // Multiple keys
+            r#"{"expiration": "2030-01-01T00:00:00.000Z", "conditions": [{"bucket": "mybucket", "key": "mykey"}]}"#,
+        ];
+        assert_invalid_condition(&invalid_jsons);
+    }
+
+    #[test]
+    fn test_parse_object_condition_value_type_error() {
+        let invalid_jsons = vec![
+            // Value not string (serde deserialization error)
+            r#"{"expiration": "2030-01-01T00:00:00.000Z", "conditions": [{"bucket": 123}]}"#,
+        ];
+        assert_json_error(&invalid_jsons);
+    }
+
+    #[test]
+    fn test_parse_condition_invalid_types() {
+        // Test RawCondition Deserialize expecting() when condition is neither array nor object
+        let invalid_jsons = vec![
+            // String instead of array/object
+            r#"{"expiration": "2030-01-01T00:00:00.000Z", "conditions": ["invalid string"]}"#,
+            // Number instead of array/object
+            r#"{"expiration": "2030-01-01T00:00:00.000Z", "conditions": [123]}"#,
+            // Boolean instead of array/object
+            r#"{"expiration": "2030-01-01T00:00:00.000Z", "conditions": [true]}"#,
+            // Null instead of array/object
+            r#"{"expiration": "2030-01-01T00:00:00.000Z", "conditions": [null]}"#,
+        ];
+        assert_json_error(&invalid_jsons);
     }
 }
