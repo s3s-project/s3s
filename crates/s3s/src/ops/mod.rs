@@ -278,6 +278,14 @@ enum Prepare {
 #[allow(clippy::too_many_lines)]
 #[tracing::instrument(level = "debug", skip_all, err)]
 async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> {
+    // Handle HTTP OPTIONS requests (CORS preflight) early, before signature verification.
+    // Browsers send OPTIONS requests to presigned URLs as CORS preflight checks.
+    // These requests must not go through signature verification because the presigned
+    // query parameters were signed for a different HTTP method (GET/PUT).
+    if req.method == Method::OPTIONS {
+        return Err(invalid_request!("Insufficient information. Origin request header needed."));
+    }
+
     let s3_path;
     let mut content_length;
     {
