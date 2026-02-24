@@ -197,12 +197,15 @@ jobs:
         run: git clone --depth 1 https://github.com/ceph/s3-tests.git /tmp/s3-tests
       - name: Get s3-tests requirements hash
         id: s3tests-hash
-        run: echo "hash=$(sha256sum /tmp/s3-tests/requirements.txt | cut -d' ' -f1)" >> $GITHUB_OUTPUT
+        run: echo "hash=$(sha256sum /tmp/s3-tests/requirements.txt | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      - name: Get Python version
+        id: python-version
+        run: python3 -c "import sys, os; f=open(os.environ['GITHUB_OUTPUT'],'a'); f.write(f'version={sys.version_info[0]}.{sys.version_info[1]}\n'); f.close()"
       - name: Restore s3tests venv cache
         uses: actions/cache@v4
         with:
           path: /tmp/s3-tests/.venv
-          key: s3tests-venv-${{ steps.s3tests-hash.outputs.hash }}
+          key: s3tests-venv-${{ runner.os }}-py${{ steps.python-version.outputs.version }}-${{ steps.s3tests-hash.outputs.hash }}
       - run: docker pull minio/minio:latest
       - run: just install s3s-proxy
       - run: ./scripts/e2e-s3tests.sh
