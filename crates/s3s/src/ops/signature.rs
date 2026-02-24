@@ -103,7 +103,7 @@ impl SignatureContext<'_> {
             && mime.type_() == mime::MULTIPART
             && mime.subtype() == mime::FORM_DATA
         {
-            return Ok(Some(self.check_post_signature().await?));
+            return self.check_post_signature().await;
         }
 
         if let Some(result) = self.v2_check().await {
@@ -120,7 +120,7 @@ impl SignatureContext<'_> {
     }
 
     #[tracing::instrument(skip(self))]
-    async fn check_post_signature(&mut self) -> S3Result<CredentialsExt> {
+    async fn check_post_signature(&mut self) -> S3Result<Option<CredentialsExt>> {
         let multipart = {
             let Some(mime) = self.mime.as_ref() else {
                 return Err(invalid_request!("internal error: mime was unexpectedly None"));
@@ -146,15 +146,16 @@ impl SignatureContext<'_> {
 
         if multipart.find_field_value("x-amz-signature").is_some() {
             debug!("checking post signature v4");
-            return self.v4_check_post_signature(multipart).await;
+            return Ok(Some(self.v4_check_post_signature(multipart).await?));
         }
 
         if multipart.find_field_value("signature").is_some() {
             debug!("checking post signature v2");
-            return self.v2_check_post_signature(multipart).await;
+            return Ok(Some(self.v2_check_post_signature(multipart).await?));
         }
 
-        Err(invalid_request!("unsupported post signature"))
+        self.multipart = Some(multipart);
+        Ok(None)
     }
 
     #[tracing::instrument(skip(self))]
@@ -676,6 +677,56 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.message().unwrap().contains("x-amz-content-sha256"));
+    }
+
+    #[tokio::test]
+    async fn post_signature_allows_anonymous() {
+        use crate::config::{S3ConfigProvider, StaticConfigProvider};
+        use std::sync::Arc;
+
+        let boundary = "boundary123";
+        let body = format!(
+            "\r\n--{boundary}\r\n\
+Content-Disposition: form-data; name=\"key\"; filename=\"key\"\r\n\r\n\
+foo.txt\r\n\
+--{boundary}\r\n\
+Content-Disposition: form-data; name=\"file\"; filename=\"file.txt\"\r\n\
+Content-Type: text/plain\r\n\r\n\
+file content\r\n\
+--{boundary}--\r\n"
+        );
+        let mut body = Body::from(body);
+        let mime: Mime = format!("multipart/form-data; boundary={boundary}").parse().unwrap();
+
+        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+        let method = Method::POST;
+        let uri = Uri::from_static("http://localhost/test-bucket");
+
+        let mut cx = SignatureContext {
+            auth: None,
+            config: &config,
+            req_version: ::http::Version::HTTP_11,
+            req_method: &method,
+            req_uri: &uri,
+            req_body: &mut body,
+            qs: None,
+            hs: OrderedHeaders::from_slice_unchecked(&[]),
+            decoded_uri_path: "/test-bucket".to_owned(),
+            vh_bucket: None,
+            content_length: None,
+            mime: Some(mime),
+            decoded_content_length: None,
+            transformed_body: None,
+            multipart: None,
+            trailing_headers: None,
+        };
+
+        let credentials = cx.check().await.unwrap();
+        assert!(credentials.is_none(), "anonymous POST should not require credentials");
+
+        let multipart = cx.multipart.expect("multipart should be stored");
+        assert_eq!(multipart.find_field_value("key"), Some("foo.txt"));
+        assert_eq!(multipart.file.name, "file.txt");
     }
 
     #[tokio::test]

@@ -274,61 +274,59 @@ where
             Some(Err(_)) => return Ok(Err(MultipartError::InvalidFormat)),
             Some(Ok((_, c))) => c,
         };
-        match content_disposition.filename {
-            None => {
-                let value = match lines.split_to(pat_without_crlf) {
-                    None => return Err((body, pat)),
-                    Some(b) => {
-                        #[allow(clippy::indexing_slicing)]
-                        let b = &b[..b.len().saturating_sub(2)];
+        if content_disposition.name.eq_ignore_ascii_case("file") {
+            let content_type = match content_type_bytes.map(std::str::from_utf8) {
+                None => None,
+                Some(Err(_)) => return Ok(Err(MultipartError::InvalidFormat)),
+                Some(Ok(s)) => Some(s),
+            };
+            let remaining_bytes = if lines.slice.is_empty() {
+                None
+            } else {
+                Some(Bytes::copy_from_slice(lines.slice))
+            };
+            let file_stream = FileStream::new(body, boundary, remaining_bytes);
+            let file_name = content_disposition.filename.unwrap_or(content_disposition.name);
+            let file = File {
+                name: file_name.to_owned(),
+                content_type: content_type.map(str::to_owned),
+                stream: Some(file_stream),
+            };
 
-                        // Check per-field size limit
-                        if b.len() > limits.max_field_size {
-                            return Ok(Err(MultipartError::FieldTooLarge(b.len(), limits.max_field_size)));
-                        }
-
-                        // Check total fields size limit
-                        *total_fields_size = total_fields_size.saturating_add(b.len());
-                        if *total_fields_size > limits.max_fields_size {
-                            return Ok(Err(MultipartError::TotalSizeTooLarge(*total_fields_size, limits.max_fields_size)));
-                        }
-
-                        match std::str::from_utf8(b) {
-                            Err(_) => return Ok(Err(MultipartError::InvalidFormat)),
-                            Ok(s) => s,
-                        }
-                    }
-                };
-
-                fields.push((content_disposition.name.to_owned(), value.to_owned()));
+            let mut fields = mem::take(fields);
+            for x in &mut fields {
+                x.0.make_ascii_lowercase();
             }
-            Some(filename) => {
-                let content_type = match content_type_bytes.map(std::str::from_utf8) {
-                    None => None,
-                    Some(Err(_)) => return Ok(Err(MultipartError::InvalidFormat)),
-                    Some(Ok(s)) => Some(s),
-                };
-                let remaining_bytes = if lines.slice.is_empty() {
-                    None
-                } else {
-                    Some(Bytes::copy_from_slice(lines.slice))
-                };
-                let file_stream = FileStream::new(body, boundary, remaining_bytes);
-                let file = File {
-                    name: filename.to_owned(),
-                    content_type: content_type.map(str::to_owned),
-                    stream: Some(file_stream),
-                };
+            fields.sort_by(|lhs, rhs| lhs.0.as_str().cmp(rhs.0.as_str()));
 
-                let mut fields = mem::take(fields);
-                for x in &mut fields {
-                    x.0.make_ascii_lowercase();
-                }
-                fields.sort_by(|lhs, rhs| lhs.0.as_str().cmp(rhs.0.as_str()));
-
-                return Ok(Ok(Multipart { fields, file }));
-            }
+            return Ok(Ok(Multipart { fields, file }));
         }
+
+        let value = match lines.split_to(pat_without_crlf) {
+            None => return Err((body, pat)),
+            Some(b) => {
+                #[allow(clippy::indexing_slicing)]
+                let b = &b[..b.len().saturating_sub(2)];
+
+                // Check per-field size limit
+                if b.len() > limits.max_field_size {
+                    return Ok(Err(MultipartError::FieldTooLarge(b.len(), limits.max_field_size)));
+                }
+
+                // Check total fields size limit
+                *total_fields_size = total_fields_size.saturating_add(b.len());
+                if *total_fields_size > limits.max_fields_size {
+                    return Ok(Err(MultipartError::TotalSizeTooLarge(*total_fields_size, limits.max_fields_size)));
+                }
+
+                match std::str::from_utf8(b) {
+                    Err(_) => return Ok(Err(MultipartError::InvalidFormat)),
+                    Ok(s) => s,
+                }
+            }
+        };
+
+        fields.push((content_disposition.name.to_owned(), value.to_owned()));
     }
 }
 
@@ -792,6 +790,38 @@ mod tests {
             let file_bytes = aggregate_file_stream(ans.file.stream.unwrap()).await.unwrap();
             assert_eq!(file_bytes, file_content);
         }
+    }
+
+    #[tokio::test]
+    async fn multipart_field_with_filename() {
+        let boundary = "boundary123";
+        let file_content = "file content";
+        let body_bytes = vec![
+            format!("\r\n--{boundary}\r\n"),
+            "Content-Disposition: form-data; name=\"key\"; filename=\"key\"\r\n\r\n".to_string(),
+            "foo.txt\r\n".to_string(),
+            format!("--{boundary}\r\n"),
+            "Content-Disposition: form-data; name=\"policy\"\r\n\r\n".to_string(),
+            "policy-data\r\n".to_string(),
+            format!("--{boundary}\r\n"),
+            "Content-Disposition: form-data; name=\"file\"; filename=\"file.txt\"\r\n".to_string(),
+            "Content-Type: text/plain\r\n\r\n".to_string(),
+            format!("{file_content}\r\n"),
+            format!("--{boundary}--\r\n"),
+        ];
+
+        let body_stream = futures::stream::iter(body_bytes.into_iter().map(|s| Ok::<_, StdError>(Bytes::from(s))));
+
+        let ans = transform_multipart(body_stream, boundary.as_bytes(), MultipartLimits::default())
+            .await
+            .unwrap();
+
+        assert_eq!(ans.find_field_value("key"), Some("foo.txt"));
+        assert_eq!(ans.find_field_value("policy"), Some("policy-data"));
+        assert_eq!(ans.file.name, "file.txt");
+
+        let file_bytes = aggregate_file_stream(ans.file.stream.unwrap()).await.unwrap();
+        assert_eq!(file_bytes, file_content);
     }
 
     #[tokio::test]
