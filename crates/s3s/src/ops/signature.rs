@@ -96,6 +96,43 @@ fn require_auth(auth: Option<&dyn S3Auth>) -> S3Result<&dyn S3Auth> {
     auth.ok_or_else(|| s3_error!(NotImplemented, "This service has no authentication provider"))
 }
 
+/// Try to match a V2 signature, retrying with a trailing-slash-normalized path
+/// if the first attempt fails.  Some clients (e.g. botocore) normalize the
+/// signing path by appending a trailing slash for bucket-level operations, even
+/// though the HTTP request path omits it.
+#[allow(clippy::too_many_arguments)]
+fn v2_try_match_signature(
+    mode: sig_v2::Mode,
+    method: &Method,
+    uri_path: &str,
+    qs: Option<&OrderedQs>,
+    hs: &OrderedHeaders<'_>,
+    vh_bucket: Option<&str>,
+    secret_key: &SecretKey,
+    expected: &str,
+) -> bool {
+    let sts = sig_v2::create_string_to_sign(mode, method, uri_path, qs, hs, vh_bucket);
+    let sig = sig_v2::calculate_signature(secret_key, &sts);
+    debug!(?sts, ?sig, "sig_v2 check");
+    if sig == expected {
+        return true;
+    }
+
+    if !uri_path.ends_with('/') {
+        let mut normalized = String::with_capacity(uri_path.len() + 1);
+        normalized.push_str(uri_path);
+        normalized.push('/');
+        let sts = sig_v2::create_string_to_sign(mode, method, &normalized, qs, hs, vh_bucket);
+        let sig = sig_v2::calculate_signature(secret_key, &sts);
+        debug!(?sts, ?sig, "sig_v2 check (normalized path)");
+        if sig == expected {
+            return true;
+        }
+    }
+
+    false
+}
+
 impl SignatureContext<'_> {
     pub async fn check(&mut self) -> S3Result<Option<CredentialsExt>> {
         if self.req_method == Method::POST
@@ -545,20 +582,20 @@ impl SignatureContext<'_> {
         let secret_key = auth.get_secret_key(access_key).await?;
 
         let uri_path = self.req_uri.path();
-        let string_to_sign = sig_v2::create_string_to_sign(
+        let expected_signature = auth_v2.signature;
+
+        let matched = v2_try_match_signature(
             sig_v2::Mode::HeaderAuth,
             method,
             uri_path,
             self.qs,
             &self.hs,
             self.vh_bucket,
+            &secret_key,
+            expected_signature,
         );
-        let signature = sig_v2::calculate_signature(&secret_key, &string_to_sign);
 
-        debug!(?string_to_sign, "sig_v2 header_auth");
-
-        let expected_signature = auth_v2.signature;
-        if signature == expected_signature {
+        if matched {
             return Ok(CredentialsExt {
                 access_key: access_key.into(),
                 secret_key,
@@ -567,34 +604,7 @@ impl SignatureContext<'_> {
             });
         }
 
-        // Some clients (e.g. botocore) normalize the signing path by appending a
-        // trailing slash for bucket-level operations, even though the HTTP request
-        // path omits it.  Retry with the normalized path to handle this mismatch.
-        if !uri_path.ends_with('/') {
-            let normalized_path = format!("{uri_path}/");
-            let string_to_sign = sig_v2::create_string_to_sign(
-                sig_v2::Mode::HeaderAuth,
-                method,
-                &normalized_path,
-                self.qs,
-                &self.hs,
-                self.vh_bucket,
-            );
-            let signature = sig_v2::calculate_signature(&secret_key, &string_to_sign);
-
-            debug!(?string_to_sign, "sig_v2 header_auth (normalized path)");
-
-            if signature == expected_signature {
-                return Ok(CredentialsExt {
-                    access_key: access_key.into(),
-                    secret_key,
-                    region: None,
-                    service: Some("s3".into()),
-                });
-            }
-        }
-
-        debug!(?signature, expected=?expected_signature, "signature mismatch");
+        debug!(expected=?expected_signature, "signature mismatch");
         Err(s3_error!(SignatureDoesNotMatch))
     }
 
@@ -642,18 +652,20 @@ impl SignatureContext<'_> {
         let secret_key = auth.get_secret_key(access_key).await?;
 
         let uri_path = self.req_uri.path();
-        let string_to_sign = sig_v2::create_string_to_sign(
+        let expected_signature = presigned_url.signature;
+
+        let matched = v2_try_match_signature(
             sig_v2::Mode::PresignedUrl,
             self.req_method,
             uri_path,
             self.qs,
             &self.hs,
             self.vh_bucket,
+            &secret_key,
+            &expected_signature,
         );
-        let signature = sig_v2::calculate_signature(&secret_key, &string_to_sign);
 
-        let expected_signature = presigned_url.signature;
-        if signature == expected_signature {
+        if matched {
             return Ok(CredentialsExt {
                 access_key: access_key.into(),
                 secret_key,
@@ -662,31 +674,7 @@ impl SignatureContext<'_> {
             });
         }
 
-        // Retry with normalized path (trailing slash) for clients that normalize
-        // the signing path differently from the HTTP request path.
-        if !uri_path.ends_with('/') {
-            let normalized_path = format!("{uri_path}/");
-            let string_to_sign = sig_v2::create_string_to_sign(
-                sig_v2::Mode::PresignedUrl,
-                self.req_method,
-                &normalized_path,
-                self.qs,
-                &self.hs,
-                self.vh_bucket,
-            );
-            let signature = sig_v2::calculate_signature(&secret_key, &string_to_sign);
-
-            if signature == expected_signature {
-                return Ok(CredentialsExt {
-                    access_key: access_key.into(),
-                    secret_key,
-                    region: None,
-                    service: Some("s3".into()),
-                });
-            }
-        }
-
-        debug!(?signature, expected=?expected_signature, "signature mismatch");
+        debug!(expected=?expected_signature, "signature mismatch");
         Err(s3_error!(SignatureDoesNotMatch))
     }
 }
