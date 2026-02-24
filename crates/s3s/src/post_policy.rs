@@ -100,43 +100,26 @@ impl PostPolicy {
         Ok(Self { expiration, conditions })
     }
 
-    /// Validate the policy against the multipart form data
+    /// Validate only the policy conditions, skipping the expiration check.
+    ///
+    /// When `url_bucket` is provided it is authoritative for the `bucket`
+    /// policy condition. If a `bucket` form field is also present but differs
+    /// from `url_bucket`, the request is rejected with `InvalidPolicyDocument`.
     ///
     /// # Arguments
     /// * `multipart` - The multipart form data
     /// * `file_size` - The size of the uploaded file in bytes
-    /// * `now` - The current time (for expiration check)
-    ///
-    /// # Errors
-    /// Returns `AccessDenied` if the policy has expired
-    /// Returns `InvalidPolicyDocument` if any condition is not satisfied
-    pub fn validate(&self, multipart: &Multipart, file_size: u64, now: time::OffsetDateTime) -> S3Result<()> {
-        // Check expiration
-        let expiration_time: time::OffsetDateTime = self.expiration.clone().into();
-        if now >= expiration_time {
-            return Err(S3Error::with_message(S3ErrorCode::AccessDenied, "Request has expired"));
-        }
-
-        // Check all conditions
-        self.validate_conditions_only(multipart, file_size, None)
-    }
-
-    /// Validate only the policy conditions, skipping the expiration check
-    ///
-    /// This is useful when the expiration has already been checked separately.
-    ///
-    /// # Arguments
-    /// * `multipart` - The multipart form data
-    /// * `file_size` - The size of the uploaded file in bytes
-    /// * `url_bucket` - The bucket name from the URL path. Used to validate
-    ///   the `bucket` condition when it is not present in the form fields.
-    ///   Clients like boto3 add a `{"bucket": "..."}` condition to the policy
-    ///   but do not include `bucket` in the form fields because the bucket is
-    ///   already determined by the URL.
+    /// * `url_bucket` - The bucket name from the URL path/host. When present,
+    ///   it is the source of truth for the `bucket` condition.
     ///
     /// # Errors
     /// Returns `InvalidPolicyDocument` if any condition is not satisfied
-    pub fn validate_conditions_only(&self, multipart: &Multipart, file_size: u64, url_bucket: Option<&str>) -> S3Result<()> {
+    pub(crate) fn validate_conditions_only(
+        &self,
+        multipart: &Multipart,
+        file_size: u64,
+        url_bucket: Option<&str>,
+    ) -> S3Result<()> {
         // Check all conditions
         for condition in &self.conditions {
             Self::validate_condition(condition, multipart, file_size, url_bucket)?;
@@ -153,7 +136,7 @@ impl PostPolicy {
     ) -> S3Result<()> {
         match condition {
             PostPolicyCondition::Eq { field, value } => {
-                let actual = Self::get_field_value(field, multipart, url_bucket);
+                let actual = Self::get_field_value(field, multipart, url_bucket)?;
                 if actual.as_deref() != Some(value.as_str()) {
                     return Err(S3Error::with_message(
                         S3ErrorCode::InvalidPolicyDocument,
@@ -165,7 +148,7 @@ impl PostPolicy {
                 }
             }
             PostPolicyCondition::StartsWith { field, prefix } => {
-                let actual = Self::get_field_value(field, multipart, url_bucket);
+                let actual = Self::get_field_value(field, multipart, url_bucket)?;
                 let actual_str = actual.as_deref().unwrap_or("");
                 if !actual_str.starts_with(prefix.as_str()) {
                     return Err(S3Error::with_message(
@@ -191,21 +174,36 @@ impl PostPolicy {
         Ok(())
     }
 
-    /// Get the value for a policy condition field.
+    /// Resolve the effective value for a policy condition field.
     ///
-    /// First checks the multipart form fields. For the `bucket` field,
-    /// falls back to the URL path bucket if not found in form fields.
-    fn get_field_value<'a>(field: &str, multipart: &'a Multipart, url_bucket: Option<&'a str>) -> Option<Cow<'a, str>> {
-        if let Some(val) = multipart.find_field_value(field) {
-            return Some(Cow::Borrowed(val));
-        }
-        // The "bucket" field is not a standard form field; it is determined by
-        // the URL path. Clients like boto3 add a bucket condition to the policy
-        // but do not include it in the form fields.
+    /// For the `bucket` field:
+    /// - If `url_bucket` is provided it is the authoritative value.
+    /// - If a `bucket` form field is also present and differs from `url_bucket`,
+    ///   the request is rejected with `InvalidPolicyDocument` rather than
+    ///   silently discarding one of them.
+    /// - If `url_bucket` is absent, fall back to the form field.
+    ///
+    /// For all other fields only the multipart form fields are consulted.
+    fn get_field_value<'a>(field: &str, multipart: &'a Multipart, url_bucket: Option<&'a str>) -> S3Result<Option<Cow<'a, str>>> {
         if field == "bucket" {
-            return url_bucket.map(Cow::Borrowed);
+            let form_bucket = multipart.find_field_value(field);
+            if let Some(ub) = url_bucket {
+                // If the client also sent a `bucket` form field it must agree
+                // with the URL bucket; a mismatch is an unambiguous error.
+                if let Some(fb) = form_bucket
+                    && fb != ub
+                {
+                    return Err(s3_error!(
+                        InvalidPolicyDocument,
+                        "Bucket in form field '{fb}' does not match bucket in URL '{ub}'"
+                    ));
+                }
+                return Ok(Some(Cow::Borrowed(ub)));
+            }
+            return Ok(form_bucket.map(Cow::Borrowed));
         }
-        None
+
+        Ok(multipart.find_field_value(field).map(Cow::Borrowed))
     }
 
     /// Get the content-length-range condition if present
@@ -717,20 +715,23 @@ mod tests {
         }
     }
 
-    /// Regression test for <https://github.com/rustfs/rustfs/issues/1785>
-    /// Form field bucket takes precedence over `url_bucket`.
+    /// When both a `bucket` form field and `url_bucket` are present but conflict,
+    /// `get_field_value` must return an error rather than silently choosing one.
     #[test]
-    fn test_validate_bucket_condition_form_field_takes_precedence() {
-        // "bucket" IS in form data
+    fn test_validate_bucket_form_field_conflicts_with_url_bucket() {
+        // "bucket" IS in form data AND url_bucket is provided, and they differ
         let multipart = create_test_multipart(vec![("bucket", "form-bucket"), ("key", "mykey")], None);
         let condition = PostPolicyCondition::Eq {
             field: "bucket".to_owned(),
             value: "form-bucket".to_owned(),
         };
 
-        // Form field should take precedence over url_bucket
+        // Conflict between form field and url_bucket must be rejected outright
         let result = PostPolicy::validate_condition(&condition, &multipart, 0, Some("url-bucket"));
-        assert!(result.is_ok());
+        assert!(result.is_err());
+        if let Err(e) = result {
+            assert!(matches!(e.code(), S3ErrorCode::InvalidPolicyDocument));
+        }
     }
 
     /// Regression test for <https://github.com/rustfs/rustfs/issues/1785>

@@ -84,7 +84,8 @@ def test_presigned_post_without_bucket_in_fields():
         policy_b64 = presigned["fields"]["policy"]
         policy_json = json.loads(base64.b64decode(policy_b64))
         bucket_conditions = [
-            c for c in policy_json["conditions"]
+            c
+            for c in policy_json["conditions"]
             if isinstance(c, dict) and "bucket" in c
         ]
         assert len(bucket_conditions) > 0, (
