@@ -193,6 +193,16 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup
+      - name: Clone s3-tests
+        run: git clone --depth 1 https://github.com/ceph/s3-tests.git /tmp/s3-tests
+      - name: Get s3-tests requirements hash
+        id: s3tests-hash
+        run: echo "hash=$(sha256sum /tmp/s3-tests/requirements.txt | cut -d' ' -f1)" >> $GITHUB_OUTPUT
+      - name: Restore s3tests venv cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/s3-tests/.venv
+          key: s3tests-venv-${{ steps.s3tests-hash.outputs.hash }}
       - run: docker pull minio/minio:latest
       - run: just install s3s-proxy
       - run: ./scripts/e2e-s3tests.sh

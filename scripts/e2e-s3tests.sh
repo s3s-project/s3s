@@ -135,8 +135,13 @@ else
     rm -rf "$S3TESTS_DIR"
     git clone --depth 1 https://github.com/ceph/s3-tests.git "$S3TESTS_DIR"
 fi
-python3 -m venv "$S3TESTS_DIR/.venv"
-"$S3TESTS_DIR/.venv/bin/pip" install -r "$S3TESTS_DIR/requirements.txt"
+REQUIREMENTS_HASH=$(sha256sum "$S3TESTS_DIR/requirements.txt" | cut -d' ' -f1)
+HASH_FILE="$S3TESTS_DIR/.venv/.requirements-hash"
+if [ ! -d "$S3TESTS_DIR/.venv" ] || [ ! -f "$HASH_FILE" ] || [ "$(cat "$HASH_FILE")" != "$REQUIREMENTS_HASH" ]; then
+    python3 -m venv "$S3TESTS_DIR/.venv"
+    "$S3TESTS_DIR/.venv/bin/pip" install -r "$S3TESTS_DIR/requirements.txt"
+    echo "$REQUIREMENTS_HASH" > "$HASH_FILE"
+fi
 
 cat > "$CONF_PATH" <<'EOF'
 [DEFAULT]
