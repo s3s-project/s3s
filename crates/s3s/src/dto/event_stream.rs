@@ -361,7 +361,11 @@ mod tests {
         let bytes = event_into_bytes(Ok(event)).unwrap();
         let (headers, payload) = parse_message(&bytes);
         assert!(headers.iter().any(|(n, v)| n == ":event-type" && v == "Records"));
-        assert!(headers.iter().any(|(n, v)| n == ":content-type" && v == "application/octet-stream"));
+        assert!(
+            headers
+                .iter()
+                .any(|(n, v)| n == ":content-type" && v == "application/octet-stream")
+        );
         assert_eq!(payload.unwrap(), b"csv,data");
     }
 
@@ -434,16 +438,17 @@ mod tests {
         let bytes = event_into_bytes(Err(err)).unwrap();
         let (headers, _payload) = parse_message(&bytes);
         assert!(headers.iter().any(|(n, v)| n == ":error-code" && v == "InternalError"));
-        assert!(headers.iter().any(|(n, v)| n == ":error-message" && v == "something went wrong"));
+        assert!(
+            headers
+                .iter()
+                .any(|(n, v)| n == ":error-message" && v == "something went wrong")
+        );
         assert!(headers.iter().any(|(n, v)| n == ":message-type" && v == "error"));
     }
 
     #[test]
     fn request_level_error_custom_code() {
-        let err = S3Error::with_message(
-            S3ErrorCode::Custom(bytestring::ByteString::from("CustomErr")),
-            "custom message",
-        );
+        let err = S3Error::with_message(S3ErrorCode::Custom(bytestring::ByteString::from("CustomErr")), "custom message");
         let bytes = event_into_bytes(Err(err)).unwrap();
         let (headers, _payload) = parse_message(&bytes);
         assert!(headers.iter().any(|(n, v)| n == ":error-code" && v == "CustomErr"));
