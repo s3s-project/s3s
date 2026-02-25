@@ -488,6 +488,13 @@ mod post_policy_test_helpers {
         SimpleAuth::from_single(access_key, secret_key)
     }
 
+    /// Standard conditions that cover the form fields added by `build_post_object_request`.
+    ///
+    /// Per the S3 spec, each non-exempt form field must have a matching condition in the policy.
+    /// The fields added by the helper are: bucket, key, x-amz-algorithm, x-amz-credential,
+    /// x-amz-date.  (x-amz-signature, policy, and file are exempt.)
+    pub const BASE_CONDITIONS: &str = r#"{"bucket":"test-bucket"},["eq","$key","test-key"],["starts-with","$x-amz-algorithm",""],["starts-with","$x-amz-credential",""],["starts-with","$x-amz-date",""]"#;
+
     pub fn build_multipart_fields(list: &[(&str, &str)], boundary: &str) -> String {
         let mut d = String::new();
         for (name, value) in list {
@@ -659,7 +666,10 @@ async fn post_object_policy_max_smaller_than_config_max() {
     let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
 
     // Create a policy with content-length-range max of 100 bytes (< config max of 1MB)
-    let policy_json = r#"{"expiration":"2030-01-01T00:00:00.000Z","conditions":[["content-length-range",0,100], ["eq", "$Content-Type", "text/plain"]]}"#;
+    let policy_json = &format!(
+        r#"{{"expiration":"2030-01-01T00:00:00.000Z","conditions":[["content-length-range",0,100],["eq","$Content-Type","text/plain"],{}]}}"#,
+        post_policy_test_helpers::BASE_CONDITIONS,
+    );
     let file_content = "a".repeat(50); // 50 bytes (within policy limit of 100 bytes)
 
     let mut req = post_policy_test_helpers::build_post_object_request(policy_json, &file_content, &secret_key, true);
@@ -690,7 +700,10 @@ async fn post_object_without_content_type_field_but_with_policy() {
     let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
 
     // Create a policy with content-length-range max of 100 bytes (< config max of 1MB)
-    let policy_json = r#"{"expiration":"2030-01-01T00:00:00.000Z","conditions":[["content-length-range",0,100], ["eq", "$Content-Type", "text/plain"]]}"#;
+    let policy_json = &format!(
+        r#"{{"expiration":"2030-01-01T00:00:00.000Z","conditions":[["content-length-range",0,100],["eq","$Content-Type","text/plain"],{}]}}"#,
+        post_policy_test_helpers::BASE_CONDITIONS,
+    );
     let file_content = "a".repeat(50); // 50 bytes (within policy limit of 100 bytes)
 
     let mut req = post_policy_test_helpers::build_post_object_request(policy_json, &file_content, &secret_key, false);
@@ -740,7 +753,10 @@ async fn post_object_file_exceeds_policy_max_but_under_config_max() {
     let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
 
     // Create a policy with content-length-range max of 100 bytes
-    let policy_json = r#"{"expiration":"2030-01-01T00:00:00.000Z","conditions":[["content-length-range",0,100]]}"#;
+    let policy_json = &format!(
+        r#"{{"expiration":"2030-01-01T00:00:00.000Z","conditions":[["content-length-range",0,100],{}]}}"#,
+        post_policy_test_helpers::BASE_CONDITIONS,
+    );
     // Create a file with 150 bytes (exceeds policy max of 100 bytes, but under config max of 10KB)
     // This is the critical security test: file should be rejected before consuming memory
     let file_content = "a".repeat(150);
@@ -787,7 +803,10 @@ async fn post_object_policy_max_larger_than_config_max() {
     let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
 
     // Create a policy with content-length-range max of 10KB (> config max of 200 bytes)
-    let policy_json = r#"{"expiration":"2030-01-01T00:00:00.000Z","conditions":[["content-length-range",0,10240]]}"#;
+    let policy_json = &format!(
+        r#"{{"expiration":"2030-01-01T00:00:00.000Z","conditions":[["content-length-range",0,10240],["eq","$Content-Type","text/plain"],{}]}}"#,
+        post_policy_test_helpers::BASE_CONDITIONS,
+    );
     // Create a file with 150 bytes (within config max of 200 bytes, within policy max of 10KB)
     let file_content = "a".repeat(150);
 
@@ -817,7 +836,10 @@ async fn post_object_content_length_range_rejects_oversized_file() {
     let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
 
     // Exact scenario from the issue: content-length-range [0, 10]
-    let policy_json = r#"{"expiration":"2030-01-01T00:00:00.000Z","conditions":[["content-length-range",0,10]]}"#;
+    let policy_json = &format!(
+        r#"{{"expiration":"2030-01-01T00:00:00.000Z","conditions":[["content-length-range",0,10],{}]}}"#,
+        post_policy_test_helpers::BASE_CONDITIONS,
+    );
     // File content is much larger than 10 bytes
     let file_content = "very long contents, longer than 10 bytes";
 
@@ -1533,7 +1555,10 @@ async fn post_policy_file_size_is_total_bytes_not_chunk_count() {
 
     // Create a policy with content-length-range [100, 50000]
     // This will accept files between 100 and 50000 bytes
-    let policy_json = r#"{"expiration":"2030-01-01T00:00:00.000Z","conditions":[["content-length-range",100,50000]]}"#;
+    let policy_json = &format!(
+        r#"{{"expiration":"2030-01-01T00:00:00.000Z","conditions":[["content-length-range",100,50000],{}]}}"#,
+        post_policy_test_helpers::BASE_CONDITIONS,
+    );
 
     // Create a 30 KB file (30 000 bytes) within policy limits.
     // Use 1 KiB chunks so the body stream yields ~30 chunks for the file part.

@@ -120,12 +120,45 @@ impl PostPolicy {
         file_size: u64,
         url_bucket: Option<&str>,
     ) -> S3Result<()> {
-        // Check all conditions
+        // Check all conditions against form fields
         for condition in &self.conditions {
             Self::validate_condition(condition, multipart, file_size, url_bucket)?;
         }
 
+        // Check that every form field is covered by a policy condition.
+        // Per AWS docs, these fields are exempt:
+        //   x-amz-signature, file, submit, policy, and x-ignore-* fields.
+        // See https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-HTTPPOSTConstructPolicy.html
+        for (name, _) in multipart.fields() {
+            if Self::is_field_exempt_from_policy(name) {
+                continue;
+            }
+            if !self.has_condition_for_field(name) {
+                return Err(S3Error::with_message(
+                    S3ErrorCode::AccessDenied,
+                    format!(
+                        "Each form field that you specify in a form must appear in the list \
+                         of policy conditions. \"{name}\" not specified in the policy."
+                    ),
+                ));
+            }
+        }
+
         Ok(())
+    }
+
+    /// Returns true if the given form field is exempt from the policy condition requirement.
+    fn is_field_exempt_from_policy(name: &str) -> bool {
+        matches!(name, "x-amz-signature" | "file" | "submit" | "policy")
+            || name.starts_with("x-ignore-")
+    }
+
+    /// Returns true if the policy contains at least one `Eq` or `StartsWith` condition for the field.
+    fn has_condition_for_field(&self, name: &str) -> bool {
+        self.conditions.iter().any(|c| match c {
+            PostPolicyCondition::Eq { field, .. } | PostPolicyCondition::StartsWith { field, .. } => field == name,
+            PostPolicyCondition::ContentLengthRange { .. } => false,
+        })
     }
 
     fn validate_condition(
@@ -836,5 +869,94 @@ mod tests {
             r#"{"expiration": "2030-01-01T00:00:00.000Z", "conditions": [null]}"#,
         ];
         assert_json_error(&invalid_jsons);
+    }
+
+    // ---- Tests for form-field-in-policy validation ----
+
+    /// A form field not declared in any policy condition must be rejected with AccessDenied.
+    #[test]
+    fn test_form_field_not_in_policy_is_rejected() {
+        let json = r#"{
+            "expiration": "2030-01-01T00:00:00.000Z",
+            "conditions": [
+                {"bucket": "mybucket"},
+                ["eq", "$key", "mykey"]
+            ]
+        }"#;
+        let policy = PostPolicy::from_json(json).unwrap();
+
+        // "success_action_status" is NOT in the policy but IS in form fields
+        let multipart = create_test_multipart(
+            vec![("key", "mykey"), ("success_action_status", "200")],
+            None,
+        );
+        let err = policy.validate_conditions_only(&multipart, 0, Some("mybucket")).unwrap_err();
+        assert!(matches!(err.code(), S3ErrorCode::AccessDenied));
+        assert!(
+            err.message().unwrap_or("").contains("success_action_status"),
+            "error message should mention the undeclared field"
+        );
+    }
+
+    /// Exempt fields (x-amz-signature, file, submit, policy, x-ignore-*) are allowed
+    /// even when not declared in the policy.
+    #[test]
+    fn test_exempt_fields_not_in_policy_are_allowed() {
+        let json = r#"{
+            "expiration": "2030-01-01T00:00:00.000Z",
+            "conditions": [
+                {"bucket": "mybucket"},
+                ["eq", "$key", "mykey"]
+            ]
+        }"#;
+        let policy = PostPolicy::from_json(json).unwrap();
+
+        let multipart = create_test_multipart(
+            vec![("key", "mykey"), ("policy", "abc"), ("x-amz-signature", "sig123")],
+            None,
+        );
+        let result = policy.validate_conditions_only(&multipart, 0, Some("mybucket"));
+        assert!(result.is_ok(), "exempt fields should not be rejected");
+    }
+
+    /// A field declared via starts-with condition should also be accepted.
+    #[test]
+    fn test_starts_with_condition_covers_field() {
+        let json = r#"{
+            "expiration": "2030-01-01T00:00:00.000Z",
+            "conditions": [
+                {"bucket": "mybucket"},
+                ["eq", "$key", "mykey"],
+                ["starts-with", "$success_action_status", ""]
+            ]
+        }"#;
+        let policy = PostPolicy::from_json(json).unwrap();
+
+        let multipart = create_test_multipart(
+            vec![("key", "mykey"), ("success_action_status", "200")],
+            None,
+        );
+        let result = policy.validate_conditions_only(&multipart, 0, Some("mybucket"));
+        assert!(result.is_ok(), "field covered by starts-with should be accepted");
+    }
+
+    /// x-ignore- prefixed fields are always allowed without a condition.
+    #[test]
+    fn test_x_ignore_prefixed_fields_are_allowed() {
+        let json = r#"{
+            "expiration": "2030-01-01T00:00:00.000Z",
+            "conditions": [
+                {"bucket": "mybucket"},
+                ["eq", "$key", "mykey"]
+            ]
+        }"#;
+        let policy = PostPolicy::from_json(json).unwrap();
+
+        let multipart = create_test_multipart(
+            vec![("key", "mykey"), ("x-ignore-custom", "anything")],
+            None,
+        );
+        let result = policy.validate_conditions_only(&multipart, 0, Some("mybucket"));
+        assert!(result.is_ok(), "x-ignore- fields should not be rejected");
     }
 }

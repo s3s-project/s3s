@@ -58,12 +58,20 @@ def delete_bucket(client, bucket: str):
 
 
 def presigned_post_with_fields(client, bucket, key, fields=None, conditions=None):
-    """Generate a presigned POST with fields included in the policy."""
+    """Generate a presigned POST with fields and matching policy conditions.
+
+    Each entry in ``fields`` is automatically added as an ``eq`` condition
+    in the policy so the server accepts it.
+    """
+    fields = fields or {}
+    conditions = list(conditions or [])
+    for fname, fvalue in fields.items():
+        conditions.append({fname: fvalue})
     return client.generate_presigned_post(
         Bucket=bucket,
         Key=key,
-        Fields=fields or {},
-        Conditions=conditions or [],
+        Fields=fields,
+        Conditions=conditions,
         ExpiresIn=3600,
     )
 
@@ -249,6 +257,35 @@ def test_success_action_invalid_status():
         delete_bucket(client, bucket)
 
 
+def test_form_field_not_in_policy_rejected():
+    """Form fields not declared in POST policy conditions must be rejected with AccessDenied."""
+    client = make_client()
+    bucket = f"test-issue1073-{uuid.uuid4().hex[:8]}"
+    create_bucket(client, bucket)
+
+    try:
+        key = "test-file.txt"
+        # Generate a presigned POST WITHOUT success_action_status in the Fields param,
+        # so it will NOT be included in the policy conditions.
+        presigned = presigned_post_with_fields(client, bucket, key)
+
+        # Manually inject the field into the form data, bypassing the policy.
+        presigned["fields"]["success_action_status"] = "200"
+
+        files = {"file": ("test.txt", b"hello world")}
+        resp = requests.post(presigned["url"], data=presigned["fields"], files=files)
+
+        assert resp.status_code == 403, (
+            f"Expected 403, got {resp.status_code}: {resp.text}"
+        )
+        assert "AccessDenied" in resp.text, (
+            f"Expected AccessDenied in response: {resp.text}"
+        )
+        print("PASS: test_form_field_not_in_policy_rejected")
+    finally:
+        delete_bucket(client, bucket)
+
+
 def main():
     tests = [
         test_success_action_status_200,
@@ -257,6 +294,7 @@ def main():
         test_success_action_status_default,
         test_success_action_redirect,
         test_success_action_invalid_status,
+        test_form_field_not_in_policy_rejected,
     ]
     passed = 0
     failed = 0
