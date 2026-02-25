@@ -57,7 +57,9 @@ def delete_bucket(client, bucket: str):
         pass
 
 
-def presigned_post(client, bucket: str, key: str, extra_conditions=None, extra_fields=None):
+def presigned_post(
+    client, bucket: str, key: str, extra_conditions=None, extra_fields=None
+):
     conditions = extra_conditions or []
     presigned = client.generate_presigned_post(
         Bucket=bucket,
@@ -79,7 +81,9 @@ def test_success_action_status_200():
     try:
         key = "test-file.txt"
         presigned = presigned_post(
-            client, bucket, key,
+            client,
+            bucket,
+            key,
             extra_fields={"success_action_status": "200"},
         )
 
@@ -103,7 +107,9 @@ def test_success_action_status_201():
     try:
         key = "test-file.txt"
         presigned = presigned_post(
-            client, bucket, key,
+            client,
+            bucket,
+            key,
             extra_fields={"success_action_status": "201"},
         )
 
@@ -128,12 +134,8 @@ def test_success_action_status_201():
         assert find_text("Bucket") == bucket, (
             f"Expected Bucket={bucket} in XML: {resp.text}"
         )
-        assert find_text("Key") == key, (
-            f"Expected Key={key} in XML: {resp.text}"
-        )
-        assert find_text("ETag") is not None, (
-            f"Expected ETag in XML: {resp.text}"
-        )
+        assert find_text("Key") == key, f"Expected Key={key} in XML: {resp.text}"
+        assert find_text("ETag") is not None, f"Expected ETag in XML: {resp.text}"
         assert find_text("Location") is not None, (
             f"Expected Location in XML: {resp.text}"
         )
@@ -151,7 +153,9 @@ def test_success_action_status_204():
     try:
         key = "test-file.txt"
         presigned = presigned_post(
-            client, bucket, key,
+            client,
+            bucket,
+            key,
             extra_fields={"success_action_status": "204"},
         )
 
@@ -197,13 +201,17 @@ def test_success_action_redirect():
         key = "test-file.txt"
         redirect_url = "https://example.com/upload-done"
         presigned = presigned_post(
-            client, bucket, key,
+            client,
+            bucket,
+            key,
             extra_fields={"success_action_redirect": redirect_url},
         )
 
         files = {"file": ("test.txt", b"hello world")}
         resp = requests.post(
-            presigned["url"], data=presigned["fields"], files=files,
+            presigned["url"],
+            data=presigned["fields"],
+            files=files,
             allow_redirects=False,
         )
 
@@ -212,7 +220,7 @@ def test_success_action_redirect():
         )
 
         location = resp.headers.get("Location", "")
-        assert location, f"Expected Location header, got none"
+        assert location, "Expected Location header, got none"
 
         parsed = urlparse(location)
         qs = parse_qs(parsed.query)
@@ -223,9 +231,7 @@ def test_success_action_redirect():
         assert qs.get("key") == [key], (
             f"Expected key={key} in Location query: {location}"
         )
-        assert "etag" in qs, (
-            f"Expected etag in Location query: {location}"
-        )
+        assert "etag" in qs, f"Expected etag in Location query: {location}"
         print("PASS: test_success_action_redirect")
     finally:
         delete_bucket(client, bucket)
@@ -240,7 +246,9 @@ def test_success_action_invalid_status():
     try:
         key = "test-file.txt"
         presigned = presigned_post(
-            client, bucket, key,
+            client,
+            bucket,
+            key,
             extra_fields={"success_action_status": "302"},
         )
 
