@@ -1,0 +1,35 @@
+[package]
+name = "s3s-mcp"
+version = "0.13.0-alpha.3"
+description = "An MCP server for S3-compatible services"
+readme = "../../README.md"
+keywords = ["s3", "mcp"]
+categories = ["web-programming"]
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "s3s-mcp"
+required-features = ["binary"]
+
+[features]
+binary = ["tokio/full", "dep:clap", "dep:tracing-subscriber", "dep:s3s-fs"]
+
+[dependencies]
+async-trait.workspace = true
+http.workspace = true
+rmcp = { workspace = true, features = ["server", "transport-io", "macros"] }
+s3s = { version = "0.13.0-alpha.3", path = "../s3s" }
+s3s-fs = { version = "0.13.0-alpha.3", path = "../s3s-fs", optional = true }
+serde.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["rt"] }
+tracing.workspace = true
+
+clap = { workspace = true, optional = true }
+tracing-subscriber = { workspace = true, optional = true }

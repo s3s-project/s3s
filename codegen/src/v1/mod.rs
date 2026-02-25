@@ -6,6 +6,7 @@ mod access;
 mod dto;
 mod error;
 mod headers;
+mod mcp;
 mod minio;
 mod ops;
 mod order;
@@ -102,5 +103,10 @@ fn inner_run(code_patch: Option<Patch>) {
     {
         let path = format!("crates/s3s-aws/src/proxy/generated{suffix}.rs");
         write_file(&path, || aws_proxy::codegen(&ops, &rust_types));
+    }
+
+    if code_patch.is_none() {
+        let path = "crates/s3s-mcp/src/generated.rs";
+        write_file(path, || mcp::codegen(&ops, &rust_types));
     }
 }
