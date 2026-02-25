@@ -149,7 +149,8 @@ impl PostPolicy {
 
     /// Returns true if the given form field is exempt from the policy condition requirement.
     fn is_field_exempt_from_policy(name: &str) -> bool {
-        matches!(name, "x-amz-signature" | "file" | "submit" | "policy")
+        // SigV4: x-amz-signature; SigV2: signature, awsaccesskeyid
+        matches!(name, "x-amz-signature" | "signature" | "awsaccesskeyid" | "file" | "submit" | "policy")
             || name.starts_with("x-ignore-")
     }
 
@@ -873,7 +874,7 @@ mod tests {
 
     // ---- Tests for form-field-in-policy validation ----
 
-    /// A form field not declared in any policy condition must be rejected with AccessDenied.
+    /// A form field not declared in any policy condition must be rejected with `AccessDenied`.
     #[test]
     fn test_form_field_not_in_policy_is_rejected() {
         let json = r#"{
@@ -886,10 +887,7 @@ mod tests {
         let policy = PostPolicy::from_json(json).unwrap();
 
         // "success_action_status" is NOT in the policy but IS in form fields
-        let multipart = create_test_multipart(
-            vec![("key", "mykey"), ("success_action_status", "200")],
-            None,
-        );
+        let multipart = create_test_multipart(vec![("key", "mykey"), ("success_action_status", "200")], None);
         let err = policy.validate_conditions_only(&multipart, 0, Some("mybucket")).unwrap_err();
         assert!(matches!(err.code(), S3ErrorCode::AccessDenied));
         assert!(
@@ -911,12 +909,23 @@ mod tests {
         }"#;
         let policy = PostPolicy::from_json(json).unwrap();
 
-        let multipart = create_test_multipart(
-            vec![("key", "mykey"), ("policy", "abc"), ("x-amz-signature", "sig123")],
+        // SigV4 exempt fields
+        let multipart = create_test_multipart(vec![("key", "mykey"), ("policy", "abc"), ("x-amz-signature", "sig123")], None);
+        let result = policy.validate_conditions_only(&multipart, 0, Some("mybucket"));
+        assert!(result.is_ok(), "SigV4 exempt fields should not be rejected");
+
+        // SigV2 exempt fields
+        let multipart_v2 = create_test_multipart(
+            vec![
+                ("awsaccesskeyid", "AKID"),
+                ("key", "mykey"),
+                ("policy", "abc"),
+                ("signature", "sig456"),
+            ],
             None,
         );
-        let result = policy.validate_conditions_only(&multipart, 0, Some("mybucket"));
-        assert!(result.is_ok(), "exempt fields should not be rejected");
+        let result_v2 = policy.validate_conditions_only(&multipart_v2, 0, Some("mybucket"));
+        assert!(result_v2.is_ok(), "SigV2 exempt fields should not be rejected");
     }
 
     /// A field declared via starts-with condition should also be accepted.
@@ -932,10 +941,7 @@ mod tests {
         }"#;
         let policy = PostPolicy::from_json(json).unwrap();
 
-        let multipart = create_test_multipart(
-            vec![("key", "mykey"), ("success_action_status", "200")],
-            None,
-        );
+        let multipart = create_test_multipart(vec![("key", "mykey"), ("success_action_status", "200")], None);
         let result = policy.validate_conditions_only(&multipart, 0, Some("mybucket"));
         assert!(result.is_ok(), "field covered by starts-with should be accepted");
     }
@@ -952,10 +958,7 @@ mod tests {
         }"#;
         let policy = PostPolicy::from_json(json).unwrap();
 
-        let multipart = create_test_multipart(
-            vec![("key", "mykey"), ("x-ignore-custom", "anything")],
-            None,
-        );
+        let multipart = create_test_multipart(vec![("key", "mykey"), ("x-ignore-custom", "anything")], None);
         let result = policy.validate_conditions_only(&multipart, 0, Some("mybucket"));
         assert!(result.is_ok(), "x-ignore- fields should not be rejected");
     }

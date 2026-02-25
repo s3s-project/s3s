@@ -311,7 +311,7 @@ fn codegen_post_object_fork_op(rust_types: &RustTypes) {
         "                http::set_xml_body(&mut res, &post_response)?;",
         "                Ok(res)",
         "            }",
-        "            Some(204 | _) | None => {",
+        "            _ => {",
         "                // 204 No Content (default, also for unrecognized values)",
         "                Ok(http::Response::with_status(http::StatusCode::NO_CONTENT))",
         "            }",

@@ -85,7 +85,9 @@ def test_success_action_status_200():
     try:
         key = "test-file.txt"
         presigned = presigned_post_with_fields(
-            client, bucket, key,
+            client,
+            bucket,
+            key,
             fields={"success_action_status": "200"},
         )
 
@@ -109,7 +111,9 @@ def test_success_action_status_201():
     try:
         key = "test-file.txt"
         presigned = presigned_post_with_fields(
-            client, bucket, key,
+            client,
+            bucket,
+            key,
             fields={"success_action_status": "201"},
         )
 
@@ -153,7 +157,9 @@ def test_success_action_status_204():
     try:
         key = "test-file.txt"
         presigned = presigned_post_with_fields(
-            client, bucket, key,
+            client,
+            bucket,
+            key,
             fields={"success_action_status": "204"},
         )
 
@@ -199,7 +205,9 @@ def test_success_action_redirect():
         key = "test-file.txt"
         redirect_url = "https://example.com/upload-done"
         presigned = presigned_post_with_fields(
-            client, bucket, key,
+            client,
+            bucket,
+            key,
             fields={"success_action_redirect": redirect_url},
         )
 
@@ -242,7 +250,9 @@ def test_success_action_invalid_status():
     try:
         key = "test-file.txt"
         presigned = presigned_post_with_fields(
-            client, bucket, key,
+            client,
+            bucket,
+            key,
             fields={"success_action_status": "302"},
         )
 
