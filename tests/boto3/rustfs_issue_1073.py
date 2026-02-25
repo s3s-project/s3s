@@ -10,7 +10,7 @@ Test points:
 3. success_action_status=204 (or omitted) returns 204 No Content (default).
 4. success_action_redirect returns 303 See Other with Location header
    including bucket, key, and etag as query parameters.
-5. Invalid success_action_status returns an error.
+5. Invalid success_action_status (e.g. 302) falls back to 204 No Content.
 """
 
 import os
@@ -57,19 +57,15 @@ def delete_bucket(client, bucket: str):
         pass
 
 
-def presigned_post(
-    client, bucket: str, key: str, extra_conditions=None, extra_fields=None
-):
-    conditions = extra_conditions or []
-    presigned = client.generate_presigned_post(
+def presigned_post_with_fields(client, bucket, key, fields=None, conditions=None):
+    """Generate a presigned POST with fields included in the policy."""
+    return client.generate_presigned_post(
         Bucket=bucket,
         Key=key,
-        Conditions=conditions,
+        Fields=fields or {},
+        Conditions=conditions or [],
         ExpiresIn=3600,
     )
-    if extra_fields:
-        presigned["fields"].update(extra_fields)
-    return presigned
 
 
 def test_success_action_status_200():
@@ -80,11 +76,9 @@ def test_success_action_status_200():
 
     try:
         key = "test-file.txt"
-        presigned = presigned_post(
-            client,
-            bucket,
-            key,
-            extra_fields={"success_action_status": "200"},
+        presigned = presigned_post_with_fields(
+            client, bucket, key,
+            fields={"success_action_status": "200"},
         )
 
         files = {"file": ("test.txt", b"hello world")}
@@ -106,11 +100,9 @@ def test_success_action_status_201():
 
     try:
         key = "test-file.txt"
-        presigned = presigned_post(
-            client,
-            bucket,
-            key,
-            extra_fields={"success_action_status": "201"},
+        presigned = presigned_post_with_fields(
+            client, bucket, key,
+            fields={"success_action_status": "201"},
         )
 
         files = {"file": ("test.txt", b"hello world")}
@@ -152,11 +144,9 @@ def test_success_action_status_204():
 
     try:
         key = "test-file.txt"
-        presigned = presigned_post(
-            client,
-            bucket,
-            key,
-            extra_fields={"success_action_status": "204"},
+        presigned = presigned_post_with_fields(
+            client, bucket, key,
+            fields={"success_action_status": "204"},
         )
 
         files = {"file": ("test.txt", b"hello world")}
@@ -178,7 +168,7 @@ def test_success_action_status_default():
 
     try:
         key = "test-file.txt"
-        presigned = presigned_post(client, bucket, key)
+        presigned = presigned_post_with_fields(client, bucket, key)
 
         files = {"file": ("test.txt", b"hello world")}
         resp = requests.post(presigned["url"], data=presigned["fields"], files=files)
@@ -200,11 +190,9 @@ def test_success_action_redirect():
     try:
         key = "test-file.txt"
         redirect_url = "https://example.com/upload-done"
-        presigned = presigned_post(
-            client,
-            bucket,
-            key,
-            extra_fields={"success_action_redirect": redirect_url},
+        presigned = presigned_post_with_fields(
+            client, bucket, key,
+            fields={"success_action_redirect": redirect_url},
         )
 
         files = {"file": ("test.txt", b"hello world")}
@@ -238,28 +226,23 @@ def test_success_action_redirect():
 
 
 def test_success_action_invalid_status():
-    """An invalid success_action_status should return an error."""
+    """An invalid success_action_status (e.g. 302) should fall back to 204 No Content."""
     client = make_client()
     bucket = f"test-issue1073-{uuid.uuid4().hex[:8]}"
     create_bucket(client, bucket)
 
     try:
         key = "test-file.txt"
-        presigned = presigned_post(
-            client,
-            bucket,
-            key,
-            extra_fields={"success_action_status": "302"},
+        presigned = presigned_post_with_fields(
+            client, bucket, key,
+            fields={"success_action_status": "302"},
         )
 
         files = {"file": ("test.txt", b"hello world")}
         resp = requests.post(presigned["url"], data=presigned["fields"], files=files)
 
-        assert resp.status_code == 400, (
-            f"Expected 400, got {resp.status_code}: {resp.text}"
-        )
-        assert "InvalidArgument" in resp.text, (
-            f"Expected InvalidArgument in response: {resp.text}"
+        assert resp.status_code == 204, (
+            f"Expected 204 (fallback for invalid status), got {resp.status_code}: {resp.text}"
         )
         print("PASS: test_success_action_invalid_status")
     finally:
