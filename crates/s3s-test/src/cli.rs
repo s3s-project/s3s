@@ -24,6 +24,7 @@ pub struct Options {
     pub json: Option<PathBuf>,
     pub filter: Vec<String>,
     pub list: bool,
+    pub run_ignored: bool,
 }
 
 #[doc(hidden)]
@@ -43,8 +44,14 @@ pub fn setup() {
         .init();
 }
 
-fn status(passed: bool) -> ColoredString {
-    if passed { "PASSED".green() } else { "FAILED".red() }
+fn status(passed: bool, ignored: bool) -> ColoredString {
+    if ignored {
+        "IGNORED".yellow()
+    } else if passed {
+        "PASSED".green()
+    } else {
+        "FAILED".red()
+    }
 }
 
 fn write_report(json_path: &Path, report: &Report) -> Result<(), StdError> {
@@ -62,10 +69,11 @@ fn print_summary(report: &Report) {
             let fixture_name = fixture.name.as_str().blue();
             for case in &fixture.cases {
                 let case_name = case.name.as_str().cyan();
-                let status = status(case.passed);
+                let st = status(case.passed, case.ignored);
                 let duration = case.duration_ms;
-                println!("{status} {duration:>w$.3}ms [{suite_name}/{fixture_name}/{case_name}]");
+                println!("{st} {duration:>w$.3}ms [{suite_name}/{fixture_name}/{case_name}]");
                 if !case.passed
+                    && !case.ignored
                     && let Some(ref run) = case.run
                 {
                     let hint = match run.result {
@@ -81,17 +89,17 @@ fn print_summary(report: &Report) {
                     println!("  {hint} {msg}");
                 }
             }
-            let status = status(fixture.case_count.all_passed());
+            let st = status(fixture.case_count.all_passed(), false);
             let duration = fixture.duration_ms;
-            println!("{status} {duration:>w$.3}ms [{suite_name}/{fixture_name}]");
+            println!("{st} {duration:>w$.3}ms [{suite_name}/{fixture_name}]");
         }
-        let status = status(suite.fixture_count.all_passed());
+        let st = status(suite.fixture_count.all_passed(), false);
         let duration = suite.duration_ms;
-        println!("{status} {duration:>w$.3}ms [{suite_name}]");
+        println!("{st} {duration:>w$.3}ms [{suite_name}]");
     }
-    let status = status(report.suite_count.all_passed());
+    let st = status(report.suite_count.all_passed(), false);
     let duration = report.duration_ms;
-    println!("{status} {duration:>w$.3}ms");
+    println!("{st} {duration:>w$.3}ms");
 }
 
 #[tokio::main]
@@ -108,6 +116,10 @@ async fn async_main(reg: impl FnOnce(&mut TestContext), opt: &Options) -> ExitCo
             }
         };
         tcx.filter(&filter_set);
+    }
+
+    if opt.run_ignored {
+        tcx.include_ignored();
     }
 
     if opt.list {
@@ -194,6 +206,9 @@ macro_rules! main {
 
             #[clap(long)]
             list: bool,
+
+            #[clap(long)]
+            run_ignored: bool,
         }
 
         fn main() -> impl ::std::process::Termination {
@@ -205,6 +220,7 @@ macro_rules! main {
                     json: opt.json,
                     filter: opt.filter,
                     list: opt.list,
+                    run_ignored: opt.run_ignored,
                 },
             )
         }
