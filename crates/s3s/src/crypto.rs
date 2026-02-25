@@ -165,3 +165,120 @@ impl Checksum for Md5 {
         self.0.finalize().into()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn crc32_checksum() {
+        let output = Crc32::checksum(b"hello");
+        assert_eq!(output.len(), 4);
+        assert_eq!(output, Crc32::checksum(b"hello"));
+    }
+
+    #[test]
+    fn crc32_incremental() {
+        let mut h = Crc32::new();
+        h.update(b"hel");
+        h.update(b"lo");
+        let incremental = h.finalize();
+        assert_eq!(incremental, Crc32::checksum(b"hello"));
+    }
+
+    #[test]
+    fn crc32_checksum_u32() {
+        let val = Crc32::checksum_u32(b"hello");
+        let bytes = val.to_be_bytes();
+        assert_eq!(bytes, Crc32::checksum(b"hello"));
+    }
+
+    #[test]
+    fn crc32_empty() {
+        let output = Crc32::checksum(b"");
+        assert_eq!(output.len(), 4);
+    }
+
+    #[test]
+    fn crc32c_checksum() {
+        let output = Crc32c::checksum(b"hello");
+        assert_eq!(output.len(), 4);
+    }
+
+    #[test]
+    fn crc32c_incremental() {
+        let mut h = Crc32c::new();
+        h.update(b"hel");
+        h.update(b"lo");
+        assert_eq!(h.finalize(), Crc32c::checksum(b"hello"));
+    }
+
+    #[test]
+    fn crc64nvme_checksum() {
+        let output = Crc64Nvme::checksum(b"hello");
+        assert_eq!(output.len(), 8);
+    }
+
+    #[test]
+    fn crc64nvme_incremental() {
+        let mut h = Crc64Nvme::new();
+        h.update(b"hel");
+        h.update(b"lo");
+        assert_eq!(h.finalize(), Crc64Nvme::checksum(b"hello"));
+    }
+
+    #[test]
+    fn sha1_checksum() {
+        let output = Sha1::checksum(b"hello");
+        assert_eq!(output.len(), 20);
+    }
+
+    #[test]
+    fn sha1_incremental() {
+        let mut h = Sha1::new();
+        h.update(b"hel");
+        h.update(b"lo");
+        assert_eq!(h.finalize(), Sha1::checksum(b"hello"));
+    }
+
+    #[test]
+    fn sha256_checksum() {
+        let output = Sha256::checksum(b"hello");
+        assert_eq!(output.len(), 32);
+    }
+
+    #[test]
+    fn sha256_incremental() {
+        let mut h = Sha256::new();
+        h.update(b"hel");
+        h.update(b"lo");
+        assert_eq!(h.finalize(), Sha256::checksum(b"hello"));
+    }
+
+    #[test]
+    fn md5_checksum() {
+        let output = Md5::checksum(b"hello");
+        assert_eq!(output.len(), 16);
+    }
+
+    #[test]
+    fn md5_incremental() {
+        let mut h = Md5::new();
+        h.update(b"hel");
+        h.update(b"lo");
+        assert_eq!(h.finalize(), Md5::checksum(b"hello"));
+    }
+
+    #[test]
+    fn sha256_known_value() {
+        // SHA-256 of empty string is well-known
+        let mut expected = [0u8; 32];
+        hex_simd::decode(
+            b"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            hex_simd::Out::from_slice(&mut expected),
+        )
+        .unwrap();
+        let output = Sha256::checksum(b"");
+        assert_eq!(output, expected);
+    }
+}
