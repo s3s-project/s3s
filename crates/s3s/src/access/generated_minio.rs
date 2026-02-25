@@ -72,6 +72,13 @@ pub trait S3Access: Send + Sync + 'static {
         Ok(())
     }
 
+    /// Checks whether the CreateSession request has accesses to the resources.
+    ///
+    /// This method returns `Ok(())` by default.
+    async fn create_session(&self, _req: &mut S3Request<CreateSessionInput>) -> S3Result<()> {
+        Ok(())
+    }
+
     /// Checks whether the DeleteBucket request has accesses to the resources.
     ///
     /// This method returns `Ok(())` by default.

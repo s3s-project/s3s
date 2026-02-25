@@ -60,6 +60,12 @@ impl From<SystemTime> for Timestamp {
     }
 }
 
+impl Default for Timestamp {
+    fn default() -> Self {
+        Self(time::OffsetDateTime::UNIX_EPOCH)
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ParseTimestampError {
     #[error("time: {0}")]

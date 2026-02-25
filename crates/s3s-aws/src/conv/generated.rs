@@ -1314,6 +1314,58 @@ impl AwsConversion for s3s::dto::CreateMultipartUploadOutput {
     }
 }
 
+impl AwsConversion for s3s::dto::CreateSessionInput {
+    type Target = aws_sdk_s3::operation::create_session::CreateSessionInput;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            bucket: unwrap_from_aws(x.bucket, "bucket")?,
+            bucket_key_enabled: try_from_aws(x.bucket_key_enabled)?,
+            ssekms_encryption_context: try_from_aws(x.ssekms_encryption_context)?,
+            ssekms_key_id: try_from_aws(x.ssekms_key_id)?,
+            server_side_encryption: try_from_aws(x.server_side_encryption)?,
+            session_mode: try_from_aws(x.session_mode)?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_bucket(Some(try_into_aws(x.bucket)?));
+        y = y.set_bucket_key_enabled(try_into_aws(x.bucket_key_enabled)?);
+        y = y.set_ssekms_encryption_context(try_into_aws(x.ssekms_encryption_context)?);
+        y = y.set_ssekms_key_id(try_into_aws(x.ssekms_key_id)?);
+        y = y.set_server_side_encryption(try_into_aws(x.server_side_encryption)?);
+        y = y.set_session_mode(try_into_aws(x.session_mode)?);
+        y.build().map_err(S3Error::internal_error)
+    }
+}
+
+impl AwsConversion for s3s::dto::CreateSessionOutput {
+    type Target = aws_sdk_s3::operation::create_session::CreateSessionOutput;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            bucket_key_enabled: try_from_aws(x.bucket_key_enabled)?,
+            credentials: unwrap_from_aws(x.credentials, "credentials")?,
+            ssekms_encryption_context: try_from_aws(x.ssekms_encryption_context)?,
+            ssekms_key_id: try_from_aws(x.ssekms_key_id)?,
+            server_side_encryption: try_from_aws(x.server_side_encryption)?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_bucket_key_enabled(try_into_aws(x.bucket_key_enabled)?);
+        y = y.set_credentials(Some(try_into_aws(x.credentials)?));
+        y = y.set_ssekms_encryption_context(try_into_aws(x.ssekms_encryption_context)?);
+        y = y.set_ssekms_key_id(try_into_aws(x.ssekms_key_id)?);
+        y = y.set_server_side_encryption(try_into_aws(x.server_side_encryption)?);
+        Ok(y.build())
+    }
+}
+
 impl AwsConversion for s3s::dto::DataRedundancy {
     type Target = aws_sdk_s3::types::DataRedundancy;
     type Error = S3Error;

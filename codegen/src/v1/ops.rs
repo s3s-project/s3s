@@ -38,7 +38,7 @@ pub struct Operation {
 pub type Operations = BTreeMap<String, Operation>;
 
 // TODO: handle these operations
-pub const SKIPPED_OPS: &[&str] = &["CreateSession", "ListDirectoryBuckets"];
+pub const SKIPPED_OPS: &[&str] = &["ListDirectoryBuckets"];
 
 pub fn collect_operations(model: &smithy::Model) -> Operations {
     let mut operations: Operations = default();
