@@ -112,7 +112,6 @@ clap = { version = "4.5.57", features = ["derive"] }
 
 # MCP
 rmcp = { version = "0.16.0", default-features = false }
-schemars = "0.8.22"
 
 # Storage backends
 opendal = "0.55.0"

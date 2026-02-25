@@ -6,11 +6,10 @@ use std::future::Future;
 use std::sync::Arc;
 
 use rmcp::ErrorData as McpError;
-use rmcp::model::{
-    CallToolRequestParams, CallToolResult, ListToolsResult, PaginatedRequestParams, ServerInfo,
-    ServerCapabilities, Tool,
-};
 use rmcp::handler::server::ServerHandler;
+use rmcp::model::{
+    CallToolRequestParams, CallToolResult, ListToolsResult, PaginatedRequestParams, ServerCapabilities, ServerInfo, Tool,
+};
 use rmcp::service::{RequestContext, RoleServer};
 
 /// An MCP server that exposes S3 operations as MCP tools.

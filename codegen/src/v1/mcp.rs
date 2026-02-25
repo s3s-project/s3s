@@ -54,6 +54,7 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
     g([
         "#![allow(clippy::too_many_lines)]",
         "#![allow(clippy::needless_pass_by_value)]",
+        "#![allow(clippy::wildcard_imports)]",
         "",
         "use std::sync::Arc;",
         "",
@@ -125,7 +126,10 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
             g!("Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(\"S3 error: {{e}}\"))])),");
             g!("}}");
         } else {
-            g!("Ok(CallToolResult::error(vec![Content::text(\"{} requires parameters that are not yet supported\".to_string())]))", op.name);
+            g!(
+                "Ok(CallToolResult::error(vec![Content::text(\"{} requires parameters that are not yet supported\".to_string())]))",
+                op.name
+            );
         }
         g!("}}");
     }
