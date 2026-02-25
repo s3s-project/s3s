@@ -1,3 +1,5 @@
+//! Internal utility types and helpers shared across the `s3s` crate.
+
 pub mod crypto;
 pub mod parser;
 pub mod rfc2047;

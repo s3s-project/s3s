@@ -1,4 +1,7 @@
-//! AWS Signature Version 4
+//! AWS Signature Version 4.
+//!
+//! Parses and verifies HMAC-SHA256-based request authentication for header-based
+//! auth, presigned URLs, and multipart POST uploads.
 //!
 //! See <https://docs.aws.amazon.com/AmazonS3/latest/API/sig-v4-header-based-auth.html>
 //!

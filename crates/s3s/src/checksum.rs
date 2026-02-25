@@ -1,3 +1,10 @@
+//! Multi-algorithm checksum computation for S3 objects.
+//!
+//! This module provides [`ChecksumHasher`], which can compute one or more
+//! checksums simultaneously in a single pass over the data. The result is
+//! a [`crate::dto::Checksum`] struct whose fields are populated with
+//! base64-encoded digests for every algorithm that was enabled.
+
 use crate::crypto::Checksum as _;
 use crate::crypto::Crc32;
 use crate::crypto::Crc32c;

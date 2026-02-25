@@ -1,3 +1,9 @@
+//! Cryptographic hash primitives used by S3 signature verification and checksum computation.
+//!
+//! This module defines the [`Checksum`] trait and provides concrete implementations
+//! for every hash algorithm supported by Amazon S3:
+//! [`Crc32`], [`Crc32c`], [`Crc64Nvme`], [`Sha1`], [`Sha256`], and [`Md5`].
+
 use numeric_cast::TruncatingCast;
 
 pub trait Checksum {
