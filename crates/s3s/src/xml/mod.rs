@@ -161,7 +161,10 @@ mod tests {
 
         assert!(xml.contains("CreateSessionResult"), "root element must be CreateSessionResult: {xml}");
         assert!(xml.contains("<Credentials>"), "must contain Credentials element: {xml}");
-        assert!(xml.contains("<AccessKeyId>AKIAIOSFODNN7EXAMPLE</AccessKeyId>"), "must contain AccessKeyId: {xml}");
+        assert!(
+            xml.contains("<AccessKeyId>AKIAIOSFODNN7EXAMPLE</AccessKeyId>"),
+            "must contain AccessKeyId: {xml}"
+        );
         assert!(xml.contains("<SecretAccessKey>"), "must contain SecretAccessKey: {xml}");
         assert!(xml.contains("<SessionToken>"), "must contain SessionToken: {xml}");
         assert!(xml.contains("<Expiration>"), "must contain Expiration: {xml}");
