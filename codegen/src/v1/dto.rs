@@ -1061,10 +1061,8 @@ fn can_derive_serde(ty: &rust::Struct, rust_types: &RustTypes) -> bool {
         // Check if the field's type can be serialized recursively
         if let Some(field_ty) = rust_types.get(&field.type_) {
             match field_ty {
-                rust::Type::Struct(s) => {
-                    if !can_derive_serde(s, rust_types) {
-                        return false;
-                    }
+                rust::Type::Struct(s) if !can_derive_serde(s, rust_types) => {
+                    return false;
                 }
                 rust::Type::List(list) => {
                     // Check if the list element type can be serialized
@@ -1121,10 +1119,8 @@ fn can_derive_default(ty: &rust::Struct, rust_types: &RustTypes) -> bool {
         }
 
         match &rust_types[&field.type_] {
-            rust::Type::Provided(ty) => {
-                if ty.name == "CachedTags" {
-                    return true;
-                }
+            rust::Type::Provided(ty) if ty.name == "CachedTags" => {
+                return true;
             }
             rust::Type::List(_) => return true,
             rust::Type::Map(_) => return true,
@@ -1305,20 +1301,16 @@ fn codegen_dto_ext(rust_types: &RustTypes) {
             let Some(field_ty) = rust_types.get(&field.type_) else { continue };
 
             match field_ty {
-                rust::Type::Alias(field_ty) => {
-                    if field.option_type && field_ty.type_ == "String" {
-                        g!("if self.{}.as_deref() == Some(\"\") {{", field.name);
-                        g!("    self.{} = None;", field.name);
-                        g!("}}");
-                    }
+                rust::Type::Alias(field_ty) if field.option_type && field_ty.type_ == "String" => {
+                    g!("if self.{}.as_deref() == Some(\"\") {{", field.name);
+                    g!("    self.{} = None;", field.name);
+                    g!("}}");
                 }
-                rust::Type::StrEnum(_) => {
-                    if field.option_type {
-                        g!("if let Some(ref val) = self.{}", field.name);
-                        g!("    && val.as_str() == \"\" {{");
-                        g!("    self.{} = None;", field.name);
-                        g!("}}");
-                    }
+                rust::Type::StrEnum(_) if field.option_type => {
+                    g!("if let Some(ref val) = self.{}", field.name);
+                    g!("    && val.as_str() == \"\" {{");
+                    g!("    self.{} = None;", field.name);
+                    g!("}}");
                 }
                 rust::Type::Struct(field_ty) => {
                     if field_ty.fields.is_empty() {
