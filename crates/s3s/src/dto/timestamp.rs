@@ -166,6 +166,13 @@ mod tests {
     use super::*;
 
     #[test]
+    fn default_is_unix_epoch() {
+        let ts = Timestamp::default();
+        let dt: time::OffsetDateTime = ts.into();
+        assert_eq!(dt, time::OffsetDateTime::UNIX_EPOCH);
+    }
+
+    #[test]
     fn text_repr() {
         let cases = [
             (TimestampFormat::DateTime, "1985-04-12T23:20:50.520Z"),

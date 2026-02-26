@@ -1575,3 +1575,74 @@ async fn post_policy_file_size_is_total_bytes_not_chunk_count() {
         Ok(_) => panic!("POST object with 50-byte file should fail content-length-range [100, 50000] validation"),
     }
 }
+
+#[test]
+fn create_session_route_resolved() {
+    use crate::http::{Body, OrderedQs};
+    use crate::path::S3Path;
+
+    let req = crate::http::Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri("http://localhost/my-bucket?session")
+            .body(Body::empty())
+            .unwrap(),
+    );
+
+    let s3_path = S3Path::Bucket {
+        bucket: "my-bucket".into(),
+    };
+    let qs = OrderedQs::parse("session").unwrap();
+    let (op, needs_full_body) = generated::resolve_route(&req, &s3_path, Some(&qs)).unwrap();
+
+    assert_eq!(op.name(), "CreateSession");
+    assert!(!needs_full_body);
+}
+
+#[test]
+fn create_session_deserialize_http() {
+    use crate::http::Body;
+    use crate::path::S3Path;
+
+    let mut req = crate::http::Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri("http://localhost/my-bucket?session")
+            .header("x-amz-create-session-mode", "ReadWrite")
+            .body(Body::empty())
+            .unwrap(),
+    );
+
+    req.s3ext.s3_path = Some(S3Path::Bucket {
+        bucket: "my-bucket".into(),
+    });
+
+    let input = generated::CreateSession::deserialize_http(&mut req).unwrap();
+
+    assert_eq!(input.bucket, "my-bucket");
+    assert_eq!(input.session_mode.as_ref().map(crate::dto::SessionMode::as_str), Some("ReadWrite"));
+    assert!(input.server_side_encryption.is_none());
+    assert!(input.ssekms_key_id.is_none());
+    assert!(input.ssekms_encryption_context.is_none());
+    assert!(input.bucket_key_enabled.is_none());
+}
+
+#[test]
+fn create_session_serialize_http() {
+    use crate::dto::{CreateSessionOutput, SessionCredentials, Timestamp, TimestampFormat};
+
+    let creds = SessionCredentials {
+        access_key_id: "AKIAIOSFODNN7EXAMPLE".to_owned(),
+        expiration: Timestamp::parse(TimestampFormat::DateTime, "2024-01-01T00:05:00.000Z").unwrap(),
+        secret_access_key: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".to_owned(),
+        session_token: "FwoGZXIvYXdzEBYaDHqa0A".to_owned(),
+    };
+
+    let output = CreateSessionOutput {
+        credentials: creds,
+        ..Default::default()
+    };
+
+    let resp = generated::CreateSession::serialize_http(output).unwrap();
+    assert_eq!(resp.status, hyper::StatusCode::OK);
+}
