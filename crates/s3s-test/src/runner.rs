@@ -89,7 +89,7 @@ fn count_cases(total: u64, iter: impl IntoIterator<Item = (bool, bool)>) -> Coun
     }
 }
 
-pub async fn run(tcx: &mut TestContext) -> Report {
+pub async fn run(tcx: &mut TestContext, concurrent: bool) -> Report {
     let total_suites = tcx.suites.len();
     info!(total_suites, "Test start");
 
@@ -98,7 +98,7 @@ pub async fn run(tcx: &mut TestContext) -> Report {
     let t0 = Instant::now();
 
     for suite in tcx.suites.values() {
-        let report = run_suite(suite).await;
+        let report = run_suite(suite, concurrent).await;
         suites.push(report);
     }
 
@@ -116,7 +116,7 @@ pub async fn run(tcx: &mut TestContext) -> Report {
 }
 
 #[instrument(skip(suite), fields(name = suite.name))]
-async fn run_suite(suite: &SuiteInfo) -> SuiteReport {
+async fn run_suite(suite: &SuiteInfo, concurrent: bool) -> SuiteReport {
     let total_fixtures = suite.fixtures.len();
     info!(total_fixtures, "Test suite start");
 
@@ -132,7 +132,7 @@ async fn run_suite(suite: &SuiteInfo) -> SuiteReport {
         let Ok(Ok(suite_data)) = result else { break 'run };
 
         for fixture in suite.fixtures.values() {
-            let report = run_fixture(fixture, &suite_data).await;
+            let report = run_fixture(fixture, &suite_data, concurrent).await;
             fixtures.push(report);
         }
 
@@ -206,8 +206,19 @@ async fn run_case(case_name: String, case_future: BoxFuture<'static, crate::Resu
     }
 }
 
+fn ignored_report(case: &CaseInfo) -> CaseReport {
+    CaseReport {
+        name: case.name.clone(),
+        passed: true,
+        ignored: true,
+        duration_ns: 0,
+        duration_ms: 0.0,
+        run: None,
+    }
+}
+
 #[instrument(skip(fixture, suite_data), fields(name = fixture.name))]
-async fn run_fixture(fixture: &FixtureInfo, suite_data: &ArcAny) -> FixtureReport {
+async fn run_fixture(fixture: &FixtureInfo, suite_data: &ArcAny, concurrent: bool) -> FixtureReport {
     let total_cases = fixture.cases.len();
     info!(total_cases, "Test fixture start");
 
@@ -223,46 +234,56 @@ async fn run_fixture(fixture: &FixtureInfo, suite_data: &ArcAny) -> FixtureRepor
         setup_summary = Some(summary);
         let Ok(Ok(fixture_data)) = result else { break 'run };
 
-        let mut handles: Vec<CaseHandle> = Vec::with_capacity(fixture.cases.len());
+        if concurrent {
+            let mut handles: Vec<CaseHandle> = Vec::with_capacity(fixture.cases.len());
 
-        for case in fixture.cases.values() {
-            if case.tags.contains(&CaseTag::Ignored) {
-                info!(name = case.name, "Test case ignored");
-                handles.push(CaseHandle::Ignored(CaseReport {
-                    name: case.name.clone(),
-                    passed: true,
-                    ignored: true,
-                    duration_ns: 0,
-                    duration_ms: 0.0,
-                    run: None,
-                }));
-                continue;
+            for case in fixture.cases.values() {
+                if case.tags.contains(&CaseTag::Ignored) {
+                    info!(name = case.name, "Test case ignored");
+                    handles.push(CaseHandle::Ignored(ignored_report(case)));
+                    continue;
+                }
+
+                let case_name = case.name.clone();
+                let case_future = (case.run)(Arc::clone(&fixture_data));
+                let span = info_span!("case", name = case_name.as_str());
+
+                let handle = spawn(run_case(case_name, case_future).instrument(span));
+                handles.push(CaseHandle::Running(handle));
             }
 
-            let case_name = case.name.clone();
-            let case_future = (case.run)(Arc::clone(&fixture_data));
-            let span = info_span!("case", name = case_name.as_str());
-
-            let handle = spawn(run_case(case_name, case_future).instrument(span));
-            handles.push(CaseHandle::Running(handle));
-        }
-
-        for handle in handles {
-            cases.push(match handle {
-                CaseHandle::Ignored(report) => report,
-                CaseHandle::Running(h) => h.await.unwrap_or_else(|_| CaseReport {
-                    name: String::from("<unknown>"),
-                    passed: false,
-                    ignored: false,
-                    duration_ns: 0,
-                    duration_ms: 0.0,
-                    run: Some(FnSummary {
-                        result: FnResult::Panicked,
+            for handle in handles {
+                cases.push(match handle {
+                    CaseHandle::Ignored(report) => report,
+                    CaseHandle::Running(h) => h.await.unwrap_or_else(|_| CaseReport {
+                        name: String::from("<unknown>"),
+                        passed: false,
+                        ignored: false,
                         duration_ns: 0,
                         duration_ms: 0.0,
+                        run: Some(FnSummary {
+                            result: FnResult::Panicked,
+                            duration_ns: 0,
+                            duration_ms: 0.0,
+                        }),
                     }),
-                }),
-            });
+                });
+            }
+        } else {
+            for case in fixture.cases.values() {
+                if case.tags.contains(&CaseTag::Ignored) {
+                    info!(name = case.name, "Test case ignored");
+                    cases.push(ignored_report(case));
+                    continue;
+                }
+
+                let case_name = case.name.clone();
+                let case_future = (case.run)(Arc::clone(&fixture_data));
+                let span = info_span!("case", name = case_name.as_str());
+
+                let report = run_case(case_name, case_future).instrument(span).await;
+                cases.push(report);
+            }
         }
 
         info!("Test fixture teardown");

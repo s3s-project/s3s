@@ -25,6 +25,7 @@ pub struct Options {
     pub filter: Vec<String>,
     pub list: bool,
     pub run_ignored: bool,
+    pub concurrent: bool,
 }
 
 #[doc(hidden)]
@@ -138,7 +139,7 @@ async fn async_main(reg: impl FnOnce(&mut TestContext), opt: &Options) -> ExitCo
         return ExitCode::from(0);
     }
 
-    let report = crate::runner::run(&mut tcx).await;
+    let report = crate::runner::run(&mut tcx, opt.concurrent).await;
 
     if let Some(ref json_path) = opt.json
         && let Err(err) = write_report(json_path, &report)
@@ -209,6 +210,9 @@ macro_rules! main {
 
             #[clap(long)]
             run_ignored: bool,
+
+            #[clap(long)]
+            concurrent: bool,
         }
 
         fn main() -> impl ::std::process::Termination {
@@ -221,6 +225,7 @@ macro_rules! main {
                     filter: opt.filter,
                     list: opt.list,
                     run_ignored: opt.run_ignored,
+                    concurrent: opt.concurrent,
                 },
             )
         }
