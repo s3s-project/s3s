@@ -86,3 +86,78 @@ impl Serialize for SecretKey {
         <str as Serialize>::serialize(PLACEHOLDER, serializer)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_from_str() {
+        let key = SecretKey::from("my-secret");
+        assert_eq!(key.expose(), "my-secret");
+    }
+
+    #[test]
+    fn new_from_string() {
+        let key = SecretKey::from("my-secret".to_owned());
+        assert_eq!(key.expose(), "my-secret");
+    }
+
+    #[test]
+    fn new_from_box_str() {
+        let boxed: Box<str> = "my-secret".into();
+        let key = SecretKey::from(boxed);
+        assert_eq!(key.expose(), "my-secret");
+    }
+
+    #[test]
+    fn debug_hides_value() {
+        let key = SecretKey::from("super-secret-value");
+        let debug = format!("{key:?}");
+        assert!(!debug.contains("super-secret-value"));
+        assert!(debug.contains(PLACEHOLDER));
+    }
+
+    #[test]
+    fn constant_time_eq() {
+        let a = SecretKey::from("same-key");
+        let b = SecretKey::from("same-key");
+        assert!(bool::from(a.ct_eq(&b)));
+
+        let c = SecretKey::from("different-key");
+        assert!(!bool::from(a.ct_eq(&c)));
+    }
+
+    #[test]
+    fn serialize_hides_value() {
+        let key = SecretKey::from("my-secret");
+        let json = serde_json::to_string(&key).unwrap();
+        assert!(!json.contains("my-secret"));
+        assert!(json.contains(PLACEHOLDER));
+    }
+
+    #[test]
+    fn deserialize() {
+        let json = r#""deserialized-secret""#;
+        let key: SecretKey = serde_json::from_str(json).unwrap();
+        assert_eq!(key.expose(), "deserialized-secret");
+    }
+
+    #[test]
+    fn clone() {
+        let key = SecretKey::from("clone-me");
+        let cloned = key.clone();
+        assert_eq!(cloned.expose(), "clone-me");
+    }
+
+    #[test]
+    fn credentials_debug() {
+        let creds = Credentials {
+            access_key: "AKID".to_owned(),
+            secret_key: SecretKey::from("hunter2"),
+        };
+        let debug = format!("{creds:?}");
+        assert!(debug.contains("AKID"));
+        assert!(!debug.contains("hunter2"));
+    }
+}
