@@ -109,6 +109,16 @@ impl TestContext {
             suite.fixtures.is_empty().not()
         });
     }
+
+    pub fn include_ignored(&mut self) {
+        for suite in self.suites.values_mut() {
+            for fixture in suite.fixtures.values_mut() {
+                for case in fixture.cases.values_mut() {
+                    case.tags.retain(|t| *t != CaseTag::Ignored);
+                }
+            }
+        }
+    }
 }
 
 pub struct SuiteBuilder<'a, S> {
