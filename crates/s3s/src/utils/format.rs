@@ -66,6 +66,6 @@ mod tests {
     fn test_fmt_timestamp() {
         let ts = Timestamp::parse(TimestampFormat::DateTime, "1985-04-12T23:20:50.520Z").unwrap();
         let result = fmt_timestamp(&ts, TimestampFormat::DateTime, |b| std::str::from_utf8(b).unwrap().to_owned());
-        assert!(result.contains("1985"));
+        assert_eq!(result, "1985-04-12T23:20:50.520Z");
     }
 }
