@@ -1671,3 +1671,86 @@ fn create_session_serialize_http() {
     let resp = generated::CreateSession::serialize_http(output).unwrap();
     assert_eq!(resp.status, hyper::StatusCode::OK);
 }
+
+#[test]
+fn list_directory_buckets_route_resolved() {
+    use crate::http::{Body, OrderedQs};
+    use crate::path::S3Path;
+
+    let req = crate::http::Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri("http://localhost/?x-id=ListDirectoryBuckets")
+            .body(Body::empty())
+            .unwrap(),
+    );
+
+    let s3_path = S3Path::Root;
+    let qs = OrderedQs::parse("x-id=ListDirectoryBuckets").unwrap();
+    let (op, needs_full_body) = generated::resolve_route(&req, &s3_path, Some(&qs)).unwrap();
+
+    assert_eq!(op.name(), "ListDirectoryBuckets");
+    assert!(!needs_full_body);
+}
+
+#[test]
+fn list_buckets_route_still_default() {
+    use crate::http::{Body, OrderedQs};
+    use crate::path::S3Path;
+
+    // With x-id=ListBuckets
+    let req = crate::http::Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri("http://localhost/?x-id=ListBuckets")
+            .body(Body::empty())
+            .unwrap(),
+    );
+
+    let s3_path = S3Path::Root;
+    let qs = OrderedQs::parse("x-id=ListBuckets").unwrap();
+    let (op, _) = generated::resolve_route(&req, &s3_path, Some(&qs)).unwrap();
+    assert_eq!(op.name(), "ListBuckets");
+
+    // Without any query string
+    let req2 = crate::http::Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri("http://localhost/")
+            .body(Body::empty())
+            .unwrap(),
+    );
+    let (op2, _) = generated::resolve_route(&req2, &s3_path, None).unwrap();
+    assert_eq!(op2.name(), "ListBuckets");
+}
+
+#[test]
+fn list_directory_buckets_deserialize_http() {
+    use crate::http::{Body, OrderedQs};
+
+    let mut req = crate::http::Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri("http://localhost/?continuation-token=abc123&max-directory-buckets=10")
+            .body(Body::empty())
+            .unwrap(),
+    );
+
+    req.s3ext.s3_path = Some(crate::path::S3Path::Root);
+    req.s3ext.qs = Some(OrderedQs::parse("continuation-token=abc123&max-directory-buckets=10").unwrap());
+
+    let input = generated::ListDirectoryBuckets::deserialize_http(&mut req).unwrap();
+
+    assert_eq!(input.continuation_token.as_deref(), Some("abc123"));
+    assert_eq!(input.max_directory_buckets, Some(10));
+}
+
+#[test]
+fn list_directory_buckets_serialize_http() {
+    use crate::dto::ListDirectoryBucketsOutput;
+
+    let output = ListDirectoryBucketsOutput { ..Default::default() };
+
+    let resp = generated::ListDirectoryBuckets::serialize_http(output).unwrap();
+    assert_eq!(resp.status, hyper::StatusCode::OK);
+}

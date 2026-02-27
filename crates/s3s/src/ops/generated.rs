@@ -62,6 +62,7 @@
 // ListBucketInventoryConfigurations
 // ListBucketMetricsConfigurations
 // ListBuckets
+// ListDirectoryBuckets
 // ListMultipartUploads
 // ListObjectVersions
 // ListObjects
@@ -4061,6 +4062,52 @@ impl super::Operation for ListBuckets {
     }
 }
 
+pub struct ListDirectoryBuckets;
+
+impl ListDirectoryBuckets {
+    pub fn deserialize_http(req: &mut http::Request) -> S3Result<ListDirectoryBucketsInput> {
+        let continuation_token: Option<DirectoryBucketToken> = http::parse_opt_query(req, "continuation-token")?;
+
+        let max_directory_buckets: Option<MaxDirectoryBuckets> = http::parse_opt_query(req, "max-directory-buckets")?;
+
+        Ok(ListDirectoryBucketsInput {
+            continuation_token,
+            max_directory_buckets,
+        })
+    }
+
+    pub fn serialize_http(x: ListDirectoryBucketsOutput) -> S3Result<http::Response> {
+        let mut res = http::Response::with_status(http::StatusCode::OK);
+        http::set_xml_body(&mut res, &x)?;
+        Ok(res)
+    }
+}
+
+#[async_trait::async_trait]
+impl super::Operation for ListDirectoryBuckets {
+    fn name(&self) -> &'static str {
+        "ListDirectoryBuckets"
+    }
+
+    async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
+        let input = Self::deserialize_http(req)?;
+        let mut s3_req = super::build_s3_request(input, req);
+        let s3 = ccx.s3;
+        if let Some(access) = ccx.access {
+            access.list_directory_buckets(&mut s3_req).await?;
+        }
+        let result = s3.list_directory_buckets(s3_req).await;
+        let s3_resp = match result {
+            Ok(val) => val,
+            Err(err) => return super::serialize_error(err, false),
+        };
+        let mut resp = Self::serialize_http(s3_resp.output)?;
+        resp.headers.extend(s3_resp.headers);
+        resp.extensions.extend(s3_resp.extensions);
+        Ok(resp)
+    }
+}
+
 pub struct ListMultipartUploads;
 
 impl ListMultipartUploads {
@@ -6771,7 +6818,14 @@ pub fn resolve_route(
             S3Path::Object { .. } => Ok((&HeadObject as &'static dyn super::Operation, false)),
         },
         hyper::Method::GET => match s3_path {
-            S3Path::Root => Ok((&ListBuckets as &'static dyn super::Operation, false)),
+            S3Path::Root => {
+                if let Some(qs) = qs {
+                    if super::check_query_pattern(qs, "x-id", "ListDirectoryBuckets") {
+                        return Ok((&ListDirectoryBuckets as &'static dyn super::Operation, false));
+                    }
+                }
+                Ok((&ListBuckets as &'static dyn super::Operation, false))
+            }
             S3Path::Bucket { .. } => {
                 if let Some(qs) = qs {
                     if qs.has("analytics") && qs.has("id") {

@@ -73,6 +73,8 @@ use std::io::Write;
 // Deserialize: ListBucketMetricsConfigurationsOutput
 //   Serialize: ListBucketsOutput
 // Deserialize: ListBucketsOutput
+//   Serialize: ListDirectoryBucketsOutput
+// Deserialize: ListDirectoryBucketsOutput
 //   Serialize: ListMultipartUploadsOutput
 //   Serialize: ListObjectVersionsOutput
 //   Serialize: ListObjectsOutput
@@ -279,6 +281,8 @@ use std::io::Write;
 // DeserializeContent: Description
 //   SerializeContent: Destination
 // DeserializeContent: Destination
+//   SerializeContent: DirectoryBucketToken
+// DeserializeContent: DirectoryBucketToken
 //   SerializeContent: DisplayName
 // DeserializeContent: DisplayName
 //   SerializeContent: ETag
@@ -467,6 +471,8 @@ use std::io::Write;
 // DeserializeContent: ListBucketMetricsConfigurationsOutput
 //   SerializeContent: ListBucketsOutput
 // DeserializeContent: ListBucketsOutput
+//   SerializeContent: ListDirectoryBucketsOutput
+// DeserializeContent: ListDirectoryBucketsOutput
 //   SerializeContent: ListMultipartUploadsOutput
 //   SerializeContent: ListObjectVersionsOutput
 //   SerializeContent: ListObjectsOutput
@@ -1192,6 +1198,18 @@ impl Serialize for ListBucketsOutput {
 impl<'xml> Deserialize<'xml> for ListBucketsOutput {
     fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
         d.named_element("ListAllMyBucketsResult", Deserializer::content)
+    }
+}
+
+impl Serialize for ListDirectoryBucketsOutput {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content_with_ns("ListAllMyDirectoryBucketsResult", XMLNS_S3, self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for ListDirectoryBucketsOutput {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("ListAllMyDirectoryBucketsResult", Deserializer::content)
     }
 }
 
@@ -5891,6 +5909,45 @@ impl<'xml> DeserializeContent<'xml> for ListBucketsOutput {
             continuation_token,
             owner,
             prefix,
+        })
+    }
+}
+impl SerializeContent for ListDirectoryBucketsOutput {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(iter) = &self.buckets {
+            s.list("Buckets", "Bucket", iter)?;
+        }
+        if let Some(ref val) = self.continuation_token {
+            s.content("ContinuationToken", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for ListDirectoryBucketsOutput {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut buckets: Option<Buckets> = None;
+        let mut continuation_token: Option<DirectoryBucketToken> = None;
+        d.for_each_element(|d, x| match x {
+            b"Buckets" => {
+                if buckets.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                buckets = Some(d.list_content("Bucket")?);
+                Ok(())
+            }
+            b"ContinuationToken" => {
+                if continuation_token.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                continuation_token = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            buckets,
+            continuation_token,
         })
     }
 }
