@@ -1,6 +1,9 @@
-//! AWS Signature Version 2
+//! AWS Signature Version 2 (legacy).
 //!
-//! <https://docs.aws.amazon.com/AmazonS3/latest/userguide/RESTAuthentication.html>
+//! Parses and verifies the older HMAC-SHA1-based request authentication scheme
+//! used by Amazon S3 before Signature Version 4.
+//!
+//! See <https://docs.aws.amazon.com/AmazonS3/latest/userguide/RESTAuthentication.html>
 //!
 
 mod authorization_v2;

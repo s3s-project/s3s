@@ -1,3 +1,9 @@
+//! Byte-stream types for S3 request and response bodies.
+//!
+//! This module defines the [`ByteStream`] trait, the [`DynByteStream`] type
+//! alias for heap-allocated streams, and [`RemainingLength`] which
+//! communicates a known or estimated byte count remaining in a stream.
+
 use crate::error::StdError;
 
 use std::collections::VecDeque;

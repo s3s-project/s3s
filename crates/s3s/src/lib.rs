@@ -80,6 +80,7 @@
 //! - [`header`]: HTTP header handling
 //! - [`path`]: S3 path handling
 //! - [`post_policy`]: POST object policy support
+//! - [`region`]: AWS region name type
 //! - [`xml`]: XML serialization/deserialization
 //!
 //! # Security

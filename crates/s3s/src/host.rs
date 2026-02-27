@@ -1,3 +1,11 @@
+//! Virtual-host parsing for S3 request routing.
+//!
+//! This module provides the [`S3Host`] trait together with the built-in
+//! implementations [`SingleDomain`] and [`MultiDomain`]. They parse the HTTP
+//! `Host` header into a [`VirtualHost`] value that carries the base domain,
+//! the bucket name (when the request uses virtual-hosted-style addressing),
+//! and an optional region.
+
 use crate::error::S3Result;
 
 use std::borrow::Cow;

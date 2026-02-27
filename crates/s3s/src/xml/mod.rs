@@ -1,3 +1,10 @@
+//! XML serialization and deserialization for S3 request and response bodies.
+//!
+//! This module provides the [`Serialize`] / [`SerializeContent`] traits and
+//! the corresponding [`Deserialize`] / [`DeserializeContent`] traits, together
+//! with [`Serializer`] and [`Deserializer`] implementations used to convert
+//! between Rust DTOs and the XML wire format required by the S3 REST API.
+
 #![allow(clippy::missing_errors_doc)] // TODO
 
 mod de;

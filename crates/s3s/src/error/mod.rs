@@ -1,3 +1,10 @@
+//! S3 error types.
+//!
+//! This module provides [`S3Error`] and [`S3Result`] for representing and
+//! propagating errors from S3 operations, along with [`S3ErrorCode`] which
+//! enumerates every standard S3 error code. The [`s3_error!`] macro offers
+//! a convenient shorthand for constructing errors by code or code-with-message.
+
 cfg_if::cfg_if! {
     if #[cfg(feature = "minio")] {
         mod generated_minio;
