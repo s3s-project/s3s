@@ -4,14 +4,12 @@ use super::smithy;
 use crate::declare_codegen;
 
 use std::collections::BTreeMap;
-use std::fs;
 use std::ops::Not;
 
 use heck::ToShoutySnakeCase;
 use regex::Regex;
+use s3s_model::error_codes;
 use scoped_writer::g;
-use serde::Deserialize;
-use serde::Serialize;
 use stdx::default::default;
 
 #[derive(Debug)]
@@ -125,33 +123,10 @@ fn collect_errors(model: &smithy::Model) -> Errors {
     errors
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct ErrorCode {
-    code: String,
-    description: String,
-    http_status_code: Option<u16>,
-}
-
 // https://github.com/Nugine/s3s/issues/224
 fn patch_extra_errors(errors: &mut Errors) {
-    // // https://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html#ReplicationErrorCodeList
-    // {
-    //     let code = "ReplicationConfigurationNotFoundError";
-    //     let desc = "There is no replication configuration for this bucket.";
-    //     let status = "404 Not Found";
-    //     errors.insert(
-    //         code.to_owned(),
-    //         Error {
-    //             code: code.to_owned(),
-    //             description: vec![Some(desc.to_owned())],
-    //             status: vec![Some(status.to_owned())],
-    //         },
-    //     );
-    // }
-
     {
-        let extra: BTreeMap<String, Vec<ErrorCode>> =
-            serde_json::from_str(fs::read_to_string("data/s3_error_codes.json").unwrap().as_str()).unwrap();
+        let extra = error_codes::load_json("data/s3_error_codes.json").unwrap();
 
         for group in extra.values() {
             for ec in group {
