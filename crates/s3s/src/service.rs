@@ -858,4 +858,79 @@ mod tests {
         let config = service.inner.config.snapshot();
         assert_eq!(config.xml_max_body_size, 10 * 1024 * 1024);
     }
+
+    #[test]
+    fn test_service_builder_set_auth() {
+        use crate::auth::SimpleAuth;
+
+        let mut builder = S3ServiceBuilder::new(MockS3);
+        builder.set_auth(SimpleAuth::from_single("AK", "SK"));
+        let service = builder.build();
+        assert!(service.inner.auth.is_some());
+    }
+
+    #[test]
+    fn test_service_builder_set_host() {
+        use crate::host::SingleDomain;
+
+        let mut builder = S3ServiceBuilder::new(MockS3);
+        builder.set_host(SingleDomain::new("s3.example.com").unwrap());
+        let service = builder.build();
+        assert!(service.inner.host.is_some());
+    }
+
+    #[test]
+    fn test_service_builder_set_route() {
+        use crate::route::S3Route;
+
+        #[derive(Clone)]
+        struct NoopRoute;
+        #[async_trait::async_trait]
+        impl S3Route for NoopRoute {
+            fn is_match(&self, _: &http::Method, _: &http::Uri, _: &http::HeaderMap, _: &mut http::Extensions) -> bool {
+                false
+            }
+            async fn call(&self, _: crate::S3Request<crate::Body>) -> crate::S3Result<crate::S3Response<crate::Body>> {
+                Err(crate::s3_error!(NotImplemented))
+            }
+        }
+
+        let mut builder = S3ServiceBuilder::new(MockS3);
+        builder.set_route(NoopRoute);
+        let service = builder.build();
+        assert!(service.inner.route.is_some());
+    }
+
+    #[test]
+    fn test_service_builder_set_access() {
+        use crate::access::{S3Access, S3AccessContext};
+
+        #[derive(Clone)]
+        struct AllowAll;
+        #[async_trait::async_trait]
+        impl S3Access for AllowAll {
+            async fn check(&self, _: &mut S3AccessContext<'_>) -> crate::S3Result<()> {
+                Ok(())
+            }
+        }
+
+        let mut builder = S3ServiceBuilder::new(MockS3);
+        builder.set_access(AllowAll);
+        let service = builder.build();
+        assert!(service.inner.access.is_some());
+    }
+
+    #[test]
+    fn test_service_debug() {
+        let service = S3ServiceBuilder::new(MockS3).build();
+        let dbg = format!("{service:?}");
+        assert!(dbg.contains("S3Service"));
+    }
+
+    #[test]
+    fn test_service_clone() {
+        let service = S3ServiceBuilder::new(MockS3).build();
+        let cloned = service.clone();
+        assert!(format!("{cloned:?}").contains("S3Service"));
+    }
 }
