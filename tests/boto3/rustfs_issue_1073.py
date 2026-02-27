@@ -27,6 +27,7 @@ ENDPOINT_URL = os.environ.get("AWS_ENDPOINT_URL", "http://localhost:8014")
 ACCESS_KEY = os.environ.get("AWS_ACCESS_KEY_ID", "AKEXAMPLES3S")
 SECRET_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "SKEXAMPLES3S")
 REGION = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
+REQUEST_TIMEOUT = 30  # seconds
 
 
 def make_client():
@@ -92,7 +93,12 @@ def test_success_action_status_200():
         )
 
         files = {"file": ("test.txt", b"hello world")}
-        resp = requests.post(presigned["url"], data=presigned["fields"], files=files)
+        resp = requests.post(
+            presigned["url"],
+            data=presigned["fields"],
+            files=files,
+            timeout=REQUEST_TIMEOUT,
+        )
 
         assert resp.status_code == 200, (
             f"Expected 200, got {resp.status_code}: {resp.text}"
@@ -118,7 +124,12 @@ def test_success_action_status_201():
         )
 
         files = {"file": ("test.txt", b"hello world")}
-        resp = requests.post(presigned["url"], data=presigned["fields"], files=files)
+        resp = requests.post(
+            presigned["url"],
+            data=presigned["fields"],
+            files=files,
+            timeout=REQUEST_TIMEOUT,
+        )
 
         assert resp.status_code == 201, (
             f"Expected 201, got {resp.status_code}: {resp.text}"
@@ -164,7 +175,12 @@ def test_success_action_status_204():
         )
 
         files = {"file": ("test.txt", b"hello world")}
-        resp = requests.post(presigned["url"], data=presigned["fields"], files=files)
+        resp = requests.post(
+            presigned["url"],
+            data=presigned["fields"],
+            files=files,
+            timeout=REQUEST_TIMEOUT,
+        )
 
         assert resp.status_code == 204, (
             f"Expected 204, got {resp.status_code}: {resp.text}"
@@ -185,7 +201,12 @@ def test_success_action_status_default():
         presigned = presigned_post_with_fields(client, bucket, key)
 
         files = {"file": ("test.txt", b"hello world")}
-        resp = requests.post(presigned["url"], data=presigned["fields"], files=files)
+        resp = requests.post(
+            presigned["url"],
+            data=presigned["fields"],
+            files=files,
+            timeout=REQUEST_TIMEOUT,
+        )
 
         assert resp.status_code == 204, (
             f"Expected 204 (default), got {resp.status_code}: {resp.text}"
@@ -217,6 +238,7 @@ def test_success_action_redirect():
             data=presigned["fields"],
             files=files,
             allow_redirects=False,
+            timeout=REQUEST_TIMEOUT,
         )
 
         assert resp.status_code == 303, (
@@ -257,7 +279,12 @@ def test_success_action_invalid_status():
         )
 
         files = {"file": ("test.txt", b"hello world")}
-        resp = requests.post(presigned["url"], data=presigned["fields"], files=files)
+        resp = requests.post(
+            presigned["url"],
+            data=presigned["fields"],
+            files=files,
+            timeout=REQUEST_TIMEOUT,
+        )
 
         assert resp.status_code == 204, (
             f"Expected 204 (fallback for invalid status), got {resp.status_code}: {resp.text}"
@@ -283,7 +310,12 @@ def test_form_field_not_in_policy_rejected():
         presigned["fields"]["success_action_status"] = "200"
 
         files = {"file": ("test.txt", b"hello world")}
-        resp = requests.post(presigned["url"], data=presigned["fields"], files=files)
+        resp = requests.post(
+            presigned["url"],
+            data=presigned["fields"],
+            files=files,
+            timeout=REQUEST_TIMEOUT,
+        )
 
         assert resp.status_code == 403, (
             f"Expected 403, got {resp.status_code}: {resp.text}"

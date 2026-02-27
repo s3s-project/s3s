@@ -126,8 +126,9 @@ impl PostPolicy {
         }
 
         // Check that every form field is covered by a policy condition.
-        // Per AWS docs, these fields are exempt:
+        // Per AWS SigV4 docs, these fields are exempt:
         //   x-amz-signature, file, submit, policy, and x-ignore-* fields.
+        // For SigV2 POSTs, we also exempt: signature and awsaccesskeyid.
         // See https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-HTTPPOSTConstructPolicy.html
         for (name, _) in multipart.fields() {
             if Self::is_field_exempt_from_policy(name) {
