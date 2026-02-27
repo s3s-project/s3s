@@ -37,7 +37,6 @@ pub struct Operation {
 
 pub type Operations = BTreeMap<String, Operation>;
 
-// TODO: handle these operations
 pub const SKIPPED_OPS: &[&str] = &[];
 
 pub fn collect_operations(model: &smithy::Model) -> Operations {
