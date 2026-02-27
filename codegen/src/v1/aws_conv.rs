@@ -291,6 +291,7 @@ fn has_unconditional_builder(name: &str) -> bool {
     matches!(
         name,
         "AnalyticsExportDestination"
+            | "CreateSessionOutput"
             | "InventoryDestination"
             | "RoutingRule"
             | "MetadataTableConfiguration"

@@ -512,7 +512,7 @@ fn collect_types_needing_serde(rust_types: &RustTypes) -> BTreeSet<String> {
     types_needing_serde
 }
 
-fn collect_types_needing_custom_default(rust_types: &RustTypes) -> BTreeSet<String> {
+fn collect_types_needing_custom_default(rust_types: &RustTypes, ops: &Operations) -> BTreeSet<String> {
     let mut types_needing_custom_default = BTreeSet::new();
 
     // Start with Configuration types that can't derive Default
@@ -523,6 +523,15 @@ fn collect_types_needing_custom_default(rust_types: &RustTypes) -> BTreeSet<Stri
         {
             // Add this type and all its struct dependencies
             collect_struct_dependencies(name, rust_types, &mut types_needing_custom_default);
+        }
+    }
+
+    // Also include operation output types that can't derive Default
+    for op in ops.values() {
+        if let Some(rust::Type::Struct(ty)) = rust_types.get(&op.output)
+            && !can_derive_default(ty, rust_types)
+        {
+            collect_struct_dependencies(&op.output, rust_types, &mut types_needing_custom_default);
         }
     }
 
@@ -603,7 +612,7 @@ pub fn codegen(rust_types: &RustTypes, ops: &Operations, patch: Option<Patch>) {
     let types_needing_serde = collect_types_needing_serde(rust_types);
 
     // Collect types that need custom Default implementations
-    let types_needing_custom_default = collect_types_needing_custom_default(rust_types);
+    let types_needing_custom_default = collect_types_needing_custom_default(rust_types, ops);
 
     g([
         "#![allow(clippy::empty_structs_with_brackets)]",

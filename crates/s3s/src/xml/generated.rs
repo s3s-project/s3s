@@ -30,6 +30,7 @@ use std::io::Write;
 //   Serialize: CreateBucketConfiguration
 // Deserialize: CreateBucketConfiguration
 //   Serialize: CreateMultipartUploadOutput
+//   Serialize: CreateSessionOutput
 //   Serialize: Delete
 // Deserialize: Delete
 //   Serialize: DeleteObjectsOutput
@@ -126,6 +127,8 @@ use std::io::Write;
 // DeserializeContent: AccessControlTranslation
 //   SerializeContent: AccessKeyIdType
 // DeserializeContent: AccessKeyIdType
+//   SerializeContent: AccessKeyIdValue
+// DeserializeContent: AccessKeyIdValue
 //   SerializeContent: AccessKeySecretType
 // DeserializeContent: AccessKeySecretType
 //   SerializeContent: AccessPointArn
@@ -238,6 +241,7 @@ use std::io::Write;
 //   SerializeContent: CreateBucketConfiguration
 // DeserializeContent: CreateBucketConfiguration
 //   SerializeContent: CreateMultipartUploadOutput
+//   SerializeContent: CreateSessionOutput
 //   SerializeContent: CreationDate
 // DeserializeContent: CreationDate
 //   SerializeContent: Credentials
@@ -728,6 +732,12 @@ use std::io::Write;
 // DeserializeContent: ServerSideEncryptionConfiguration
 //   SerializeContent: ServerSideEncryptionRule
 // DeserializeContent: ServerSideEncryptionRule
+//   SerializeContent: SessionCredentialValue
+// DeserializeContent: SessionCredentialValue
+//   SerializeContent: SessionCredentials
+// DeserializeContent: SessionCredentials
+//   SerializeContent: SessionExpiration
+// DeserializeContent: SessionExpiration
 //   SerializeContent: Setting
 // DeserializeContent: Setting
 //   SerializeContent: SimplePrefix
@@ -936,6 +946,12 @@ impl<'xml> Deserialize<'xml> for CreateBucketConfiguration {
 impl Serialize for CreateMultipartUploadOutput {
     fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         s.content_with_ns("InitiateMultipartUploadResult", XMLNS_S3, self)
+    }
+}
+
+impl Serialize for CreateSessionOutput {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content_with_ns("CreateSessionResult", XMLNS_S3, self)
     }
 }
 
@@ -3017,6 +3033,13 @@ impl SerializeContent for CreateMultipartUploadOutput {
         if let Some(ref val) = self.upload_id {
             s.content("UploadId", val)?;
         }
+        Ok(())
+    }
+}
+
+impl SerializeContent for CreateSessionOutput {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("Credentials", &self.credentials)?;
         Ok(())
     }
 }
@@ -9330,6 +9353,61 @@ impl<'xml> DeserializeContent<'xml> for ServerSideEncryptionRule {
         Ok(Self {
             apply_server_side_encryption_by_default,
             bucket_key_enabled,
+        })
+    }
+}
+impl SerializeContent for SessionCredentials {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("AccessKeyId", &self.access_key_id)?;
+        s.timestamp("Expiration", &self.expiration, TimestampFormat::DateTime)?;
+        s.content("SecretAccessKey", &self.secret_access_key)?;
+        s.content("SessionToken", &self.session_token)?;
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for SessionCredentials {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut access_key_id: Option<AccessKeyIdValue> = None;
+        let mut expiration: Option<SessionExpiration> = None;
+        let mut secret_access_key: Option<SessionCredentialValue> = None;
+        let mut session_token: Option<SessionCredentialValue> = None;
+        d.for_each_element(|d, x| match x {
+            b"AccessKeyId" => {
+                if access_key_id.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                access_key_id = Some(d.content()?);
+                Ok(())
+            }
+            b"Expiration" => {
+                if expiration.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                expiration = Some(d.timestamp(TimestampFormat::DateTime)?);
+                Ok(())
+            }
+            b"SecretAccessKey" => {
+                if secret_access_key.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                secret_access_key = Some(d.content()?);
+                Ok(())
+            }
+            b"SessionToken" => {
+                if session_token.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                session_token = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            access_key_id: access_key_id.ok_or(DeError::MissingField)?,
+            expiration: expiration.ok_or(DeError::MissingField)?,
+            secret_access_key: secret_access_key.ok_or(DeError::MissingField)?,
+            session_token: session_token.ok_or(DeError::MissingField)?,
         })
     }
 }
