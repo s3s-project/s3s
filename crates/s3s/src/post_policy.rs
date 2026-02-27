@@ -1,4 +1,7 @@
-//! POST Object Policy
+//! POST Object policy parsing and validation.
+//!
+//! A POST policy is a base64-encoded JSON document attached to a browser-based
+//! upload that restricts what the form fields may contain.
 //!
 //! See <https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-HTTPPOSTConstructPolicy.html>
 

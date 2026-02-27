@@ -1,3 +1,10 @@
+//! XML serialization and deserialization for S3 request and response bodies.
+//!
+//! This module provides the [`Serialize`] / [`SerializeContent`] traits and
+//! the corresponding [`Deserialize`] / [`DeserializeContent`] traits, together
+//! with [`Serializer`] and [`Deserializer`] implementations used to convert
+//! between Rust DTOs and the XML wire format required by the S3 REST API.
+
 #![allow(clippy::missing_errors_doc)] // TODO
 
 mod de;
@@ -136,5 +143,37 @@ mod tests {
         let expected = format!("\"{long_hash}\"");
         assert!(xml.contains(&expected), "Long ETag must use literal quotes; got: {xml}");
         assert!(!xml.contains("&quot;"), "Long ETag must not use &quot;; got: {xml}");
+    }
+
+    #[test]
+    fn create_session_output_xml_serialization() {
+        use crate::dto::{CreateSessionOutput, SessionCredentials, Timestamp, TimestampFormat};
+
+        let creds = SessionCredentials {
+            access_key_id: "AKIAIOSFODNN7EXAMPLE".to_owned(),
+            expiration: Timestamp::parse(TimestampFormat::DateTime, "2024-01-01T00:05:00.000Z").unwrap(),
+            secret_access_key: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".to_owned(),
+            session_token: "FwoGZXIvYXdzEBYaDHqa0A".to_owned(),
+        };
+
+        let output = CreateSessionOutput {
+            credentials: creds,
+            ..Default::default()
+        };
+
+        let mut buf = Vec::new();
+        let mut ser = Serializer::new(Cursor::new(&mut buf));
+        output.serialize(&mut ser).unwrap();
+        let xml = String::from_utf8(buf).unwrap();
+
+        assert!(xml.contains("CreateSessionResult"), "root element must be CreateSessionResult: {xml}");
+        assert!(xml.contains("<Credentials>"), "must contain Credentials element: {xml}");
+        assert!(
+            xml.contains("<AccessKeyId>AKIAIOSFODNN7EXAMPLE</AccessKeyId>"),
+            "must contain AccessKeyId: {xml}"
+        );
+        assert!(xml.contains("<SecretAccessKey>"), "must contain SecretAccessKey: {xml}");
+        assert!(xml.contains("<SessionToken>"), "must contain SessionToken: {xml}");
+        assert!(xml.contains("<Expiration>"), "must contain Expiration: {xml}");
     }
 }

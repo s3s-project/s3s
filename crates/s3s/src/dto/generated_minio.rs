@@ -3715,6 +3715,131 @@ impl fmt::Debug for CreateMultipartUploadOutput {
     }
 }
 
+#[derive(Clone, Default, PartialEq)]
+pub struct CreateSessionInput {
+    /// <p>The name of the bucket that you create a session for.</p>
+    pub bucket: BucketName,
+    /// <p>Specifies whether Amazon S3 should use an S3 Bucket Key for object encryption with
+    /// server-side encryption using KMS keys (SSE-KMS).</p>
+    /// <p>S3 Bucket Keys are always enabled for <code>GET</code> and <code>PUT</code> operations in a directory bucket and can’t be disabled. S3 Bucket Keys aren't supported, when you copy SSE-KMS encrypted objects from general purpose buckets  
+    /// to directory buckets, from directory buckets to general purpose buckets, or between directory buckets, through <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_CopyObject.html">CopyObject</a>, <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_UploadPartCopy.html">UploadPartCopy</a>, <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/directory-buckets-objects-Batch-Ops">the Copy operation in Batch Operations</a>, or
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/create-import-job">the import jobs</a>. In this case, Amazon S3 makes a call to KMS every time a copy request is made for a KMS-encrypted object.</p>
+    pub bucket_key_enabled: Option<BucketKeyEnabled>,
+    /// <p>Specifies the Amazon Web Services KMS Encryption Context as an additional encryption context to use for object encryption. The value of
+    /// this header is a Base64 encoded string of a UTF-8 encoded JSON, which contains the encryption context as key-value pairs.
+    /// This value is stored as object metadata and automatically gets passed on
+    /// to Amazon Web Services KMS for future <code>GetObject</code> operations on
+    /// this object.</p>
+    /// <p>
+    /// <b>General purpose buckets</b> - This value must be explicitly added during <code>CopyObject</code> operations if you want an additional encryption context for your object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingKMSEncryption.html#encryption-context">Encryption context</a> in the <i>Amazon S3 User Guide</i>.</p>
+    /// <p>
+    /// <b>Directory buckets</b> - You can optionally provide an explicit encryption context value. The value must match the default encryption context - the bucket Amazon Resource Name (ARN). An additional encryption context value is not supported. </p>
+    pub ssekms_encryption_context: Option<SSEKMSEncryptionContext>,
+    /// <p>If you specify <code>x-amz-server-side-encryption</code> with <code>aws:kms</code>, you must specify the <code>
+    /// x-amz-server-side-encryption-aws-kms-key-id</code> header with the ID (Key ID or Key ARN) of the KMS
+    /// symmetric encryption customer managed key to use. Otherwise, you get an HTTP <code>400 Bad Request</code> error. Only use the key ID or key ARN. The key alias format of the KMS key isn't supported. Also, if the KMS key doesn't exist in the same
+    /// account that't issuing the command, you must use the full Key ARN not the Key ID. </p>
+    /// <p>Your SSE-KMS configuration can only support 1 <a href="https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#customer-cmk">customer managed key</a> per directory bucket's lifetime.
+    /// The <a href="https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#aws-managed-cmk">Amazon Web Services managed key</a> (<code>aws/s3</code>) isn't supported.
+    /// </p>
+    pub ssekms_key_id: Option<SSEKMSKeyId>,
+    /// <p>The server-side encryption algorithm to use when you store objects in the directory bucket.</p>
+    /// <p>For directory buckets, there are only two supported options for server-side encryption: server-side encryption with Amazon S3 managed keys (SSE-S3) (<code>AES256</code>) and server-side encryption with KMS keys (SSE-KMS) (<code>aws:kms</code>). By default, Amazon S3 encrypts data with SSE-S3.
+    /// For more
+    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/serv-side-encryption.html">Protecting data with server-side encryption</a> in the <i>Amazon S3 User Guide</i>.</p>
+    pub server_side_encryption: Option<ServerSideEncryption>,
+    /// <p>Specifies the mode of the session that will be created, either <code>ReadWrite</code> or
+    /// <code>ReadOnly</code>. By default, a <code>ReadWrite</code> session is created. A
+    /// <code>ReadWrite</code> session is capable of executing all the Zonal endpoint API operations on a
+    /// directory bucket. A <code>ReadOnly</code> session is constrained to execute the following
+    /// Zonal endpoint API operations: <code>GetObject</code>, <code>HeadObject</code>, <code>ListObjectsV2</code>,
+    /// <code>GetObjectAttributes</code>, <code>ListParts</code>, and
+    /// <code>ListMultipartUploads</code>.</p>
+    pub session_mode: Option<SessionMode>,
+}
+
+impl fmt::Debug for CreateSessionInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("CreateSessionInput");
+        d.field("bucket", &self.bucket);
+        if let Some(ref val) = self.bucket_key_enabled {
+            d.field("bucket_key_enabled", val);
+        }
+        if let Some(ref val) = self.ssekms_encryption_context {
+            d.field("ssekms_encryption_context", val);
+        }
+        if let Some(ref val) = self.ssekms_key_id {
+            d.field("ssekms_key_id", val);
+        }
+        if let Some(ref val) = self.server_side_encryption {
+            d.field("server_side_encryption", val);
+        }
+        if let Some(ref val) = self.session_mode {
+            d.field("session_mode", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+
+impl CreateSessionInput {
+    #[must_use]
+    pub fn builder() -> builders::CreateSessionInputBuilder {
+        default()
+    }
+}
+
+#[derive(Clone, PartialEq)]
+pub struct CreateSessionOutput {
+    /// <p>Indicates whether to use an S3 Bucket Key for server-side encryption
+    /// with KMS keys (SSE-KMS).</p>
+    pub bucket_key_enabled: Option<BucketKeyEnabled>,
+    /// <p>The established temporary security credentials for the created session.</p>
+    pub credentials: SessionCredentials,
+    /// <p>If present, indicates the Amazon Web Services KMS Encryption Context to use for object encryption. The value of
+    /// this header is a Base64 encoded string of a UTF-8 encoded JSON, which contains the encryption context as key-value pairs.
+    /// This value is stored as object metadata and automatically gets
+    /// passed on to Amazon Web Services KMS for future <code>GetObject</code>
+    /// operations on this object.</p>
+    pub ssekms_encryption_context: Option<SSEKMSEncryptionContext>,
+    /// <p>If you specify <code>x-amz-server-side-encryption</code> with <code>aws:kms</code>, this header indicates the ID of the KMS
+    /// symmetric encryption customer managed key that was used for object encryption.</p>
+    pub ssekms_key_id: Option<SSEKMSKeyId>,
+    /// <p>The server-side encryption algorithm used when you store objects in the directory bucket.</p>
+    pub server_side_encryption: Option<ServerSideEncryption>,
+}
+
+impl fmt::Debug for CreateSessionOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("CreateSessionOutput");
+        if let Some(ref val) = self.bucket_key_enabled {
+            d.field("bucket_key_enabled", val);
+        }
+        d.field("credentials", &self.credentials);
+        if let Some(ref val) = self.ssekms_encryption_context {
+            d.field("ssekms_encryption_context", val);
+        }
+        if let Some(ref val) = self.ssekms_key_id {
+            d.field("ssekms_key_id", val);
+        }
+        if let Some(ref val) = self.server_side_encryption {
+            d.field("server_side_encryption", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+
+impl Default for CreateSessionOutput {
+    fn default() -> Self {
+        Self {
+            bucket_key_enabled: None,
+            credentials: default(),
+            ssekms_encryption_context: None,
+            ssekms_key_id: None,
+            server_side_encryption: None,
+        }
+    }
+}
+
 pub type CreationDate = Timestamp;
 
 /// <p>Amazon Web Services credentials for API authentication.</p>
@@ -20146,6 +20271,17 @@ impl fmt::Debug for SessionCredentials {
     }
 }
 
+impl Default for SessionCredentials {
+    fn default() -> Self {
+        Self {
+            access_key_id: default(),
+            expiration: default(),
+            secret_access_key: default(),
+            session_token: default(),
+        }
+    }
+}
+
 pub type SessionExpiration = Timestamp;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -21930,6 +22066,7 @@ mod tests {
         require_default::<CreateBucketOutput>();
         require_default::<CreateBucketMetadataTableConfigurationOutput>();
         require_default::<CreateMultipartUploadOutput>();
+        require_default::<CreateSessionOutput>();
         require_default::<DeleteBucketOutput>();
         require_default::<DeleteBucketAnalyticsConfigurationOutput>();
         require_default::<DeleteBucketCorsOutput>();
@@ -22035,6 +22172,8 @@ mod tests {
         require_clone::<CreateBucketMetadataTableConfigurationOutput>();
         require_clone::<CreateMultipartUploadInput>();
         require_clone::<CreateMultipartUploadOutput>();
+        require_clone::<CreateSessionInput>();
+        require_clone::<CreateSessionOutput>();
         require_clone::<DeleteBucketInput>();
         require_clone::<DeleteBucketOutput>();
         require_clone::<DeleteBucketAnalyticsConfigurationInput>();
@@ -23977,6 +24116,107 @@ pub mod builders {
                 tagging,
                 version_id,
                 website_redirect_location,
+            })
+        }
+    }
+
+    /// A builder for [`CreateSessionInput`]
+    #[derive(Default)]
+    pub struct CreateSessionInputBuilder {
+        bucket: Option<BucketName>,
+
+        bucket_key_enabled: Option<BucketKeyEnabled>,
+
+        ssekms_encryption_context: Option<SSEKMSEncryptionContext>,
+
+        ssekms_key_id: Option<SSEKMSKeyId>,
+
+        server_side_encryption: Option<ServerSideEncryption>,
+
+        session_mode: Option<SessionMode>,
+    }
+
+    impl CreateSessionInputBuilder {
+        pub fn set_bucket(&mut self, field: BucketName) -> &mut Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        pub fn set_bucket_key_enabled(&mut self, field: Option<BucketKeyEnabled>) -> &mut Self {
+            self.bucket_key_enabled = field;
+            self
+        }
+
+        pub fn set_ssekms_encryption_context(&mut self, field: Option<SSEKMSEncryptionContext>) -> &mut Self {
+            self.ssekms_encryption_context = field;
+            self
+        }
+
+        pub fn set_ssekms_key_id(&mut self, field: Option<SSEKMSKeyId>) -> &mut Self {
+            self.ssekms_key_id = field;
+            self
+        }
+
+        pub fn set_server_side_encryption(&mut self, field: Option<ServerSideEncryption>) -> &mut Self {
+            self.server_side_encryption = field;
+            self
+        }
+
+        pub fn set_session_mode(&mut self, field: Option<SessionMode>) -> &mut Self {
+            self.session_mode = field;
+            self
+        }
+
+        #[must_use]
+        pub fn bucket(mut self, field: BucketName) -> Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn bucket_key_enabled(mut self, field: Option<BucketKeyEnabled>) -> Self {
+            self.bucket_key_enabled = field;
+            self
+        }
+
+        #[must_use]
+        pub fn ssekms_encryption_context(mut self, field: Option<SSEKMSEncryptionContext>) -> Self {
+            self.ssekms_encryption_context = field;
+            self
+        }
+
+        #[must_use]
+        pub fn ssekms_key_id(mut self, field: Option<SSEKMSKeyId>) -> Self {
+            self.ssekms_key_id = field;
+            self
+        }
+
+        #[must_use]
+        pub fn server_side_encryption(mut self, field: Option<ServerSideEncryption>) -> Self {
+            self.server_side_encryption = field;
+            self
+        }
+
+        #[must_use]
+        pub fn session_mode(mut self, field: Option<SessionMode>) -> Self {
+            self.session_mode = field;
+            self
+        }
+
+        pub fn build(self) -> Result<CreateSessionInput, BuildError> {
+            let bucket = self.bucket.ok_or_else(|| BuildError::missing_field("bucket"))?;
+            let bucket_key_enabled = self.bucket_key_enabled;
+            let ssekms_encryption_context = self.ssekms_encryption_context;
+            let ssekms_key_id = self.ssekms_key_id;
+            let server_side_encryption = self.server_side_encryption;
+            let session_mode = self.session_mode;
+            Ok(CreateSessionInput {
+                bucket,
+                bucket_key_enabled,
+                ssekms_encryption_context,
+                ssekms_key_id,
+                server_side_encryption,
+                session_mode,
             })
         }
     }
@@ -34285,6 +34525,42 @@ impl DtoExt for CreateMultipartUploadOutput {
         }
         if self.upload_id.as_deref() == Some("") {
             self.upload_id = None;
+        }
+    }
+}
+impl DtoExt for CreateSessionInput {
+    fn ignore_empty_strings(&mut self) {
+        if self.ssekms_encryption_context.as_deref() == Some("") {
+            self.ssekms_encryption_context = None;
+        }
+        if self.ssekms_key_id.as_deref() == Some("") {
+            self.ssekms_key_id = None;
+        }
+        if let Some(ref val) = self.server_side_encryption
+            && val.as_str() == ""
+        {
+            self.server_side_encryption = None;
+        }
+        if let Some(ref val) = self.session_mode
+            && val.as_str() == ""
+        {
+            self.session_mode = None;
+        }
+    }
+}
+impl DtoExt for CreateSessionOutput {
+    fn ignore_empty_strings(&mut self) {
+        self.credentials.ignore_empty_strings();
+        if self.ssekms_encryption_context.as_deref() == Some("") {
+            self.ssekms_encryption_context = None;
+        }
+        if self.ssekms_key_id.as_deref() == Some("") {
+            self.ssekms_key_id = None;
+        }
+        if let Some(ref val) = self.server_side_encryption
+            && val.as_str() == ""
+        {
+            self.server_side_encryption = None;
         }
     }
 }

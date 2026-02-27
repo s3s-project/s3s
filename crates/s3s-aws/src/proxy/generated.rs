@@ -242,6 +242,32 @@ impl S3 for Proxy {
     }
 
     #[tracing::instrument(skip(self, req))]
+    async fn create_session(
+        &self,
+        req: S3Request<s3s::dto::CreateSessionInput>,
+    ) -> S3Result<S3Response<s3s::dto::CreateSessionOutput>> {
+        let input = req.input;
+        debug!(?input);
+        let mut b = self.0.create_session();
+        b = b.set_bucket(Some(try_into_aws(input.bucket)?));
+        b = b.set_bucket_key_enabled(try_into_aws(input.bucket_key_enabled)?);
+        b = b.set_ssekms_encryption_context(try_into_aws(input.ssekms_encryption_context)?);
+        b = b.set_ssekms_key_id(try_into_aws(input.ssekms_key_id)?);
+        b = b.set_server_side_encryption(try_into_aws(input.server_side_encryption)?);
+        b = b.set_session_mode(try_into_aws(input.session_mode)?);
+        let result = b.send().await;
+        match result {
+            Ok(output) => {
+                let headers = super::meta::build_headers(&output)?;
+                let output = try_from_aws(output)?;
+                debug!(?output);
+                Ok(S3Response::with_headers(output, headers))
+            }
+            Err(e) => Err(wrap_sdk_error!(e)),
+        }
+    }
+
+    #[tracing::instrument(skip(self, req))]
     async fn delete_bucket(
         &self,
         req: S3Request<s3s::dto::DeleteBucketInput>,

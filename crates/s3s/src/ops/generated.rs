@@ -6,6 +6,7 @@
 // CreateBucket
 // CreateBucketMetadataTableConfiguration
 // CreateMultipartUpload
+// CreateSession
 // DeleteBucket
 // DeleteBucketAnalyticsConfiguration
 // DeleteBucketCors
@@ -284,6 +285,16 @@ impl http::TryIntoHeaderValue for ServerSideEncryption {
     }
 }
 
+impl http::TryIntoHeaderValue for SessionMode {
+    type Error = http::InvalidHeaderValue;
+    fn try_into_header_value(self) -> Result<http::HeaderValue, Self::Error> {
+        match Cow::from(self) {
+            Cow::Borrowed(s) => http::HeaderValue::try_from(s),
+            Cow::Owned(s) => http::HeaderValue::try_from(s),
+        }
+    }
+}
+
 impl http::TryIntoHeaderValue for StorageClass {
     type Error = http::InvalidHeaderValue;
     fn try_into_header_value(self) -> Result<http::HeaderValue, Self::Error> {
@@ -443,6 +454,14 @@ impl http::TryFromHeaderValue for RequestPayer {
 }
 
 impl http::TryFromHeaderValue for ServerSideEncryption {
+    type Error = http::ParseHeaderError;
+    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
+        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
+        Ok(Self::from(val.to_owned()))
+    }
+}
+
+impl http::TryFromHeaderValue for SessionMode {
     type Error = http::ParseHeaderError;
     fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
         let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
@@ -1073,6 +1092,70 @@ impl super::Operation for CreateMultipartUpload {
             access.create_multipart_upload(&mut s3_req).await?;
         }
         let result = s3.create_multipart_upload(s3_req).await;
+        let s3_resp = match result {
+            Ok(val) => val,
+            Err(err) => return super::serialize_error(err, false),
+        };
+        let mut resp = Self::serialize_http(s3_resp.output)?;
+        resp.headers.extend(s3_resp.headers);
+        resp.extensions.extend(s3_resp.extensions);
+        Ok(resp)
+    }
+}
+
+pub struct CreateSession;
+
+impl CreateSession {
+    pub fn deserialize_http(req: &mut http::Request) -> S3Result<CreateSessionInput> {
+        let bucket = http::unwrap_bucket(req);
+
+        let bucket_key_enabled: Option<BucketKeyEnabled> =
+            http::parse_opt_header(req, &X_AMZ_SERVER_SIDE_ENCRYPTION_BUCKET_KEY_ENABLED)?;
+
+        let ssekms_encryption_context: Option<SSEKMSEncryptionContext> =
+            http::parse_opt_header(req, &X_AMZ_SERVER_SIDE_ENCRYPTION_CONTEXT)?;
+
+        let ssekms_key_id: Option<SSEKMSKeyId> = http::parse_opt_header(req, &X_AMZ_SERVER_SIDE_ENCRYPTION_AWS_KMS_KEY_ID)?;
+
+        let server_side_encryption: Option<ServerSideEncryption> = http::parse_opt_header(req, &X_AMZ_SERVER_SIDE_ENCRYPTION)?;
+
+        let session_mode: Option<SessionMode> = http::parse_opt_header(req, &X_AMZ_CREATE_SESSION_MODE)?;
+
+        Ok(CreateSessionInput {
+            bucket,
+            bucket_key_enabled,
+            ssekms_encryption_context,
+            ssekms_key_id,
+            server_side_encryption,
+            session_mode,
+        })
+    }
+
+    pub fn serialize_http(x: CreateSessionOutput) -> S3Result<http::Response> {
+        let mut res = http::Response::with_status(http::StatusCode::OK);
+        http::set_xml_body(&mut res, &x)?;
+        http::add_opt_header(&mut res, X_AMZ_SERVER_SIDE_ENCRYPTION_BUCKET_KEY_ENABLED, x.bucket_key_enabled)?;
+        http::add_opt_header(&mut res, X_AMZ_SERVER_SIDE_ENCRYPTION_CONTEXT, x.ssekms_encryption_context)?;
+        http::add_opt_header(&mut res, X_AMZ_SERVER_SIDE_ENCRYPTION_AWS_KMS_KEY_ID, x.ssekms_key_id)?;
+        http::add_opt_header(&mut res, X_AMZ_SERVER_SIDE_ENCRYPTION, x.server_side_encryption)?;
+        Ok(res)
+    }
+}
+
+#[async_trait::async_trait]
+impl super::Operation for CreateSession {
+    fn name(&self) -> &'static str {
+        "CreateSession"
+    }
+
+    async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
+        let input = Self::deserialize_http(req)?;
+        let mut s3_req = super::build_s3_request(input, req);
+        let s3 = ccx.s3;
+        if let Some(access) = ccx.access {
+            access.create_session(&mut s3_req).await?;
+        }
+        let result = s3.create_session(s3_req).await;
         let s3_resp = match result {
             Ok(val) => val,
             Err(err) => return super::serialize_error(err, false),
@@ -6710,6 +6793,9 @@ pub fn resolve_route(
                     }
                     if qs.has("metrics") && qs.has("id") {
                         return Ok((&GetBucketMetricsConfiguration as &'static dyn super::Operation, false));
+                    }
+                    if qs.has("session") {
+                        return Ok((&CreateSession as &'static dyn super::Operation, false));
                     }
                     if qs.has("accelerate") {
                         return Ok((&GetBucketAccelerateConfiguration as &'static dyn super::Operation, false));

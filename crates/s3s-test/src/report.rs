@@ -40,6 +40,7 @@ pub struct CaseReport {
     pub name: String,
 
     pub passed: bool,
+    pub ignored: bool,
     pub duration_ns: u64,
     pub duration_ms: f64,
 
@@ -58,12 +59,13 @@ pub struct CountSummary {
     pub total: u64,
     pub passed: u64,
     pub failed: u64,
+    pub ignored: u64,
 }
 
 impl CountSummary {
     #[must_use]
     pub fn all_passed(&self) -> bool {
-        self.passed == self.total
+        self.failed == 0
     }
 }
 

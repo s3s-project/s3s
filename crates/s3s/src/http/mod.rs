@@ -1,3 +1,8 @@
+//! HTTP layer types and utilities used internally by the S3 service.
+//!
+//! Contains request and response wrappers, body types, query-string and header
+//! helpers, multipart-form parsing, and the AWS chunked-upload stream decoder.
+
 mod ser;
 pub use self::ser::*;
 

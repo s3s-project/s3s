@@ -1,3 +1,9 @@
+//! Byte-stream types for S3 request and response bodies.
+//!
+//! This module defines the [`ByteStream`] trait, the [`DynByteStream`] type
+//! alias for heap-allocated streams, and [`RemainingLength`] which
+//! communicates a known or estimated byte count remaining in a stream.
+
 use crate::error::StdError;
 
 use std::collections::VecDeque;
@@ -179,5 +185,171 @@ impl Stream for VecByteStream {
 impl ByteStream for VecByteStream {
     fn remaining_length(&self) -> RemainingLength {
         RemainingLength::new_exact(self.remaining_bytes)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use futures::StreamExt;
+
+    // --- RemainingLength tests ---
+
+    #[test]
+    fn remaining_length_unknown() {
+        let rl = RemainingLength::unknown();
+        assert_eq!(rl.exact(), None);
+        assert_eq!(format!("{rl:?}"), "(0..)");
+    }
+
+    #[test]
+    fn remaining_length_exact() {
+        let rl = RemainingLength::new_exact(42);
+        assert_eq!(rl.exact(), Some(42));
+        assert_eq!(format!("{rl:?}"), "42");
+    }
+
+    #[test]
+    fn remaining_length_range() {
+        let rl = RemainingLength::new(10, Some(20));
+        assert_eq!(rl.exact(), None);
+        assert_eq!(format!("{rl:?}"), "(10..=20)");
+    }
+
+    #[test]
+    fn remaining_length_lower_only() {
+        let rl = RemainingLength::new(5, None);
+        assert_eq!(rl.exact(), None);
+        assert_eq!(format!("{rl:?}"), "(5..)");
+    }
+
+    #[test]
+    #[should_panic(expected = "lower <= upper")]
+    fn remaining_length_invalid() {
+        let _ = RemainingLength::new(20, Some(10));
+    }
+
+    #[test]
+    fn remaining_length_into_size_hint() {
+        let rl = RemainingLength::new(10, Some(20));
+        let sh: http_body::SizeHint = rl.into();
+        assert_eq!(sh.lower(), 10);
+        assert_eq!(sh.upper(), Some(20));
+    }
+
+    #[test]
+    fn remaining_length_from_size_hint() {
+        let mut sh = http_body::SizeHint::new();
+        sh.set_lower(5);
+        sh.set_upper(15);
+        let rl: RemainingLength = sh.into();
+        assert_eq!(rl.exact(), None);
+        assert_eq!(format!("{rl:?}"), "(5..=15)");
+    }
+
+    #[test]
+    fn remaining_length_from_size_hint_no_upper() {
+        let sh = http_body::SizeHint::new();
+        let rl: RemainingLength = sh.into();
+        assert_eq!(rl.exact(), None);
+    }
+
+    // --- VecByteStream tests ---
+
+    #[tokio::test]
+    async fn vec_byte_stream_empty() {
+        let mut s = VecByteStream::new(vec![]);
+        assert_eq!(s.exact_remaining_length(), 0);
+        assert_eq!(s.remaining_length().exact(), Some(0));
+        let (lo, hi) = s.size_hint();
+        assert_eq!(lo, 0);
+        assert_eq!(hi, Some(0));
+        assert!(s.next().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn vec_byte_stream_single_chunk() {
+        let data = Bytes::from_static(b"hello");
+        let mut s = VecByteStream::new(vec![data.clone()]);
+        assert_eq!(s.exact_remaining_length(), 5);
+        let item = s.next().await.unwrap().unwrap();
+        assert_eq!(item, data);
+        assert_eq!(s.exact_remaining_length(), 0);
+        assert!(s.next().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn vec_byte_stream_multiple_chunks() {
+        let c1 = Bytes::from_static(b"ab");
+        let c2 = Bytes::from_static(b"cde");
+        let mut s = VecByteStream::new(vec![c1.clone(), c2.clone()]);
+        assert_eq!(s.exact_remaining_length(), 5);
+
+        let (lo, hi) = s.size_hint();
+        assert_eq!(lo, 2);
+        assert_eq!(hi, Some(2));
+
+        let item1 = s.next().await.unwrap().unwrap();
+        assert_eq!(item1, c1);
+        assert_eq!(s.exact_remaining_length(), 3);
+
+        let item2 = s.next().await.unwrap().unwrap();
+        assert_eq!(item2, c2);
+        assert_eq!(s.exact_remaining_length(), 0);
+
+        assert!(s.next().await.is_none());
+    }
+
+    // --- into_dyn / Wrapper tests ---
+
+    // A concrete-error ByteStream for testing `into_dyn`
+    struct TestByteStream(VecDeque<Bytes>);
+
+    impl Stream for TestByteStream {
+        type Item = Result<Bytes, std::io::Error>;
+        fn poll_next(mut self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+            Poll::Ready(self.0.pop_front().map(Ok))
+        }
+        fn size_hint(&self) -> (usize, Option<usize>) {
+            let n = self.0.len();
+            (n, Some(n))
+        }
+    }
+
+    impl ByteStream for TestByteStream {
+        fn remaining_length(&self) -> RemainingLength {
+            let total: usize = self.0.iter().map(Bytes::len).sum();
+            RemainingLength::new_exact(total)
+        }
+    }
+
+    #[tokio::test]
+    async fn into_dyn_stream() {
+        let mut q = VecDeque::new();
+        q.push_back(Bytes::from_static(b"test"));
+        let mut ds = into_dyn(TestByteStream(q));
+        let item = ds.next().await.unwrap().unwrap();
+        assert_eq!(item, Bytes::from_static(b"test"));
+        assert!(ds.next().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn into_dyn_remaining_length() {
+        let mut q = VecDeque::new();
+        q.push_back(Bytes::from_static(b"abc"));
+        let ds = into_dyn(TestByteStream(q));
+        assert_eq!(ds.remaining_length().exact(), Some(3));
+    }
+
+    #[tokio::test]
+    async fn into_dyn_size_hint() {
+        let mut q = VecDeque::new();
+        q.push_back(Bytes::from_static(b"a"));
+        q.push_back(Bytes::from_static(b"b"));
+        let ds = into_dyn(TestByteStream(q));
+        let (lo, hi) = ds.size_hint();
+        assert_eq!(lo, 2);
+        assert_eq!(hi, Some(2));
     }
 }

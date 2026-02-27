@@ -4,13 +4,19 @@
 use crate::report::*;
 use crate::tcx::*;
 
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Instant;
 
 use tokio::spawn;
+use tokio::task::JoinHandle;
 use tracing::Instrument;
 use tracing::info;
+use tracing::info_span;
 use tracing::instrument;
+
+type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 macro_rules! run_fn {
     ($call:expr) => {{
@@ -54,10 +60,36 @@ fn count(total: u64, iter: impl IntoIterator<Item = bool>) -> CountSummary {
             failed += 1;
         }
     }
-    CountSummary { total, passed, failed }
+    CountSummary {
+        total,
+        passed,
+        failed,
+        ignored: 0,
+    }
 }
 
-pub async fn run(tcx: &mut TestContext) -> Report {
+fn count_cases(total: u64, iter: impl IntoIterator<Item = (bool, bool)>) -> CountSummary {
+    let mut passed = 0;
+    let mut failed = 0;
+    let mut ignored = 0;
+    for (p, i) in iter {
+        if i {
+            ignored += 1;
+        } else if p {
+            passed += 1;
+        } else {
+            failed += 1;
+        }
+    }
+    CountSummary {
+        total,
+        passed,
+        failed,
+        ignored,
+    }
+}
+
+pub async fn run(tcx: &mut TestContext, concurrent: bool) -> Report {
     let total_suites = tcx.suites.len();
     info!(total_suites, "Test start");
 
@@ -66,7 +98,7 @@ pub async fn run(tcx: &mut TestContext) -> Report {
     let t0 = Instant::now();
 
     for suite in tcx.suites.values() {
-        let report = run_suite(suite).await;
+        let report = run_suite(suite, concurrent).await;
         suites.push(report);
     }
 
@@ -84,7 +116,7 @@ pub async fn run(tcx: &mut TestContext) -> Report {
 }
 
 #[instrument(skip(suite), fields(name = suite.name))]
-async fn run_suite(suite: &SuiteInfo) -> SuiteReport {
+async fn run_suite(suite: &SuiteInfo, concurrent: bool) -> SuiteReport {
     let total_fixtures = suite.fixtures.len();
     info!(total_fixtures, "Test suite start");
 
@@ -100,7 +132,7 @@ async fn run_suite(suite: &SuiteInfo) -> SuiteReport {
         let Ok(Ok(suite_data)) = result else { break 'run };
 
         for fixture in suite.fixtures.values() {
-            let report = run_fixture(fixture, &suite_data).await;
+            let report = run_fixture(fixture, &suite_data, concurrent).await;
             fixtures.push(report);
         }
 
@@ -124,8 +156,69 @@ async fn run_suite(suite: &SuiteInfo) -> SuiteReport {
     }
 }
 
+enum CaseHandle {
+    Ignored(CaseReport),
+    Running(JoinHandle<CaseReport>),
+}
+
+#[allow(clippy::similar_names)]
+async fn run_case(case_name: String, case_future: BoxFuture<'static, crate::Result>) -> CaseReport {
+    info!("Test case start");
+    let t0 = Instant::now();
+
+    let result = spawn(case_future.in_current_span()).await;
+    let elapsed_ns = t0.elapsed().as_nanos() as u64;
+    let elapsed_ms = elapsed_ns as f64 / 1e6;
+
+    let summary = match result {
+        Ok(Ok(())) => FnSummary {
+            result: FnResult::Ok,
+            duration_ns: elapsed_ns,
+            duration_ms: elapsed_ms,
+        },
+        Ok(Err(ref e)) => FnSummary {
+            result: FnResult::Err(e.to_string()),
+            duration_ns: elapsed_ns,
+            duration_ms: elapsed_ms,
+        },
+        Err(ref e) if e.is_panic() => FnSummary {
+            result: FnResult::Panicked,
+            duration_ns: elapsed_ns,
+            duration_ms: elapsed_ms,
+        },
+        Err(ref e) => FnSummary {
+            result: FnResult::Err(e.to_string()),
+            duration_ns: elapsed_ns,
+            duration_ms: elapsed_ms,
+        },
+    };
+
+    info!(?summary, "Test case end");
+    let passed = summary.result.is_ok();
+
+    CaseReport {
+        name: case_name,
+        passed,
+        ignored: false,
+        duration_ns: elapsed_ns,
+        duration_ms: elapsed_ms,
+        run: Some(summary),
+    }
+}
+
+fn ignored_report(case: &CaseInfo) -> CaseReport {
+    CaseReport {
+        name: case.name.clone(),
+        passed: true,
+        ignored: true,
+        duration_ns: 0,
+        duration_ms: 0.0,
+        run: None,
+    }
+}
+
 #[instrument(skip(fixture, suite_data), fields(name = fixture.name))]
-async fn run_fixture(fixture: &FixtureInfo, suite_data: &ArcAny) -> FixtureReport {
+async fn run_fixture(fixture: &FixtureInfo, suite_data: &ArcAny, concurrent: bool) -> FixtureReport {
     let total_cases = fixture.cases.len();
     info!(total_cases, "Test fixture start");
 
@@ -141,9 +234,56 @@ async fn run_fixture(fixture: &FixtureInfo, suite_data: &ArcAny) -> FixtureRepor
         setup_summary = Some(summary);
         let Ok(Ok(fixture_data)) = result else { break 'run };
 
-        for case in fixture.cases.values() {
-            let report = run_case(case, &fixture_data).await;
-            cases.push(report);
+        if concurrent {
+            let mut handles: Vec<CaseHandle> = Vec::with_capacity(fixture.cases.len());
+
+            for case in fixture.cases.values() {
+                if case.tags.contains(&CaseTag::Ignored) {
+                    info!(name = case.name, "Test case ignored");
+                    handles.push(CaseHandle::Ignored(ignored_report(case)));
+                    continue;
+                }
+
+                let case_name = case.name.clone();
+                let case_future = (case.run)(Arc::clone(&fixture_data));
+                let span = info_span!("case", name = case_name.as_str());
+
+                let handle = spawn(run_case(case_name, case_future).instrument(span));
+                handles.push(CaseHandle::Running(handle));
+            }
+
+            for handle in handles {
+                cases.push(match handle {
+                    CaseHandle::Ignored(report) => report,
+                    CaseHandle::Running(h) => h.await.unwrap_or_else(|_| CaseReport {
+                        name: String::from("<unknown>"),
+                        passed: false,
+                        ignored: false,
+                        duration_ns: 0,
+                        duration_ms: 0.0,
+                        run: Some(FnSummary {
+                            result: FnResult::Panicked,
+                            duration_ns: 0,
+                            duration_ms: 0.0,
+                        }),
+                    }),
+                });
+            }
+        } else {
+            for case in fixture.cases.values() {
+                if case.tags.contains(&CaseTag::Ignored) {
+                    info!(name = case.name, "Test case ignored");
+                    cases.push(ignored_report(case));
+                    continue;
+                }
+
+                let case_name = case.name.clone();
+                let case_future = (case.run)(Arc::clone(&fixture_data));
+                let span = info_span!("case", name = case_name.as_str());
+
+                let report = run_case(case_name, case_future).instrument(span).await;
+                cases.push(report);
+            }
         }
 
         info!("Test fixture teardown");
@@ -152,7 +292,7 @@ async fn run_fixture(fixture: &FixtureInfo, suite_data: &ArcAny) -> FixtureRepor
     }
 
     let duration_ns = t0.elapsed().as_nanos() as u64;
-    let case_count = count(total_cases as u64, cases.iter().map(|r| r.passed));
+    let case_count = count_cases(total_cases as u64, cases.iter().map(|r| (r.passed, r.ignored)));
 
     info!(duration_ns, ?case_count, "Test fixture end");
 
@@ -164,26 +304,5 @@ async fn run_fixture(fixture: &FixtureInfo, suite_data: &ArcAny) -> FixtureRepor
         duration_ns,
         duration_ms: duration_ns as f64 / 1e6,
         cases,
-    }
-}
-
-#[instrument(skip(case, fixture_data), fields(name = case.name))]
-async fn run_case(case: &CaseInfo, fixture_data: &ArcAny) -> CaseReport {
-    info!("Test case start");
-
-    let t0 = Instant::now();
-    let (_, summary) = run_fn!((case.run)(Arc::clone(fixture_data)));
-
-    info!(?summary, "Test case end");
-
-    let duration_ns = t0.elapsed().as_nanos() as u64;
-    let passed = summary.result.is_ok();
-
-    CaseReport {
-        name: case.name.clone(),
-        passed,
-        duration_ns,
-        duration_ms: duration_ns as f64 / 1e6,
-        run: Some(summary),
     }
 }

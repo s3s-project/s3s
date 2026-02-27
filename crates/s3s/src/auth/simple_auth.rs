@@ -48,3 +48,66 @@ impl S3Auth for SimpleAuth {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_empty() {
+        let auth = SimpleAuth::new();
+        assert!(auth.lookup("anything").is_none());
+    }
+
+    #[test]
+    fn from_single() {
+        let auth = SimpleAuth::from_single("AKID", "secret");
+        assert!(auth.lookup("AKID").is_some());
+        assert_eq!(auth.lookup("AKID").unwrap().expose(), "secret");
+        assert!(auth.lookup("other").is_none());
+    }
+
+    #[test]
+    fn register_and_lookup() {
+        let mut auth = SimpleAuth::new();
+        let prev = auth.register("key1".to_owned(), SecretKey::from("sec1"));
+        assert!(prev.is_none());
+        assert_eq!(auth.lookup("key1").unwrap().expose(), "sec1");
+    }
+
+    #[test]
+    fn register_replaces() {
+        let mut auth = SimpleAuth::from_single("key", "old");
+        let prev = auth.register("key".to_owned(), SecretKey::from("new"));
+        assert!(prev.is_some());
+        assert_eq!(auth.lookup("key").unwrap().expose(), "new");
+    }
+
+    #[test]
+    fn default_is_empty() {
+        let auth = SimpleAuth::default();
+        assert!(auth.lookup("x").is_none());
+    }
+
+    #[test]
+    fn debug_impl() {
+        let auth = SimpleAuth::from_single("AKID", "secret");
+        let debug = format!("{auth:?}");
+        assert!(debug.contains("SimpleAuth"));
+    }
+
+    #[tokio::test]
+    async fn get_secret_key_found() {
+        let auth = SimpleAuth::from_single("AKID", "secret");
+        let result = auth.get_secret_key("AKID").await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().expose(), "secret");
+    }
+
+    #[tokio::test]
+    async fn get_secret_key_not_found() {
+        let auth = SimpleAuth::from_single("AKID", "secret");
+        let result = auth.get_secret_key("UNKNOWN").await;
+        assert!(result.is_err());
+    }
+}

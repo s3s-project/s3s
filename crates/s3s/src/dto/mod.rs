@@ -1,3 +1,10 @@
+//! S3 data transfer objects (DTOs).
+//!
+//! This module re-exports all S3 operation input and output types together with
+//! supporting data structures generated from the AWS Smithy service model.
+//! These are the primary typed structures used when implementing the
+//! [`S3`](crate::S3) trait.
+
 mod build_error;
 
 cfg_if::cfg_if! {

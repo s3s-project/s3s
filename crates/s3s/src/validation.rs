@@ -1,6 +1,9 @@
-//! Validation API for S3 bucket names
+//! Validation API for S3 bucket names.
+//!
+//! The [`NameValidation`] trait lets users plug in a custom bucket name validator.
+//! [`AwsNameValidation`] provides the standard AWS bucket naming rules.
 
-/// Trait for validating S3 names
+/// Trait for validating S3 bucket names
 ///
 /// Implementations should return `true` for valid names and `false` for invalid ones.
 pub trait NameValidation: Send + Sync + 'static {

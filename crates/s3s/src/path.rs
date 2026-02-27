@@ -392,4 +392,93 @@ mod tests {
         // Both should give the same result (error for invalid bucket name)
         assert_eq!(result1.is_err(), result2.is_err());
     }
+
+    // --- S3Path accessor coverage ---
+
+    #[test]
+    fn s3path_root_accessors() {
+        let p = S3Path::root();
+        assert!(p.is_root());
+        assert!(p.as_bucket().is_none());
+        assert!(p.as_object().is_none());
+        assert!(p.get_bucket_name().is_none());
+        assert!(p.get_object_key().is_none());
+    }
+
+    #[test]
+    fn s3path_bucket_accessors() {
+        let p = S3Path::bucket("my-bucket");
+        assert!(!p.is_root());
+        assert_eq!(p.as_bucket(), Some("my-bucket"));
+        assert!(p.as_object().is_none());
+        assert_eq!(p.get_bucket_name(), Some("my-bucket"));
+        assert!(p.get_object_key().is_none());
+    }
+
+    #[test]
+    fn s3path_object_accessors() {
+        let p = S3Path::object("my-bucket", "my-key");
+        assert!(!p.is_root());
+        assert!(p.as_bucket().is_none());
+        assert_eq!(p.as_object(), Some(("my-bucket", "my-key")));
+        assert_eq!(p.get_bucket_name(), Some("my-bucket"));
+        assert_eq!(p.get_object_key(), Some("my-key"));
+    }
+
+    #[test]
+    fn check_key_boundary() {
+        // Exactly 1024 bytes should be valid
+        let key = "a".repeat(1024);
+        assert!(check_key(&key));
+
+        // 1025 bytes should be invalid
+        let key = "a".repeat(1025);
+        assert!(!check_key(&key));
+    }
+
+    #[test]
+    fn virtual_hosted_no_bucket_fallback() {
+        // When vh_bucket is None, falls back to path-style parsing
+        let result = parse_virtual_hosted_style(None, "/bucket/key");
+        assert_eq!(result, Ok(S3Path::object("bucket", "key")));
+    }
+
+    #[test]
+    fn virtual_hosted_invalid_path() {
+        // URI path without leading slash
+        let result = parse_virtual_hosted_style(Some("bucket"), "no-slash");
+        assert_eq!(result, Err(ParseS3PathError::InvalidPath));
+    }
+
+    #[test]
+    fn virtual_hosted_key_too_long() {
+        let long_key = "a".repeat(1025);
+        let uri_path = format!("/{long_key}");
+        let result = parse_virtual_hosted_style(Some("bucket"), &uri_path);
+        assert_eq!(result, Err(ParseS3PathError::KeyTooLong));
+    }
+
+    #[test]
+    fn bucket_name_edge_cases() {
+        // Too short
+        assert!(!check_bucket_name("ab"));
+        // Too long (64 chars)
+        assert!(!check_bucket_name(&"a".repeat(64)));
+        // Exactly 3 chars: valid
+        assert!(check_bucket_name("abc"));
+        // Exactly 63 chars: valid
+        assert!(check_bucket_name(&"a".repeat(63)));
+        // Starts with xn--
+        assert!(!check_bucket_name("xn--example"));
+    }
+
+    #[test]
+    fn parse_s3_path_error_display() {
+        let err = ParseS3PathError::InvalidPath;
+        assert!(!format!("{err}").is_empty());
+        let err = ParseS3PathError::InvalidBucketName;
+        assert!(!format!("{err}").is_empty());
+        let err = ParseS3PathError::KeyTooLong;
+        assert!(!format!("{err}").is_empty());
+    }
 }

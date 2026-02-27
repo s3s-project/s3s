@@ -60,6 +60,12 @@ impl From<SystemTime> for Timestamp {
     }
 }
 
+impl Default for Timestamp {
+    fn default() -> Self {
+        Self(time::OffsetDateTime::UNIX_EPOCH)
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ParseTimestampError {
     #[error("time: {0}")]
@@ -158,6 +164,13 @@ impl Timestamp {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn default_is_unix_epoch() {
+        let ts = Timestamp::default();
+        let dt: time::OffsetDateTime = ts.into();
+        assert_eq!(dt, time::OffsetDateTime::UNIX_EPOCH);
+    }
 
     #[test]
     fn text_repr() {

@@ -1,3 +1,9 @@
+//! Internal S3 operation dispatch, HTTP serialization, and deserialization.
+//!
+//! This module converts incoming HTTP requests into typed operation inputs,
+//! invokes the user-provided [`S3`](crate::S3) implementation, and converts
+//! the resulting outputs or errors back into HTTP responses.
+
 cfg_if::cfg_if! {
     if #[cfg(feature = "minio")] {
         mod generated_minio;

@@ -512,7 +512,7 @@ fn collect_types_needing_serde(rust_types: &RustTypes) -> BTreeSet<String> {
     types_needing_serde
 }
 
-fn collect_types_needing_custom_default(rust_types: &RustTypes) -> BTreeSet<String> {
+fn collect_types_needing_custom_default(rust_types: &RustTypes, ops: &Operations) -> BTreeSet<String> {
     let mut types_needing_custom_default = BTreeSet::new();
 
     // Start with Configuration types that can't derive Default
@@ -523,6 +523,15 @@ fn collect_types_needing_custom_default(rust_types: &RustTypes) -> BTreeSet<Stri
         {
             // Add this type and all its struct dependencies
             collect_struct_dependencies(name, rust_types, &mut types_needing_custom_default);
+        }
+    }
+
+    // Also include operation output types that can't derive Default
+    for op in ops.values() {
+        if let Some(rust::Type::Struct(ty)) = rust_types.get(&op.output)
+            && !can_derive_default(ty, rust_types)
+        {
+            collect_struct_dependencies(&op.output, rust_types, &mut types_needing_custom_default);
         }
     }
 
@@ -603,7 +612,7 @@ pub fn codegen(rust_types: &RustTypes, ops: &Operations, patch: Option<Patch>) {
     let types_needing_serde = collect_types_needing_serde(rust_types);
 
     // Collect types that need custom Default implementations
-    let types_needing_custom_default = collect_types_needing_custom_default(rust_types);
+    let types_needing_custom_default = collect_types_needing_custom_default(rust_types, ops);
 
     g([
         "#![allow(clippy::empty_structs_with_brackets)]",
@@ -1061,10 +1070,8 @@ fn can_derive_serde(ty: &rust::Struct, rust_types: &RustTypes) -> bool {
         // Check if the field's type can be serialized recursively
         if let Some(field_ty) = rust_types.get(&field.type_) {
             match field_ty {
-                rust::Type::Struct(s) => {
-                    if !can_derive_serde(s, rust_types) {
-                        return false;
-                    }
+                rust::Type::Struct(s) if !can_derive_serde(s, rust_types) => {
+                    return false;
                 }
                 rust::Type::List(list) => {
                     // Check if the list element type can be serialized
@@ -1121,10 +1128,8 @@ fn can_derive_default(ty: &rust::Struct, rust_types: &RustTypes) -> bool {
         }
 
         match &rust_types[&field.type_] {
-            rust::Type::Provided(ty) => {
-                if ty.name == "CachedTags" {
-                    return true;
-                }
+            rust::Type::Provided(ty) if ty.name == "CachedTags" => {
+                return true;
             }
             rust::Type::List(_) => return true,
             rust::Type::Map(_) => return true,
@@ -1305,20 +1310,16 @@ fn codegen_dto_ext(rust_types: &RustTypes) {
             let Some(field_ty) = rust_types.get(&field.type_) else { continue };
 
             match field_ty {
-                rust::Type::Alias(field_ty) => {
-                    if field.option_type && field_ty.type_ == "String" {
-                        g!("if self.{}.as_deref() == Some(\"\") {{", field.name);
-                        g!("    self.{} = None;", field.name);
-                        g!("}}");
-                    }
+                rust::Type::Alias(field_ty) if field.option_type && field_ty.type_ == "String" => {
+                    g!("if self.{}.as_deref() == Some(\"\") {{", field.name);
+                    g!("    self.{} = None;", field.name);
+                    g!("}}");
                 }
-                rust::Type::StrEnum(_) => {
-                    if field.option_type {
-                        g!("if let Some(ref val) = self.{}", field.name);
-                        g!("    && val.as_str() == \"\" {{");
-                        g!("    self.{} = None;", field.name);
-                        g!("}}");
-                    }
+                rust::Type::StrEnum(_) if field.option_type => {
+                    g!("if let Some(ref val) = self.{}", field.name);
+                    g!("    && val.as_str() == \"\" {{");
+                    g!("    self.{} = None;", field.name);
+                    g!("}}");
                 }
                 rust::Type::Struct(field_ty) => {
                     if field_ty.fields.is_empty() {
