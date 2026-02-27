@@ -91,3 +91,74 @@ impl<'a> AmzContentSha256<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_single_chunk() {
+        // Valid SHA-256 hex (64 lowercase hex chars)
+        let hash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+        let v = AmzContentSha256::parse(hash).unwrap();
+        assert_eq!(v, AmzContentSha256::SingleChunk(hash));
+        assert!(!v.is_streaming());
+        assert!(!v.has_trailer());
+    }
+
+    #[test]
+    fn parse_unsigned_payload() {
+        let v = AmzContentSha256::parse("UNSIGNED-PAYLOAD").unwrap();
+        assert_eq!(v, AmzContentSha256::UnsignedPayload);
+        assert!(!v.is_streaming());
+        assert!(!v.has_trailer());
+    }
+
+    #[test]
+    fn parse_streaming_unsigned_payload_trailer() {
+        let v = AmzContentSha256::parse("STREAMING-UNSIGNED-PAYLOAD-TRAILER").unwrap();
+        assert_eq!(v, AmzContentSha256::StreamingUnsignedPayloadTrailer);
+        assert!(v.is_streaming());
+        assert!(v.has_trailer());
+    }
+
+    #[test]
+    fn parse_streaming_aws4_hmac_sha256_payload() {
+        let v = AmzContentSha256::parse("STREAMING-AWS4-HMAC-SHA256-PAYLOAD").unwrap();
+        assert_eq!(v, AmzContentSha256::StreamingAws4HmacSha256Payload);
+        assert!(v.is_streaming());
+        assert!(!v.has_trailer());
+    }
+
+    #[test]
+    fn parse_streaming_aws4_hmac_sha256_payload_trailer() {
+        let v = AmzContentSha256::parse("STREAMING-AWS4-HMAC-SHA256-PAYLOAD-TRAILER").unwrap();
+        assert_eq!(v, AmzContentSha256::StreamingAws4HmacSha256PayloadTrailer);
+        assert!(v.is_streaming());
+        assert!(v.has_trailer());
+    }
+
+    #[test]
+    fn parse_streaming_aws4_ecdsa_p256_sha256_payload() {
+        let v = AmzContentSha256::parse("STREAMING-AWS4-ECDSA-P256-SHA256-PAYLOAD").unwrap();
+        assert_eq!(v, AmzContentSha256::StreamingAws4EcdsaP256Sha256Payload);
+        assert!(v.is_streaming());
+        assert!(!v.has_trailer());
+    }
+
+    #[test]
+    fn parse_streaming_aws4_ecdsa_p256_sha256_payload_trailer() {
+        let v = AmzContentSha256::parse("STREAMING-AWS4-ECDSA-P256-SHA256-PAYLOAD-TRAILER").unwrap();
+        assert_eq!(v, AmzContentSha256::StreamingAws4EcdsaP256Sha256PayloadTrailer);
+        assert!(v.is_streaming());
+        assert!(v.has_trailer());
+    }
+
+    #[test]
+    fn parse_unknown_variant() {
+        let err = AmzContentSha256::parse("INVALID-VALUE").unwrap_err();
+        assert!(matches!(err, ParseAmzContentSha256Error::UnknownVariant));
+        // Verify error Display impl
+        let _ = format!("{err}");
+    }
+}

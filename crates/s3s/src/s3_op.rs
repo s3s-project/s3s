@@ -17,3 +17,14 @@ impl S3Operation {
         self.name
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn operation_name() {
+        let op = S3Operation { name: "GetObject" };
+        assert_eq!(op.name(), "GetObject");
+    }
+}

@@ -40,3 +40,22 @@ impl Instant {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_now_utc() {
+        let t = now_utc();
+        // Ensure it returns something Debug-formattable
+        let _ = format!("{t:?}");
+    }
+
+    #[test]
+    fn test_instant_now_and_elapsed() {
+        let t = Instant::now();
+        let e = t.elapsed();
+        let _ = format!("{e:?}");
+    }
+}
