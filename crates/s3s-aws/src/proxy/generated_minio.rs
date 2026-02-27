@@ -1557,6 +1557,28 @@ impl S3 for Proxy {
     }
 
     #[tracing::instrument(skip(self, req))]
+    async fn list_directory_buckets(
+        &self,
+        req: S3Request<s3s::dto::ListDirectoryBucketsInput>,
+    ) -> S3Result<S3Response<s3s::dto::ListDirectoryBucketsOutput>> {
+        let input = req.input;
+        debug!(?input);
+        let mut b = self.0.list_directory_buckets();
+        b = b.set_continuation_token(try_into_aws(input.continuation_token)?);
+        b = b.set_max_directory_buckets(try_into_aws(input.max_directory_buckets)?);
+        let result = b.send().await;
+        match result {
+            Ok(output) => {
+                let headers = super::meta::build_headers(&output)?;
+                let output = try_from_aws(output)?;
+                debug!(?output);
+                Ok(S3Response::with_headers(output, headers))
+            }
+            Err(e) => Err(wrap_sdk_error!(e)),
+        }
+    }
+
+    #[tracing::instrument(skip(self, req))]
     async fn list_multipart_uploads(
         &self,
         req: S3Request<s3s::dto::ListMultipartUploadsInput>,

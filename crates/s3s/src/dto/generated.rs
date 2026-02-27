@@ -12134,6 +12134,63 @@ impl fmt::Debug for ListBucketsOutput {
 }
 
 #[derive(Clone, Default, PartialEq)]
+pub struct ListDirectoryBucketsInput {
+    /// <p>
+    /// <code>ContinuationToken</code> indicates to Amazon S3 that the list is being continued on
+    /// buckets in this account with a token. <code>ContinuationToken</code> is obfuscated and is
+    /// not a real bucket name. You can use this <code>ContinuationToken</code> for the pagination
+    /// of the list results. </p>
+    pub continuation_token: Option<DirectoryBucketToken>,
+    /// <p>Maximum number of buckets to be returned in response. When the number is more than the
+    /// count of buckets that are owned by an Amazon Web Services account, return all the buckets in
+    /// response.</p>
+    pub max_directory_buckets: Option<MaxDirectoryBuckets>,
+}
+
+impl fmt::Debug for ListDirectoryBucketsInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("ListDirectoryBucketsInput");
+        if let Some(ref val) = self.continuation_token {
+            d.field("continuation_token", val);
+        }
+        if let Some(ref val) = self.max_directory_buckets {
+            d.field("max_directory_buckets", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+
+impl ListDirectoryBucketsInput {
+    #[must_use]
+    pub fn builder() -> builders::ListDirectoryBucketsInputBuilder {
+        default()
+    }
+}
+
+#[derive(Clone, Default, PartialEq)]
+pub struct ListDirectoryBucketsOutput {
+    /// <p>The list of buckets owned by the requester. </p>
+    pub buckets: Option<Buckets>,
+    /// <p>If <code>ContinuationToken</code> was sent with the request, it is included in the
+    /// response. You can use the returned <code>ContinuationToken</code> for pagination of the
+    /// list response.</p>
+    pub continuation_token: Option<DirectoryBucketToken>,
+}
+
+impl fmt::Debug for ListDirectoryBucketsOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("ListDirectoryBucketsOutput");
+        if let Some(ref val) = self.buckets {
+            d.field("buckets", val);
+        }
+        if let Some(ref val) = self.continuation_token {
+            d.field("continuation_token", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+
+#[derive(Clone, Default, PartialEq)]
 pub struct ListMultipartUploadsInput {
     /// <p>The name of the bucket to which the multipart upload was initiated. </p>
     /// <p>
@@ -21954,6 +22011,7 @@ mod tests {
         require_default::<ListBucketInventoryConfigurationsOutput>();
         require_default::<ListBucketMetricsConfigurationsOutput>();
         require_default::<ListBucketsOutput>();
+        require_default::<ListDirectoryBucketsOutput>();
         require_default::<ListMultipartUploadsOutput>();
         require_default::<ListObjectVersionsOutput>();
         require_default::<ListObjectsOutput>();
@@ -22114,6 +22172,8 @@ mod tests {
         require_clone::<ListBucketMetricsConfigurationsOutput>();
         require_clone::<ListBucketsInput>();
         require_clone::<ListBucketsOutput>();
+        require_clone::<ListDirectoryBucketsInput>();
+        require_clone::<ListDirectoryBucketsOutput>();
         require_clone::<ListMultipartUploadsInput>();
         require_clone::<ListMultipartUploadsOutput>();
         require_clone::<ListObjectVersionsInput>();
@@ -27588,6 +27648,47 @@ pub mod builders {
                 continuation_token,
                 max_buckets,
                 prefix,
+            })
+        }
+    }
+
+    /// A builder for [`ListDirectoryBucketsInput`]
+    #[derive(Default)]
+    pub struct ListDirectoryBucketsInputBuilder {
+        continuation_token: Option<DirectoryBucketToken>,
+
+        max_directory_buckets: Option<MaxDirectoryBuckets>,
+    }
+
+    impl ListDirectoryBucketsInputBuilder {
+        pub fn set_continuation_token(&mut self, field: Option<DirectoryBucketToken>) -> &mut Self {
+            self.continuation_token = field;
+            self
+        }
+
+        pub fn set_max_directory_buckets(&mut self, field: Option<MaxDirectoryBuckets>) -> &mut Self {
+            self.max_directory_buckets = field;
+            self
+        }
+
+        #[must_use]
+        pub fn continuation_token(mut self, field: Option<DirectoryBucketToken>) -> Self {
+            self.continuation_token = field;
+            self
+        }
+
+        #[must_use]
+        pub fn max_directory_buckets(mut self, field: Option<MaxDirectoryBuckets>) -> Self {
+            self.max_directory_buckets = field;
+            self
+        }
+
+        pub fn build(self) -> Result<ListDirectoryBucketsInput, BuildError> {
+            let continuation_token = self.continuation_token;
+            let max_directory_buckets = self.max_directory_buckets;
+            Ok(ListDirectoryBucketsInput {
+                continuation_token,
+                max_directory_buckets,
             })
         }
     }
@@ -35749,6 +35850,20 @@ impl DtoExt for ListBucketsOutput {
         }
         if self.prefix.as_deref() == Some("") {
             self.prefix = None;
+        }
+    }
+}
+impl DtoExt for ListDirectoryBucketsInput {
+    fn ignore_empty_strings(&mut self) {
+        if self.continuation_token.as_deref() == Some("") {
+            self.continuation_token = None;
+        }
+    }
+}
+impl DtoExt for ListDirectoryBucketsOutput {
+    fn ignore_empty_strings(&mut self) {
+        if self.continuation_token.as_deref() == Some("") {
+            self.continuation_token = None;
         }
     }
 }

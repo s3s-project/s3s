@@ -38,7 +38,7 @@ pub struct Operation {
 pub type Operations = BTreeMap<String, Operation>;
 
 // TODO: handle these operations
-pub const SKIPPED_OPS: &[&str] = &["ListDirectoryBuckets"];
+pub const SKIPPED_OPS: &[&str] = &[];
 
 pub fn collect_operations(model: &smithy::Model) -> Operations {
     let mut operations: Operations = default();
@@ -975,12 +975,22 @@ impl PathPattern {
         qs.retain(|(n, v)| n != "x-id" && v.is_empty().not());
         qs
     }
+
+    fn x_id_value(part: &str) -> Option<String> {
+        let (_, q) = part.split_once('?')?;
+        let qs: Vec<(String, String)> = serde_urlencoded::from_str(q).unwrap();
+        qs.into_iter()
+            .find(|(n, _)| n == "x-id")
+            .map(|(_, v)| v)
+            .filter(|v| v.is_empty().not())
+    }
 }
 
 struct Route<'a> {
     op: &'a Operation,
     query_tag: Option<String>,
     query_patterns: Vec<(String, String)>,
+    x_id: Option<String>,
     required_headers: Vec<&'a str>,
     required_query_strings: Vec<&'a str>,
     needs_full_body: bool,
@@ -1002,6 +1012,7 @@ fn collect_routes<'a>(ops: &'a Operations, rust_types: &'a RustTypes) -> HashMap
             op,
             query_tag: PathPattern::query_tag(&op.http_uri),
             query_patterns: PathPattern::query_patterns(&op.http_uri),
+            x_id: PathPattern::x_id_value(&op.http_uri),
 
             required_headers: required_headers(op, rust_types),
             required_query_strings: required_query_strings(op, rust_types),
@@ -1159,7 +1170,11 @@ fn codegen_router(ops: &Operations, rust_types: &RustTypes) {
                                 && route.query_tag.is_none()
                         };
                         let final_count = group.iter().filter(|r| is_final_op(r)).count();
-                        assert!(final_count <= 1);
+                        // When multiple final ops exist, they must be disambiguated by x-id
+                        if final_count > 1 {
+                            assert!(group.iter().filter(|r| is_final_op(r)).all(|r| r.x_id.is_some()));
+                        }
+                        let fallback_op_name = group.iter().find(|r| is_final_op(r)).map(|r| r.op.name.as_str());
 
                         g!("if let Some(qs) = qs {{");
                         for route in group {
@@ -1227,7 +1242,15 @@ fn codegen_router(ops: &Operations, rust_types: &RustTypes) {
                                     succ(route, true);
                                     g!("}}");
                                 }
-                                (false, false) => {}
+                                (false, false) => {
+                                    // When multiple final ops exist, use x-id to disambiguate non-fallback routes
+                                    if final_count > 1 && Some(route.op.name.as_str()) != fallback_op_name {
+                                        let x_id = route.x_id.as_deref().unwrap();
+                                        g!("if super::check_query_pattern(qs, \"x-id\",\"{x_id}\") {{");
+                                        succ(route, true);
+                                        g!("}}");
+                                    }
+                                }
                             }
                         }
                         g!("}}");
@@ -1276,9 +1299,8 @@ fn codegen_router(ops: &Operations, rust_types: &RustTypes) {
                             }
                         }
 
-                        if final_count == 1 {
-                            let route = group.last().unwrap();
-                            assert!(is_final_op(route));
+                        if final_count >= 1 {
+                            let route = group.iter().find(|r| is_final_op(r)).unwrap();
                             succ(route, false);
                         } else {
                             g!("Err(super::unknown_operation())");

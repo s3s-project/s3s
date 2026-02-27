@@ -4916,6 +4916,44 @@ impl AwsConversion for s3s::dto::ListBucketsOutput {
     }
 }
 
+impl AwsConversion for s3s::dto::ListDirectoryBucketsInput {
+    type Target = aws_sdk_s3::operation::list_directory_buckets::ListDirectoryBucketsInput;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            continuation_token: try_from_aws(x.continuation_token)?,
+            max_directory_buckets: try_from_aws(x.max_directory_buckets)?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_continuation_token(try_into_aws(x.continuation_token)?);
+        y = y.set_max_directory_buckets(try_into_aws(x.max_directory_buckets)?);
+        y.build().map_err(S3Error::internal_error)
+    }
+}
+
+impl AwsConversion for s3s::dto::ListDirectoryBucketsOutput {
+    type Target = aws_sdk_s3::operation::list_directory_buckets::ListDirectoryBucketsOutput;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            buckets: try_from_aws(x.buckets)?,
+            continuation_token: try_from_aws(x.continuation_token)?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_buckets(try_into_aws(x.buckets)?);
+        y = y.set_continuation_token(try_into_aws(x.continuation_token)?);
+        Ok(y.build())
+    }
+}
+
 impl AwsConversion for s3s::dto::ListMultipartUploadsInput {
     type Target = aws_sdk_s3::operation::list_multipart_uploads::ListMultipartUploadsInput;
     type Error = S3Error;

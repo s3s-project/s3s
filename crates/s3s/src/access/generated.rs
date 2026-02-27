@@ -512,6 +512,13 @@ pub trait S3Access: Send + Sync + 'static {
         Ok(())
     }
 
+    /// Checks whether the ListDirectoryBuckets request has accesses to the resources.
+    ///
+    /// This method returns `Ok(())` by default.
+    async fn list_directory_buckets(&self, _req: &mut S3Request<ListDirectoryBucketsInput>) -> S3Result<()> {
+        Ok(())
+    }
+
     /// Checks whether the ListMultipartUploads request has accesses to the resources.
     ///
     /// This method returns `Ok(())` by default.

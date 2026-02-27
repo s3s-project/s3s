@@ -3929,6 +3929,42 @@ pub trait S3: Send + Sync + 'static {
         Err(s3_error!(NotImplemented, "ListBuckets is not implemented yet"))
     }
 
+    /// <p>Returns a list of all Amazon S3 directory buckets owned by the authenticated sender of the
+    /// request. For more information about directory buckets, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/directory-buckets-overview.html">Directory buckets</a> in the <i>Amazon S3 User Guide</i>.</p>
+    /// <note>
+    /// <p>
+    /// <b>Directory buckets </b> - For directory buckets, you must make requests for this API operation to the Regional endpoint. These endpoints support path-style requests in the format <code>https://s3express-control.<i>region-code</i>.amazonaws.com/<i>bucket-name</i>
+    /// </code>. Virtual-hosted-style requests aren't supported.
+    /// For more information about endpoints in Availability Zones, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/endpoint-directory-buckets-AZ.html">Regional and Zonal endpoints for directory buckets in Availability Zones</a> in the
+    /// <i>Amazon S3 User Guide</i>. For more information about endpoints in Local Zones, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-lzs-for-directory-buckets.html">Concepts for directory buckets in Local Zones</a> in the
+    /// <i>Amazon S3 User Guide</i>.</p>
+    /// </note>
+    /// <dl>
+    /// <dt>Permissions</dt>
+    /// <dd>
+    /// <p>You must have the <code>s3express:ListAllMyDirectoryBuckets</code> permission
+    /// in an IAM identity-based policy instead of a bucket policy. Cross-account access to this API operation isn't supported. This operation can only be performed by the Amazon Web Services account that owns the resource.
+    /// For more information about directory bucket policies and permissions, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-express-security-iam.html">Amazon Web Services Identity and Access Management (IAM) for S3 Express One Zone</a> in the <i>Amazon S3 User Guide</i>.</p>
+    /// </dd>
+    /// <dt>HTTP Host header syntax</dt>
+    /// <dd>
+    /// <p>
+    /// <b>Directory buckets </b> - The HTTP Host
+    /// header syntax is
+    /// <code>s3express-control.<i>region</i>.amazonaws.com</code>.</p>
+    /// </dd>
+    /// </dl>
+    /// <note>
+    /// <p> The <code>BucketRegion</code> response element is not part of the
+    /// <code>ListDirectoryBuckets</code> Response Syntax.</p>
+    /// </note>
+    async fn list_directory_buckets(
+        &self,
+        _req: S3Request<ListDirectoryBucketsInput>,
+    ) -> S3Result<S3Response<ListDirectoryBucketsOutput>> {
+        Err(s3_error!(NotImplemented, "ListDirectoryBuckets is not implemented yet"))
+    }
+
     /// <p>This operation lists in-progress multipart uploads in a bucket. An in-progress multipart
     /// upload is a multipart upload that has been initiated by the
     /// <code>CreateMultipartUpload</code> request, but has not yet been completed or
