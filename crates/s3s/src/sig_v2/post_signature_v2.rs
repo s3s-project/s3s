@@ -36,11 +36,7 @@ mod tests {
 
     #[test]
     fn extract_success() {
-        let m = make_multipart(vec![
-            ("policy", "test-policy"),
-            ("AWSAccessKeyId", "AKID"),
-            ("signature", "sig123"),
-        ]);
+        let m = make_multipart(vec![("policy", "test-policy"), ("AWSAccessKeyId", "AKID"), ("signature", "sig123")]);
         let v = PostSignatureV2::extract(&m).unwrap();
         assert_eq!(v.policy, "test-policy");
         assert_eq!(v.access_key_id, "AKID");
