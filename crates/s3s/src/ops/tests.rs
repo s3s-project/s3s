@@ -1724,9 +1724,7 @@ fn list_directory_buckets_deserialize_http() {
 fn list_directory_buckets_serialize_http() {
     use crate::dto::ListDirectoryBucketsOutput;
 
-    let output = ListDirectoryBucketsOutput {
-        ..Default::default()
-    };
+    let output = ListDirectoryBucketsOutput { ..Default::default() };
 
     let resp = generated::ListDirectoryBuckets::serialize_http(output).unwrap();
     assert_eq!(resp.status, hyper::StatusCode::OK);
