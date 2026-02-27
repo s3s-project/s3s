@@ -6723,17 +6723,9 @@ impl PostObject {
                 http::set_xml_body(&mut res, &post_response)?;
                 Ok(res)
             }
-            Some(204) | None => {
-                // 204 No Content (default)
+            _ => {
+                // 204 No Content (default, also for unrecognized values)
                 Ok(http::Response::with_status(http::StatusCode::NO_CONTENT))
-            }
-            Some(status) => {
-                // Invalid status code, return error
-                Err(s3_error!(
-                    InvalidArgument,
-                    "Invalid success_action_status: {}. Valid values are 200, 201, 204.",
-                    status
-                ))
             }
         }
     }

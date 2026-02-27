@@ -17,4 +17,6 @@ export AWS_ACCESS_KEY_ID=minioadmin
 export AWS_SECRET_ACCESS_KEY=minioadmin
 export AWS_DEFAULT_REGION=us-east-1
 
-uv run python3 tests/boto3/rustfs_issue_984.py
+for f in tests/boto3/*.py; do
+    uv run python3 "$f"
+done
