@@ -151,7 +151,9 @@ fn parse_access_point_resource(
     account_id: &str,
     version_id: Option<Cow<'_, str>>,
 ) -> Result<CopySource, ParseCopySourceError> {
-    let rest = resource.strip_prefix("accesspoint/").ok_or(ParseCopySourceError::InvalidArn)?;
+    let rest = resource
+        .strip_prefix("accesspoint/")
+        .ok_or(ParseCopySourceError::InvalidArn)?;
     let (name, key) = rest.split_once("/object/").ok_or(ParseCopySourceError::InvalidArn)?;
 
     if !check_access_point_name(name) {
@@ -295,7 +297,11 @@ impl CopySource {
                 key,
                 version_id,
             } => {
-                write!(&mut buf, "arn:{partition}:s3:{region}:{account_id}:accesspoint/{access_point_name}/object/{key}").unwrap();
+                write!(
+                    &mut buf,
+                    "arn:{partition}:s3:{region}:{account_id}:accesspoint/{access_point_name}/object/{key}"
+                )
+                .unwrap();
                 if let Some(version_id) = version_id {
                     write!(&mut buf, "?versionId={version_id}").unwrap();
                 }
@@ -308,7 +314,11 @@ impl CopySource {
                 key,
                 version_id,
             } => {
-                write!(&mut buf, "arn:{partition}:s3-outposts:{region}:{account_id}:outpost/{outpost_id}/object/{key}").unwrap();
+                write!(
+                    &mut buf,
+                    "arn:{partition}:s3-outposts:{region}:{account_id}:outpost/{outpost_id}/object/{key}"
+                )
+                .unwrap();
                 if let Some(version_id) = version_id {
                     write!(&mut buf, "?versionId={version_id}").unwrap();
                 }
@@ -589,8 +599,7 @@ mod tests {
 
     #[test]
     fn access_point_roundtrip_with_version() {
-        let original =
-            "arn:aws:s3:us-east-1:111122223333:accesspoint/prod-ap/object/data/file.csv?versionId=ver123";
+        let original = "arn:aws:s3:us-east-1:111122223333:accesspoint/prod-ap/object/data/file.csv?versionId=ver123";
         let parsed = CopySource::parse(original).unwrap();
         assert_eq!(parsed.format_to_string(), original);
     }
@@ -623,8 +632,7 @@ mod tests {
 
     #[test]
     fn outpost_with_version_id() {
-        let header =
-            "arn:aws:s3-outposts:ap-southeast-1:999888777666:outpost/op-123/object/backup.tar.gz?versionId=abc";
+        let header = "arn:aws:s3-outposts:ap-southeast-1:999888777666:outpost/op-123/object/backup.tar.gz?versionId=abc";
         let val = CopySource::parse(header).unwrap();
         match val {
             CopySource::Outpost {
@@ -661,8 +669,7 @@ mod tests {
 
     #[test]
     fn outpost_roundtrip() {
-        let original =
-            "arn:aws:s3-outposts:us-west-2:123456789012:outpost/my-outpost/object/reports/january.pdf";
+        let original = "arn:aws:s3-outposts:us-west-2:123456789012:outpost/my-outpost/object/reports/january.pdf";
         let parsed = CopySource::parse(original).unwrap();
         assert_eq!(parsed.format_to_string(), original);
     }
@@ -859,7 +866,7 @@ mod tests {
 
     #[test]
     fn check_account_id_wrong_length() {
-        assert!(!check_account_id("12345678901"));  // 11 digits
+        assert!(!check_account_id("12345678901")); // 11 digits
         assert!(!check_account_id("1234567890123")); // 13 digits
         assert!(!check_account_id(""));
     }
