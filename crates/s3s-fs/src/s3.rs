@@ -74,7 +74,7 @@ impl S3 for FileSystem {
     async fn copy_object(&self, req: S3Request<CopyObjectInput>) -> S3Result<S3Response<CopyObjectOutput>> {
         let input = req.input;
         let (bucket, key) = match input.copy_source {
-            CopySource::AccessPoint { .. } => return Err(s3_error!(NotImplemented)),
+            CopySource::AccessPoint { .. } | CopySource::Outpost { .. } => return Err(s3_error!(NotImplemented)),
             CopySource::Bucket { ref bucket, ref key, .. } => (bucket, key),
         };
 
@@ -739,7 +739,7 @@ impl S3 for FileSystem {
         }
 
         let (src_bucket, src_key) = match input.copy_source {
-            CopySource::AccessPoint { .. } => return Err(s3_error!(NotImplemented)),
+            CopySource::AccessPoint { .. } | CopySource::Outpost { .. } => return Err(s3_error!(NotImplemented)),
             CopySource::Bucket { ref bucket, ref key, .. } => (bucket, key),
         };
         let src_path = self.get_object_path(src_bucket, src_key)?;
