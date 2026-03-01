@@ -376,3 +376,529 @@ pub fn parse_field_value_timestamp(m: &Multipart, name: &str, fmt: TimestampForm
         Err(source) => Err(s3_error!(source, InvalidArgument, "invalid field value: {}: {:?}", name, val)),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::dto::TimestampFormat;
+    use crate::http::multipart::File;
+    use crate::http::{Body, OrderedQs};
+    use crate::path::S3Path;
+    use crate::stream::ByteStream;
+    use bytes::Bytes;
+
+    fn make_request() -> Request {
+        Request {
+            version: http::Version::HTTP_11,
+            method: hyper::Method::GET,
+            uri: hyper::Uri::from_static("http://example.com"),
+            headers: hyper::HeaderMap::new(),
+            extensions: hyper::http::Extensions::default(),
+            body: Body::empty(),
+            s3ext: super::super::request::S3Extensions::default(),
+        }
+    }
+
+    // --- TryFromHeaderValue tests ---
+
+    #[test]
+    fn try_from_header_value_bool() {
+        use crate::http::HeaderValue;
+        assert!(bool::try_from_header_value(&HeaderValue::from_static("true")).unwrap());
+        assert!(bool::try_from_header_value(&HeaderValue::from_static("True")).unwrap());
+        assert!(!bool::try_from_header_value(&HeaderValue::from_static("false")).unwrap());
+        assert!(!bool::try_from_header_value(&HeaderValue::from_static("False")).unwrap());
+        assert!(bool::try_from_header_value(&HeaderValue::from_static("invalid")).is_err());
+    }
+
+    #[test]
+    fn try_from_header_value_i32() {
+        use crate::http::HeaderValue;
+        assert_eq!(i32::try_from_header_value(&HeaderValue::from_static("42")).unwrap(), 42);
+        assert_eq!(i32::try_from_header_value(&HeaderValue::from_static("-1")).unwrap(), -1);
+        assert!(i32::try_from_header_value(&HeaderValue::from_static("abc")).is_err());
+    }
+
+    #[test]
+    fn try_from_header_value_i64() {
+        use crate::http::HeaderValue;
+        assert_eq!(
+            i64::try_from_header_value(&HeaderValue::from_static("9876543210")).unwrap(),
+            9_876_543_210_i64
+        );
+        assert!(i64::try_from_header_value(&HeaderValue::from_static("abc")).is_err());
+    }
+
+    #[test]
+    fn try_from_header_value_string() {
+        use crate::http::HeaderValue;
+        assert_eq!(String::try_from_header_value(&HeaderValue::from_static("hello")).unwrap(), "hello");
+    }
+
+    // --- parse_header / parse_opt_header tests ---
+
+    #[test]
+    fn parse_header_present() {
+        let mut req = make_request();
+        req.headers.insert("x-custom", "42".parse().unwrap());
+        let name = HeaderName::from_static("x-custom");
+        let val: i32 = parse_header(&req, &name).unwrap();
+        assert_eq!(val, 42);
+    }
+
+    #[test]
+    fn parse_header_missing() {
+        let req = make_request();
+        let name = HeaderName::from_static("x-custom");
+        let result: S3Result<i32> = parse_header(&req, &name);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_header_empty_value() {
+        let mut req = make_request();
+        req.headers.insert("x-custom", "".parse().unwrap());
+        let name = HeaderName::from_static("x-custom");
+        let result: S3Result<i32> = parse_header(&req, &name);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_header_duplicate() {
+        let mut req = make_request();
+        req.headers.append("x-custom", "1".parse().unwrap());
+        req.headers.append("x-custom", "2".parse().unwrap());
+        let name = HeaderName::from_static("x-custom");
+        let result: S3Result<i32> = parse_header(&req, &name);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_opt_header_present() {
+        let mut req = make_request();
+        req.headers.insert("x-custom", "hello".parse().unwrap());
+        let name = HeaderName::from_static("x-custom");
+        let val: Option<String> = parse_opt_header(&req, &name).unwrap();
+        assert_eq!(val.as_deref(), Some("hello"));
+    }
+
+    #[test]
+    fn parse_opt_header_missing() {
+        let req = make_request();
+        let name = HeaderName::from_static("x-custom");
+        let val: Option<String> = parse_opt_header(&req, &name).unwrap();
+        assert!(val.is_none());
+    }
+
+    #[test]
+    fn parse_opt_header_empty() {
+        let mut req = make_request();
+        req.headers.insert("x-custom", "".parse().unwrap());
+        let name = HeaderName::from_static("x-custom");
+        let val: Option<String> = parse_opt_header(&req, &name).unwrap();
+        assert!(val.is_none());
+    }
+
+    #[test]
+    fn parse_opt_header_duplicate() {
+        let mut req = make_request();
+        req.headers.append("x-custom", "a".parse().unwrap());
+        req.headers.append("x-custom", "b".parse().unwrap());
+        let name = HeaderName::from_static("x-custom");
+        let result: S3Result<Option<String>> = parse_opt_header(&req, &name);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_opt_header_timestamp_present() {
+        let mut req = make_request();
+        req.headers
+            .insert("x-amz-date", "Wed, 21 Oct 2015 07:28:00 GMT".parse().unwrap());
+        let name = HeaderName::from_static("x-amz-date");
+        let ts = parse_opt_header_timestamp(&req, &name, TimestampFormat::HttpDate).unwrap();
+        assert!(ts.is_some());
+    }
+
+    #[test]
+    fn parse_opt_header_timestamp_missing() {
+        let req = make_request();
+        let name = HeaderName::from_static("x-amz-date");
+        let ts = parse_opt_header_timestamp(&req, &name, TimestampFormat::HttpDate).unwrap();
+        assert!(ts.is_none());
+    }
+
+    #[test]
+    fn parse_opt_header_timestamp_invalid() {
+        let mut req = make_request();
+        req.headers.insert("x-amz-date", "not-a-date".parse().unwrap());
+        let name = HeaderName::from_static("x-amz-date");
+        let result = parse_opt_header_timestamp(&req, &name, TimestampFormat::HttpDate);
+        assert!(result.is_err());
+    }
+
+    // --- parse_query / parse_opt_query tests ---
+
+    #[test]
+    fn parse_query_present() {
+        let mut req = make_request();
+        req.s3ext.qs = Some(OrderedQs::from_vec_unchecked(vec![("max-keys".into(), "100".into())]));
+        let val: i32 = parse_query(&req, "max-keys").unwrap();
+        assert_eq!(val, 100);
+    }
+
+    #[test]
+    fn parse_query_missing_qs() {
+        let req = make_request();
+        let result: S3Result<i32> = parse_query(&req, "max-keys");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_query_missing_key() {
+        let mut req = make_request();
+        req.s3ext.qs = Some(OrderedQs::from_vec_unchecked(vec![("other".into(), "1".into())]));
+        let result: S3Result<i32> = parse_query(&req, "max-keys");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_query_duplicate() {
+        let mut req = make_request();
+        req.s3ext.qs = Some(OrderedQs::from_vec_unchecked(vec![
+            ("key".into(), "1".into()),
+            ("key".into(), "2".into()),
+        ]));
+        let result: S3Result<i32> = parse_query(&req, "key");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_query_invalid_value() {
+        let mut req = make_request();
+        req.s3ext.qs = Some(OrderedQs::from_vec_unchecked(vec![("max-keys".into(), "abc".into())]));
+        let result: S3Result<i32> = parse_query(&req, "max-keys");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_opt_query_present() {
+        let mut req = make_request();
+        req.s3ext.qs = Some(OrderedQs::from_vec_unchecked(vec![("prefix".into(), "foo".into())]));
+        let val: Option<String> = parse_opt_query(&req, "prefix").unwrap();
+        assert_eq!(val.as_deref(), Some("foo"));
+    }
+
+    #[test]
+    fn parse_opt_query_missing() {
+        let mut req = make_request();
+        req.s3ext.qs = Some(OrderedQs::from_vec_unchecked(vec![]));
+        let val: Option<String> = parse_opt_query(&req, "prefix").unwrap();
+        assert!(val.is_none());
+    }
+
+    #[test]
+    fn parse_opt_query_no_qs() {
+        let req = make_request();
+        let val: Option<String> = parse_opt_query(&req, "prefix").unwrap();
+        assert!(val.is_none());
+    }
+
+    #[test]
+    fn parse_opt_query_duplicate() {
+        let mut req = make_request();
+        req.s3ext.qs = Some(OrderedQs::from_vec_unchecked(vec![
+            ("key".into(), "a".into()),
+            ("key".into(), "b".into()),
+        ]));
+        let result: S3Result<Option<String>> = parse_opt_query(&req, "key");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_opt_query_timestamp_present() {
+        let mut req = make_request();
+        req.s3ext.qs = Some(OrderedQs::from_vec_unchecked(vec![(
+            "date".into(),
+            "Wed, 21 Oct 2015 07:28:00 GMT".into(),
+        )]));
+        let ts = parse_opt_query_timestamp(&req, "date", TimestampFormat::HttpDate).unwrap();
+        assert!(ts.is_some());
+    }
+
+    #[test]
+    fn parse_opt_query_timestamp_missing() {
+        let req = make_request();
+        let ts = parse_opt_query_timestamp(&req, "date", TimestampFormat::HttpDate).unwrap();
+        assert!(ts.is_none());
+    }
+
+    // --- unwrap_bucket / unwrap_object tests ---
+
+    #[test]
+    fn unwrap_bucket_test() {
+        let mut req = make_request();
+        req.s3ext.s3_path = Some(S3Path::Bucket {
+            bucket: "my-bucket".into(),
+        });
+        let bucket = unwrap_bucket(&mut req);
+        assert_eq!(bucket, "my-bucket");
+    }
+
+    #[test]
+    #[should_panic(expected = "s3 path not found")]
+    fn unwrap_bucket_missing() {
+        let mut req = make_request();
+        let _ = unwrap_bucket(&mut req);
+    }
+
+    #[test]
+    fn unwrap_object_test() {
+        let mut req = make_request();
+        req.s3ext.s3_path = Some(S3Path::Object {
+            bucket: "my-bucket".into(),
+            key: "my-key".into(),
+        });
+        let (bucket, key) = unwrap_object(&mut req);
+        assert_eq!(bucket, "my-bucket");
+        assert_eq!(key, "my-key");
+    }
+
+    #[test]
+    #[should_panic(expected = "s3 path not found")]
+    fn unwrap_object_missing() {
+        let mut req = make_request();
+        let _ = unwrap_object(&mut req);
+    }
+
+    // --- take_string_body / take_xml_body / take_opt_xml_body tests ---
+
+    #[test]
+    fn take_string_body_ok() {
+        let mut req = make_request();
+        req.body = Body::from(Bytes::from_static(b"hello world"));
+        let s = take_string_body(&mut req).unwrap();
+        assert_eq!(s, "hello world");
+    }
+
+    #[test]
+    fn take_string_body_empty() {
+        let mut req = make_request();
+        req.body = Body::from(Bytes::new());
+        let s = take_string_body(&mut req).unwrap();
+        assert_eq!(s, "");
+    }
+
+    #[test]
+    fn take_string_body_invalid_utf8() {
+        let mut req = make_request();
+        req.body = Body::from(vec![0xff, 0xfe]);
+        let result = take_string_body(&mut req);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn take_stream_body_test() {
+        let mut req = make_request();
+        req.body = Body::from(Bytes::from_static(b"stream data"));
+        let blob = take_stream_body(&mut req);
+        let rl = blob.remaining_length();
+        // After taking, body should be default (empty)
+        assert!(http_body::Body::is_end_stream(&req.body));
+        let _ = rl;
+    }
+
+    #[test]
+    fn take_xml_body_empty_returns_error() {
+        let mut req = make_request();
+        req.body = Body::from(Bytes::new());
+        let result = take_xml_body::<crate::dto::Tagging>(&mut req);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn take_opt_xml_body_empty_returns_none() {
+        let mut req = make_request();
+        req.body = Body::from(Bytes::new());
+        let result = take_opt_xml_body::<crate::dto::Tagging>(&mut req).unwrap();
+        assert!(result.is_none());
+    }
+
+    // --- parse_opt_metadata ---
+
+    #[test]
+    fn parse_opt_metadata_none() {
+        let req = make_request();
+        let result = parse_opt_metadata(&req).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn parse_opt_metadata_some() {
+        let mut req = make_request();
+        req.headers.insert("x-amz-meta-mykey", "myvalue".parse().unwrap());
+        let result = parse_opt_metadata(&req).unwrap();
+        let metadata = result.unwrap();
+        assert_eq!(metadata.get("mykey").map(String::as_str), Some("myvalue"));
+    }
+
+    #[test]
+    fn parse_opt_metadata_empty_key_ignored() {
+        let mut req = make_request();
+        // "x-amz-meta-" with empty suffix should be ignored
+        req.headers.insert("x-amz-meta-", "value".parse().unwrap());
+        let result = parse_opt_metadata(&req).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn parse_opt_metadata_duplicate_header() {
+        let mut req = make_request();
+        req.headers.append("x-amz-meta-key", "val1".parse().unwrap());
+        req.headers.append("x-amz-meta-key", "val2".parse().unwrap());
+        let result = parse_opt_metadata(&req);
+        assert!(result.is_err());
+    }
+
+    // --- parse_list_header / parse_opt_list_header ---
+
+    #[test]
+    fn parse_list_header_single() {
+        let mut req = make_request();
+        req.headers.insert("x-list", "hello".parse().unwrap());
+        let name = HeaderName::from_static("x-list");
+        let list: List<String> = parse_list_header(&req, &name).unwrap();
+        assert_eq!(list, vec!["hello".to_string()]);
+    }
+
+    #[test]
+    fn parse_list_header_multiple() {
+        let mut req = make_request();
+        req.headers.append("x-list", "a".parse().unwrap());
+        req.headers.append("x-list", "b".parse().unwrap());
+        let name = HeaderName::from_static("x-list");
+        let list: List<String> = parse_list_header(&req, &name).unwrap();
+        assert_eq!(list.len(), 2);
+    }
+
+    #[test]
+    fn parse_list_header_missing() {
+        let req = make_request();
+        let name = HeaderName::from_static("x-list");
+        let result: S3Result<List<String>> = parse_list_header(&req, &name);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_opt_list_header_present() {
+        let mut req = make_request();
+        req.headers.insert("x-list", "item".parse().unwrap());
+        let name = HeaderName::from_static("x-list");
+        let list: Option<List<String>> = parse_opt_list_header(&req, &name).unwrap();
+        assert!(list.is_some());
+    }
+
+    #[test]
+    fn parse_opt_list_header_missing() {
+        let req = make_request();
+        let name = HeaderName::from_static("x-list");
+        let list: Option<List<String>> = parse_opt_list_header(&req, &name).unwrap();
+        assert!(list.is_none());
+    }
+
+    // --- parse_field_value / parse_field_value_timestamp ---
+
+    #[test]
+    fn parse_field_value_found() {
+        let m = Multipart::new_for_test(
+            vec![("key".into(), "42".into())],
+            File {
+                name: "file".into(),
+                content_type: None,
+                stream: None,
+            },
+        );
+        let val: Option<i32> = parse_field_value(&m, "key").unwrap();
+        assert_eq!(val, Some(42));
+    }
+
+    #[test]
+    fn parse_field_value_not_found() {
+        let m = Multipart::new_for_test(
+            vec![],
+            File {
+                name: "file".into(),
+                content_type: None,
+                stream: None,
+            },
+        );
+        let val: Option<i32> = parse_field_value(&m, "key").unwrap();
+        assert!(val.is_none());
+    }
+
+    #[test]
+    fn parse_field_value_invalid() {
+        let m = Multipart::new_for_test(
+            vec![("key".into(), "abc".into())],
+            File {
+                name: "file".into(),
+                content_type: None,
+                stream: None,
+            },
+        );
+        let result: S3Result<Option<i32>> = parse_field_value(&m, "key");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_field_value_timestamp_found() {
+        let m = Multipart::new_for_test(
+            vec![("date".into(), "Wed, 21 Oct 2015 07:28:00 GMT".into())],
+            File {
+                name: "file".into(),
+                content_type: None,
+                stream: None,
+            },
+        );
+        let ts = parse_field_value_timestamp(&m, "date", TimestampFormat::HttpDate).unwrap();
+        assert!(ts.is_some());
+    }
+
+    #[test]
+    fn parse_field_value_timestamp_not_found() {
+        let m = Multipart::new_for_test(
+            vec![],
+            File {
+                name: "file".into(),
+                content_type: None,
+                stream: None,
+            },
+        );
+        let ts = parse_field_value_timestamp(&m, "date", TimestampFormat::HttpDate).unwrap();
+        assert!(ts.is_none());
+    }
+
+    #[test]
+    fn parse_field_value_timestamp_invalid() {
+        let m = Multipart::new_for_test(
+            vec![("date".into(), "not-a-date".into())],
+            File {
+                name: "file".into(),
+                content_type: None,
+                stream: None,
+            },
+        );
+        let result = parse_field_value_timestamp(&m, "date", TimestampFormat::HttpDate);
+        assert!(result.is_err());
+    }
+
+    // --- ParseHeaderError Display ---
+
+    #[test]
+    fn parse_header_error_display() {
+        assert!(format!("{}", ParseHeaderError::Boolean).contains("boolean"));
+        assert!(format!("{}", ParseHeaderError::Integer).contains("integer"));
+        assert!(format!("{}", ParseHeaderError::Long).contains("long"));
+        assert!(format!("{}", ParseHeaderError::Enum).contains("enum"));
+        assert!(format!("{}", ParseHeaderError::String).contains("string"));
+    }
+}

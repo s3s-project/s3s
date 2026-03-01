@@ -237,4 +237,73 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn to_header_string_int_inclusive() {
+        let range = range_int_inclusive(0, 499);
+        assert_eq!(range.to_header_string(), "bytes=0-499");
+    }
+
+    #[test]
+    fn to_header_string_int_from() {
+        let range = range_int_from(9500);
+        assert_eq!(range.to_header_string(), "bytes=9500-");
+    }
+
+    #[test]
+    fn to_header_string_suffix() {
+        let range = range_suffix(500);
+        assert_eq!(range.to_header_string(), "bytes=-500");
+    }
+
+    #[test]
+    fn to_header_string_roundtrip() {
+        let cases = [range_int_inclusive(0, 499), range_int_from(9500), range_suffix(500)];
+        for range in &cases {
+            let header = range.to_header_string();
+            let parsed = Range::parse(&header).unwrap();
+            assert_eq!(*range, parsed);
+        }
+    }
+
+    #[test]
+    fn try_from_header_value() {
+        use crate::http::TryFromHeaderValue;
+        let hv = http::HeaderValue::from_static("bytes=0-499");
+        let range = Range::try_from_header_value(&hv).unwrap();
+        assert_eq!(range, range_int_inclusive(0, 499));
+
+        let hv = http::HeaderValue::from_static("bytes=100-");
+        let range = Range::try_from_header_value(&hv).unwrap();
+        assert_eq!(range, range_int_from(100));
+
+        let hv = http::HeaderValue::from_static("bytes=-500");
+        let range = Range::try_from_header_value(&hv).unwrap();
+        assert_eq!(range, range_suffix(500));
+    }
+
+    #[test]
+    fn range_not_satisfiable_to_s3_error() {
+        let err = RangeNotSatisfiable { _priv: () };
+        let s3_err: S3Error = err.into();
+        let code = s3_err.code();
+        assert_eq!(code, &S3ErrorCode::InvalidRange);
+    }
+
+    #[test]
+    fn parse_first_exceeds_i64_max() {
+        let big = format!("bytes={}-", i64::MAX as u64 + 1);
+        assert!(Range::parse(&big).is_err());
+    }
+
+    #[test]
+    fn parse_last_exceeds_i64_max() {
+        let big = format!("bytes=0-{}", i64::MAX as u64 + 1);
+        assert!(Range::parse(&big).is_err());
+    }
+
+    #[test]
+    fn parse_first_greater_than_last() {
+        assert!(Range::parse("bytes=500-100").is_err());
+    }
 }

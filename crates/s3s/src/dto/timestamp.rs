@@ -192,4 +192,163 @@ mod tests {
             assert_eq!(expected, text);
         }
     }
+
+    #[test]
+    fn parse_epoch_seconds_integer() {
+        let ts = Timestamp::parse(TimestampFormat::EpochSeconds, "0").unwrap();
+        let dt: time::OffsetDateTime = ts.into();
+        assert_eq!(dt, time::OffsetDateTime::UNIX_EPOCH);
+    }
+
+    #[test]
+    fn parse_epoch_seconds_negative() {
+        let ts = Timestamp::parse(TimestampFormat::EpochSeconds, "-1").unwrap();
+        let dt: time::OffsetDateTime = ts.into();
+        assert_eq!(dt.unix_timestamp(), -1);
+    }
+
+    #[test]
+    fn parse_epoch_seconds_fractional_lengths() {
+        // 1 digit fractional
+        let ts = Timestamp::parse(TimestampFormat::EpochSeconds, "100.5").unwrap();
+        let dt: time::OffsetDateTime = ts.into();
+        assert_eq!(dt.unix_timestamp(), 100);
+        assert_eq!(dt.nanosecond(), 500_000_000);
+
+        // 3 digits
+        let ts = Timestamp::parse(TimestampFormat::EpochSeconds, "100.123").unwrap();
+        let dt: time::OffsetDateTime = ts.into();
+        assert_eq!(dt.nanosecond(), 123_000_000);
+
+        // 6 digits
+        let ts = Timestamp::parse(TimestampFormat::EpochSeconds, "100.123456").unwrap();
+        let dt: time::OffsetDateTime = ts.into();
+        assert_eq!(dt.nanosecond(), 123_456_000);
+
+        // 9 digits
+        let ts = Timestamp::parse(TimestampFormat::EpochSeconds, "100.123456789").unwrap();
+        let dt: time::OffsetDateTime = ts.into();
+        assert_eq!(dt.nanosecond(), 123_456_789);
+    }
+
+    #[test]
+    fn parse_epoch_seconds_overflow_fractional() {
+        // 10 digits should fail
+        let result = Timestamp::parse(TimestampFormat::EpochSeconds, "100.1234567890");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_datetime_invalid() {
+        let result = Timestamp::parse(TimestampFormat::DateTime, "not-a-date");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_http_date_invalid() {
+        let result = Timestamp::parse(TimestampFormat::HttpDate, "not-a-date");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_epoch_seconds_invalid() {
+        let result = Timestamp::parse(TimestampFormat::EpochSeconds, "abc");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn from_system_time() {
+        let st = SystemTime::UNIX_EPOCH;
+        let ts = Timestamp::from(st);
+        let dt: time::OffsetDateTime = ts.into();
+        assert_eq!(dt, time::OffsetDateTime::UNIX_EPOCH);
+    }
+
+    #[test]
+    fn from_offset_datetime() {
+        let odt = time::OffsetDateTime::UNIX_EPOCH;
+        let ts = Timestamp::from(odt);
+        let back: time::OffsetDateTime = ts.into();
+        assert_eq!(back, time::OffsetDateTime::UNIX_EPOCH);
+    }
+
+    #[test]
+    fn serde_roundtrip() {
+        let ts = Timestamp::parse(TimestampFormat::DateTime, "1985-04-12T23:20:50.520Z").unwrap();
+        let json = serde_json::to_string(&ts).unwrap();
+        assert!(json.contains("1985-04-12"));
+        let parsed: Timestamp = serde_json::from_str(&json).unwrap();
+        assert_eq!(ts, parsed);
+    }
+
+    #[test]
+    fn serde_deserialize_invalid() {
+        let result: Result<Timestamp, _> = serde_json::from_str("\"not-a-date\"");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn format_epoch_seconds() {
+        let ts = Timestamp::parse(TimestampFormat::EpochSeconds, "0").unwrap();
+        let mut buf = Vec::new();
+        ts.format(TimestampFormat::EpochSeconds, &mut buf).unwrap();
+        let text = String::from_utf8(buf).unwrap();
+        assert_eq!(text, "0");
+    }
+
+    #[test]
+    fn timestamp_ord() {
+        let ts1 = Timestamp::parse(TimestampFormat::EpochSeconds, "100").unwrap();
+        let ts2 = Timestamp::parse(TimestampFormat::EpochSeconds, "200").unwrap();
+        assert!(ts1 < ts2);
+        assert_eq!(ts1, ts1.clone());
+    }
+
+    #[test]
+    fn timestamp_hash() {
+        use std::collections::HashSet;
+        let ts1 = Timestamp::parse(TimestampFormat::EpochSeconds, "100").unwrap();
+        let ts2 = Timestamp::parse(TimestampFormat::EpochSeconds, "100").unwrap();
+        let mut set = HashSet::new();
+        set.insert(ts1);
+        set.insert(ts2);
+        assert_eq!(set.len(), 1);
+    }
+
+    #[test]
+    fn parse_epoch_seconds_all_frac_lengths() {
+        // 2 digit fractional
+        let ts = Timestamp::parse(TimestampFormat::EpochSeconds, "100.12").unwrap();
+        let dt: time::OffsetDateTime = ts.into();
+        assert_eq!(dt.nanosecond(), 120_000_000);
+
+        // 4 digits
+        let ts = Timestamp::parse(TimestampFormat::EpochSeconds, "100.1234").unwrap();
+        let dt: time::OffsetDateTime = ts.into();
+        assert_eq!(dt.nanosecond(), 123_400_000);
+
+        // 5 digits
+        let ts = Timestamp::parse(TimestampFormat::EpochSeconds, "100.12345").unwrap();
+        let dt: time::OffsetDateTime = ts.into();
+        assert_eq!(dt.nanosecond(), 123_450_000);
+
+        // 7 digits
+        let ts = Timestamp::parse(TimestampFormat::EpochSeconds, "100.1234567").unwrap();
+        let dt: time::OffsetDateTime = ts.into();
+        assert_eq!(dt.nanosecond(), 123_456_700);
+
+        // 8 digits
+        let ts = Timestamp::parse(TimestampFormat::EpochSeconds, "100.12345678").unwrap();
+        let dt: time::OffsetDateTime = ts.into();
+        assert_eq!(dt.nanosecond(), 123_456_780);
+    }
+
+    #[test]
+    fn parse_epoch_negative_with_frac() {
+        // "-1.5" means -1 seconds + 0.5 fractional = -0.5 seconds
+        let ts = Timestamp::parse(TimestampFormat::EpochSeconds, "-1.5").unwrap();
+        let dt: time::OffsetDateTime = ts.into();
+        let nanos = dt.unix_timestamp_nanos();
+        assert_eq!(nanos, -500_000_000);
+    }
 }
