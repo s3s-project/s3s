@@ -20,7 +20,7 @@ The project converts HTTP requests to operation inputs, calls user-defined servi
 ## Development Workflow
 
 ### Required Tools
-- **Rust**: ^1.86.0 (MSRV - minimum supported version)
+- **Rust**: ^1.92.0 (MSRV - minimum supported version)
 - **just**: ^1.36.0 (task runner, like make)
 - **uv**: ^0.5.0 (Python package manager)
 - **Docker**: For E2E testing

@@ -422,7 +422,7 @@ impl PresignedUrl {
         let content = "Hello from PUT presigned URL!";
 
         // Create a presigned PUT URL
-        let presigning_config = PresigningConfig::expires_in(Duration::from_secs(3600))?;
+        let presigning_config = PresigningConfig::expires_in(Duration::from_hours(1))?;
         let presigned_request = s3.put_object().bucket(bucket).key(key).presigned(presigning_config).await?;
 
         debug!(uri = %presigned_request.uri(), "PUT presigned URL created");
@@ -463,7 +463,7 @@ impl PresignedUrl {
             .await?;
 
         // Create a presigned GET URL
-        let presigning_config = PresigningConfig::expires_in(Duration::from_secs(3600))?;
+        let presigning_config = PresigningConfig::expires_in(Duration::from_hours(1))?;
         let presigned_request = s3.get_object().bucket(bucket).key(key).presigned(presigning_config).await?;
 
         debug!(uri = %presigned_request.uri(), "GET presigned URL created");

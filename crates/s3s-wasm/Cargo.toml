@@ -9,7 +9,7 @@ publish = false
 
 [dependencies]
 futures = { workspace = true, features = ["executor"] }
-getrandom = { version = "0.3.4", features = ["wasm_js"] }
+getrandom = { version = "0.4.1", features = ["wasm_js"] }
 http.workspace = true
 s3s = { version = "0.13.0-alpha.3", path = "../s3s", default-features = false }
 
@@ -17,4 +17,4 @@ s3s = { version = "0.13.0-alpha.3", path = "../s3s", default-features = false }
 workspace = true
 
 [dev-dependencies]
-wasm-bindgen-test = "0.3.58"
+wasm-bindgen-test = "0.3.64"
