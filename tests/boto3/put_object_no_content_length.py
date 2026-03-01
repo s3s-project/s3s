@@ -363,9 +363,12 @@ def test_5_raw_socket_put_no_content_length():
         ]
         raw_request = "\r\n".join(req_lines).encode("utf-8") + body
 
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # Use getaddrinfo to support both IPv4 and IPv6 (e.g. when localhost resolves to ::1)
+        addrinfo = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+        family, socktype, proto, _canonname, sockaddr = addrinfo[0]
+        sock = socket.socket(family, socktype, proto)
         sock.settimeout(10)
-        sock.connect((host, port))
+        sock.connect(sockaddr)
         sock.sendall(raw_request)
         sock.shutdown(socket.SHUT_WR)
 
