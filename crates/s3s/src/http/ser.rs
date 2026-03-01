@@ -161,3 +161,116 @@ pub fn add_opt_metadata(res: &mut Response, metadata: Option<Metadata>) -> S3Res
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bytes::Bytes;
+
+    fn new_response() -> Response {
+        Response::default()
+    }
+
+    #[test]
+    fn try_into_header_value_bool() {
+        let hv = true.try_into_header_value().unwrap();
+        assert_eq!(hv.as_bytes(), b"true");
+        let hv = false.try_into_header_value().unwrap();
+        assert_eq!(hv.as_bytes(), b"false");
+    }
+
+    #[test]
+    fn try_into_header_value_i32() {
+        let hv = 42i32.try_into_header_value().unwrap();
+        assert_eq!(hv.as_bytes(), b"42");
+        let hv = (-1i32).try_into_header_value().unwrap();
+        assert_eq!(hv.as_bytes(), b"-1");
+        let hv = 0i32.try_into_header_value().unwrap();
+        assert_eq!(hv.as_bytes(), b"0");
+    }
+
+    #[test]
+    fn try_into_header_value_i64() {
+        let hv = 123_456_789_i64.try_into_header_value().unwrap();
+        assert_eq!(hv.as_bytes(), b"123456789");
+        let hv = (-99i64).try_into_header_value().unwrap();
+        assert_eq!(hv.as_bytes(), b"-99");
+    }
+
+    #[test]
+    fn try_into_header_value_string() {
+        let hv = "hello".to_string().try_into_header_value().unwrap();
+        assert_eq!(hv.as_bytes(), b"hello");
+    }
+
+    #[test]
+    fn add_opt_header_some() {
+        let mut res = new_response();
+        add_opt_header(&mut res, hyper::header::CONTENT_LENGTH, Some(42i64)).unwrap();
+        assert_eq!(res.headers.get(hyper::header::CONTENT_LENGTH).unwrap().as_bytes(), b"42");
+    }
+
+    #[test]
+    fn add_opt_header_none() {
+        let mut res = new_response();
+        add_opt_header::<_, String>(&mut res, hyper::header::CONTENT_TYPE, None).unwrap();
+        assert!(res.headers.get(hyper::header::CONTENT_TYPE).is_none());
+    }
+
+    #[test]
+    fn add_opt_header_bool() {
+        let mut res = new_response();
+        add_opt_header(&mut res, "x-amz-delete-marker", Some(true)).unwrap();
+        assert_eq!(res.headers.get("x-amz-delete-marker").unwrap().as_bytes(), b"true");
+    }
+
+    #[test]
+    fn add_opt_header_timestamp_some() {
+        let mut res = new_response();
+        let ts = Timestamp::parse(TimestampFormat::HttpDate, "Wed, 21 Oct 2015 07:28:00 GMT").unwrap();
+        super::add_opt_header_timestamp(&mut res, "x-amz-date", Some(ts), TimestampFormat::HttpDate).unwrap();
+        assert_eq!(res.headers.get("x-amz-date").unwrap().as_bytes(), b"Wed, 21 Oct 2015 07:28:00 GMT");
+    }
+
+    #[test]
+    fn add_opt_header_timestamp_is_none() {
+        let mut res = new_response();
+        super::add_opt_header_timestamp(&mut res, "x-amz-date", None, TimestampFormat::HttpDate).unwrap();
+        assert!(res.headers.get("x-amz-date").is_none());
+    }
+
+    #[test]
+    fn set_stream_body_test() {
+        let mut res = new_response();
+        let blob = StreamingBlob::new(Body::from(Bytes::from_static(b"stream data")));
+        set_stream_body(&mut res, blob);
+        assert!(!http_body::Body::is_end_stream(&res.body));
+    }
+
+    #[test]
+    fn add_opt_metadata_some() {
+        let mut res = new_response();
+        let mut metadata = Metadata::default();
+        metadata.insert("key1".into(), "value1".into());
+        metadata.insert("key2".into(), "value2".into());
+        add_opt_metadata(&mut res, Some(metadata)).unwrap();
+        assert!(res.headers.get("x-amz-meta-key1").is_some());
+        assert!(res.headers.get("x-amz-meta-key2").is_some());
+    }
+
+    #[test]
+    fn add_opt_metadata_none() {
+        let mut res = new_response();
+        add_opt_metadata(&mut res, None).unwrap();
+        assert!(res.headers.is_empty());
+    }
+
+    #[test]
+    fn add_opt_metadata_empty_map() {
+        let mut res = new_response();
+        let metadata = Metadata::default();
+        add_opt_metadata(&mut res, Some(metadata)).unwrap();
+        // Empty map treated same as Some with empty
+        // Just verifies no panic
+    }
+}

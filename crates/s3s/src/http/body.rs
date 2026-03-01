@@ -309,6 +309,8 @@ impl Body {
 mod tests {
     use super::*;
 
+    use futures::StreamExt;
+
     #[tokio::test]
     async fn test_store_all_limited_success() {
         let data = b"hello world";
@@ -332,5 +334,254 @@ mod tests {
         let result = body.store_all_limited(10).await;
         assert!(result.is_ok());
         assert!(result.unwrap().is_empty());
+    }
+
+    #[test]
+    fn body_empty_is_end_stream() {
+        let body = Body::empty();
+        assert!(http_body::Body::is_end_stream(&body));
+    }
+
+    #[test]
+    fn body_once_is_end_stream() {
+        let body = Body::from(Bytes::from_static(b"data"));
+        assert!(!http_body::Body::is_end_stream(&body));
+
+        let body = Body::from(Bytes::new());
+        assert!(http_body::Body::is_end_stream(&body));
+    }
+
+    #[test]
+    fn body_empty_size_hint() {
+        let body = Body::empty();
+        let hint = http_body::Body::size_hint(&body);
+        assert_eq!(hint.lower(), 0);
+        assert_eq!(hint.upper(), Some(0));
+    }
+
+    #[test]
+    fn body_once_size_hint() {
+        let body = Body::from(Bytes::from_static(b"hello"));
+        let hint = http_body::Body::size_hint(&body);
+        assert_eq!(hint.lower(), 5);
+        assert_eq!(hint.upper(), Some(5));
+    }
+
+    #[tokio::test]
+    async fn body_empty_poll_frame() {
+        let mut body = Body::empty();
+        let frame = http_body::Body::poll_frame(
+            Pin::new(&mut body),
+            &mut std::task::Context::from_waker(futures::task::noop_waker_ref()),
+        );
+        assert!(matches!(frame, Poll::Ready(None)));
+    }
+
+    #[tokio::test]
+    async fn body_once_poll_frame() {
+        let mut body = Body::from(Bytes::from_static(b"hello"));
+        let waker = futures::task::noop_waker_ref();
+        let mut cx = std::task::Context::from_waker(waker);
+        let frame = http_body::Body::poll_frame(Pin::new(&mut body), &mut cx);
+        match frame {
+            Poll::Ready(Some(Ok(frame))) => {
+                let data = frame.into_data().unwrap();
+                assert_eq!(data.as_ref(), b"hello");
+            }
+            _ => panic!("expected data frame"),
+        }
+        // Second poll should return None
+        let frame = http_body::Body::poll_frame(Pin::new(&mut body), &mut cx);
+        assert!(matches!(frame, Poll::Ready(None)));
+    }
+
+    #[tokio::test]
+    async fn body_once_empty_bytes_poll_frame() {
+        let mut body = Body::from(Bytes::new());
+        let waker = futures::task::noop_waker_ref();
+        let mut cx = std::task::Context::from_waker(waker);
+        let frame = http_body::Body::poll_frame(Pin::new(&mut body), &mut cx);
+        assert!(matches!(frame, Poll::Ready(None)));
+    }
+
+    #[test]
+    fn body_from_vec() {
+        let body = Body::from(vec![1u8, 2, 3]);
+        assert!(!http_body::Body::is_end_stream(&body));
+        let hint = http_body::Body::size_hint(&body);
+        assert_eq!(hint.lower(), 3);
+    }
+
+    #[test]
+    fn body_from_string() {
+        let body = Body::from("hello".to_string());
+        assert!(!http_body::Body::is_end_stream(&body));
+        let hint = http_body::Body::size_hint(&body);
+        assert_eq!(hint.lower(), 5);
+    }
+
+    #[test]
+    fn body_bytes_empty() {
+        let body = Body::empty();
+        let bytes = body.bytes();
+        assert_eq!(bytes, Some(Bytes::new()));
+    }
+
+    #[test]
+    fn body_bytes_once() {
+        let body = Body::from(Bytes::from_static(b"hello"));
+        let bytes = body.bytes();
+        assert_eq!(bytes, Some(Bytes::from_static(b"hello")));
+    }
+
+    #[test]
+    fn body_take_bytes_empty() {
+        let mut body = Body::empty();
+        let bytes = body.take_bytes();
+        assert_eq!(bytes, Some(Bytes::new()));
+    }
+
+    #[test]
+    fn body_take_bytes_once() {
+        let mut body = Body::from(Bytes::from_static(b"hello"));
+        let bytes = body.take_bytes();
+        assert_eq!(bytes, Some(Bytes::from_static(b"hello")));
+        // After take, body should be empty
+        assert!(http_body::Body::is_end_stream(&body));
+    }
+
+    #[test]
+    fn body_debug_empty() {
+        let body = Body::empty();
+        let debug = format!("{body:?}");
+        assert!(debug.contains("Body"));
+    }
+
+    #[test]
+    fn body_debug_once() {
+        let body = Body::from(Bytes::from_static(b"hi"));
+        let debug = format!("{body:?}");
+        assert!(debug.contains("Body"));
+        assert!(debug.contains("once"));
+    }
+
+    #[tokio::test]
+    async fn body_stream_impl() {
+        let mut body = Body::from(Bytes::from_static(b"stream"));
+        let mut collected = Vec::new();
+        while let Some(chunk) = body.next().await {
+            collected.push(chunk.unwrap());
+        }
+        assert_eq!(collected, vec![Bytes::from_static(b"stream")]);
+    }
+
+    #[tokio::test]
+    async fn body_stream_empty() {
+        let mut body = Body::empty();
+        let next = body.next().await;
+        assert!(next.is_none());
+    }
+
+    #[test]
+    fn body_byte_stream_remaining_length_empty() {
+        let body = Body::empty();
+        let rl = ByteStream::remaining_length(&body);
+        assert_eq!(rl.exact(), Some(0));
+    }
+
+    #[test]
+    fn body_byte_stream_remaining_length_once() {
+        let body = Body::from(Bytes::from_static(b"12345"));
+        let rl = ByteStream::remaining_length(&body);
+        assert_eq!(rl.exact(), Some(5));
+    }
+
+    #[test]
+    fn body_http_body_boxed() {
+        let inner = http_body_util::Full::new(Bytes::from_static(b"boxed"));
+        let body = Body::http_body(inner);
+        let hint = http_body::Body::size_hint(&body);
+        assert_eq!(hint.lower(), 5);
+        assert!(!http_body::Body::is_end_stream(&body));
+    }
+
+    #[test]
+    fn body_http_body_unsync() {
+        let inner = http_body_util::Full::new(Bytes::from_static(b"unsync"));
+        let body = Body::http_body_unsync(inner);
+        let hint = http_body::Body::size_hint(&body);
+        assert_eq!(hint.lower(), 6);
+        assert!(!http_body::Body::is_end_stream(&body));
+    }
+
+    #[test]
+    fn body_debug_box_body() {
+        let inner = http_body_util::Full::new(Bytes::from_static(b"test"));
+        let body = Body::http_body(inner);
+        let debug = format!("{body:?}");
+        assert!(debug.contains("Body"));
+        assert!(debug.contains("remaining_length"));
+    }
+
+    #[test]
+    fn body_debug_unsync_box_body() {
+        let inner = http_body_util::Full::new(Bytes::from_static(b"test"));
+        let body = Body::http_body_unsync(inner);
+        let debug = format!("{body:?}");
+        assert!(debug.contains("Body"));
+        assert!(debug.contains("remaining_length"));
+    }
+
+    #[test]
+    fn body_from_dyn_byte_stream() {
+        let inner = Body::from(Bytes::from_static(b"dyn"));
+        let dyn_stream: DynByteStream = Box::pin(inner);
+        let body = Body::from(dyn_stream);
+        let debug = format!("{body:?}");
+        assert!(debug.contains("dyn_stream"));
+    }
+
+    #[test]
+    fn body_size_limit_exceeded_display() {
+        let err = BodySizeLimitExceeded { size: 100, limit: 50 };
+        let msg = format!("{err}");
+        assert!(msg.contains("100"));
+        assert!(msg.contains("50"));
+    }
+
+    #[tokio::test]
+    async fn body_boxed_poll_frame() {
+        let inner = http_body_util::Full::new(Bytes::from_static(b"boxed"));
+        let mut body = Body::http_body(inner);
+        let mut collected = Vec::new();
+        while let Some(chunk) = body.next().await {
+            collected.push(chunk.unwrap());
+        }
+        assert_eq!(collected, vec![Bytes::from_static(b"boxed")]);
+    }
+
+    #[tokio::test]
+    async fn body_unsync_poll_frame() {
+        let inner = http_body_util::Full::new(Bytes::from_static(b"unsync"));
+        let mut body = Body::http_body_unsync(inner);
+        let mut collected = Vec::new();
+        while let Some(chunk) = body.next().await {
+            collected.push(chunk.unwrap());
+        }
+        assert_eq!(collected, vec![Bytes::from_static(b"unsync")]);
+    }
+
+    #[test]
+    fn body_bytes_returns_none_for_box_body() {
+        let inner = http_body_util::Full::new(Bytes::from_static(b"test"));
+        let body = Body::http_body(inner);
+        assert!(body.bytes().is_none());
+    }
+
+    #[test]
+    fn body_take_bytes_returns_none_for_box_body() {
+        let inner = http_body_util::Full::new(Bytes::from_static(b"test"));
+        let mut body = Body::http_body(inner);
+        assert!(body.take_bytes().is_none());
     }
 }

@@ -130,11 +130,10 @@ where
 mod tests {
     use super::*;
     use futures::StreamExt;
+    use http_body::Body as HttpBody;
 
     #[tokio::test]
     async fn streaming_blob_new_and_poll() {
-        let data = vec![Bytes::from_static(b"hello"), Bytes::from_static(b" world")];
-        let stream = futures::stream::iter(data.into_iter().map(Ok::<_, StdError>));
         let body = Body::from(Bytes::from_static(b"hello world"));
         let mut blob = StreamingBlob::new(body);
         let mut collected = Vec::new();
@@ -181,7 +180,7 @@ mod tests {
         let body = Body::from(Bytes::from_static(b"data"));
         let blob = StreamingBlob::from(body);
         let body_back: Body = Body::from(blob);
-        assert!(!body_back.is_end_stream());
+        assert!(!HttpBody::is_end_stream(&body_back));
     }
 
     #[test]
