@@ -80,7 +80,7 @@ serde_urlencoded = "0.7.1"
 # Async & concurrency
 async-trait = "0.1.89"
 futures = { version = "0.3.32", default-features = false }
-futures-util = "0.3.31"
+futures-util = "0.3.32"
 pin-project-lite = "0.2.17"
 sync_wrapper = { version = "1.0.2", default-features = false }
 tokio = "1.49.0"
@@ -96,7 +96,6 @@ httparse = "1.10.1"
 hyper = "1.8.1"
 hyper-util = "0.1.20"
 mime = "0.3.17"
-rustls-pemfile = "2.2.0"
 tokio-rustls = "0.26.4"
 tower = { version = "0.5.3", default-features = false }
 url = "2.5.8"
@@ -114,10 +113,10 @@ clap = { version = "4.5.60", features = ["derive"] }
 opendal = "0.55.0"
 
 # AWS SDK
-aws-config = { version = "1.8.13", default-features = false }
-aws-credential-types = "1.2.11"
-aws-sdk-s3 = "1.122.0"
-aws-sdk-sts = "1.97.0"
-aws-smithy-runtime-api = "1.11.3"
-aws-smithy-types = "1.4.3"
-aws-smithy-types-convert = "0.60.12"
+aws-config = { version = "1.8.14", default-features = false }
+aws-credential-types = "1.2.13"
+aws-sdk-s3 = "1.124.0"
+aws-sdk-sts = "1.99.0"
+aws-smithy-runtime-api = "1.11.5"
+aws-smithy-types = "1.4.5"
+aws-smithy-types-convert = "0.60.13"
