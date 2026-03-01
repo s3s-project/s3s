@@ -1,0 +1,24 @@
+name: Semver
+
+on:
+  pull_request:
+    branches:
+      - main
+      - 'feat/**'
+  merge_group:
+    types: [checks_requested]
+  schedule:
+    - cron: '0 0 * * 0' # at midnight of each sunday
+  workflow_dispatch:
+
+jobs:
+  semver-checks:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Check semver
+        uses: obi1kenobi/cargo-semver-checks-action@v2

@@ -20,6 +20,9 @@ lint:
 test:
     cargo test --workspace --all-features --all-targets
 
+semver-checks:
+    cargo semver-checks
+
 doc:
     RUSTDOCFLAGS="--cfg docsrs" cargo +nightly doc --open --no-deps --all-features
 
