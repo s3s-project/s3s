@@ -1,4 +1,4 @@
-FROM rust:1.89 AS builder
+FROM rust:latest AS builder
 
 # TARGETARCH is a built-in ARG provided by the Docker builder (e.g., "amd64", "arm64")
 # It's automatically available in RUN commands.
