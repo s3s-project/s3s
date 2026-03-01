@@ -143,6 +143,18 @@ fn check_account_id(id: &str) -> bool {
     id.len() == 12 && id.bytes().all(|b| b.is_ascii_digit())
 }
 
+/// URL-encodes a path, preserving `/` separators.
+fn encode_path(s: &str) -> String {
+    let mut buf = String::new();
+    for (i, seg) in s.split('/').enumerate() {
+        if i > 0 {
+            buf.push('/');
+        }
+        buf.push_str(&urlencoding::encode(seg));
+    }
+    buf
+}
+
 /// Parses an access point ARN resource: `accesspoint/<name>/object/<key>`
 fn parse_access_point_resource(
     resource: &str,
@@ -284,9 +296,11 @@ impl CopySource {
         let mut buf = String::new();
         match self {
             CopySource::Bucket { bucket, key, version_id } => {
-                write!(&mut buf, "{bucket}/{key}").unwrap();
+                let encoded_key = encode_path(key);
+                write!(&mut buf, "{bucket}/{encoded_key}").unwrap();
                 if let Some(version_id) = version_id {
-                    write!(&mut buf, "?versionId={version_id}").unwrap();
+                    let encoded_vid = urlencoding::encode(version_id);
+                    write!(&mut buf, "?versionId={encoded_vid}").unwrap();
                 }
             }
             CopySource::AccessPoint {
@@ -297,13 +311,15 @@ impl CopySource {
                 key,
                 version_id,
             } => {
+                let encoded_key = encode_path(key);
                 write!(
                     &mut buf,
-                    "arn:{partition}:s3:{region}:{account_id}:accesspoint/{access_point_name}/object/{key}"
+                    "arn:{partition}:s3:{region}:{account_id}:accesspoint/{access_point_name}/object/{encoded_key}"
                 )
                 .unwrap();
                 if let Some(version_id) = version_id {
-                    write!(&mut buf, "?versionId={version_id}").unwrap();
+                    let encoded_vid = urlencoding::encode(version_id);
+                    write!(&mut buf, "?versionId={encoded_vid}").unwrap();
                 }
             }
             CopySource::Outpost {
@@ -314,13 +330,15 @@ impl CopySource {
                 key,
                 version_id,
             } => {
+                let encoded_key = encode_path(key);
                 write!(
                     &mut buf,
-                    "arn:{partition}:s3-outposts:{region}:{account_id}:outpost/{outpost_id}/object/{key}"
+                    "arn:{partition}:s3-outposts:{region}:{account_id}:outpost/{outpost_id}/object/{encoded_key}"
                 )
                 .unwrap();
                 if let Some(version_id) = version_id {
-                    write!(&mut buf, "?versionId={version_id}").unwrap();
+                    let encoded_vid = urlencoding::encode(version_id);
+                    write!(&mut buf, "?versionId={encoded_vid}").unwrap();
                 }
             }
         }
@@ -914,6 +932,77 @@ mod tests {
     #[test]
     fn outpost_roundtrip_cn_partition() {
         let original = "arn:aws-cn:s3-outposts:cn-north-1:123456789012:outpost/my-outpost/object/key.txt";
+        let parsed = CopySource::parse(original).unwrap();
+        assert_eq!(parsed.format_to_string(), original);
+    }
+
+    // ── Missing error branch coverage ──
+
+    #[test]
+    fn invalid_bucket_name() {
+        // Bucket name too short (1 char)
+        let header = "a/some-key";
+        let err = CopySource::parse(header).unwrap_err();
+        assert!(matches!(err, ParseCopySourceError::InvalidBucketName));
+    }
+
+    #[test]
+    fn invalid_key_too_long_bucket() {
+        let long_key = "a".repeat(1025);
+        let header = format!("my-bucket/{long_key}");
+        let err = CopySource::parse(&header).unwrap_err();
+        assert!(matches!(err, ParseCopySourceError::InvalidKey));
+    }
+
+    #[test]
+    fn invalid_outpost_empty_key() {
+        let header = "arn:aws:s3-outposts:us-west-2:123456789012:outpost/my-outpost/object/";
+        let err = CopySource::parse(header).unwrap_err();
+        assert!(matches!(err, ParseCopySourceError::InvalidKey));
+    }
+
+    #[test]
+    fn invalid_encoding_version_id() {
+        // %80 in versionId triggers InvalidEncoding from extract_version_id
+        let header = "my-bucket/key?versionId=%80";
+        let err = CopySource::parse(header).unwrap_err();
+        assert!(matches!(err, ParseCopySourceError::InvalidEncoding));
+    }
+
+    #[test]
+    fn invalid_outpost_bad_resource_prefix() {
+        // s3-outposts service but resource doesn't start with "outpost/"
+        let header = "arn:aws:s3-outposts:us-west-2:123456789012:accesspoint/my-ap/object/key";
+        let err = CopySource::parse(header).unwrap_err();
+        assert!(matches!(err, ParseCopySourceError::InvalidArn));
+    }
+
+    // ── Encoded roundtrip tests ──
+
+    #[test]
+    fn bucket_roundtrip_encoded_key() {
+        let header = "awsexamplebucket/reports/file%3Fversion.txt?versionId=abc";
+        let parsed = CopySource::parse(header).unwrap();
+        assert_eq!(parsed.format_to_string(), header);
+    }
+
+    #[test]
+    fn access_point_roundtrip_encoded_key_spaces() {
+        let original = "arn:aws:s3:us-west-2:123456789012:accesspoint/my-ap/object/my%20file.txt";
+        let parsed = CopySource::parse(original).unwrap();
+        assert_eq!(parsed.format_to_string(), original);
+    }
+
+    #[test]
+    fn access_point_roundtrip_encoded_key_question_mark() {
+        let original = "arn:aws:s3:us-west-2:123456789012:accesspoint/my-ap/object/path/to/file%3Fname.txt";
+        let parsed = CopySource::parse(original).unwrap();
+        assert_eq!(parsed.format_to_string(), original);
+    }
+
+    #[test]
+    fn outpost_roundtrip_encoded_key() {
+        let original = "arn:aws:s3-outposts:us-west-2:123456789012:outpost/my-outpost/object/my%20doc.pdf";
         let parsed = CopySource::parse(original).unwrap();
         assert_eq!(parsed.format_to_string(), original);
     }
