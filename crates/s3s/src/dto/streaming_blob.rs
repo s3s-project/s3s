@@ -125,3 +125,93 @@ where
 {
     Box::pin(StreamWrapper { inner })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use futures::StreamExt;
+
+    #[tokio::test]
+    async fn streaming_blob_new_and_poll() {
+        let data = vec![Bytes::from_static(b"hello"), Bytes::from_static(b" world")];
+        let stream = futures::stream::iter(data.into_iter().map(Ok::<_, StdError>));
+        let body = Body::from(Bytes::from_static(b"hello world"));
+        let mut blob = StreamingBlob::new(body);
+        let mut collected = Vec::new();
+        while let Some(chunk) = blob.next().await {
+            collected.push(chunk.unwrap());
+        }
+        assert_eq!(collected, vec![Bytes::from_static(b"hello world")]);
+    }
+
+    #[tokio::test]
+    async fn streaming_blob_wrap() {
+        let data = vec![
+            Ok::<_, std::io::Error>(Bytes::from_static(b"abc")),
+            Ok(Bytes::from_static(b"def")),
+        ];
+        let stream = futures::stream::iter(data);
+        let mut blob = StreamingBlob::wrap(stream);
+        let mut collected = Vec::new();
+        while let Some(chunk) = blob.next().await {
+            collected.push(chunk.unwrap());
+        }
+        assert_eq!(collected, vec![Bytes::from_static(b"abc"), Bytes::from_static(b"def")]);
+    }
+
+    #[test]
+    fn streaming_blob_debug() {
+        let body = Body::from(Bytes::from_static(b"test"));
+        let blob = StreamingBlob::new(body);
+        let debug = format!("{blob:?}");
+        assert!(debug.contains("StreamingBlob"));
+        assert!(debug.contains("remaining_length"));
+    }
+
+    #[test]
+    fn streaming_blob_remaining_length() {
+        let body = Body::from(Bytes::from_static(b"hello"));
+        let blob = StreamingBlob::new(body);
+        let rl = blob.remaining_length();
+        assert_eq!(rl.exact(), Some(5));
+    }
+
+    #[test]
+    fn streaming_blob_from_body_roundtrip() {
+        let body = Body::from(Bytes::from_static(b"data"));
+        let blob = StreamingBlob::from(body);
+        let body_back: Body = Body::from(blob);
+        assert!(!body_back.is_end_stream());
+    }
+
+    #[test]
+    fn streaming_blob_into_dyn_byte_stream() {
+        let body = Body::from(Bytes::from_static(b"test"));
+        let blob = StreamingBlob::new(body);
+        let _dyn_stream: DynByteStream = blob.into();
+    }
+
+    #[test]
+    fn streaming_blob_from_dyn_byte_stream() {
+        let body = Body::from(Bytes::from_static(b"test"));
+        let dyn_stream: DynByteStream = Box::pin(body);
+        let _blob = StreamingBlob::from(dyn_stream);
+    }
+
+    #[test]
+    fn streaming_blob_size_hint() {
+        let body = Body::from(Bytes::from_static(b"12345"));
+        let blob = StreamingBlob::new(body);
+        let (lower, _upper) = blob.size_hint();
+        // Body::Once with 5 bytes - size_hint is from DynByteStream
+        let _ = lower;
+    }
+
+    #[tokio::test]
+    async fn streaming_blob_empty() {
+        let body = Body::empty();
+        let mut blob = StreamingBlob::new(body);
+        let next = blob.next().await;
+        assert!(next.is_none());
+    }
+}
