@@ -270,7 +270,6 @@ mod tests {
         let mut res = new_response();
         let metadata = Metadata::default();
         add_opt_metadata(&mut res, Some(metadata)).unwrap();
-        // Empty map treated same as Some with empty
-        // Just verifies no panic
+        assert!(res.headers.is_empty());
     }
 }

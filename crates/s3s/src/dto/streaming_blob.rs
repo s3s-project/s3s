@@ -201,9 +201,10 @@ mod tests {
     fn streaming_blob_size_hint() {
         let body = Body::from(Bytes::from_static(b"12345"));
         let blob = StreamingBlob::new(body);
-        let (lower, _upper) = blob.size_hint();
-        // Body::Once with 5 bytes - size_hint is from DynByteStream
-        let _ = lower;
+        let (lower, upper) = blob.size_hint();
+        if let Some(upper) = upper {
+            assert!(lower <= upper);
+        }
     }
 
     #[tokio::test]

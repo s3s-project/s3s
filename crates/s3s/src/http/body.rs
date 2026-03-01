@@ -367,8 +367,8 @@ mod tests {
         assert_eq!(hint.upper(), Some(5));
     }
 
-    #[tokio::test]
-    async fn body_empty_poll_frame() {
+    #[test]
+    fn body_empty_poll_frame() {
         let mut body = Body::empty();
         let frame = http_body::Body::poll_frame(
             Pin::new(&mut body),
@@ -377,8 +377,8 @@ mod tests {
         assert!(matches!(frame, Poll::Ready(None)));
     }
 
-    #[tokio::test]
-    async fn body_once_poll_frame() {
+    #[test]
+    fn body_once_poll_frame() {
         let mut body = Body::from(Bytes::from_static(b"hello"));
         let waker = futures::task::noop_waker_ref();
         let mut cx = std::task::Context::from_waker(waker);
@@ -395,8 +395,8 @@ mod tests {
         assert!(matches!(frame, Poll::Ready(None)));
     }
 
-    #[tokio::test]
-    async fn body_once_empty_bytes_poll_frame() {
+    #[test]
+    fn body_once_empty_bytes_poll_frame() {
         let mut body = Body::from(Bytes::new());
         let waker = futures::task::noop_waker_ref();
         let mut cx = std::task::Context::from_waker(waker);
