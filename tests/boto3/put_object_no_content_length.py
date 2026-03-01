@@ -357,6 +357,7 @@ def test_5_raw_socket_put_no_content_length():
             f"x-amz-content-sha256: {sig_headers['x-amz-content-sha256']}",
             f"Authorization: {sig_headers['Authorization']}",
             "Content-Type: application/octet-stream",
+            "Connection: close",
             "",
             "",
         ]
@@ -366,6 +367,7 @@ def test_5_raw_socket_put_no_content_length():
         sock.settimeout(10)
         sock.connect((host, port))
         sock.sendall(raw_request)
+        sock.shutdown(socket.SHUT_WR)
 
         # Read response
         response = b""
@@ -406,7 +408,7 @@ def test_5_raw_socket_put_no_content_length():
 
 
 def test_6_put_zero_content_length():
-    """PutObject with Content-Length: 0 but non-empty body (should create empty object)."""
+    """PutObject with Content-Length: 0 (zero-length PUT, should create empty object)."""
     test_name = "6. PUT with Content-Length: 0"
     try:
         url = f"{ENDPOINT_URL}/{BUCKET}/test-zero-cl.txt"
