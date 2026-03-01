@@ -7,11 +7,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-[Unreleased]: https://github.com/s3s-project/s3s/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/s3s-project/s3s/compare/v0.13.0...HEAD
+
+## [v0.13.0] - 2026-03-01
+
+[v0.13.0]: https://github.com/s3s-project/s3s/compare/v0.12.0...v0.13.0
+
+Tracking in [#442](https://github.com/s3s-project/s3s/issues/442).
+
+MSRV of this minor version: 1.92.0
+
+### s3s
+
+POST Object support:
++ Split out POST Object handling ([#466](https://github.com/s3s-project/s3s/pull/466))
++ Add POST Object success action ([#467](https://github.com/s3s-project/s3s/pull/467))
++ Add POST policy validation ([#470](https://github.com/s3s-project/s3s/pull/470))
++ Add support for Content-Type field in POST multipart requests ([#500](https://github.com/s3s-project/s3s/pull/500))
++ Fix file_size calculation for post policy validation ([#497](https://github.com/s3s-project/s3s/pull/497))
++ Fix content-length-range error code in post policy ([#502](https://github.com/s3s-project/s3s/pull/502))
++ Fix bucket validation from URL in post policy ([#507](https://github.com/s3s-project/s3s/pull/507))
++ Fix multipart parsing and anonymous post object ([#508](https://github.com/s3s-project/s3s/pull/508))
+
+New S3 operations:
++ Add `ListDirectoryBuckets` operation ([#520](https://github.com/s3s-project/s3s/pull/520))
++ Add `CreateSession` operation ([#511](https://github.com/s3s-project/s3s/pull/511))
+
+Region support:
++ Add strong type `Region` ([#504](https://github.com/s3s-project/s3s/pull/504))
++ Add region in `VirtualHost` ([#481](https://github.com/s3s-project/s3s/pull/481))
++ Pass region & service to request extensions ([#503](https://github.com/s3s-project/s3s/pull/503))
+
+Axum / tower integration:
++ Implement generic `tower::Service` for `S3Service` to enable Axum integration ([#451](https://github.com/s3s-project/s3s/pull/451))
++ Add `hyper` feature `http2` ([#459](https://github.com/s3s-project/s3s/pull/459))
+
+Configuration:
++ Add `S3ConfigProvider` module with configurable parameters ([#452](https://github.com/s3s-project/s3s/pull/452))
+
+Compatibility fixes:
++ Accept unquoted ETag values for S3 compatibility ([#449](https://github.com/s3s-project/s3s/pull/449))
++ Output ETag with literal quotes in XML ([#499](https://github.com/s3s-project/s3s/pull/499))
++ Improve S3 error response and parsing compatibility ([#462](https://github.com/s3s-project/s3s/pull/462))
++ Ensure Name precedes Contents in ListObjectsOutput XML ([#480](https://github.com/s3s-project/s3s/pull/480))
++ Fix SigV2: add 14 missing sub-resources to INCLUDED_QUERY ([#517](https://github.com/s3s-project/s3s/pull/517))
+
+### s3s-model
+
++ Add S3 error codes support ([#515](https://github.com/s3s-project/s3s/pull/515))
+
+### s3s-test
+
++ Add ignored tests and concurrent case execution ([#516](https://github.com/s3s-project/s3s/pull/516))
+
+### Testing
+
++ Add Ceph s3-tests E2E runner for s3s-proxy + MinIO with baseline-aware reporting ([#464](https://github.com/s3s-project/s3s/pull/464))
++ Classify s3tests results by S3 capability ([#505](https://github.com/s3s-project/s3s/pull/505))
++ Adopt `date_time_format_test_suite` from smithy-rs ([#485](https://github.com/s3s-project/s3s/pull/485))
++ Auto-discover boto3 regression tests ([#510](https://github.com/s3s-project/s3s/pull/510))
++ Add regression tests for previously fixed issues ([#488](https://github.com/s3s-project/s3s/pull/488))
++ Add access control tests for authenticated/anonymous access ([#483](https://github.com/s3s-project/s3s/pull/483))
++ Add unit tests for core s3s modules ([#514](https://github.com/s3s-project/s3s/pull/514), [#519](https://github.com/s3s-project/s3s/pull/519))
+
+### Documentation
+
++ Add comprehensive API documentation to s3s crate ([#492](https://github.com/s3s-project/s3s/pull/492))
++ Add and improve module-level docs across all modules ([#513](https://github.com/s3s-project/s3s/pull/513))
 
 ### Docker
 
-+ Migrated Docker releases from Docker Hub to GitHub Container Registry (ghcr.io)
++ Migrate Docker releases from Docker Hub to GitHub Container Registry (ghcr.io) ([#490](https://github.com/s3s-project/s3s/pull/490))
 
 ## [v0.12.0] - 2025-12-22
 
