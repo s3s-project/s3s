@@ -502,6 +502,13 @@ impl SignatureContext<'_> {
             let stream = UploadStream::new(body, length, expected_checksum)
                 .map_err(|_| invalid_request!("invalid header: x-amz-content-sha256"))?;
             *self.req_body = Body::from(stream.into_byte_stream());
+        } else if matches!(amz_content_sha256, Some(AmzContentSha256::UnsignedPayload)) {
+            // For non-streaming unsigned payloads, require Content-Length.
+            // This aligns with MinIO behavior: PutObject with chunked Transfer-Encoding
+            // (no Content-Length) is rejected with MissingContentLength (411).
+            if self.content_length.is_none() && self.req_body.remaining_length().exact().is_none() {
+                return Err(s3_error!(MissingContentLength, "missing header: content-length"));
+            }
         }
 
         Ok(CredentialsExt {

@@ -1,6 +1,6 @@
 [package]
 name = "s3s-fs"
-version = "0.13.0"
+version = "0.14.0-dev"
 description = "An experimental S3 server based on file system"
 readme = "../../README.md"
 keywords = ["s3"]
@@ -39,7 +39,7 @@ hyper-util = { workspace = true, optional = true, features = [
 mime.workspace = true
 numeric_cast.workspace = true
 path-absolutize.workspace = true
-s3s = { version = "0.13.0", path = "../s3s" }
+s3s = { version = "0.14.0-dev", path = "../s3s" }
 serde.workspace = true
 serde_json.workspace = true
 std-next.workspace = true
@@ -63,6 +63,6 @@ futures-util.workspace = true
 hyper = { workspace = true, features = ["http1", "http2"] }
 hyper-util = { workspace = true, features = ["server-auto", "server-graceful", "http1", "http2", "tokio"] }
 opendal = { workspace = true, features = ["services-s3"] }
-s3s-aws = { version = "0.13.0", path = "../s3s-aws" }
+s3s-aws = { version = "0.14.0-dev", path = "../s3s-aws" }
 tokio = { workspace = true, features = ["full"] }
 tracing-subscriber.workspace = true

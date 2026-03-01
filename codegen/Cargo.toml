@@ -19,5 +19,5 @@ regex = "1.12.3"
 serde.workspace = true
 serde_json = { workspace = true, features = ["preserve_order"] }
 serde_urlencoded = "0.7.1"
-s3s-model = { version = "0.13.0", path = "../crates/s3s-model" }
+s3s-model = { version = "0.14.0-dev", path = "../crates/s3s-model" }
 http.workspace = true
