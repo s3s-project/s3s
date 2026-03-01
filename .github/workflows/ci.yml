@@ -120,7 +120,7 @@ jobs:
       - run: just install s3s-proxy
       - run: ./scripts/e2e-mint.sh
       - run: ./scripts/report-mint.py /tmp/mint/log.json
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: mint-proxy-minio.logs
           path: ./target/s3s-proxy.log
@@ -136,7 +136,7 @@ jobs:
       - run: just install s3s-e2e
       - run: just install s3s-fs
       - run: ./scripts/e2e-fs.sh --filter '^Basic'
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: e2e-fs.logs
           path: ./target/s3s-fs.log
@@ -152,7 +152,7 @@ jobs:
       - run: uv sync
       - run: just install s3s-fs
       - run: ./scripts/e2e-boto3-fs.sh
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: e2e-boto3-fs.logs
@@ -202,14 +202,14 @@ jobs:
         id: python-version
         run: python3 -c "import sys, os; f=open(os.environ['GITHUB_OUTPUT'],'a'); f.write(f'version={sys.version_info[0]}.{sys.version_info[1]}\n'); f.close()"
       - name: Restore s3tests venv cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: /tmp/s3-tests/.venv
           key: s3tests-venv-${{ runner.os }}-py${{ steps.python-version.outputs.version }}-${{ steps.s3tests-hash.outputs.hash }}
       - run: docker pull minio/minio:latest
       - run: just install s3s-proxy
       - run: ./scripts/e2e-s3tests.sh
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: e2e-s3tests.logs
           path: |
