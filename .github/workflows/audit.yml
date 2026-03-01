@@ -1,13 +1,6 @@
 name: Audit
 
 on:
-  push:
-    branches:
-      - main
-      - 'feat/**'
-    paths:
-      - '**/Cargo.toml'
-      - '**/Cargo.lock'
   pull_request:
     branches:
       - main
@@ -15,6 +8,8 @@ on:
     paths:
       - '**/Cargo.toml'
       - '**/Cargo.lock'
+  merge_group:
+    types: [checks_requested]
   schedule:
     - cron: '0 0 * * 0' # at midnight of each sunday
   workflow_dispatch:
