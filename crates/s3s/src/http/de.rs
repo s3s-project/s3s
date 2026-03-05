@@ -258,17 +258,16 @@ where
     result
 }
 
-/// MinIO compatibility: literal `" Enabled "` (with spaces) for legacy object lock/versioning config.
+/// `MinIO` compatibility: literal `" Enabled "` (with spaces) for legacy object lock/versioning config.
 #[cfg(feature = "minio")]
 fn is_minio_enabled_literal(bytes: &[u8]) -> bool {
     bytes.trim_ascii() == b"Enabled"
 }
 
-/// MinIO compatibility: take ObjectLockConfiguration, accepting literal `" Enabled "` as enabled.
+/// `MinIO` compatibility: take `ObjectLockConfiguration`, accepting literal `" Enabled "` as enabled.
 #[cfg(feature = "minio")]
 pub fn take_opt_object_lock_configuration(req: &mut Request) -> S3Result<Option<crate::dto::ObjectLockConfiguration>> {
     use crate::dto::{ObjectLockConfiguration, ObjectLockEnabled};
-    use stdx::default::default;
 
     let bytes = req.body.take_bytes().expect("full body not found");
     if bytes.is_empty() {
@@ -278,7 +277,6 @@ pub fn take_opt_object_lock_configuration(req: &mut Request) -> S3Result<Option<
         return Ok(Some(ObjectLockConfiguration {
             object_lock_enabled: Some(ObjectLockEnabled::from("Enabled".to_owned())),
             rule: None,
-            ..default()
         }));
     }
     let result = deserialize_xml::<ObjectLockConfiguration>(&bytes).map(Some);
@@ -288,7 +286,7 @@ pub fn take_opt_object_lock_configuration(req: &mut Request) -> S3Result<Option<
     result
 }
 
-/// MinIO compatibility: take VersioningConfiguration, accepting literal `" Enabled "` as enabled.
+/// `MinIO` compatibility: take `VersioningConfiguration`, accepting literal `" Enabled "` as enabled.
 #[cfg(feature = "minio")]
 pub fn take_versioning_configuration(req: &mut Request) -> S3Result<crate::dto::VersioningConfiguration> {
     use crate::dto::{BucketVersioningStatus, VersioningConfiguration};

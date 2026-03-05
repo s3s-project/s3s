@@ -182,7 +182,7 @@ impl<'xml> Deserializer<'xml> {
             match self.next_event()? {
                 DeEvent::Start(x) => {
                     let name = x.name().as_ref().to_vec();
-                    if names_bytes.iter().any(|n| *n == name) {
+                    if names_bytes.contains(&name) {
                         return Ok(name);
                     }
                     return Err(unexpected_tag_name());
@@ -235,7 +235,7 @@ impl<'xml> Deserializer<'xml> {
         Ok(ans)
     }
 
-    /// Deserializes an element with any of the given root names (MinIO compatibility).
+    /// Deserializes an element with any of the given root names (`MinIO` compatibility).
     ///
     /// # Errors
     /// Returns an error if the deserialization fails.
