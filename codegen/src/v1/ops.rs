@@ -204,6 +204,7 @@ fn codegen_http(ops: &Operations, rust_types: &RustTypes) {
 
         codegen_op_http_de(op, rust_types);
         codegen_op_http_ser(op, rust_types);
+        codegen_required_capabilities(op);
 
         g!("}}");
         g!();
@@ -894,6 +895,12 @@ fn codegen_op_http_call(op: &Operation) {
     let method = op.name.to_snake_case();
 
     g!("let input = Self::deserialize_http(req)?;");
+    g!("{{");
+    g!("    let required = Self::required_capabilities(&input);");
+    g!("    if !required.is_empty() {{");
+    g!("        crate::capability::check(&required, &ccx.s3.capabilities())?;");
+    g!("    }}");
+    g!("}}");
     g!("let mut s3_req = super::build_s3_request(input, req);");
     g!("let s3 = ccx.s3;");
 
@@ -928,6 +935,27 @@ fn codegen_op_http_call(op: &Operation) {
     g!("Ok(resp)");
 
     g!("}}");
+    g!("}}");
+}
+
+fn codegen_required_capabilities(op: &Operation) {
+    let input_ty = &op.input;
+    g!("pub fn required_capabilities(input: &{input_ty}) -> crate::capability::Capabilities {{");
+
+    match op.name.as_str() {
+        "GetObject" | "HeadObject" => {
+            g!("let mut caps = crate::capability::Capabilities::empty();");
+            g!("if input.part_number.is_some() {{");
+            g!("    caps = caps.with(crate::capability::Capability::GetObjectPartNumber);");
+            g!("}}");
+            g!("caps");
+        }
+        _ => {
+            g!("let _ = input;");
+            g!("crate::capability::Capabilities::empty()");
+        }
+    }
+
     g!("}}");
 }
 

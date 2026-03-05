@@ -524,6 +524,11 @@ impl AbortMultipartUpload {
         http::add_opt_header(&mut res, X_AMZ_REQUEST_CHARGED, x.request_charged)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &AbortMultipartUploadInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -534,6 +539,12 @@ impl super::Operation for AbortMultipartUpload {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -618,6 +629,11 @@ impl CompleteMultipartUpload {
             upload_id,
         })
     }
+
+    pub fn required_capabilities(input: &CompleteMultipartUploadInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -628,6 +644,12 @@ impl super::Operation for CompleteMultipartUpload {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -807,6 +829,11 @@ impl CopyObject {
         http::add_opt_header(&mut res, X_AMZ_VERSION_ID, x.version_id)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &CopyObjectInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -817,6 +844,12 @@ impl super::Operation for CopyObject {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -878,6 +911,11 @@ impl CreateBucket {
         http::add_opt_header(&mut res, LOCATION, x.location)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &CreateBucketInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -888,6 +926,12 @@ impl super::Operation for CreateBucket {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -931,6 +975,11 @@ impl CreateBucketMetadataTableConfiguration {
     pub fn serialize_http(_: CreateBucketMetadataTableConfigurationOutput) -> S3Result<http::Response> {
         Ok(http::Response::with_status(http::StatusCode::OK))
     }
+
+    pub fn required_capabilities(input: &CreateBucketMetadataTableConfigurationInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -941,6 +990,12 @@ impl super::Operation for CreateBucketMetadataTableConfiguration {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -1083,6 +1138,11 @@ impl CreateMultipartUpload {
         http::add_opt_header(&mut res, X_AMZ_SERVER_SIDE_ENCRYPTION, x.server_side_encryption)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &CreateMultipartUploadInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -1093,6 +1153,12 @@ impl super::Operation for CreateMultipartUpload {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -1147,6 +1213,11 @@ impl CreateSession {
         http::add_opt_header(&mut res, X_AMZ_SERVER_SIDE_ENCRYPTION, x.server_side_encryption)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &CreateSessionInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -1157,6 +1228,12 @@ impl super::Operation for CreateSession {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -1194,6 +1271,11 @@ impl DeleteBucket {
     pub fn serialize_http(_: DeleteBucketOutput) -> S3Result<http::Response> {
         Ok(http::Response::with_status(http::StatusCode::NO_CONTENT))
     }
+
+    pub fn required_capabilities(input: &DeleteBucketInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -1204,6 +1286,12 @@ impl super::Operation for DeleteBucket {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -1241,6 +1329,11 @@ impl DeleteBucketAnalyticsConfiguration {
     pub fn serialize_http(_: DeleteBucketAnalyticsConfigurationOutput) -> S3Result<http::Response> {
         Ok(http::Response::with_status(http::StatusCode::NO_CONTENT))
     }
+
+    pub fn required_capabilities(input: &DeleteBucketAnalyticsConfigurationInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -1251,6 +1344,12 @@ impl super::Operation for DeleteBucketAnalyticsConfiguration {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -1285,6 +1384,11 @@ impl DeleteBucketCors {
     pub fn serialize_http(_: DeleteBucketCorsOutput) -> S3Result<http::Response> {
         Ok(http::Response::with_status(http::StatusCode::NO_CONTENT))
     }
+
+    pub fn required_capabilities(input: &DeleteBucketCorsInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -1295,6 +1399,12 @@ impl super::Operation for DeleteBucketCors {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -1329,6 +1439,11 @@ impl DeleteBucketEncryption {
     pub fn serialize_http(_: DeleteBucketEncryptionOutput) -> S3Result<http::Response> {
         Ok(http::Response::with_status(http::StatusCode::NO_CONTENT))
     }
+
+    pub fn required_capabilities(input: &DeleteBucketEncryptionInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -1339,6 +1454,12 @@ impl super::Operation for DeleteBucketEncryption {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -1370,6 +1491,11 @@ impl DeleteBucketIntelligentTieringConfiguration {
     pub fn serialize_http(_: DeleteBucketIntelligentTieringConfigurationOutput) -> S3Result<http::Response> {
         Ok(http::Response::with_status(http::StatusCode::NO_CONTENT))
     }
+
+    pub fn required_capabilities(input: &DeleteBucketIntelligentTieringConfigurationInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -1380,6 +1506,12 @@ impl super::Operation for DeleteBucketIntelligentTieringConfiguration {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -1417,6 +1549,11 @@ impl DeleteBucketInventoryConfiguration {
     pub fn serialize_http(_: DeleteBucketInventoryConfigurationOutput) -> S3Result<http::Response> {
         Ok(http::Response::with_status(http::StatusCode::NO_CONTENT))
     }
+
+    pub fn required_capabilities(input: &DeleteBucketInventoryConfigurationInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -1427,6 +1564,12 @@ impl super::Operation for DeleteBucketInventoryConfiguration {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -1461,6 +1604,11 @@ impl DeleteBucketLifecycle {
     pub fn serialize_http(_: DeleteBucketLifecycleOutput) -> S3Result<http::Response> {
         Ok(http::Response::with_status(http::StatusCode::NO_CONTENT))
     }
+
+    pub fn required_capabilities(input: &DeleteBucketLifecycleInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -1471,6 +1619,12 @@ impl super::Operation for DeleteBucketLifecycle {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -1505,6 +1659,11 @@ impl DeleteBucketMetadataTableConfiguration {
     pub fn serialize_http(_: DeleteBucketMetadataTableConfigurationOutput) -> S3Result<http::Response> {
         Ok(http::Response::with_status(http::StatusCode::NO_CONTENT))
     }
+
+    pub fn required_capabilities(input: &DeleteBucketMetadataTableConfigurationInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -1515,6 +1674,12 @@ impl super::Operation for DeleteBucketMetadataTableConfiguration {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -1552,6 +1717,11 @@ impl DeleteBucketMetricsConfiguration {
     pub fn serialize_http(_: DeleteBucketMetricsConfigurationOutput) -> S3Result<http::Response> {
         Ok(http::Response::with_status(http::StatusCode::NO_CONTENT))
     }
+
+    pub fn required_capabilities(input: &DeleteBucketMetricsConfigurationInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -1562,6 +1732,12 @@ impl super::Operation for DeleteBucketMetricsConfiguration {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -1596,6 +1772,11 @@ impl DeleteBucketOwnershipControls {
     pub fn serialize_http(_: DeleteBucketOwnershipControlsOutput) -> S3Result<http::Response> {
         Ok(http::Response::with_status(http::StatusCode::NO_CONTENT))
     }
+
+    pub fn required_capabilities(input: &DeleteBucketOwnershipControlsInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -1606,6 +1787,12 @@ impl super::Operation for DeleteBucketOwnershipControls {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -1640,6 +1827,11 @@ impl DeleteBucketPolicy {
     pub fn serialize_http(_: DeleteBucketPolicyOutput) -> S3Result<http::Response> {
         Ok(http::Response::with_status(http::StatusCode::NO_CONTENT))
     }
+
+    pub fn required_capabilities(input: &DeleteBucketPolicyInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -1650,6 +1842,12 @@ impl super::Operation for DeleteBucketPolicy {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -1684,6 +1882,11 @@ impl DeleteBucketReplication {
     pub fn serialize_http(_: DeleteBucketReplicationOutput) -> S3Result<http::Response> {
         Ok(http::Response::with_status(http::StatusCode::NO_CONTENT))
     }
+
+    pub fn required_capabilities(input: &DeleteBucketReplicationInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -1694,6 +1897,12 @@ impl super::Operation for DeleteBucketReplication {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -1728,6 +1937,11 @@ impl DeleteBucketTagging {
     pub fn serialize_http(_: DeleteBucketTaggingOutput) -> S3Result<http::Response> {
         Ok(http::Response::with_status(http::StatusCode::NO_CONTENT))
     }
+
+    pub fn required_capabilities(input: &DeleteBucketTaggingInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -1738,6 +1952,12 @@ impl super::Operation for DeleteBucketTagging {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -1772,6 +1992,11 @@ impl DeleteBucketWebsite {
     pub fn serialize_http(_: DeleteBucketWebsiteOutput) -> S3Result<http::Response> {
         Ok(http::Response::with_status(http::StatusCode::NO_CONTENT))
     }
+
+    pub fn required_capabilities(input: &DeleteBucketWebsiteInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -1782,6 +2007,12 @@ impl super::Operation for DeleteBucketWebsite {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -1844,6 +2075,11 @@ impl DeleteObject {
         http::add_opt_header(&mut res, X_AMZ_VERSION_ID, x.version_id)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &DeleteObjectInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -1854,6 +2090,12 @@ impl super::Operation for DeleteObject {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -1894,6 +2136,11 @@ impl DeleteObjectTagging {
         http::add_opt_header(&mut res, X_AMZ_VERSION_ID, x.version_id)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &DeleteObjectTaggingInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -1904,6 +2151,12 @@ impl super::Operation for DeleteObjectTagging {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -1957,6 +2210,11 @@ impl DeleteObjects {
         http::add_opt_header(&mut res, X_AMZ_REQUEST_CHARGED, x.request_charged)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &DeleteObjectsInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -1967,6 +2225,12 @@ impl super::Operation for DeleteObjects {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -2001,6 +2265,11 @@ impl DeletePublicAccessBlock {
     pub fn serialize_http(_: DeletePublicAccessBlockOutput) -> S3Result<http::Response> {
         Ok(http::Response::with_status(http::StatusCode::NO_CONTENT))
     }
+
+    pub fn required_capabilities(input: &DeletePublicAccessBlockInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -2011,6 +2280,12 @@ impl super::Operation for DeletePublicAccessBlock {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -2051,6 +2326,11 @@ impl GetBucketAccelerateConfiguration {
         http::add_opt_header(&mut res, X_AMZ_REQUEST_CHARGED, x.request_charged)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &GetBucketAccelerateConfigurationInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -2061,6 +2341,12 @@ impl super::Operation for GetBucketAccelerateConfiguration {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -2097,6 +2383,11 @@ impl GetBucketAcl {
         http::set_xml_body(&mut res, &x)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &GetBucketAclInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -2107,6 +2398,12 @@ impl super::Operation for GetBucketAcl {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -2148,6 +2445,11 @@ impl GetBucketAnalyticsConfiguration {
         }
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &GetBucketAnalyticsConfigurationInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -2158,6 +2460,12 @@ impl super::Operation for GetBucketAnalyticsConfiguration {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -2194,6 +2502,11 @@ impl GetBucketCors {
         http::set_xml_body(&mut res, &x)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &GetBucketCorsInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -2204,6 +2517,12 @@ impl super::Operation for GetBucketCors {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -2242,6 +2561,11 @@ impl GetBucketEncryption {
         }
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &GetBucketEncryptionInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -2252,6 +2576,12 @@ impl super::Operation for GetBucketEncryption {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -2287,6 +2617,11 @@ impl GetBucketIntelligentTieringConfiguration {
         }
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &GetBucketIntelligentTieringConfigurationInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -2297,6 +2632,12 @@ impl super::Operation for GetBucketIntelligentTieringConfiguration {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -2338,6 +2679,11 @@ impl GetBucketInventoryConfiguration {
         }
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &GetBucketInventoryConfigurationInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -2348,6 +2694,12 @@ impl super::Operation for GetBucketInventoryConfiguration {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -2389,6 +2741,11 @@ impl GetBucketLifecycleConfiguration {
         )?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &GetBucketLifecycleConfigurationInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -2399,6 +2756,12 @@ impl super::Operation for GetBucketLifecycleConfiguration {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -2435,6 +2798,11 @@ impl GetBucketLocation {
         http::set_xml_body(&mut res, &x)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &GetBucketLocationInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -2445,6 +2813,12 @@ impl super::Operation for GetBucketLocation {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -2481,6 +2855,11 @@ impl GetBucketLogging {
         http::set_xml_body(&mut res, &x)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &GetBucketLoggingInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -2491,6 +2870,12 @@ impl super::Operation for GetBucketLogging {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -2529,6 +2914,11 @@ impl GetBucketMetadataTableConfiguration {
         }
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &GetBucketMetadataTableConfigurationInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -2539,6 +2929,12 @@ impl super::Operation for GetBucketMetadataTableConfiguration {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -2580,6 +2976,11 @@ impl GetBucketMetricsConfiguration {
         }
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &GetBucketMetricsConfigurationInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -2590,6 +2991,12 @@ impl super::Operation for GetBucketMetricsConfiguration {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -2626,6 +3033,11 @@ impl GetBucketNotificationConfiguration {
         http::set_xml_body(&mut res, &x)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &GetBucketNotificationConfigurationInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -2636,6 +3048,12 @@ impl super::Operation for GetBucketNotificationConfiguration {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -2674,6 +3092,11 @@ impl GetBucketOwnershipControls {
         }
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &GetBucketOwnershipControlsInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -2684,6 +3107,12 @@ impl super::Operation for GetBucketOwnershipControls {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -2722,6 +3151,11 @@ impl GetBucketPolicy {
         }
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &GetBucketPolicyInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -2732,6 +3166,12 @@ impl super::Operation for GetBucketPolicy {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -2770,6 +3210,11 @@ impl GetBucketPolicyStatus {
         }
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &GetBucketPolicyStatusInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -2780,6 +3225,12 @@ impl super::Operation for GetBucketPolicyStatus {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -2818,6 +3269,11 @@ impl GetBucketReplication {
         }
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &GetBucketReplicationInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -2828,6 +3284,12 @@ impl super::Operation for GetBucketReplication {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -2864,6 +3326,11 @@ impl GetBucketRequestPayment {
         http::set_xml_body(&mut res, &x)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &GetBucketRequestPaymentInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -2874,6 +3341,12 @@ impl super::Operation for GetBucketRequestPayment {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -2910,6 +3383,11 @@ impl GetBucketTagging {
         http::set_xml_body(&mut res, &x)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &GetBucketTaggingInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -2920,6 +3398,12 @@ impl super::Operation for GetBucketTagging {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -2956,6 +3440,11 @@ impl GetBucketVersioning {
         http::set_xml_body(&mut res, &x)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &GetBucketVersioningInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -2966,6 +3455,12 @@ impl super::Operation for GetBucketVersioning {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -3002,6 +3497,11 @@ impl GetBucketWebsite {
         http::set_xml_body(&mut res, &x)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &GetBucketWebsiteInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -3012,6 +3512,12 @@ impl super::Operation for GetBucketWebsite {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -3156,6 +3662,14 @@ impl GetObject {
         http::add_opt_header(&mut res, X_AMZ_WEBSITE_REDIRECT_LOCATION, x.website_redirect_location)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &GetObjectInput) -> crate::capability::Capabilities {
+        let mut caps = crate::capability::Capabilities::empty();
+        if input.part_number.is_some() {
+            caps = caps.with(crate::capability::Capability::GetObjectPartNumber);
+        }
+        caps
+    }
 }
 
 #[async_trait::async_trait]
@@ -3166,6 +3680,12 @@ impl super::Operation for GetObject {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -3212,6 +3732,11 @@ impl GetObjectAcl {
         http::add_opt_header(&mut res, X_AMZ_REQUEST_CHARGED, x.request_charged)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &GetObjectAclInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -3222,6 +3747,12 @@ impl super::Operation for GetObjectAcl {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -3289,6 +3820,11 @@ impl GetObjectAttributes {
         http::add_opt_header(&mut res, X_AMZ_VERSION_ID, x.version_id)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &GetObjectAttributesInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -3299,6 +3835,12 @@ impl super::Operation for GetObjectAttributes {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -3344,6 +3886,11 @@ impl GetObjectLegalHold {
         }
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &GetObjectLegalHoldInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -3354,6 +3901,12 @@ impl super::Operation for GetObjectLegalHold {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -3392,6 +3945,11 @@ impl GetObjectLockConfiguration {
         }
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &GetObjectLockConfigurationInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -3402,6 +3960,12 @@ impl super::Operation for GetObjectLockConfiguration {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -3447,6 +4011,11 @@ impl GetObjectRetention {
         }
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &GetObjectRetentionInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -3457,6 +4026,12 @@ impl super::Operation for GetObjectRetention {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -3501,6 +4076,11 @@ impl GetObjectTagging {
         http::add_opt_header(&mut res, X_AMZ_VERSION_ID, x.version_id)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &GetObjectTaggingInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -3511,6 +4091,12 @@ impl super::Operation for GetObjectTagging {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -3554,6 +4140,11 @@ impl GetObjectTorrent {
         http::add_opt_header(&mut res, X_AMZ_REQUEST_CHARGED, x.request_charged)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &GetObjectTorrentInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -3564,6 +4155,12 @@ impl super::Operation for GetObjectTorrent {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -3602,6 +4199,11 @@ impl GetPublicAccessBlock {
         }
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &GetPublicAccessBlockInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -3612,6 +4214,12 @@ impl super::Operation for GetPublicAccessBlock {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -3651,6 +4259,11 @@ impl HeadBucket {
         http::add_opt_header(&mut res, X_AMZ_BUCKET_REGION, x.bucket_region)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &HeadBucketInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -3661,6 +4274,12 @@ impl super::Operation for HeadBucket {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -3799,6 +4418,14 @@ impl HeadObject {
         http::add_opt_header(&mut res, X_AMZ_WEBSITE_REDIRECT_LOCATION, x.website_redirect_location)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &HeadObjectInput) -> crate::capability::Capabilities {
+        let mut caps = crate::capability::Capabilities::empty();
+        if input.part_number.is_some() {
+            caps = caps.with(crate::capability::Capability::GetObjectPartNumber);
+        }
+        caps
+    }
 }
 
 #[async_trait::async_trait]
@@ -3809,6 +4436,12 @@ impl super::Operation for HeadObject {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -3848,6 +4481,11 @@ impl ListBucketAnalyticsConfigurations {
         http::set_xml_body(&mut res, &x)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &ListBucketAnalyticsConfigurationsInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -3858,6 +4496,12 @@ impl super::Operation for ListBucketAnalyticsConfigurations {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -3894,6 +4538,11 @@ impl ListBucketIntelligentTieringConfigurations {
         http::set_xml_body(&mut res, &x)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &ListBucketIntelligentTieringConfigurationsInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -3904,6 +4553,12 @@ impl super::Operation for ListBucketIntelligentTieringConfigurations {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -3943,6 +4598,11 @@ impl ListBucketInventoryConfigurations {
         http::set_xml_body(&mut res, &x)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &ListBucketInventoryConfigurationsInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -3953,6 +4613,12 @@ impl super::Operation for ListBucketInventoryConfigurations {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -3992,6 +4658,11 @@ impl ListBucketMetricsConfigurations {
         http::set_xml_body(&mut res, &x)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &ListBucketMetricsConfigurationsInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -4002,6 +4673,12 @@ impl super::Operation for ListBucketMetricsConfigurations {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -4044,6 +4721,11 @@ impl ListBuckets {
         http::set_xml_body(&mut res, &x)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &ListBucketsInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -4054,6 +4736,12 @@ impl super::Operation for ListBuckets {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -4090,6 +4778,11 @@ impl ListDirectoryBuckets {
         http::set_xml_body(&mut res, &x)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &ListDirectoryBucketsInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -4100,6 +4793,12 @@ impl super::Operation for ListDirectoryBuckets {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -4158,6 +4857,11 @@ impl ListMultipartUploads {
         http::add_opt_header(&mut res, X_AMZ_REQUEST_CHARGED, x.request_charged)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &ListMultipartUploadsInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -4168,6 +4872,12 @@ impl super::Operation for ListMultipartUploads {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -4230,6 +4940,11 @@ impl ListObjectVersions {
         http::add_opt_header(&mut res, X_AMZ_REQUEST_CHARGED, x.request_charged)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &ListObjectVersionsInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -4240,6 +4955,12 @@ impl super::Operation for ListObjectVersions {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -4299,6 +5020,11 @@ impl ListObjects {
         http::add_opt_header(&mut res, X_AMZ_REQUEST_CHARGED, x.request_charged)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &ListObjectsInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -4309,6 +5035,12 @@ impl super::Operation for ListObjects {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -4374,6 +5106,11 @@ impl ListObjectsV2 {
         http::add_opt_header(&mut res, X_AMZ_REQUEST_CHARGED, x.request_charged)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &ListObjectsV2Input) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -4384,6 +5121,12 @@ impl super::Operation for ListObjectsV2 {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -4447,6 +5190,11 @@ impl ListParts {
         http::add_opt_header(&mut res, X_AMZ_REQUEST_CHARGED, x.request_charged)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &ListPartsInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -4457,6 +5205,12 @@ impl super::Operation for ListParts {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -4497,6 +5251,11 @@ impl PutBucketAccelerateConfiguration {
     pub fn serialize_http(_: PutBucketAccelerateConfigurationOutput) -> S3Result<http::Response> {
         Ok(http::Response::with_status(http::StatusCode::OK))
     }
+
+    pub fn required_capabilities(input: &PutBucketAccelerateConfigurationInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -4507,6 +5266,12 @@ impl super::Operation for PutBucketAccelerateConfiguration {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -4568,6 +5333,11 @@ impl PutBucketAcl {
     pub fn serialize_http(_: PutBucketAclOutput) -> S3Result<http::Response> {
         Ok(http::Response::with_status(http::StatusCode::OK))
     }
+
+    pub fn required_capabilities(input: &PutBucketAclInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -4578,6 +5348,12 @@ impl super::Operation for PutBucketAcl {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -4618,6 +5394,11 @@ impl PutBucketAnalyticsConfiguration {
     pub fn serialize_http(_: PutBucketAnalyticsConfigurationOutput) -> S3Result<http::Response> {
         Ok(http::Response::with_status(http::StatusCode::OK))
     }
+
+    pub fn required_capabilities(input: &PutBucketAnalyticsConfigurationInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -4628,6 +5409,12 @@ impl super::Operation for PutBucketAnalyticsConfiguration {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -4671,6 +5458,11 @@ impl PutBucketCors {
     pub fn serialize_http(_: PutBucketCorsOutput) -> S3Result<http::Response> {
         Ok(http::Response::with_status(http::StatusCode::OK))
     }
+
+    pub fn required_capabilities(input: &PutBucketCorsInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -4681,6 +5473,12 @@ impl super::Operation for PutBucketCors {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -4724,6 +5522,11 @@ impl PutBucketEncryption {
     pub fn serialize_http(_: PutBucketEncryptionOutput) -> S3Result<http::Response> {
         Ok(http::Response::with_status(http::StatusCode::OK))
     }
+
+    pub fn required_capabilities(input: &PutBucketEncryptionInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -4734,6 +5537,12 @@ impl super::Operation for PutBucketEncryption {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -4771,6 +5580,11 @@ impl PutBucketIntelligentTieringConfiguration {
     pub fn serialize_http(_: PutBucketIntelligentTieringConfigurationOutput) -> S3Result<http::Response> {
         Ok(http::Response::with_status(http::StatusCode::OK))
     }
+
+    pub fn required_capabilities(input: &PutBucketIntelligentTieringConfigurationInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -4781,6 +5595,12 @@ impl super::Operation for PutBucketIntelligentTieringConfiguration {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -4821,6 +5641,11 @@ impl PutBucketInventoryConfiguration {
     pub fn serialize_http(_: PutBucketInventoryConfigurationOutput) -> S3Result<http::Response> {
         Ok(http::Response::with_status(http::StatusCode::OK))
     }
+
+    pub fn required_capabilities(input: &PutBucketInventoryConfigurationInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -4831,6 +5656,12 @@ impl super::Operation for PutBucketInventoryConfiguration {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -4881,6 +5712,11 @@ impl PutBucketLifecycleConfiguration {
         )?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &PutBucketLifecycleConfigurationInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -4891,6 +5727,12 @@ impl super::Operation for PutBucketLifecycleConfiguration {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -4934,6 +5776,11 @@ impl PutBucketLogging {
     pub fn serialize_http(_: PutBucketLoggingOutput) -> S3Result<http::Response> {
         Ok(http::Response::with_status(http::StatusCode::OK))
     }
+
+    pub fn required_capabilities(input: &PutBucketLoggingInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -4944,6 +5791,12 @@ impl super::Operation for PutBucketLogging {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -4984,6 +5837,11 @@ impl PutBucketMetricsConfiguration {
     pub fn serialize_http(_: PutBucketMetricsConfigurationOutput) -> S3Result<http::Response> {
         Ok(http::Response::with_status(http::StatusCode::OK))
     }
+
+    pub fn required_capabilities(input: &PutBucketMetricsConfigurationInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -4994,6 +5852,12 @@ impl super::Operation for PutBucketMetricsConfiguration {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -5035,6 +5899,11 @@ impl PutBucketNotificationConfiguration {
     pub fn serialize_http(_: PutBucketNotificationConfigurationOutput) -> S3Result<http::Response> {
         Ok(http::Response::with_status(http::StatusCode::OK))
     }
+
+    pub fn required_capabilities(input: &PutBucketNotificationConfigurationInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -5045,6 +5914,12 @@ impl super::Operation for PutBucketNotificationConfiguration {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -5085,6 +5960,11 @@ impl PutBucketOwnershipControls {
     pub fn serialize_http(_: PutBucketOwnershipControlsOutput) -> S3Result<http::Response> {
         Ok(http::Response::with_status(http::StatusCode::OK))
     }
+
+    pub fn required_capabilities(input: &PutBucketOwnershipControlsInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -5095,6 +5975,12 @@ impl super::Operation for PutBucketOwnershipControls {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -5142,6 +6028,11 @@ impl PutBucketPolicy {
     pub fn serialize_http(_: PutBucketPolicyOutput) -> S3Result<http::Response> {
         Ok(http::Response::with_status(http::StatusCode::NO_CONTENT))
     }
+
+    pub fn required_capabilities(input: &PutBucketPolicyInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -5152,6 +6043,12 @@ impl super::Operation for PutBucketPolicy {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -5198,6 +6095,11 @@ impl PutBucketReplication {
     pub fn serialize_http(_: PutBucketReplicationOutput) -> S3Result<http::Response> {
         Ok(http::Response::with_status(http::StatusCode::OK))
     }
+
+    pub fn required_capabilities(input: &PutBucketReplicationInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -5208,6 +6110,12 @@ impl super::Operation for PutBucketReplication {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -5251,6 +6159,11 @@ impl PutBucketRequestPayment {
     pub fn serialize_http(_: PutBucketRequestPaymentOutput) -> S3Result<http::Response> {
         Ok(http::Response::with_status(http::StatusCode::OK))
     }
+
+    pub fn required_capabilities(input: &PutBucketRequestPaymentInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -5261,6 +6174,12 @@ impl super::Operation for PutBucketRequestPayment {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -5304,6 +6223,11 @@ impl PutBucketTagging {
     pub fn serialize_http(_: PutBucketTaggingOutput) -> S3Result<http::Response> {
         Ok(http::Response::with_status(http::StatusCode::OK))
     }
+
+    pub fn required_capabilities(input: &PutBucketTaggingInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -5314,6 +6238,12 @@ impl super::Operation for PutBucketTagging {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -5360,6 +6290,11 @@ impl PutBucketVersioning {
     pub fn serialize_http(_: PutBucketVersioningOutput) -> S3Result<http::Response> {
         Ok(http::Response::with_status(http::StatusCode::OK))
     }
+
+    pub fn required_capabilities(input: &PutBucketVersioningInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -5370,6 +6305,12 @@ impl super::Operation for PutBucketVersioning {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -5413,6 +6354,11 @@ impl PutBucketWebsite {
     pub fn serialize_http(_: PutBucketWebsiteOutput) -> S3Result<http::Response> {
         Ok(http::Response::with_status(http::StatusCode::OK))
     }
+
+    pub fn required_capabilities(input: &PutBucketWebsiteInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -5423,6 +6369,12 @@ impl super::Operation for PutBucketWebsite {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -5756,6 +6708,11 @@ impl PutObject {
         http::add_opt_header(&mut res, X_AMZ_VERSION_ID, x.version_id)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &PutObjectInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -5766,6 +6723,12 @@ impl super::Operation for PutObject {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -5836,6 +6799,11 @@ impl PutObjectAcl {
         http::add_opt_header(&mut res, X_AMZ_REQUEST_CHARGED, x.request_charged)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &PutObjectAclInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -5846,6 +6814,12 @@ impl super::Operation for PutObjectAcl {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -5904,6 +6878,11 @@ impl PutObjectLegalHold {
         http::add_opt_header(&mut res, X_AMZ_REQUEST_CHARGED, x.request_charged)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &PutObjectLegalHoldInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -5914,6 +6893,12 @@ impl super::Operation for PutObjectLegalHold {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -5965,6 +6950,11 @@ impl PutObjectLockConfiguration {
         http::add_opt_header(&mut res, X_AMZ_REQUEST_CHARGED, x.request_charged)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &PutObjectLockConfigurationInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -5975,6 +6965,12 @@ impl super::Operation for PutObjectLockConfiguration {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -6037,6 +7033,11 @@ impl PutObjectRetention {
         http::add_opt_header(&mut res, X_AMZ_REQUEST_CHARGED, x.request_charged)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &PutObjectRetentionInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -6047,6 +7048,12 @@ impl super::Operation for PutObjectRetention {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -6099,6 +7106,11 @@ impl PutObjectTagging {
         http::add_opt_header(&mut res, X_AMZ_VERSION_ID, x.version_id)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &PutObjectTaggingInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -6109,6 +7121,12 @@ impl super::Operation for PutObjectTagging {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -6152,6 +7170,11 @@ impl PutPublicAccessBlock {
     pub fn serialize_http(_: PutPublicAccessBlockOutput) -> S3Result<http::Response> {
         Ok(http::Response::with_status(http::StatusCode::OK))
     }
+
+    pub fn required_capabilities(input: &PutPublicAccessBlockInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -6162,6 +7185,12 @@ impl super::Operation for PutPublicAccessBlock {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -6212,6 +7241,11 @@ impl RestoreObject {
         http::add_opt_header(&mut res, X_AMZ_RESTORE_OUTPUT_PATH, x.restore_output_path)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &RestoreObjectInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -6222,6 +7256,12 @@ impl super::Operation for RestoreObject {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -6275,6 +7315,11 @@ impl SelectObjectContent {
         }
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &SelectObjectContentInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -6285,6 +7330,12 @@ impl super::Operation for SelectObjectContent {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -6380,6 +7431,11 @@ impl UploadPart {
         http::add_opt_header(&mut res, X_AMZ_SERVER_SIDE_ENCRYPTION, x.server_side_encryption)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &UploadPartInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -6390,6 +7446,12 @@ impl super::Operation for UploadPart {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -6492,6 +7554,11 @@ impl UploadPartCopy {
         http::add_opt_header(&mut res, X_AMZ_SERVER_SIDE_ENCRYPTION, x.server_side_encryption)?;
         Ok(res)
     }
+
+    pub fn required_capabilities(input: &UploadPartCopyInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -6502,6 +7569,12 @@ impl super::Operation for UploadPartCopy {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {
@@ -6667,6 +7740,11 @@ impl WriteGetObjectResponse {
     pub fn serialize_http(_: WriteGetObjectResponseOutput) -> S3Result<http::Response> {
         Ok(http::Response::with_status(http::StatusCode::OK))
     }
+
+    pub fn required_capabilities(input: &WriteGetObjectResponseInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -6677,6 +7755,12 @@ impl super::Operation for WriteGetObjectResponse {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         let mut s3_req = super::build_s3_request(input, req);
         let s3 = ccx.s3;
         if let Some(access) = ccx.access {

@@ -10,6 +10,7 @@ pub fn codegen(ops: &Operations) {
     declare_codegen!();
 
     g([
+        "use crate::capability::Capabilities;",
         "use crate::dto::*;",
         "use crate::error::S3Result;",
         "use crate::protocol::S3Request;",
@@ -18,6 +19,10 @@ pub fn codegen(ops: &Operations) {
         "/// An async trait which represents the S3 API",
         "#[async_trait::async_trait]",
         "pub trait S3: Send + Sync + 'static {",
+        "",
+        "fn capabilities(&self) -> Capabilities {",
+        "    Capabilities::empty()",
+        "}",
         "",
     ]);
 
