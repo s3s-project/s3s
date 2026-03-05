@@ -4,6 +4,7 @@ use super::rust;
 use super::rust::default_value_literal;
 
 use crate::declare_codegen;
+use crate::v1::Patch;
 use crate::v1::ops::is_op_output;
 use crate::v1::rust::StructField;
 
@@ -13,7 +14,7 @@ use std::ops::Not;
 use scoped_writer::g;
 use stdx::default::default;
 
-pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
+pub fn codegen(ops: &Operations, rust_types: &RustTypes, patch: Option<Patch>) {
     declare_codegen!();
 
     g([
@@ -63,8 +64,8 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
     g!("const XMLNS_S3: &str = \"http://s3.amazonaws.com/doc/2006-03-01/\";");
     g!();
 
-    codegen_xml_serde(ops, rust_types, &root_type_names);
-    codegen_xml_serde_content(ops, rust_types, &field_type_names);
+    codegen_xml_serde(ops, rust_types, &root_type_names, patch);
+    codegen_xml_serde_content(ops, rust_types, &field_type_names, patch);
 }
 
 pub fn is_xml_payload(field: &rust::StructField) -> bool {
@@ -220,7 +221,12 @@ fn s3_unwrapped_xml_output(ops: &Operations, ty_name: &str) -> bool {
     ops.iter().any(|(_, op)| op.s3_unwrapped_xml_output && op.output == ty_name)
 }
 
-fn codegen_xml_serde(ops: &Operations, rust_types: &RustTypes, root_type_names: &BTreeMap<&str, Option<&str>>) {
+fn codegen_xml_serde(
+    ops: &Operations,
+    rust_types: &RustTypes,
+    root_type_names: &BTreeMap<&str, Option<&str>>,
+    patch: Option<Patch>,
+) {
     for (rust_type, xml_name) in root_type_names.iter().map(|(&name, xml_name)| (&rust_types[name], xml_name)) {
         let rust::Type::Struct(ty) = rust_type else { panic!("{rust_type:#?}") };
 
@@ -253,7 +259,15 @@ fn codegen_xml_serde(ops: &Operations, rust_types: &RustTypes, root_type_names: 
             g!("impl<'xml> Deserialize<'xml> for {} {{", ty.name);
             g!("fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {{");
 
-            g!("d.named_element(\"{xml_name}\", Deserializer::content)");
+            // MinIO compatibility: accept both LifecycleConfiguration and BucketLifecycleConfiguration
+            if ty.name == "BucketLifecycleConfiguration" && matches!(patch, Some(Patch::Minio)) {
+                g!("d.named_element_any(");
+                g!("    &[\"LifecycleConfiguration\", \"BucketLifecycleConfiguration\"],");
+                g!("    Deserializer::content,");
+                g!(")");
+            } else {
+                g!("d.named_element(\"{xml_name}\", Deserializer::content)");
+            }
 
             g!("}}");
             g!("}}");
@@ -262,7 +276,7 @@ fn codegen_xml_serde(ops: &Operations, rust_types: &RustTypes, root_type_names: 
     }
 }
 
-fn codegen_xml_serde_content(ops: &Operations, rust_types: &RustTypes, field_type_names: &BTreeSet<&str>) {
+fn codegen_xml_serde_content(ops: &Operations, rust_types: &RustTypes, field_type_names: &BTreeSet<&str>, patch: Option<Patch>) {
     for rust_type in field_type_names.iter().map(|&name| &rust_types[name]) {
         match rust_type {
             rust::Type::Alias(_) => {}
@@ -329,13 +343,13 @@ fn codegen_xml_serde_content(ops: &Operations, rust_types: &RustTypes, field_typ
                     g!("}}");
                 }
             }
-            rust::Type::Struct(ty) => codegen_xml_serde_content_struct(ops, rust_types, ty),
+            rust::Type::Struct(ty) => codegen_xml_serde_content_struct(ops, rust_types, ty, patch),
         }
     }
 }
 
 #[allow(clippy::too_many_lines)]
-fn codegen_xml_serde_content_struct(_ops: &Operations, rust_types: &RustTypes, ty: &rust::Struct) {
+fn codegen_xml_serde_content_struct(_ops: &Operations, rust_types: &RustTypes, ty: &rust::Struct, patch: Option<Patch>) {
     if can_impl_serialize_content(rust_types, &ty.name) {
         g!("impl SerializeContent for {} {{", ty.name);
         g!(
@@ -537,7 +551,12 @@ fn codegen_xml_serde_content_struct(_ops: &Operations, rust_types: &RustTypes, t
                 g!("Ok(())");
                 g!("}}");
             }
-            g!("_ => Err(DeError::UnexpectedTagName)");
+            // MinIO compatibility: skip unknown elements for BucketLifecycleConfiguration
+            if ty.name == "BucketLifecycleConfiguration" && matches!(patch, Some(Patch::Minio)) {
+                g!("_ => Ok(()),");
+            } else {
+                g!("_ => Err(DeError::UnexpectedTagName)");
+            }
             g!("}})?;");
         }
 
