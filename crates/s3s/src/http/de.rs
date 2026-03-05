@@ -258,6 +258,59 @@ where
     result
 }
 
+/// MinIO compatibility: literal `" Enabled "` (with spaces) for legacy object lock/versioning config.
+#[cfg(feature = "minio")]
+fn is_minio_enabled_literal(bytes: &[u8]) -> bool {
+    bytes.trim_ascii() == b"Enabled"
+}
+
+/// MinIO compatibility: take ObjectLockConfiguration, accepting literal `" Enabled "` as enabled.
+#[cfg(feature = "minio")]
+pub fn take_opt_object_lock_configuration(req: &mut Request) -> S3Result<Option<crate::dto::ObjectLockConfiguration>> {
+    use crate::dto::{ObjectLockConfiguration, ObjectLockEnabled};
+    use stdx::default::default;
+
+    let bytes = req.body.take_bytes().expect("full body not found");
+    if bytes.is_empty() {
+        return Ok(None);
+    }
+    if is_minio_enabled_literal(&bytes) {
+        return Ok(Some(ObjectLockConfiguration {
+            object_lock_enabled: Some(ObjectLockEnabled::from("Enabled".to_owned())),
+            rule: None,
+            ..default()
+        }));
+    }
+    let result = deserialize_xml::<ObjectLockConfiguration>(&bytes).map(Some);
+    if result.is_err() {
+        error!(?bytes, "malformed xml body");
+    }
+    result
+}
+
+/// MinIO compatibility: take VersioningConfiguration, accepting literal `" Enabled "` as enabled.
+#[cfg(feature = "minio")]
+pub fn take_versioning_configuration(req: &mut Request) -> S3Result<crate::dto::VersioningConfiguration> {
+    use crate::dto::{BucketVersioningStatus, VersioningConfiguration};
+    use stdx::default::default;
+
+    let bytes = req.body.take_bytes().expect("full body not found");
+    if bytes.is_empty() {
+        return Err(S3ErrorCode::MissingRequestBodyError.into());
+    }
+    if is_minio_enabled_literal(&bytes) {
+        return Ok(VersioningConfiguration {
+            status: Some(BucketVersioningStatus::from("Enabled".to_owned())),
+            ..default()
+        });
+    }
+    let result = deserialize_xml::<VersioningConfiguration>(&bytes);
+    if result.is_err() {
+        error!(?bytes, "malformed xml body");
+    }
+    result
+}
+
 pub fn take_string_body(req: &mut Request) -> S3Result<String> {
     let bytes = req.body.take_bytes().expect("full body not found");
     match String::from_utf8_simd(bytes.into()) {

@@ -175,8 +175,28 @@ impl<'xml> Deserializer<'xml> {
         }
     }
 
-    /// Expects an end event
-    fn expect_end(&mut self, name: &[u8]) -> DeResult {
+    /// Expects a start event with any of the given names. Returns the matched name (owned).
+    fn expect_start_any(&mut self, names: &[&str]) -> DeResult<Vec<u8>> {
+        let names_bytes: Vec<Vec<u8>> = names.iter().map(|s| s.as_bytes().to_vec()).collect();
+        loop {
+            match self.next_event()? {
+                DeEvent::Start(x) => {
+                    let name = x.name().as_ref().to_vec();
+                    if names_bytes.iter().any(|n| *n == name) {
+                        return Ok(name);
+                    }
+                    return Err(unexpected_tag_name());
+                }
+                DeEvent::End(_) => return Err(unexpected_end()),
+                DeEvent::Text(_) => continue,
+                DeEvent::Eof => return Err(unexpected_eof()),
+            }
+        }
+    }
+
+    /// Expects an end event (accepts both `&[u8]` and `AsRef<[u8]>` for flexibility)
+    fn expect_end(&mut self, name: impl AsRef<[u8]>) -> DeResult {
+        let name = name.as_ref();
         loop {
             match self.next_event()? {
                 DeEvent::Start(_) => return Err(unexpected_start()),
@@ -212,6 +232,21 @@ impl<'xml> Deserializer<'xml> {
         self.expect_start(name.as_bytes())?;
         let ans = f(self)?;
         self.expect_end(name.as_bytes())?;
+        Ok(ans)
+    }
+
+    /// Deserializes an element with any of the given root names (MinIO compatibility).
+    ///
+    /// # Errors
+    /// Returns an error if the deserialization fails.
+    pub fn named_element_any<T>(
+        &mut self,
+        names: &[&str],
+        f: impl FnOnce(&mut Self) -> DeResult<T>,
+    ) -> DeResult<T> {
+        let name = self.expect_start_any(names)?;
+        let ans = f(self)?;
+        self.expect_end(name)?;
         Ok(ans)
     }
 

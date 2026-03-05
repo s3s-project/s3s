@@ -27,7 +27,7 @@ fn write_file(path: &str, f: impl FnOnce()) {
 }
 
 #[derive(Debug, Clone, Copy)]
-enum Patch {
+pub enum Patch {
     Minio,
 }
 
@@ -76,7 +76,7 @@ fn inner_run(code_patch: Option<Patch>) {
 
     {
         let path = format!("crates/s3s/src/xml/generated{suffix}.rs");
-        write_file(&path, || xml::codegen(&ops, &rust_types));
+        write_file(&path, || xml::codegen(&ops, &rust_types, code_patch));
     }
 
     {
@@ -86,7 +86,7 @@ fn inner_run(code_patch: Option<Patch>) {
 
     {
         let path = format!("crates/s3s/src/ops/generated{suffix}.rs");
-        write_file(&path, || ops::codegen(&ops, &rust_types));
+        write_file(&path, || ops::codegen(&ops, &rust_types, code_patch));
     }
 
     {
