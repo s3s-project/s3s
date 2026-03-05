@@ -714,7 +714,11 @@ fn codegen_op_http_de(op: &Operation, rust_types: &RustTypes, patch: Option<Patc
                                         && field.name == "object_lock_configuration"
                                         && matches!(patch, Some(Patch::Minio))
                                     {
-                                        g!("let {}: Option<{}> = http::take_opt_object_lock_configuration(req)?;", field.name, field.type_);
+                                        g!(
+                                            "let {}: Option<{}> = http::take_opt_object_lock_configuration(req)?;",
+                                            field.name,
+                                            field.type_
+                                        );
                                     } else {
                                         g!("let {}: Option<{}> = http::take_opt_xml_body(req)?;", field.name, field.type_);
                                     }

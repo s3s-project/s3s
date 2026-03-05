@@ -4,9 +4,9 @@ use super::rust;
 use super::rust::default_value_literal;
 
 use crate::declare_codegen;
+use crate::v1::Patch;
 use crate::v1::ops::is_op_output;
 use crate::v1::rust::StructField;
-use crate::v1::Patch;
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::ops::Not;
@@ -221,7 +221,12 @@ fn s3_unwrapped_xml_output(ops: &Operations, ty_name: &str) -> bool {
     ops.iter().any(|(_, op)| op.s3_unwrapped_xml_output && op.output == ty_name)
 }
 
-fn codegen_xml_serde(ops: &Operations, rust_types: &RustTypes, root_type_names: &BTreeMap<&str, Option<&str>>, patch: Option<Patch>) {
+fn codegen_xml_serde(
+    ops: &Operations,
+    rust_types: &RustTypes,
+    root_type_names: &BTreeMap<&str, Option<&str>>,
+    patch: Option<Patch>,
+) {
     for (rust_type, xml_name) in root_type_names.iter().map(|(&name, xml_name)| (&rust_types[name], xml_name)) {
         let rust::Type::Struct(ty) = rust_type else { panic!("{rust_type:#?}") };
 

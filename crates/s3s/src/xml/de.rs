@@ -239,11 +239,7 @@ impl<'xml> Deserializer<'xml> {
     ///
     /// # Errors
     /// Returns an error if the deserialization fails.
-    pub fn named_element_any<T>(
-        &mut self,
-        names: &[&str],
-        f: impl FnOnce(&mut Self) -> DeResult<T>,
-    ) -> DeResult<T> {
+    pub fn named_element_any<T>(&mut self, names: &[&str], f: impl FnOnce(&mut Self) -> DeResult<T>) -> DeResult<T> {
         let name = self.expect_start_any(names)?;
         let ans = f(self)?;
         self.expect_end(name)?;
