@@ -942,19 +942,9 @@ fn codegen_required_capabilities(op: &Operation) {
     let input_ty = &op.input;
     g!("pub fn required_capabilities(input: &{input_ty}) -> crate::capability::Capabilities {{");
 
-    match op.name.as_str() {
-        "GetObject" | "HeadObject" => {
-            g!("let mut caps = crate::capability::Capabilities::empty();");
-            g!("if input.part_number.is_some() {{");
-            g!("    caps = caps.with(crate::capability::Capability::GetObjectPartNumber);");
-            g!("}}");
-            g!("caps");
-        }
-        _ => {
-            g!("let _ = input;");
-            g!("crate::capability::Capabilities::empty()");
-        }
-    }
+    let _ = op;
+    g!("let _ = input;");
+    g!("crate::capability::Capabilities::empty()");
 
     g!("}}");
 }

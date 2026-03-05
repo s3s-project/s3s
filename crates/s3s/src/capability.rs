@@ -8,11 +8,8 @@ use std::collections::BTreeSet;
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Capability {
-    /// `GetObject` and `HeadObject` with a `partNumber` query parameter.
-    ///
-    /// When set, the server must return only the specified part of a multipart
-    /// object instead of the entire object.
-    GetObjectPartNumber,
+    #[doc(hidden)]
+    __Test,
 }
 
 /// A set of [`Capability`] values declared by an S3 backend.
@@ -63,4 +60,32 @@ pub fn check(required: &Capabilities, supported: &Capabilities) -> crate::error:
         "Backend does not declare support for capabilities: {:?}",
         missing
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_required_always_passes() {
+        assert!(check(&Capabilities::empty(), &Capabilities::empty()).is_ok());
+    }
+
+    #[test]
+    fn missing_capability_rejected() {
+        let required = Capabilities::empty().with(Capability::__Test);
+        assert!(check(&required, &Capabilities::empty()).is_err());
+    }
+
+    #[test]
+    fn declared_capability_passes() {
+        let caps = Capabilities::empty().with(Capability::__Test);
+        assert!(check(&caps, &caps).is_ok());
+    }
+
+    #[test]
+    fn superset_passes() {
+        let supported = Capabilities::empty().with(Capability::__Test);
+        assert!(check(&Capabilities::empty(), &supported).is_ok());
+    }
 }

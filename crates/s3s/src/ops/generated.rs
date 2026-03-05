@@ -3655,11 +3655,8 @@ impl GetObject {
     }
 
     pub fn required_capabilities(input: &GetObjectInput) -> crate::capability::Capabilities {
-        let mut caps = crate::capability::Capabilities::empty();
-        if input.part_number.is_some() {
-            caps = caps.with(crate::capability::Capability::GetObjectPartNumber);
-        }
-        caps
+        let _ = input;
+        crate::capability::Capabilities::empty()
     }
 }
 
@@ -4411,11 +4408,8 @@ impl HeadObject {
     }
 
     pub fn required_capabilities(input: &HeadObjectInput) -> crate::capability::Capabilities {
-        let mut caps = crate::capability::Capabilities::empty();
-        if input.part_number.is_some() {
-            caps = caps.with(crate::capability::Capability::GetObjectPartNumber);
-        }
-        caps
+        let _ = input;
+        crate::capability::Capabilities::empty()
     }
 }
 
