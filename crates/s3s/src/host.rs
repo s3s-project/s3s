@@ -300,10 +300,11 @@ impl S3Host for AnyDomain {
             return Err(s3_error!(InvalidRequest, "Invalid host header"));
         }
 
-        // Strip the port to work with the hostname only.
-        let hostname = match host.split_once(':') {
-            Some((h, _port)) => h,
-            None => host,
+        // Split host:port once; reuse this for both hostname extraction and
+        // base-domain reconstruction so the port logic is not duplicated.
+        let (hostname, port) = match host.split_once(':') {
+            Some((h, p)) => (h, Some(p)),
+            None => (host, None),
         };
 
         // If the hostname has a dot, the first label is the bucket name
@@ -312,12 +313,8 @@ impl S3Host for AnyDomain {
             let bucket = &hostname[..dot];
             let base_domain_host = &hostname[dot + 1..];
 
-            // Reconstruct the base domain with port if present.
-            let base_domain = match host.split_once(':') {
-                Some((_h, port)) => {
-                    // Use Cow::Owned because we need to combine base_domain_host + port
-                    Cow::Owned(format!("{base_domain_host}:{port}"))
-                }
+            let base_domain: Cow<'_, str> = match port {
+                Some(p) => Cow::Owned(format!("{base_domain_host}:{p}")),
                 None => Cow::Borrowed(base_domain_host),
             };
 

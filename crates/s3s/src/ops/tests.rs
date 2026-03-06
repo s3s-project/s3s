@@ -1757,7 +1757,7 @@ fn list_directory_buckets_serialize_http() {
 
 #[test]
 fn create_bucket_route_resolved_path_style() {
-    use crate::http::{Body, OrderedQs};
+    use crate::http::Body;
     use crate::path::S3Path;
 
     // PUT /my-bucket (path-style, no query string)
@@ -1821,8 +1821,7 @@ fn create_bucket_virtual_hosted_any_domain() {
     assert_eq!(vh.bucket(), Some("my-bucket"));
 
     let validation = AwsNameValidation::new();
-    let s3_path =
-        crate::path::parse_virtual_hosted_style_with_validation(vh.bucket(), "/", &validation).unwrap();
+    let s3_path = crate::path::parse_virtual_hosted_style_with_validation(vh.bucket(), "/", &validation).unwrap();
 
     assert!(matches!(s3_path, S3Path::Bucket { ref bucket } if &**bucket == "my-bucket"));
 
