@@ -204,6 +204,7 @@ fn codegen_http(ops: &Operations, rust_types: &RustTypes) {
 
         codegen_op_http_de(op, rust_types);
         codegen_op_http_ser(op, rust_types);
+        codegen_required_capabilities(op);
 
         g!("}}");
         g!();
@@ -316,6 +317,11 @@ fn codegen_post_object_fork_op(rust_types: &RustTypes) {
         "            }",
         "        }",
         "    }",
+        "",
+        "    pub fn required_capabilities(input: &PostObjectInput) -> crate::capability::Capabilities {",
+        "        let _ = input;",
+        "        crate::capability::Capabilities::empty()",
+        "    }",
         "}",
         "",
     ]);
@@ -326,6 +332,12 @@ fn codegen_post_object_fork_op(rust_types: &RustTypes) {
     g([
         "    async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {",
         "        let post_input = Self::deserialize_http(req)?;",
+        "        {",
+        "            let required = Self::required_capabilities(&post_input);",
+        "            if !required.is_empty() {",
+        "                crate::capability::check(&required, &ccx.s3.capabilities())?;",
+        "            }",
+        "        }",
         "        // Save POST-specific fields before conversion",
         "        let success_action_redirect = post_input.success_action_redirect.clone();",
         "        let success_action_status = post_input.success_action_status;",
@@ -894,6 +906,12 @@ fn codegen_op_http_call(op: &Operation) {
     let method = op.name.to_snake_case();
 
     g!("let input = Self::deserialize_http(req)?;");
+    g!("{{");
+    g!("    let required = Self::required_capabilities(&input);");
+    g!("    if !required.is_empty() {{");
+    g!("        crate::capability::check(&required, &ccx.s3.capabilities())?;");
+    g!("    }}");
+    g!("}}");
     g!("let mut s3_req = super::build_s3_request(input, req);");
     g!("let s3 = ccx.s3;");
 
@@ -928,6 +946,16 @@ fn codegen_op_http_call(op: &Operation) {
     g!("Ok(resp)");
 
     g!("}}");
+    g!("}}");
+}
+
+fn codegen_required_capabilities(op: &Operation) {
+    let input_ty = &op.input;
+    g!("pub fn required_capabilities(input: &{input_ty}) -> crate::capability::Capabilities {{");
+
+    g!("let _ = input;");
+    g!("crate::capability::Capabilities::empty()");
+
     g!("}}");
 }
 
