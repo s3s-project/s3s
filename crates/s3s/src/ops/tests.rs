@@ -1754,3 +1754,86 @@ fn list_directory_buckets_serialize_http() {
     let resp = generated::ListDirectoryBuckets::serialize_http(output).unwrap();
     assert_eq!(resp.status, hyper::StatusCode::OK);
 }
+
+#[test]
+fn create_bucket_route_resolved_path_style() {
+    use crate::http::Body;
+    use crate::path::S3Path;
+
+    // PUT /my-bucket (path-style, no query string)
+    let req = crate::http::Request::from(
+        hyper::Request::builder()
+            .method(Method::PUT)
+            .uri("http://localhost/my-bucket")
+            .body(Body::empty())
+            .unwrap(),
+    );
+
+    let s3_path = S3Path::Bucket {
+        bucket: "my-bucket".into(),
+    };
+    let (op, needs_full_body) = generated::resolve_route(&req, &s3_path, None).unwrap();
+
+    assert_eq!(op.name(), "CreateBucket");
+    assert!(needs_full_body);
+}
+
+#[test]
+fn create_bucket_route_resolved_with_x_id() {
+    use crate::http::{Body, OrderedQs};
+    use crate::path::S3Path;
+
+    // PUT /my-bucket?x-id=CreateBucket (path-style with x-id)
+    let req = crate::http::Request::from(
+        hyper::Request::builder()
+            .method(Method::PUT)
+            .uri("http://localhost/my-bucket?x-id=CreateBucket")
+            .body(Body::empty())
+            .unwrap(),
+    );
+
+    let s3_path = S3Path::Bucket {
+        bucket: "my-bucket".into(),
+    };
+    let qs = OrderedQs::parse("x-id=CreateBucket").unwrap();
+    let (op, needs_full_body) = generated::resolve_route(&req, &s3_path, Some(&qs)).unwrap();
+
+    assert_eq!(op.name(), "CreateBucket");
+    assert!(needs_full_body);
+}
+
+/// Regression test for <https://github.com/s3s-project/s3s/issues/534>.
+///
+/// When the AWS SDK sends a virtual-hosted-style request
+/// (`PUT / HTTP/1.1` with `Host: my-bucket.endpoint:9000`) and the
+/// server uses `AnyDomain` as its S3Host, the bucket must be extracted
+/// from the `Host` header so that the router sees `S3Path::Bucket`
+/// instead of `S3Path::Root`.
+#[test]
+fn create_bucket_virtual_hosted_any_domain() {
+    use crate::host::{AnyDomain, S3Host};
+    use crate::path::S3Path;
+    use crate::validation::AwsNameValidation;
+
+    let host = AnyDomain;
+    let vh = host.parse_host_header("my-bucket.localhost:9000").unwrap();
+
+    assert_eq!(vh.bucket(), Some("my-bucket"));
+
+    let validation = AwsNameValidation::new();
+    let s3_path = crate::path::parse_virtual_hosted_style_with_validation(vh.bucket(), "/", &validation).unwrap();
+
+    assert!(matches!(s3_path, S3Path::Bucket { ref bucket } if &**bucket == "my-bucket"));
+
+    // Verify the router dispatches to CreateBucket
+    let req = crate::http::Request::from(
+        hyper::Request::builder()
+            .method(Method::PUT)
+            .uri("http://my-bucket.localhost:9000/")
+            .body(crate::http::Body::empty())
+            .unwrap(),
+    );
+    let (op, needs_full_body) = generated::resolve_route(&req, &s3_path, None).unwrap();
+    assert_eq!(op.name(), "CreateBucket");
+    assert!(needs_full_body);
+}

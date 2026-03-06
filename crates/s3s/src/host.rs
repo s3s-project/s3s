@@ -1,10 +1,16 @@
 //! Virtual-host parsing for S3 request routing.
 //!
 //! This module provides the [`S3Host`] trait together with the built-in
-//! implementations [`SingleDomain`] and [`MultiDomain`]. They parse the HTTP
-//! `Host` header into a [`VirtualHost`] value that carries the base domain,
-//! the bucket name (when the request uses virtual-hosted-style addressing),
-//! and an optional region.
+//! implementations [`SingleDomain`], [`MultiDomain`], and [`AnyDomain`].
+//! They parse the HTTP `Host` header into a [`VirtualHost`] value that carries
+//! the base domain, the bucket name (when the request uses virtual-hosted-style
+//! addressing), and an optional region.
+//!
+//! [`AnyDomain`] is a permissive implementation that works without any
+//! pre-configured base domain. It treats the first subdomain label of the
+//! `Host` header as the bucket name (e.g. `my-bucket.my-host:9000` →
+//! bucket `my-bucket`). This is useful for custom S3-compatible endpoints
+//! where AWS SDKs send virtual-hosted-style requests by default.
 
 use crate::error::S3Result;
 
@@ -257,6 +263,69 @@ impl S3Host for MultiDomain {
     }
 }
 
+/// A permissive [`S3Host`] implementation that works without a
+/// pre-configured base domain.
+///
+/// `AnyDomain` splits the `Host` header on the first `'.'` and treats
+/// everything before it as the S3 bucket name.
+///
+/// | Host header | Bucket | Domain |
+/// |---|---|---|
+/// | `my-bucket.my-host:9000` | `my-bucket` | `my-host:9000` |
+/// | `my-bucket.localhost:8080` | `my-bucket` | `localhost:8080` |
+/// | `localhost:9000` | *(none)* | `localhost:9000` |
+///
+/// This is useful for custom S3-compatible endpoints where clients
+/// (AWS SDKs, Terraform, etc.) send virtual-hosted-style requests by
+/// default without `s3_use_path_style = true`.
+///
+/// # Examples
+///
+/// ```
+/// use s3s::host::AnyDomain;
+/// use s3s::service::S3ServiceBuilder;
+/// # struct DummyS3;
+/// # #[async_trait::async_trait]
+/// # impl s3s::S3 for DummyS3 {}
+///
+/// let mut builder = S3ServiceBuilder::new(DummyS3);
+/// builder.set_host(AnyDomain);
+/// ```
+#[derive(Debug, Clone, Copy)]
+pub struct AnyDomain;
+
+impl S3Host for AnyDomain {
+    fn parse_host_header<'a>(&'a self, host: &'a str) -> S3Result<VirtualHost<'a>> {
+        if !is_valid_domain(host) {
+            return Err(s3_error!(InvalidRequest, "Invalid host header"));
+        }
+
+        // Split host:port once; reuse this for both hostname extraction and
+        // base-domain reconstruction so the port logic is not duplicated.
+        let (hostname, port) = match host.split_once(':') {
+            Some((h, p)) => (h, Some(p)),
+            None => (host, None),
+        };
+
+        // If the hostname has a dot, the first label is the bucket name
+        // and the rest (plus optional port) is the base domain.
+        if let Some(dot) = hostname.find('.') {
+            let bucket = &hostname[..dot];
+            let base_domain_host = &hostname[dot + 1..];
+
+            let base_domain: Cow<'_, str> = match port {
+                Some(p) => Cow::Owned(format!("{base_domain_host}:{p}")),
+                None => Cow::Borrowed(base_domain_host),
+            };
+
+            return Ok(VirtualHost::new(base_domain).with_bucket(bucket));
+        }
+
+        // No subdomain found; treat as root domain (path-style request).
+        Ok(VirtualHost::new(host))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -383,5 +452,59 @@ mod tests {
         assert_eq!(vh.domain(), "example.com");
         assert_eq!(vh.bucket(), Some("another-bucket"));
         assert_eq!(vh.region(), Some("eu-west-1"));
+    }
+
+    #[test]
+    fn any_domain_with_subdomain_and_port() {
+        let ad = AnyDomain;
+
+        let vh = ad.parse_host_header("my-bucket.localhost:9000").unwrap();
+        assert_eq!(vh.bucket(), Some("my-bucket"));
+        assert_eq!(vh.domain(), "localhost:9000");
+    }
+
+    #[test]
+    fn any_domain_with_subdomain_no_port() {
+        let ad = AnyDomain;
+
+        let vh = ad.parse_host_header("my-bucket.example.com").unwrap();
+        assert_eq!(vh.bucket(), Some("my-bucket"));
+        assert_eq!(vh.domain(), "example.com");
+    }
+
+    #[test]
+    fn any_domain_no_subdomain_with_port() {
+        let ad = AnyDomain;
+
+        let vh = ad.parse_host_header("localhost:9000").unwrap();
+        assert_eq!(vh.bucket(), None);
+        assert_eq!(vh.domain(), "localhost:9000");
+    }
+
+    #[test]
+    fn any_domain_no_subdomain_no_port() {
+        let ad = AnyDomain;
+
+        let vh = ad.parse_host_header("localhost").unwrap();
+        assert_eq!(vh.bucket(), None);
+        assert_eq!(vh.domain(), "localhost");
+    }
+
+    #[test]
+    fn any_domain_multi_level_subdomain() {
+        let ad = AnyDomain;
+
+        // Only the first label is the bucket; the rest is the domain.
+        let vh = ad.parse_host_header("my-bucket.s3.us-east-1.example.com:443").unwrap();
+        assert_eq!(vh.bucket(), Some("my-bucket"));
+        assert_eq!(vh.domain(), "s3.us-east-1.example.com:443");
+    }
+
+    #[test]
+    fn any_domain_invalid_host() {
+        let ad = AnyDomain;
+
+        let err = ad.parse_host_header("").unwrap_err();
+        assert!(matches!(err.code(), S3ErrorCode::InvalidRequest));
     }
 }
