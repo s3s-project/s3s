@@ -7854,6 +7854,11 @@ impl PostObject {
             }
         }
     }
+
+    pub fn required_capabilities(input: &PostObjectInput) -> crate::capability::Capabilities {
+        let _ = input;
+        crate::capability::Capabilities::empty()
+    }
 }
 
 #[async_trait::async_trait]
@@ -7864,6 +7869,12 @@ impl super::Operation for PostObject {
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let post_input = Self::deserialize_http(req)?;
+        {
+            let required = Self::required_capabilities(&post_input);
+            if !required.is_empty() {
+                crate::capability::check(&required, &ccx.s3.capabilities())?;
+            }
+        }
         // Save POST-specific fields before conversion
         let success_action_redirect = post_input.success_action_redirect.clone();
         let success_action_status = post_input.success_action_status;

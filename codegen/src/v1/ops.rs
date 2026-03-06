@@ -317,6 +317,11 @@ fn codegen_post_object_fork_op(rust_types: &RustTypes) {
         "            }",
         "        }",
         "    }",
+        "",
+        "    pub fn required_capabilities(input: &PostObjectInput) -> crate::capability::Capabilities {",
+        "        let _ = input;",
+        "        crate::capability::Capabilities::empty()",
+        "    }",
         "}",
         "",
     ]);
@@ -327,6 +332,12 @@ fn codegen_post_object_fork_op(rust_types: &RustTypes) {
     g([
         "    async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {",
         "        let post_input = Self::deserialize_http(req)?;",
+        "        {",
+        "            let required = Self::required_capabilities(&post_input);",
+        "            if !required.is_empty() {",
+        "                crate::capability::check(&required, &ccx.s3.capabilities())?;",
+        "            }",
+        "        }",
         "        // Save POST-specific fields before conversion",
         "        let success_action_redirect = post_input.success_action_redirect.clone();",
         "        let success_action_status = post_input.success_action_status;",
@@ -942,7 +953,6 @@ fn codegen_required_capabilities(op: &Operation) {
     let input_ty = &op.input;
     g!("pub fn required_capabilities(input: &{input_ty}) -> crate::capability::Capabilities {{");
 
-    let _ = op;
     g!("let _ = input;");
     g!("crate::capability::Capabilities::empty()");
 
