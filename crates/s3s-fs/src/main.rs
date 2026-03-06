@@ -2,7 +2,7 @@ use s3s_fs::FileSystem;
 use s3s_fs::Result;
 
 use s3s::auth::SimpleAuth;
-use s3s::host::MultiDomain;
+use s3s::host::{AnyDomain, MultiDomain};
 use s3s::service::S3ServiceBuilder;
 
 use std::io::IsTerminal;
@@ -37,8 +37,17 @@ struct Opt {
     secret_key: Option<String>,
 
     /// Domain names used for virtual-hosted-style requests.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "any_domain")]
     domain: Vec<String>,
+
+    /// Accept virtual-hosted-style requests from any domain.
+    ///
+    /// The first subdomain label of the `Host` header is treated as the
+    /// bucket name (e.g. `my-bucket.my-host:9000` → bucket `my-bucket`).
+    /// This is useful when AWS SDKs or Terraform send virtual-hosted-style
+    /// requests to a custom endpoint.
+    #[arg(long, conflicts_with = "domain")]
+    any_domain: bool,
 
     /// Root directory of stored data.
     root: PathBuf,
@@ -104,6 +113,9 @@ async fn run(opt: Opt) -> Result {
         if opt.domain.is_empty().not() {
             b.set_host(MultiDomain::new(&opt.domain)?);
             info!("virtual-hosted-style requests are enabled");
+        } else if opt.any_domain {
+            b.set_host(AnyDomain);
+            info!("virtual-hosted-style requests are enabled (any domain)");
         }
 
         b.build()
