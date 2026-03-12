@@ -260,6 +260,8 @@ use std::io::Write;
 // DeserializeContent: DaysAfterInitiation
 //   SerializeContent: DefaultRetention
 // DeserializeContent: DefaultRetention
+//   SerializeContent: DelMarkerExpiration
+// DeserializeContent: DelMarkerExpiration
 //   SerializeContent: Delete
 // DeserializeContent: Delete
 //   SerializeContent: DeleteMarker
@@ -327,6 +329,8 @@ use std::io::Write;
 // DeserializeContent: ExistingObjectReplicationStatus
 //   SerializeContent: ExpirationStatus
 // DeserializeContent: ExpirationStatus
+//   SerializeContent: ExpiredObjectAllVersions
+// DeserializeContent: ExpiredObjectAllVersions
 //   SerializeContent: ExpiredObjectDeleteMarker
 // DeserializeContent: ExpiredObjectDeleteMarker
 //   SerializeContent: ExposeHeader
@@ -875,7 +879,7 @@ impl Serialize for BucketLifecycleConfiguration {
 
 impl<'xml> Deserialize<'xml> for BucketLifecycleConfiguration {
     fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("LifecycleConfiguration", Deserializer::content)
+        d.named_element_any(&["LifecycleConfiguration", "BucketLifecycleConfiguration"], Deserializer::content)
     }
 }
 
@@ -1994,6 +1998,9 @@ impl<'xml> DeserializeContent<'xml> for BucketInfo {
 }
 impl SerializeContent for BucketLifecycleConfiguration {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.expiry_updated_at {
+            s.timestamp("ExpiryUpdatedAt", val, TimestampFormat::DateTime)?;
+        }
         {
             let iter = &self.rules;
             s.flattened_list("Rule", iter)?;
@@ -2004,16 +2011,25 @@ impl SerializeContent for BucketLifecycleConfiguration {
 
 impl<'xml> DeserializeContent<'xml> for BucketLifecycleConfiguration {
     fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut expiry_updated_at: Option<Date> = None;
         let mut rules: Option<LifecycleRules> = None;
         d.for_each_element(|d, x| match x {
+            b"ExpiryUpdatedAt" => {
+                if expiry_updated_at.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                expiry_updated_at = Some(d.timestamp(TimestampFormat::DateTime)?);
+                Ok(())
+            }
             b"Rule" => {
                 let ans: LifecycleRule = d.content()?;
                 rules.get_or_insert_with(List::new).push(ans);
                 Ok(())
             }
-            _ => Err(DeError::UnexpectedTagName),
+            _ => Ok(()),
         })?;
         Ok(Self {
+            expiry_updated_at,
             rules: rules.ok_or(DeError::MissingField)?,
         })
     }
@@ -3187,6 +3203,31 @@ impl<'xml> DeserializeContent<'xml> for DefaultRetention {
             _ => Err(DeError::UnexpectedTagName),
         })?;
         Ok(Self { days, mode, years })
+    }
+}
+impl SerializeContent for DelMarkerExpiration {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.days {
+            s.content("Days", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for DelMarkerExpiration {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut days: Option<Days> = None;
+        d.for_each_element(|d, x| match x {
+            b"Days" => {
+                if days.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                days = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self { days })
     }
 }
 impl SerializeContent for Delete {
@@ -5384,6 +5425,9 @@ impl SerializeContent for LifecycleExpiration {
         if let Some(ref val) = self.days {
             s.content("Days", val)?;
         }
+        if let Some(ref val) = self.expired_object_all_versions {
+            s.content("ExpiredObjectAllVersions", val)?;
+        }
         if let Some(ref val) = self.expired_object_delete_marker {
             s.content("ExpiredObjectDeleteMarker", val)?;
         }
@@ -5395,6 +5439,7 @@ impl<'xml> DeserializeContent<'xml> for LifecycleExpiration {
     fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
         let mut date: Option<Date> = None;
         let mut days: Option<Days> = None;
+        let mut expired_object_all_versions: Option<ExpiredObjectAllVersions> = None;
         let mut expired_object_delete_marker: Option<ExpiredObjectDeleteMarker> = None;
         d.for_each_element(|d, x| match x {
             b"Date" => {
@@ -5411,6 +5456,13 @@ impl<'xml> DeserializeContent<'xml> for LifecycleExpiration {
                 days = Some(d.content()?);
                 Ok(())
             }
+            b"ExpiredObjectAllVersions" => {
+                if expired_object_all_versions.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                expired_object_all_versions = Some(d.content()?);
+                Ok(())
+            }
             b"ExpiredObjectDeleteMarker" => {
                 if expired_object_delete_marker.is_some() {
                     return Err(DeError::DuplicateField);
@@ -5423,6 +5475,7 @@ impl<'xml> DeserializeContent<'xml> for LifecycleExpiration {
         Ok(Self {
             date,
             days,
+            expired_object_all_versions,
             expired_object_delete_marker,
         })
     }
@@ -5431,6 +5484,9 @@ impl SerializeContent for LifecycleRule {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.abort_incomplete_multipart_upload {
             s.content("AbortIncompleteMultipartUpload", val)?;
+        }
+        if let Some(ref val) = self.del_marker_expiration {
+            s.content("DelMarkerExpiration", val)?;
         }
         if let Some(ref val) = self.expiration {
             s.content("Expiration", val)?;
@@ -5461,6 +5517,7 @@ impl SerializeContent for LifecycleRule {
 impl<'xml> DeserializeContent<'xml> for LifecycleRule {
     fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
         let mut abort_incomplete_multipart_upload: Option<AbortIncompleteMultipartUpload> = None;
+        let mut del_marker_expiration: Option<DelMarkerExpiration> = None;
         let mut expiration: Option<LifecycleExpiration> = None;
         let mut filter: Option<LifecycleRuleFilter> = None;
         let mut id: Option<ID> = None;
@@ -5475,6 +5532,13 @@ impl<'xml> DeserializeContent<'xml> for LifecycleRule {
                     return Err(DeError::DuplicateField);
                 }
                 abort_incomplete_multipart_upload = Some(d.content()?);
+                Ok(())
+            }
+            b"DelMarkerExpiration" => {
+                if del_marker_expiration.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                del_marker_expiration = Some(d.content()?);
                 Ok(())
             }
             b"Expiration" => {
@@ -5533,6 +5597,7 @@ impl<'xml> DeserializeContent<'xml> for LifecycleRule {
         })?;
         Ok(Self {
             abort_incomplete_multipart_upload,
+            del_marker_expiration,
             expiration,
             filter,
             id,
