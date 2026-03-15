@@ -173,6 +173,59 @@
                     }
                 }
             }
+        },
+        "com.amazonaws.s3#DelMarkerExpiration": {
+            "type": "structure",
+            "members": {
+                "Days": {
+                    "target": "com.amazonaws.s3#Days"
+                }
+            },
+            "traits": {
+                "s3s#minio": ""
+            }
+        },
+        "com.amazonaws.s3#BucketLifecycleConfiguration": {
+            "type": "structure",
+            "members": {
+                "ExpiryUpdatedAt": {
+                    "target": "com.amazonaws.s3#Date",
+                    "traits": {
+                        "smithy.api#xmlName": "ExpiryUpdatedAt",
+                        "s3s#minio": ""
+                    }
+                }
+            }
+        },
+        "com.amazonaws.s3#LifecycleRule": {
+            "type": "structure",
+            "members": {
+                "DelMarkerExpiration": {
+                    "target": "com.amazonaws.s3#DelMarkerExpiration",
+                    "traits": {
+                        "smithy.api#xmlName": "DelMarkerExpiration",
+                        "s3s#minio": ""
+                    }
+                }
+            }
+        },
+        "com.amazonaws.s3#ExpiredObjectAllVersions": {
+            "type": "boolean",
+            "traits": {
+                "s3s#minio": ""
+            }
+        },
+        "com.amazonaws.s3#LifecycleExpiration": {
+            "type": "structure",
+            "members": {
+                "ExpiredObjectAllVersions": {
+                    "target": "com.amazonaws.s3#ExpiredObjectAllVersions",
+                    "traits": {
+                        "smithy.api#xmlName": "ExpiredObjectAllVersions",
+                        "s3s#minio": ""
+                    }
+                }
+            }
         }
     }
 }
