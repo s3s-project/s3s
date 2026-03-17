@@ -237,9 +237,9 @@ impl<'xml> Deserializer<'xml> {
 
     /// Deserializes an element with any of the given root names (`MinIO` compatibility).
     ///
-    /// MinIO reference:
-    /// - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/lifecycle/lifecycle.go#L129-L166
-    /// - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/lifecycle/lifecycle_test.go#L441-L447
+    /// `MinIO` reference:
+    /// - <https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/lifecycle/lifecycle.go#L129-L166>
+    /// - <https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/lifecycle/lifecycle_test.go#L441-L447>
     ///
     /// # Errors
     /// Returns an error if the deserialization fails.
