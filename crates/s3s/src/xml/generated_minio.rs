@@ -879,6 +879,9 @@ impl Serialize for BucketLifecycleConfiguration {
 
 impl<'xml> Deserialize<'xml> for BucketLifecycleConfiguration {
     fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        // MinIO reference:
+        // - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/lifecycle/lifecycle.go#L129-L166
+        // - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/lifecycle/lifecycle_test.go#L441-L447
         d.named_element_any(&["LifecycleConfiguration", "BucketLifecycleConfiguration"], Deserializer::content)
     }
 }
@@ -2026,6 +2029,10 @@ impl<'xml> DeserializeContent<'xml> for BucketLifecycleConfiguration {
                 rules.get_or_insert_with(List::new).push(ans);
                 Ok(())
             }
+            // MinIO reference:
+            // - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/lifecycle/lifecycle.go#L102-L166
+            // - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/lifecycle/delmarker-expiration.go#L27-L64
+            // - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/lifecycle/expiration.go#L115-L124
             _ => Ok(()),
         })?;
         Ok(Self {

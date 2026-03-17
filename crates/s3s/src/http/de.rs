@@ -258,13 +258,23 @@ where
     result
 }
 
-/// `MinIO` compatibility: literal `" Enabled "` (with spaces) for legacy object lock/versioning config.
+/// `MinIO` compatibility: accept a trimmed bare `Enabled` body for the
+/// versioning/object-lock shorthands handled below.
+///
+/// No exact raw-body parser was found in current `minio/minio` S3 handlers; this
+/// shim is derived from the `Enabled` values used by MinIO's config types:
+/// - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/versioning/versioning.go#L49-L84
+/// - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/object/lock/lock.go#L232-L319
 #[cfg(feature = "minio")]
 fn is_minio_enabled_literal(bytes: &[u8]) -> bool {
     bytes.trim_ascii() == b"Enabled"
 }
 
-/// `MinIO` compatibility: take `ObjectLockConfiguration`, accepting literal `" Enabled "` as enabled.
+/// `MinIO` compatibility: take `ObjectLockConfiguration`, accepting a trimmed
+/// bare `Enabled` body as enabled.
+///
+/// MinIO reference:
+/// - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/object/lock/lock.go#L232-L319
 #[cfg(feature = "minio")]
 pub fn take_opt_object_lock_configuration(req: &mut Request) -> S3Result<Option<crate::dto::ObjectLockConfiguration>> {
     use crate::dto::{ObjectLockConfiguration, ObjectLockEnabled};
@@ -286,7 +296,12 @@ pub fn take_opt_object_lock_configuration(req: &mut Request) -> S3Result<Option<
     result
 }
 
-/// `MinIO` compatibility: take `VersioningConfiguration`, accepting literal `" Enabled "` as enabled.
+/// `MinIO` compatibility: take `VersioningConfiguration`, accepting a trimmed
+/// bare `Enabled` body as enabled.
+///
+/// MinIO reference:
+/// - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/versioning/versioning.go#L49-L84
+/// - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/versioning/versioning.go#L157-L166
 #[cfg(feature = "minio")]
 pub fn take_versioning_configuration(req: &mut Request) -> S3Result<crate::dto::VersioningConfiguration> {
     use crate::dto::{BucketVersioningStatus, VersioningConfiguration};

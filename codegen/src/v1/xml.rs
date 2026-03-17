@@ -259,8 +259,20 @@ fn codegen_xml_serde(
             g!("impl<'xml> Deserialize<'xml> for {} {{", ty.name);
             g!("fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {{");
 
-            // MinIO compatibility: accept both LifecycleConfiguration and BucketLifecycleConfiguration
+            // MinIO compatibility: accept both LifecycleConfiguration and
+            // BucketLifecycleConfiguration.
+            //
+            // MinIO reference:
+            // - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/lifecycle/lifecycle.go#L129-L166
+            // - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/lifecycle/lifecycle_test.go#L441-L447
             if ty.name == "BucketLifecycleConfiguration" && matches!(patch, Some(Patch::Minio)) {
+                g!("// MinIO reference:");
+                g!(
+                    "// - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/lifecycle/lifecycle.go#L129-L166"
+                );
+                g!(
+                    "// - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/lifecycle/lifecycle_test.go#L441-L447"
+                );
                 g!("d.named_element_any(");
                 g!("    &[\"LifecycleConfiguration\", \"BucketLifecycleConfiguration\"],");
                 g!("    Deserializer::content,");
@@ -551,8 +563,25 @@ fn codegen_xml_serde_content_struct(_ops: &Operations, rust_types: &RustTypes, t
                 g!("Ok(())");
                 g!("}}");
             }
-            // MinIO compatibility: skip unknown elements for BucketLifecycleConfiguration
+            // MinIO compatibility: keep BucketLifecycleConfiguration parsing
+            // permissive so MinIO-specific lifecycle fields do not make the
+            // whole document fail to parse.
+            //
+            // MinIO lifecycle shape/reference points:
+            // - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/lifecycle/lifecycle.go#L102-L166
+            // - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/lifecycle/delmarker-expiration.go#L27-L64
+            // - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/lifecycle/expiration.go#L115-L124
             if ty.name == "BucketLifecycleConfiguration" && matches!(patch, Some(Patch::Minio)) {
+                g!("// MinIO reference:");
+                g!(
+                    "// - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/lifecycle/lifecycle.go#L102-L166"
+                );
+                g!(
+                    "// - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/lifecycle/delmarker-expiration.go#L27-L64"
+                );
+                g!(
+                    "// - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/lifecycle/expiration.go#L115-L124"
+                );
                 g!("_ => Ok(()),");
             } else {
                 g!("_ => Err(DeError::UnexpectedTagName)");
