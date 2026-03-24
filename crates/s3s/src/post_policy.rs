@@ -153,8 +153,11 @@ impl PostPolicy {
 
     /// Returns true if the given form field is exempt from the policy condition requirement.
     fn is_field_exempt_from_policy(name: &str) -> bool {
-        // SigV4: x-amz-signature; SigV2: signature, awsaccesskeyid
+        // SigV4: x-amz-signature; SigV2: signature, awsaccesskeyid.
+        // Keep the MinIO-compatible exception set for encryption-specific fields,
+        // which are allowed outside policy conditions for browser POST uploads.
         matches!(name, "x-amz-signature" | "signature" | "awsaccesskeyid" | "file" | "submit" | "policy")
+            || name.starts_with("x-amz-server-side-encryption-")
             || name.starts_with("x-ignore-")
     }
 
@@ -930,6 +933,34 @@ mod tests {
         );
         let result_v2 = policy.validate_conditions_only(&multipart_v2, 0, Some("mybucket"));
         assert!(result_v2.is_ok(), "SigV2 exempt fields should not be rejected");
+    }
+
+    #[test]
+    fn test_encryption_fields_not_in_policy_are_allowed() {
+        let json = r#"{
+            "expiration": "2030-01-01T00:00:00.000Z",
+            "conditions": [
+                {"bucket": "mybucket"},
+                ["eq", "$key", "mykey"]
+            ]
+        }"#;
+        let policy = PostPolicy::from_json(json).unwrap();
+
+        let multipart = create_test_multipart(
+            vec![
+                ("key", "mykey"),
+                ("x-amz-server-side-encryption-customer-algorithm", "AES256"),
+                ("x-amz-server-side-encryption-customer-key", "ZmFrZS1rZXk="),
+                ("x-amz-server-side-encryption-customer-key-md5", "ZmFrZS1tZDU="),
+                ("x-amz-server-side-encryption-aws-kms-key-id", "test-key"),
+                ("x-amz-server-side-encryption-bucket-key-enabled", "true"),
+                ("x-amz-server-side-encryption-context", "e30="),
+                ("x-amz-server-side-encryption-custom-flag", "custom"),
+            ],
+            None,
+        );
+        let result = policy.validate_conditions_only(&multipart, 0, Some("mybucket"));
+        assert!(result.is_ok(), "encryption exception fields should not be rejected");
     }
 
     /// A field declared via starts-with condition should also be accepted.
