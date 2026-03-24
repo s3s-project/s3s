@@ -5345,6 +5345,9 @@ impl PutBucketVersioning {
 
         let mfa: Option<MFA> = http::parse_opt_header(req, &X_AMZ_MFA)?;
 
+        // MinIO reference:
+        // - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/versioning/versioning.go#L49-L84
+        // - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/versioning/versioning.go#L157-L166
         let versioning_configuration: VersioningConfiguration = http::take_versioning_configuration(req)?;
 
         Ok(PutBucketVersioningInput {
@@ -5943,6 +5946,8 @@ impl PutObjectLockConfiguration {
 
         let expected_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_EXPECTED_BUCKET_OWNER)?;
 
+        // MinIO reference:
+        // - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/object/lock/lock.go#L232-L319
         let object_lock_configuration: Option<ObjectLockConfiguration> = http::take_opt_object_lock_configuration(req)?;
 
         let request_payer: Option<RequestPayer> = http::parse_opt_header(req, &X_AMZ_REQUEST_PAYER)?;

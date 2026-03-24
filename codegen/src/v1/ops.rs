@@ -709,11 +709,22 @@ fn codegen_op_http_de(op: &Operation, rust_types: &RustTypes, patch: Option<Patc
                                     g!("    Err(e) => return Err(e),");
                                     g!("}};");
                                 } else if field.option_type {
-                                    // MinIO compatibility: literal " Enabled " for legacy config
+                                    // MinIO compatibility: accept a trimmed bare
+                                    // `Enabled` body as an object-lock shorthand.
+                                    //
+                                    // Current MinIO source does not expose the same
+                                    // raw-body parser on the S3 HTTP path; this
+                                    // helper is derived from the ObjectLock config
+                                    // shape and its required Enabled state:
+                                    // - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/object/lock/lock.go#L232-L319
                                     if op.name == "PutObjectLockConfiguration"
                                         && field.name == "object_lock_configuration"
                                         && matches!(patch, Some(Patch::Minio))
                                     {
+                                        g!("// MinIO reference:");
+                                        g!(
+                                            "// - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/object/lock/lock.go#L232-L319"
+                                        );
                                         g!(
                                             "let {}: Option<{}> = http::take_opt_object_lock_configuration(req)?;",
                                             field.name,
@@ -723,11 +734,25 @@ fn codegen_op_http_de(op: &Operation, rust_types: &RustTypes, patch: Option<Patc
                                         g!("let {}: Option<{}> = http::take_opt_xml_body(req)?;", field.name, field.type_);
                                     }
                                 } else {
-                                    // MinIO compatibility: literal " Enabled " for legacy config
+                                    // MinIO compatibility: accept a trimmed bare
+                                    // `Enabled` body as a versioning shorthand.
+                                    //
+                                    // Current MinIO source models versioning
+                                    // enablement via VersioningConfiguration and
+                                    // the `Enabled` status value:
+                                    // - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/versioning/versioning.go#L49-L84
+                                    // - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/versioning/versioning.go#L157-L166
                                     if op.name == "PutBucketVersioning"
                                         && field.name == "versioning_configuration"
                                         && matches!(patch, Some(Patch::Minio))
                                     {
+                                        g!("// MinIO reference:");
+                                        g!(
+                                            "// - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/versioning/versioning.go#L49-L84"
+                                        );
+                                        g!(
+                                            "// - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/versioning/versioning.go#L157-L166"
+                                        );
                                         g!("let {}: {} = http::take_versioning_configuration(req)?;", field.name, field.type_);
                                     } else {
                                         g!("let {}: {} = http::take_xml_body(req)?;", field.name, field.type_);
