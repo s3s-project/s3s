@@ -157,7 +157,7 @@ impl PostPolicy {
         // Keep the MinIO-compatible exception set for encryption-specific fields,
         // which are allowed outside policy conditions for browser POST uploads.
         matches!(name, "x-amz-signature" | "signature" | "awsaccesskeyid" | "file" | "submit" | "policy")
-            || name.starts_with("x-amz-server-side-encryption-")
+            || name.starts_with("x-amz-server-side-encryption")
             || name.starts_with("x-ignore-")
     }
 
@@ -949,6 +949,7 @@ mod tests {
         let multipart = create_test_multipart(
             vec![
                 ("key", "mykey"),
+                ("x-amz-server-side-encryption", "AES256"),
                 ("x-amz-server-side-encryption-customer-algorithm", "AES256"),
                 ("x-amz-server-side-encryption-customer-key", "ZmFrZS1rZXk="),
                 ("x-amz-server-side-encryption-customer-key-md5", "ZmFrZS1tZDU="),
