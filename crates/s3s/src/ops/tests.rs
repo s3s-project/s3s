@@ -233,6 +233,88 @@ fn extract_host_from_uri() {
     assert_eq!(host, None);
 }
 
+/// HTTP/2 requests lack a Host header (:authority is used instead).
+/// Verify that prepare() injects Host from uri.authority().
+#[tokio::test]
+async fn http2_authority_injected_as_host_header() {
+    use crate::config::{S3ConfigProvider, StaticConfigProvider};
+    use crate::http::{Body, Request};
+    use std::sync::Arc;
+
+    struct NoOpS3;
+    #[async_trait::async_trait]
+    impl crate::s3_trait::S3 for NoOpS3 {}
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(NoOpS3);
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+    let ccx = CallContext {
+        s3: &s3,
+        config: &config,
+        host: None,
+        auth: None,
+        access: None,
+        route: None,
+        validation: None,
+    };
+
+    let mut req = Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .version(::http::Version::HTTP_2)
+            .uri("http://s3.example.com/test-bucket/test-key")
+            .body(Body::empty())
+            .unwrap(),
+    );
+
+    assert!(req.headers.get(crate::header::HOST).is_none());
+    let _ = super::prepare(&mut req, &ccx).await;
+
+    let host = req
+        .headers
+        .get(crate::header::HOST)
+        .expect("Host must be injected for HTTP/2");
+    assert_eq!(host.to_str().unwrap(), "s3.example.com");
+}
+
+/// Existing Host header (HTTP/1.1) must not be overwritten.
+#[tokio::test]
+async fn http1_host_header_not_overwritten() {
+    use crate::config::{S3ConfigProvider, StaticConfigProvider};
+    use crate::http::{Body, Request};
+    use std::sync::Arc;
+
+    struct NoOpS3;
+    #[async_trait::async_trait]
+    impl crate::s3_trait::S3 for NoOpS3 {}
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(NoOpS3);
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+    let ccx = CallContext {
+        s3: &s3,
+        config: &config,
+        host: None,
+        auth: None,
+        access: None,
+        route: None,
+        validation: None,
+    };
+
+    let mut req = Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .version(::http::Version::HTTP_11)
+            .uri("/test-bucket/test-key")
+            .header("host", "my-custom-host.example.com")
+            .body(Body::empty())
+            .unwrap(),
+    );
+
+    let _ = super::prepare(&mut req, &ccx).await;
+
+    let host = req.headers.get(crate::header::HOST).unwrap();
+    assert_eq!(host.to_str().unwrap(), "my-custom-host.example.com");
+}
+
 #[tokio::test]
 async fn presigned_url_expires_0_should_be_expired() {
     use crate::S3ErrorCode;
