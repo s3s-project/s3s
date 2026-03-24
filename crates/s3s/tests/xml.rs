@@ -199,9 +199,8 @@ fn tagging() {
 #[test]
 fn lifecycle_expiration() {
     let val = s3s::dto::LifecycleExpiration {
-        date: None,
         days: Some(365),
-        expired_object_delete_marker: None,
+        ..Default::default()
     };
 
     let ans = serialize_content(&val).unwrap();
