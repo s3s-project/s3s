@@ -226,6 +226,338 @@
                     }
                 }
             }
+        },
+        "com.amazonaws.s3#MinioMetadataKey": {
+            "type": "string",
+            "traits": {
+                "s3s#minio": ""
+            }
+        },
+        "com.amazonaws.s3#MinioMetadataValue": {
+            "type": "string",
+            "traits": {
+                "s3s#minio": ""
+            }
+        },
+        "com.amazonaws.s3#MinioUserTags": {
+            "type": "string",
+            "traits": {
+                "s3s#minio": ""
+            }
+        },
+        "com.amazonaws.s3#MinioInternalCount": {
+            "type": "integer",
+            "traits": {
+                "s3s#minio": ""
+            }
+        },
+        "com.amazonaws.s3#MinioMetadataEntry": {
+            "type": "structure",
+            "members": {
+                "Key": {
+                    "target": "com.amazonaws.s3#MinioMetadataKey",
+                    "traits": {
+                        "smithy.api#required": {}
+                    }
+                },
+                "Value": {
+                    "target": "com.amazonaws.s3#MinioMetadataValue",
+                    "traits": {
+                        "smithy.api#required": {}
+                    }
+                }
+            },
+            "traits": {
+                "s3s#minio": ""
+            }
+        },
+        "com.amazonaws.s3#MinioMetadataEntries": {
+            "type": "list",
+            "member": {
+                "target": "com.amazonaws.s3#MinioMetadataEntry"
+            },
+            "traits": {
+                "s3s#minio": ""
+            }
+        },
+        "com.amazonaws.s3#MinioUserMetadata": {
+            "type": "structure",
+            "members": {
+                "Items": {
+                    "target": "com.amazonaws.s3#MinioMetadataEntries",
+                    "traits": {
+                        "smithy.api#required": {},
+                        "s3s#minio": ""
+                    }
+                }
+            },
+            "traits": {
+                "s3s#minio": ""
+            }
+        },
+        "com.amazonaws.s3#ObjectInternalInfo": {
+            "type": "structure",
+            "members": {
+                "K": {
+                    "target": "com.amazonaws.s3#MinioInternalCount",
+                    "traits": {
+                        "smithy.api#required": {},
+                        "s3s#minio": ""
+                    }
+                },
+                "M": {
+                    "target": "com.amazonaws.s3#MinioInternalCount",
+                    "traits": {
+                        "smithy.api#required": {},
+                        "s3s#minio": ""
+                    }
+                }
+            },
+            "traits": {
+                "s3s#minio": ""
+            }
+        },
+        "com.amazonaws.s3#ObjectVersionM": {
+            "type": "structure",
+            "members": {
+                "ETag": {
+                    "target": "com.amazonaws.s3#ETag",
+                    "traits": {
+                        "s3s#minio": ""
+                    }
+                },
+                "IsLatest": {
+                    "target": "com.amazonaws.s3#IsLatest",
+                    "traits": {
+                        "s3s#minio": ""
+                    }
+                },
+                "Key": {
+                    "target": "com.amazonaws.s3#ObjectKey",
+                    "traits": {
+                        "s3s#minio": ""
+                    }
+                },
+                "LastModified": {
+                    "target": "com.amazonaws.s3#LastModified",
+                    "traits": {
+                        "s3s#minio": ""
+                    }
+                },
+                "Owner": {
+                    "target": "com.amazonaws.s3#Owner",
+                    "traits": {
+                        "s3s#minio": ""
+                    }
+                },
+                "Size": {
+                    "target": "com.amazonaws.s3#Size",
+                    "traits": {
+                        "s3s#minio": ""
+                    }
+                },
+                "StorageClass": {
+                    "target": "com.amazonaws.s3#ObjectVersionStorageClass",
+                    "traits": {
+                        "s3s#minio": ""
+                    }
+                },
+                "VersionId": {
+                    "target": "com.amazonaws.s3#ObjectVersionId",
+                    "traits": {
+                        "s3s#minio": ""
+                    }
+                },
+                "UserMetadata": {
+                    "target": "com.amazonaws.s3#MinioUserMetadata",
+                    "traits": {
+                        "s3s#minio": ""
+                    }
+                },
+                "UserTags": {
+                    "target": "com.amazonaws.s3#MinioUserTags",
+                    "traits": {
+                        "s3s#minio": ""
+                    }
+                },
+                "Internal": {
+                    "target": "com.amazonaws.s3#ObjectInternalInfo",
+                    "traits": {
+                        "s3s#minio": ""
+                    }
+                }
+            },
+            "traits": {
+                "s3s#minio": ""
+            }
+        },
+        "com.amazonaws.s3#DeleteMarkerM": {
+            "type": "structure",
+            "members": {
+                "IsLatest": {
+                    "target": "com.amazonaws.s3#IsLatest",
+                    "traits": {
+                        "s3s#minio": ""
+                    }
+                },
+                "Key": {
+                    "target": "com.amazonaws.s3#ObjectKey",
+                    "traits": {
+                        "s3s#minio": ""
+                    }
+                },
+                "LastModified": {
+                    "target": "com.amazonaws.s3#LastModified",
+                    "traits": {
+                        "s3s#minio": ""
+                    }
+                },
+                "Owner": {
+                    "target": "com.amazonaws.s3#Owner",
+                    "traits": {
+                        "s3s#minio": ""
+                    }
+                },
+                "VersionId": {
+                    "target": "com.amazonaws.s3#ObjectVersionId",
+                    "traits": {
+                        "s3s#minio": ""
+                    }
+                },
+                "UserMetadata": {
+                    "target": "com.amazonaws.s3#MinioUserMetadata",
+                    "traits": {
+                        "s3s#minio": ""
+                    }
+                },
+                "UserTags": {
+                    "target": "com.amazonaws.s3#MinioUserTags",
+                    "traits": {
+                        "s3s#minio": ""
+                    }
+                },
+                "Internal": {
+                    "target": "com.amazonaws.s3#ObjectInternalInfo",
+                    "traits": {
+                        "s3s#minio": ""
+                    }
+                }
+            },
+            "traits": {
+                "s3s#minio": ""
+            }
+        },
+        "com.amazonaws.s3#ListObjectVersionMEntry": {
+            "type": "union",
+            "members": {
+                "Version": {
+                    "target": "com.amazonaws.s3#ObjectVersionM"
+                },
+                "DeleteMarker": {
+                    "target": "com.amazonaws.s3#DeleteMarkerM"
+                }
+            },
+            "traits": {
+                "s3s#minio": ""
+            }
+        },
+        "com.amazonaws.s3#ListObjectVersionMEntries": {
+            "type": "list",
+            "member": {
+                "target": "com.amazonaws.s3#ListObjectVersionMEntry"
+            },
+            "traits": {
+                "s3s#minio": ""
+            }
+        },
+        "com.amazonaws.s3#ListObjectVersionsMOutput": {
+            "type": "structure",
+            "members": {
+                "CommonPrefixes": {
+                    "target": "com.amazonaws.s3#CommonPrefixList",
+                    "traits": {
+                        "smithy.api#xmlFlattened": "",
+                        "s3s#minio": ""
+                    }
+                },
+                "Delimiter": {
+                    "target": "com.amazonaws.s3#Delimiter",
+                    "traits": {
+                        "s3s#minio": ""
+                    }
+                },
+                "EncodingType": {
+                    "target": "com.amazonaws.s3#EncodingType",
+                    "traits": {
+                        "s3s#minio": ""
+                    }
+                },
+                "IsTruncated": {
+                    "target": "com.amazonaws.s3#IsTruncated",
+                    "traits": {
+                        "s3s#minio": ""
+                    }
+                },
+                "KeyMarker": {
+                    "target": "com.amazonaws.s3#KeyMarker",
+                    "traits": {
+                        "s3s#minio": ""
+                    }
+                },
+                "MaxKeys": {
+                    "target": "com.amazonaws.s3#MaxKeys",
+                    "traits": {
+                        "s3s#minio": ""
+                    }
+                },
+                "Name": {
+                    "target": "com.amazonaws.s3#BucketName",
+                    "traits": {
+                        "s3s#minio": ""
+                    }
+                },
+                "NextKeyMarker": {
+                    "target": "com.amazonaws.s3#NextKeyMarker",
+                    "traits": {
+                        "s3s#minio": ""
+                    }
+                },
+                "NextVersionIdMarker": {
+                    "target": "com.amazonaws.s3#NextVersionIdMarker",
+                    "traits": {
+                        "s3s#minio": ""
+                    }
+                },
+                "Prefix": {
+                    "target": "com.amazonaws.s3#Prefix",
+                    "traits": {
+                        "s3s#minio": ""
+                    }
+                },
+                "RequestCharged": {
+                    "target": "com.amazonaws.s3#RequestCharged",
+                    "traits": {
+                        "smithy.api#httpHeader": "x-amz-request-charged",
+                        "s3s#minio": ""
+                    }
+                },
+                "VersionIdMarker": {
+                    "target": "com.amazonaws.s3#VersionIdMarker",
+                    "traits": {
+                        "s3s#minio": ""
+                    }
+                },
+                "Entries": {
+                    "target": "com.amazonaws.s3#ListObjectVersionMEntries",
+                    "traits": {
+                        "smithy.api#required": {},
+                        "s3s#minio": ""
+                    }
+                }
+            },
+            "traits": {
+                "s3s#minio": ""
+            }
         }
     }
 }

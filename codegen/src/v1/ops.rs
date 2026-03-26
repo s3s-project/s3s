@@ -1,5 +1,6 @@
 use super::dto::RustTypes;
 use super::rust::default_value_literal;
+use super::smithy::SmithyTraitsExt;
 use super::xml::{is_xml_output, is_xml_payload};
 use super::{dto, rust, smithy};
 use super::{headers, o};
@@ -17,7 +18,7 @@ use heck::ToSnakeCase;
 use scoped_writer::g;
 use stdx::default::default;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Operation {
     pub name: String,
 
@@ -34,6 +35,8 @@ pub struct Operation {
     pub http_method: String,
     pub http_uri: String,
     pub http_code: u16,
+
+    pub is_minio_extension: bool,
 }
 
 pub type Operations = BTreeMap<String, Operation>;
@@ -112,6 +115,7 @@ pub fn collect_operations(model: &smithy::Model) -> Operations {
             http_method: sh.traits.http_method().unwrap().to_owned(),
             http_uri: sh.traits.http_uri().unwrap().to_owned(),
             http_code,
+            is_minio_extension: sh.traits.minio(),
         };
         insert(&mut operations, op_name, op);
     }
@@ -137,11 +141,34 @@ pub fn collect_operations(model: &smithy::Model) -> Operations {
             http_method: o("POST"),
             http_uri: o("/{Bucket}"),
             http_code: 200,
+            is_minio_extension: false,
         };
         insert(&mut operations, op_name, op);
     }
 
     operations
+}
+
+pub fn augment_operations(mut ops: Operations, patch: Option<Patch>) -> Operations {
+    if matches!(patch, Some(Patch::Minio)) && ops.contains_key("ListObjectVersionsM").not() {
+        let op_name = o("ListObjectVersionsM");
+        let op = Operation {
+            name: op_name.clone(),
+            input: o("ListObjectVersionsInput"),
+            output: o("ListObjectVersionsMOutput"),
+            smithy_input: o("ListObjectVersionsRequest"),
+            smithy_output: o("ListObjectVersionsMOutput"),
+            s3_unwrapped_xml_output: false,
+            doc: Some(o("MinIO compatibility extension for `GET /{bucket}?versions&metadata=true`.")),
+            http_method: o("GET"),
+            http_uri: o("/{Bucket}?versions&metadata=true"),
+            http_code: 200,
+            is_minio_extension: true,
+        };
+        assert!(ops.insert(op_name, op).is_none());
+    }
+
+    ops
 }
 
 pub fn is_op_input(name: &str, ops: &Operations) -> bool {
@@ -198,6 +225,12 @@ fn codegen_http(ops: &Operations, rust_types: &RustTypes, patch: Option<Patch>) 
         if op.name == "PostObject" {
             continue;
         }
+        if op.name == "ListObjectVersionsM" {
+            codegen_list_object_versions_m_op();
+            codegen_op_http_call(op);
+            g!();
+            continue;
+        }
         g!("pub struct {};", op.name);
         g!();
 
@@ -214,6 +247,24 @@ fn codegen_http(ops: &Operations, rust_types: &RustTypes, patch: Option<Patch>) 
     }
 
     codegen_post_object_fork_op(rust_types);
+}
+
+fn codegen_list_object_versions_m_op() {
+    g(["pub struct ListObjectVersionsM;", "", "impl ListObjectVersionsM {"]);
+    g([
+        "    pub fn deserialize_http(req: &mut http::Request) -> S3Result<ListObjectVersionsInput> {",
+        "        ListObjectVersions::deserialize_http(req)",
+        "    }",
+        "",
+        "    pub fn serialize_http(x: ListObjectVersionsMOutput) -> S3Result<http::Response> {",
+        "        let mut res = http::Response::with_status(http::StatusCode::OK);",
+        "        http::set_xml_body(&mut res, &x)?;",
+        "        http::add_opt_header(&mut res, X_AMZ_REQUEST_CHARGED, x.request_charged)?;",
+        "        Ok(res)",
+        "    }",
+    ]);
+    g!("}}");
+    g!();
 }
 
 #[allow(clippy::too_many_lines)]
@@ -376,7 +427,7 @@ fn codegen_header_value(ops: &Operations, rust_types: &RustTypes) {
 
     for op in ops.values() {
         for ty_name in [op.input.as_str(), op.output.as_str()] {
-            let rust_type = &rust_types[ty_name];
+            let Some(rust_type) = rust_types.get(ty_name) else { continue };
             match rust_type {
                 rust::Type::Provided(_) => {}
                 rust::Type::Struct(ty) => {
@@ -1234,8 +1285,6 @@ fn codegen_router(ops: &Operations, rust_types: &RustTypes) {
 
                             match (has_query_tag, has_query_patterns) {
                                 (true, true) => {
-                                    assert_eq!(route.op.name, "SelectObjectContent");
-
                                     let tag = route.query_tag.as_deref().unwrap();
                                     let (n, v) = qp.first().unwrap();
 

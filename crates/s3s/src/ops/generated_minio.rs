@@ -65,6 +65,7 @@
 // ListDirectoryBuckets
 // ListMultipartUploads
 // ListObjectVersions
+// ListObjectVersionsM
 // ListObjects
 // ListObjectsV2
 // ListParts
@@ -4257,6 +4258,46 @@ impl super::Operation for ListObjectVersions {
     }
 }
 
+pub struct ListObjectVersionsM;
+
+impl ListObjectVersionsM {
+    pub fn deserialize_http(req: &mut http::Request) -> S3Result<ListObjectVersionsInput> {
+        ListObjectVersions::deserialize_http(req)
+    }
+
+    pub fn serialize_http(x: ListObjectVersionsMOutput) -> S3Result<http::Response> {
+        let mut res = http::Response::with_status(http::StatusCode::OK);
+        http::set_xml_body(&mut res, &x)?;
+        http::add_opt_header(&mut res, X_AMZ_REQUEST_CHARGED, x.request_charged)?;
+        Ok(res)
+    }
+}
+
+#[async_trait::async_trait]
+impl super::Operation for ListObjectVersionsM {
+    fn name(&self) -> &'static str {
+        "ListObjectVersionsM"
+    }
+
+    async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
+        let input = Self::deserialize_http(req)?;
+        let mut s3_req = super::build_s3_request(input, req);
+        let s3 = ccx.s3;
+        if let Some(access) = ccx.access {
+            access.list_object_versions_m(&mut s3_req).await?;
+        }
+        let result = s3.list_object_versions_m(s3_req).await;
+        let s3_resp = match result {
+            Ok(val) => val,
+            Err(err) => return super::serialize_error(err, false),
+        };
+        let mut resp = Self::serialize_http(s3_resp.output)?;
+        resp.headers.extend(s3_resp.headers);
+        resp.extensions.extend(s3_resp.extensions);
+        Ok(resp)
+    }
+}
+
 pub struct ListObjects;
 
 impl ListObjects {
@@ -6848,6 +6889,9 @@ pub fn resolve_route(
             }
             S3Path::Bucket { .. } => {
                 if let Some(qs) = qs {
+                    if qs.has("versions") && super::check_query_pattern(qs, "metadata", "true") {
+                        return Ok((&ListObjectVersionsM as &'static dyn super::Operation, false));
+                    }
                     if qs.has("analytics") && qs.has("id") {
                         return Ok((&GetBucketAnalyticsConfiguration as &'static dyn super::Operation, false));
                     }

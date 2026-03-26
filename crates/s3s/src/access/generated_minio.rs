@@ -533,6 +533,13 @@ pub trait S3Access: Send + Sync + 'static {
         Ok(())
     }
 
+    /// Checks whether the ListObjectVersionsM request has accesses to the resources.
+    ///
+    /// This method returns `Ok(())` by default.
+    async fn list_object_versions_m(&self, _req: &mut S3Request<ListObjectVersionsInput>) -> S3Result<()> {
+        Ok(())
+    }
+
     /// Checks whether the ListObjects request has accesses to the resources.
     ///
     /// This method returns `Ok(())` by default.

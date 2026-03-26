@@ -112,6 +112,8 @@ pub struct StructEnum {
     pub name: String,
     pub variants: Vec<StructEnumVariant>,
     pub doc: Option<String>,
+
+    pub is_custom_extension: bool,
 }
 
 #[derive(Debug, Clone)]
