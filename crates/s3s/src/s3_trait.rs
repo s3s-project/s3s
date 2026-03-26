@@ -4152,6 +4152,19 @@ pub trait S3: Send + Sync + 'static {
         Err(s3_error!(NotImplemented, "ListObjectVersions is not implemented yet"))
     }
 
+    #[cfg(feature = "minio")]
+    /// `MinIO` compatibility extension for `GET /{bucket}?versions&metadata=true`.
+    ///
+    /// This is not part of the AWS S3 API. Implementations may return MinIO-specific
+    /// metadata fields for each listed version/delete marker while preserving the
+    /// standard `ListObjectVersions` behavior for plain `?versions` requests.
+    async fn list_object_versions_m(
+        &self,
+        _req: S3Request<ListObjectVersionsInput>,
+    ) -> S3Result<S3Response<ListObjectVersionsMOutput>> {
+        Err(s3_error!(NotImplemented, "ListObjectVersionsM is not implemented yet"))
+    }
+
     /// <note>
     /// <p>This operation is not supported for directory buckets.</p>
     /// </note>

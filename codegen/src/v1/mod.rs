@@ -53,6 +53,7 @@ fn inner_run(code_patch: Option<Patch>) {
 
     let ops = ops::collect_operations(&model);
     let rust_types = dto::collect_rust_types(&model, &ops);
+    let codegen_ops = ops::augment_operations(ops.clone(), code_patch);
 
     let suffix = match code_patch {
         Some(Patch::Minio) => "_minio",
@@ -81,17 +82,17 @@ fn inner_run(code_patch: Option<Patch>) {
 
     {
         let path = "crates/s3s/src/s3_trait.rs";
-        write_file(path, || s3_trait::codegen(&ops));
+        write_file(path, || s3_trait::codegen(&codegen_ops));
     }
 
     {
         let path = format!("crates/s3s/src/ops/generated{suffix}.rs");
-        write_file(&path, || ops::codegen(&ops, &rust_types, code_patch));
+        write_file(&path, || ops::codegen(&codegen_ops, &rust_types, code_patch));
     }
 
     {
         let path = format!("crates/s3s/src/access/generated{suffix}.rs");
-        write_file(&path, || access::codegen(&ops));
+        write_file(&path, || access::codegen(&codegen_ops));
     }
 
     {
