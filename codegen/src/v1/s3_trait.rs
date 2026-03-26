@@ -47,7 +47,7 @@ pub fn codegen(ops: &Operations) {
 
         if op.name == "ListObjectVersionsM" {
             g([
-                "/// MinIO compatibility extension for `GET /{bucket}?versions&metadata=true`.",
+                "/// `MinIO` compatibility extension for `GET /{bucket}?versions&metadata=true`.",
                 "///",
                 "/// This is not part of the AWS S3 API. Implementations may return MinIO-specific",
                 "/// metadata fields for each listed version/delete marker while preserving the",
