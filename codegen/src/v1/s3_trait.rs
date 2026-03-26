@@ -53,6 +53,14 @@ pub fn codegen(ops: &Operations) {
                 "/// metadata fields for each listed version/delete marker while preserving the",
                 "/// standard `ListObjectVersions` behavior for plain `?versions` requests.",
             ]);
+        } else if op.name == "ListObjectsV2M" {
+            g([
+                "/// `MinIO` compatibility extension for `GET /{bucket}?list-type=2&metadata=true`.",
+                "///",
+                "/// This is not part of the AWS S3 API. Implementations may return MinIO-specific",
+                "/// metadata fields for each listed object while preserving the standard",
+                "/// `ListObjectsV2` behavior for plain `?list-type=2` requests.",
+            ]);
         } else {
             codegen_doc(op.doc.as_deref());
         }

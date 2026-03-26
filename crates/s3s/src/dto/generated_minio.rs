@@ -13212,6 +13212,69 @@ impl ListObjectsV2Input {
 }
 
 #[derive(Clone, Default, PartialEq)]
+pub struct ListObjectsV2MOutput {
+    pub common_prefixes: Option<CommonPrefixList>,
+    pub contents: Option<ObjectMList>,
+    pub continuation_token: Option<Token>,
+    pub delimiter: Option<Delimiter>,
+    pub encoding_type: Option<EncodingType>,
+    pub is_truncated: Option<IsTruncated>,
+    pub key_count: Option<KeyCount>,
+    pub max_keys: Option<MaxKeys>,
+    pub name: Option<BucketName>,
+    pub next_continuation_token: Option<NextToken>,
+    pub prefix: Option<Prefix>,
+    pub request_charged: Option<RequestCharged>,
+    pub start_after: Option<StartAfter>,
+}
+
+impl fmt::Debug for ListObjectsV2MOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("ListObjectsV2MOutput");
+        if let Some(ref val) = self.common_prefixes {
+            d.field("common_prefixes", val);
+        }
+        if let Some(ref val) = self.contents {
+            d.field("contents", val);
+        }
+        if let Some(ref val) = self.continuation_token {
+            d.field("continuation_token", val);
+        }
+        if let Some(ref val) = self.delimiter {
+            d.field("delimiter", val);
+        }
+        if let Some(ref val) = self.encoding_type {
+            d.field("encoding_type", val);
+        }
+        if let Some(ref val) = self.is_truncated {
+            d.field("is_truncated", val);
+        }
+        if let Some(ref val) = self.key_count {
+            d.field("key_count", val);
+        }
+        if let Some(ref val) = self.max_keys {
+            d.field("max_keys", val);
+        }
+        if let Some(ref val) = self.name {
+            d.field("name", val);
+        }
+        if let Some(ref val) = self.next_continuation_token {
+            d.field("next_continuation_token", val);
+        }
+        if let Some(ref val) = self.prefix {
+            d.field("prefix", val);
+        }
+        if let Some(ref val) = self.request_charged {
+            d.field("request_charged", val);
+        }
+        if let Some(ref val) = self.start_after {
+            d.field("start_after", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+
+#[derive(Clone, Default, PartialEq)]
 pub struct ListObjectsV2Output {
     /// <p>The bucket name.</p>
     pub name: Option<BucketName>,
@@ -14887,6 +14950,55 @@ impl fmt::Debug for ObjectLockRule {
 }
 
 pub type ObjectLockToken = String;
+
+#[derive(Clone, Default, PartialEq)]
+pub struct ObjectM {
+    pub e_tag: Option<ETag>,
+    pub internal: Option<ObjectInternalInfo>,
+    pub key: Option<ObjectKey>,
+    pub last_modified: Option<LastModified>,
+    pub owner: Option<Owner>,
+    pub size: Option<Size>,
+    pub storage_class: Option<ObjectStorageClass>,
+    pub user_metadata: Option<MinioUserMetadata>,
+    pub user_tags: Option<MinioUserTags>,
+}
+
+impl fmt::Debug for ObjectM {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("ObjectM");
+        if let Some(ref val) = self.e_tag {
+            d.field("e_tag", val);
+        }
+        if let Some(ref val) = self.internal {
+            d.field("internal", val);
+        }
+        if let Some(ref val) = self.key {
+            d.field("key", val);
+        }
+        if let Some(ref val) = self.last_modified {
+            d.field("last_modified", val);
+        }
+        if let Some(ref val) = self.owner {
+            d.field("owner", val);
+        }
+        if let Some(ref val) = self.size {
+            d.field("size", val);
+        }
+        if let Some(ref val) = self.storage_class {
+            d.field("storage_class", val);
+        }
+        if let Some(ref val) = self.user_metadata {
+            d.field("user_metadata", val);
+        }
+        if let Some(ref val) = self.user_tags {
+            d.field("user_tags", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+
+pub type ObjectMList = List<ObjectM>;
 
 /// <p>The source object of the COPY action is not in the active tier and is only stored in
 /// Amazon S3 Glacier.</p>
@@ -36651,6 +36763,38 @@ impl DtoExt for ListObjectsV2Input {
         }
     }
 }
+impl DtoExt for ListObjectsV2MOutput {
+    fn ignore_empty_strings(&mut self) {
+        if self.continuation_token.as_deref() == Some("") {
+            self.continuation_token = None;
+        }
+        if self.delimiter.as_deref() == Some("") {
+            self.delimiter = None;
+        }
+        if let Some(ref val) = self.encoding_type
+            && val.as_str() == ""
+        {
+            self.encoding_type = None;
+        }
+        if self.name.as_deref() == Some("") {
+            self.name = None;
+        }
+        if self.next_continuation_token.as_deref() == Some("") {
+            self.next_continuation_token = None;
+        }
+        if self.prefix.as_deref() == Some("") {
+            self.prefix = None;
+        }
+        if let Some(ref val) = self.request_charged
+            && val.as_str() == ""
+        {
+            self.request_charged = None;
+        }
+        if self.start_after.as_deref() == Some("") {
+            self.start_after = None;
+        }
+    }
+}
 impl DtoExt for ListObjectsV2Output {
     fn ignore_empty_strings(&mut self) {
         if self.name.as_deref() == Some("") {
@@ -36931,6 +37075,30 @@ impl DtoExt for ObjectLockRule {
     fn ignore_empty_strings(&mut self) {
         if let Some(ref mut val) = self.default_retention {
             val.ignore_empty_strings();
+        }
+    }
+}
+impl DtoExt for ObjectM {
+    fn ignore_empty_strings(&mut self) {
+        if let Some(ref mut val) = self.internal {
+            val.ignore_empty_strings();
+        }
+        if self.key.as_deref() == Some("") {
+            self.key = None;
+        }
+        if let Some(ref mut val) = self.owner {
+            val.ignore_empty_strings();
+        }
+        if let Some(ref val) = self.storage_class
+            && val.as_str() == ""
+        {
+            self.storage_class = None;
+        }
+        if let Some(ref mut val) = self.user_metadata {
+            val.ignore_empty_strings();
+        }
+        if self.user_tags.as_deref() == Some("") {
+            self.user_tags = None;
         }
     }
 }
