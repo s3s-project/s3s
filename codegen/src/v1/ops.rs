@@ -168,6 +168,24 @@ pub fn augment_operations(mut ops: Operations, patch: Option<Patch>) -> Operatio
         assert!(ops.insert(op_name, op).is_none());
     }
 
+    if matches!(patch, Some(Patch::Minio)) && ops.contains_key("ListObjectsV2M").not() {
+        let op_name = o("ListObjectsV2M");
+        let op = Operation {
+            name: op_name.clone(),
+            input: o("ListObjectsV2Input"),
+            output: o("ListObjectsV2MOutput"),
+            smithy_input: o("ListObjectsV2Request"),
+            smithy_output: o("ListObjectsV2MOutput"),
+            s3_unwrapped_xml_output: false,
+            doc: Some(o("MinIO compatibility extension for `GET /{bucket}?list-type=2&metadata=true`.")),
+            http_method: o("GET"),
+            http_uri: o("/{Bucket}?list-type=2&metadata=true"),
+            http_code: 200,
+            is_minio_extension: true,
+        };
+        assert!(ops.insert(op_name, op).is_none());
+    }
+
     ops
 }
 
@@ -225,8 +243,8 @@ fn codegen_http(ops: &Operations, rust_types: &RustTypes, patch: Option<Patch>) 
         if op.name == "PostObject" {
             continue;
         }
-        if op.name == "ListObjectVersionsM" {
-            codegen_list_object_versions_m_op();
+        if matches!(op.name.as_str(), "ListObjectVersionsM" | "ListObjectsV2M") {
+            codegen_metadata_extension_op(op);
             codegen_op_http_call(op);
             g!();
             continue;
@@ -249,14 +267,25 @@ fn codegen_http(ops: &Operations, rust_types: &RustTypes, patch: Option<Patch>) 
     codegen_post_object_fork_op(rust_types);
 }
 
-fn codegen_list_object_versions_m_op() {
-    g(["pub struct ListObjectVersionsM;", "", "impl ListObjectVersionsM {"]);
+fn codegen_metadata_extension_op(op: &Operation) {
+    g!("pub struct {};", op.name);
+    g!();
+    g!("impl {} {{", op.name);
     g([
-        "    pub fn deserialize_http(req: &mut http::Request) -> S3Result<ListObjectVersionsInput> {",
-        "        ListObjectVersions::deserialize_http(req)",
+        "    pub fn deserialize_http(req: &mut http::Request) -> S3Result<",
+        op.input.as_str(),
+        "> {",
+        "        ",
+        if op.name == "ListObjectVersionsM" {
+            "ListObjectVersions::deserialize_http(req)"
+        } else {
+            "ListObjectsV2::deserialize_http(req)"
+        },
         "    }",
         "",
-        "    pub fn serialize_http(x: ListObjectVersionsMOutput) -> S3Result<http::Response> {",
+        "    pub fn serialize_http(x: ",
+        op.output.as_str(),
+        ") -> S3Result<http::Response> {",
         "        let mut res = http::Response::with_status(http::StatusCode::OK);",
         "        http::set_xml_body(&mut res, &x)?;",
         "        http::add_opt_header(&mut res, X_AMZ_REQUEST_CHARGED, x.request_charged)?;",
@@ -1279,16 +1308,16 @@ fn codegen_router(ops: &Operations, rust_types: &RustTypes) {
                                 let tag = route.query_tag.as_deref().unwrap();
                                 assert!(tag.as_bytes().iter().all(|&x| x == b'-' || x.is_ascii_alphabetic()), "{tag}");
                             }
-                            if has_query_patterns {
-                                assert!(qp.len() <= 1);
-                            }
-
                             match (has_query_tag, has_query_patterns) {
                                 (true, true) => {
                                     let tag = route.query_tag.as_deref().unwrap();
-                                    let (n, v) = qp.first().unwrap();
+                                    let pattern_check = qp
+                                        .iter()
+                                        .map(|(n, v)| format!("super::check_query_pattern(qs, \"{n}\",\"{v}\")"))
+                                        .collect::<Vec<_>>()
+                                        .join(" && ");
 
-                                    g!("if qs.has(\"{tag}\") && super::check_query_pattern(qs, \"{n}\",\"{v}\") {{");
+                                    g!("if qs.has(\"{tag}\") && {pattern_check} {{");
                                     succ(route, true);
                                     g!("}}");
                                 }
@@ -1327,8 +1356,12 @@ fn codegen_router(ops: &Operations, rust_types: &RustTypes) {
                                     }
                                 }
                                 (false, true) => {
-                                    let (n, v) = qp.first().unwrap();
-                                    g!("if super::check_query_pattern(qs, \"{n}\",\"{v}\") {{");
+                                    let pattern_check = qp
+                                        .iter()
+                                        .map(|(n, v)| format!("super::check_query_pattern(qs, \"{n}\",\"{v}\")"))
+                                        .collect::<Vec<_>>()
+                                        .join(" && ");
+                                    g!("if {pattern_check} {{");
                                     succ(route, true);
                                     g!("}}");
                                 }

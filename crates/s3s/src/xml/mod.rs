@@ -79,8 +79,8 @@ mod manually {
 
     #[cfg(feature = "minio")]
     use crate::dto::{
-        DeleteMarkerM, ListObjectVersionMEntry, ListObjectVersionsMOutput, MinioUserMetadata, ObjectInternalInfo, ObjectVersionM,
-        TimestampFormat,
+        DeleteMarkerM, ListObjectVersionMEntry, ListObjectVersionsMOutput, ListObjectsV2MOutput, MinioUserMetadata,
+        ObjectInternalInfo, ObjectM, ObjectVersionM, TimestampFormat,
     };
 
     #[cfg(feature = "minio")]
@@ -175,6 +175,96 @@ mod manually {
             }
             if let Some(ref val) = self.is_latest {
                 s.content("IsLatest", val)?;
+            }
+            Ok(())
+        }
+    }
+
+    #[cfg(feature = "minio")]
+    impl Serialize for ListObjectsV2MOutput {
+        fn serialize<W: std::io::Write>(&self, s: &mut Serializer<W>) -> SerResult {
+            s.element_with_ns("ListBucketResult", "http://s3.amazonaws.com/doc/2006-03-01/", |s| {
+                self.serialize_content(s)
+            })
+        }
+    }
+
+    #[cfg(feature = "minio")]
+    impl SerializeContent for ListObjectsV2MOutput {
+        fn serialize_content<W: std::io::Write>(&self, s: &mut Serializer<W>) -> SerResult {
+            if let Some(ref val) = self.name {
+                s.content("Name", val)?;
+            }
+            if let Some(ref val) = self.prefix {
+                s.content("Prefix", val)?;
+            }
+            if let Some(ref val) = self.max_keys {
+                s.content("MaxKeys", val)?;
+            }
+            if let Some(ref val) = self.key_count {
+                s.content("KeyCount", val)?;
+            }
+            if let Some(ref val) = self.continuation_token {
+                s.content("ContinuationToken", val)?;
+            }
+            if let Some(ref val) = self.is_truncated {
+                s.content("IsTruncated", val)?;
+            }
+            if let Some(ref val) = self.next_continuation_token {
+                s.content("NextContinuationToken", val)?;
+            }
+            if let Some(ref contents) = self.contents {
+                for content in contents {
+                    s.content("Contents", content)?;
+                }
+            }
+            if let Some(ref prefixes) = self.common_prefixes {
+                for prefix in prefixes {
+                    s.content("CommonPrefixes", prefix)?;
+                }
+            }
+            if let Some(ref val) = self.delimiter {
+                s.content("Delimiter", val)?;
+            }
+            if let Some(ref val) = self.encoding_type {
+                s.content("EncodingType", val)?;
+            }
+            if let Some(ref val) = self.start_after {
+                s.content("StartAfter", val)?;
+            }
+            Ok(())
+        }
+    }
+
+    #[cfg(feature = "minio")]
+    impl SerializeContent for ObjectM {
+        fn serialize_content<W: std::io::Write>(&self, s: &mut Serializer<W>) -> SerResult {
+            if let Some(ref val) = self.key {
+                s.content("Key", val)?;
+            }
+            if let Some(ref val) = self.last_modified {
+                s.timestamp("LastModified", val, TimestampFormat::DateTime)?;
+            }
+            if let Some(ref val) = self.e_tag {
+                s.content("ETag", val)?;
+            }
+            if let Some(ref val) = self.size {
+                s.content("Size", val)?;
+            }
+            if let Some(ref val) = self.owner {
+                s.content("Owner", val)?;
+            }
+            if let Some(ref val) = self.storage_class {
+                s.content("StorageClass", val)?;
+            }
+            if let Some(ref val) = self.user_metadata {
+                s.content("UserMetadata", val)?;
+            }
+            if let Some(ref val) = self.user_tags {
+                s.content("UserTags", val)?;
+            }
+            if let Some(ref val) = self.internal {
+                s.content("Internal", val)?;
             }
             Ok(())
         }
