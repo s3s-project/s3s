@@ -287,7 +287,7 @@ impl S3 for FileSystem {
         let path = self.get_object_path(&input.bucket, &input.key)?;
 
         if !path.exists() {
-            return Err(s3_error!(NoSuchBucket));
+            return Err(s3_error!(NoSuchKey));
         }
 
         let file_metadata = try_!(fs::metadata(path).await);
