@@ -1401,3 +1401,105 @@ async fn test_multipart_upload_id_auth() -> Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+#[tracing::instrument]
+async fn test_list_objects_v2_continuation_token_pagination() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-continuation-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let keys = ["a.txt", "b.txt", "c.txt", "d.txt", "e.txt"];
+    for key in &keys {
+        c.put_object()
+            .bucket(bucket)
+            .key(*key)
+            .body(ByteStream::from_static(b"x"))
+            .send()
+            .await?;
+    }
+
+    // Walk all pages with max_keys=2
+    let mut all_keys: Vec<String> = Vec::new();
+    let mut token: Option<String> = None;
+    loop {
+        let mut req = c.list_objects_v2().bucket(bucket).max_keys(2);
+        if let Some(t) = &token {
+            req = req.continuation_token(t.clone());
+        }
+        let page = req.send().await?;
+
+        all_keys.extend(page.contents().iter().filter_map(|o| o.key().map(String::from)));
+
+        if page.is_truncated() != Some(true) {
+            break;
+        }
+        token = page.next_continuation_token().map(String::from);
+        assert!(token.is_some(), "is_truncated is true but next_continuation_token is missing");
+    }
+
+    assert_eq!(all_keys, vec!["a.txt", "b.txt", "c.txt", "d.txt", "e.txt"]);
+
+    // Cleanup
+    for key in &keys {
+        delete_object(&c, bucket, key).await?;
+    }
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+/// When both `continuation_token` and `start_after` are present, we use whichever is larger
+#[tokio::test]
+#[tracing::instrument]
+async fn test_list_objects_v2_continuation_token_and_start_after_uses_max() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-ct-max-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let keys = ["a.txt", "b.txt", "c.txt", "d.txt", "e.txt"];
+    for key in &keys {
+        c.put_object()
+            .bucket(bucket)
+            .key(*key)
+            .body(ByteStream::from_static(b"x"))
+            .send()
+            .await?;
+    }
+
+    // Case 1: start_after is larger
+    let result = c
+        .list_objects_v2()
+        .bucket(bucket)
+        .continuation_token("b.txt")
+        .start_after("d.txt")
+        .send()
+        .await?;
+    let result_keys: Vec<_> = result.contents().iter().filter_map(|o| o.key()).collect();
+    assert_eq!(result_keys, vec!["e.txt"], "should resume after the larger value (d.txt)");
+
+    // Case 2: continuation_token is larger
+    let result = c
+        .list_objects_v2()
+        .bucket(bucket)
+        .continuation_token("c.txt")
+        .start_after("a.txt")
+        .send()
+        .await?;
+    let result_keys: Vec<_> = result.contents().iter().filter_map(|o| o.key()).collect();
+    assert_eq!(result_keys, vec!["d.txt", "e.txt"], "should resume after the larger value (c.txt)");
+
+    // Cleanup
+    for key in &keys {
+        delete_object(&c, bucket, key).await?;
+    }
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
