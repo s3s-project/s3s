@@ -1401,3 +1401,56 @@ async fn test_multipart_upload_id_auth() -> Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+#[tracing::instrument]
+async fn test_upload_part_copy_empty_source() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-upc-empty-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let src_key = "empty.txt";
+    c.put_object()
+        .bucket(bucket)
+        .key(src_key)
+        .body(ByteStream::from_static(b""))
+        .send()
+        .await?;
+
+    let dst_key = "dst.txt";
+    let upload_id = c
+        .create_multipart_upload()
+        .bucket(bucket)
+        .key(dst_key)
+        .send()
+        .await?
+        .upload_id
+        .unwrap();
+
+    let copy_source = format!("{bucket}/{src_key}");
+    c.upload_part_copy()
+        .bucket(bucket)
+        .key(dst_key)
+        .copy_source(copy_source)
+        .upload_id(&upload_id)
+        .part_number(1)
+        .send()
+        .await
+        .unwrap();
+
+    c.abort_multipart_upload()
+        .bucket(bucket)
+        .key(dst_key)
+        .upload_id(&upload_id)
+        .send()
+        .await
+        .unwrap();
+
+    delete_object(&c, bucket, src_key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
