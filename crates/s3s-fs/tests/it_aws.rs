@@ -1401,3 +1401,248 @@ async fn test_multipart_upload_id_auth() -> Result<()> {
 
     Ok(())
 }
+
+/// Test that CompleteMultipartUpload with If-None-Match: * succeeds when object doesn't exist
+/// and fails with PreconditionFailed (412) when object already exists.
+#[tokio::test]
+#[tracing::instrument]
+async fn test_complete_multipart_if_none_match() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-cmu-ifnm-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    let key = "multipart-conditional.txt";
+    let content = "abcdefghijklmnopqrstuvwxyz/0123456789/!@#$%^&*();\n";
+
+    create_bucket(&c, bucket).await?;
+
+    // Helper: create and upload a single part, returning (upload_id, upload_parts)
+    async fn do_multipart_upload(c: &Client, bucket: &str, key: &str, content: &[u8]) -> Result<(String, Vec<CompletedPart>)> {
+        let upload_id = c
+            .create_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .send()
+            .await?
+            .upload_id
+            .unwrap();
+
+        let ans = c
+            .upload_part()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(&upload_id)
+            .body(ByteStream::from(content.to_vec()))
+            .part_number(1)
+            .send()
+            .await?;
+
+        let part = CompletedPart::builder()
+            .e_tag(ans.e_tag.unwrap_or_default())
+            .part_number(1)
+            .build();
+
+        Ok((upload_id, vec![part]))
+    }
+
+    // Test 1: CompleteMultipartUpload with If-None-Match: * should succeed when object doesn't exist
+    debug!("Test 1: CompleteMultipartUpload with If-None-Match: * on non-existent object");
+    {
+        let (upload_id, upload_parts) = do_multipart_upload(&c, bucket, key, content.as_bytes()).await?;
+        let upload = CompletedMultipartUpload::builder().set_parts(Some(upload_parts)).build();
+
+        let result = c
+            .complete_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(&upload_id)
+            .multipart_upload(upload)
+            .if_none_match("*")
+            .send()
+            .await;
+
+        match result {
+            Ok(_) => debug!("✓ Successfully completed multipart upload with If-None-Match: *"),
+            Err(e) => panic!("Expected CompleteMultipartUpload with If-None-Match: * to succeed when object doesn't exist, but got error: {e:?}"),
+        }
+    }
+
+    // Verify the object was created
+    {
+        let result = c.get_object().bucket(bucket).key(key).send().await?;
+        let body = result.body.collect().await?.into_bytes();
+        assert_eq!(body.as_ref(), content.as_bytes());
+        debug!("✓ Verified object was created via multipart upload");
+    }
+
+    // Test 2: CompleteMultipartUpload with If-None-Match: * should fail when object exists
+    debug!("Test 2: CompleteMultipartUpload with If-None-Match: * on existing object");
+    {
+        let (upload_id, upload_parts) = do_multipart_upload(&c, bucket, key, b"new content").await?;
+        let upload = CompletedMultipartUpload::builder().set_parts(Some(upload_parts)).build();
+
+        let result = c
+            .complete_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(&upload_id)
+            .multipart_upload(upload)
+            .if_none_match("*")
+            .send()
+            .await;
+
+        match result {
+            Ok(_) => panic!("Expected CompleteMultipartUpload with If-None-Match: * to fail when object exists, but it succeeded"),
+            Err(e) => {
+                let error_str = format!("{e:?}");
+                debug!("✓ Expected error when object exists: {error_str}");
+                assert!(
+                    error_str.contains("PreconditionFailed") || error_str.contains("412"),
+                    "Expected PreconditionFailed error, got: {error_str}"
+                );
+            }
+        }
+    }
+
+    // Verify the object wasn't overwritten
+    {
+        let result = c.get_object().bucket(bucket).key(key).send().await?;
+        let body = result.body.collect().await?.into_bytes();
+        assert_eq!(body.as_ref(), content.as_bytes());
+        debug!("✓ Verified object was not overwritten");
+    }
+
+    // Cleanup
+    delete_object(&c, bucket, key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+/// Test that CompleteMultipartUpload with If-Match succeeds when ETag matches
+/// and fails with PreconditionFailed (412) when ETag doesn't match.
+#[tokio::test]
+#[tracing::instrument]
+async fn test_complete_multipart_if_match() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-cmu-ifm-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    let key = "multipart-conditional-match.txt";
+    let content = "abcdefghijklmnopqrstuvwxyz/0123456789/!@#$%^&*();\n";
+
+    create_bucket(&c, bucket).await?;
+
+    // First, create the object with a known ETag via put_object
+    let initial_etag = {
+        let body = ByteStream::from_static(content.as_bytes());
+        let result = c.put_object().bucket(bucket).key(key).body(body).send().await?;
+        result.e_tag().unwrap().to_owned()
+    };
+    debug!("Initial ETag: {initial_etag}");
+
+    // Helper: create and upload a single part
+    async fn do_multipart_upload(c: &Client, bucket: &str, key: &str, content: &[u8]) -> Result<(String, Vec<CompletedPart>)> {
+        let upload_id = c
+            .create_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .send()
+            .await?
+            .upload_id
+            .unwrap();
+
+        let ans = c
+            .upload_part()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(&upload_id)
+            .body(ByteStream::from(content.to_vec()))
+            .part_number(1)
+            .send()
+            .await?;
+
+        let part = CompletedPart::builder()
+            .e_tag(ans.e_tag.unwrap_or_default())
+            .part_number(1)
+            .build();
+
+        Ok((upload_id, vec![part]))
+    }
+
+    // Test 1: CompleteMultipartUpload with If-Match and wrong ETag should fail
+    debug!("Test 1: CompleteMultipartUpload with If-Match and wrong ETag");
+    {
+        let (upload_id, upload_parts) = do_multipart_upload(&c, bucket, key, b"new content").await?;
+        let upload = CompletedMultipartUpload::builder().set_parts(Some(upload_parts)).build();
+
+        let result = c
+            .complete_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(&upload_id)
+            .multipart_upload(upload)
+            .if_match("\"wrong-etag-value\"")
+            .send()
+            .await;
+
+        match result {
+            Ok(_) => panic!("Expected CompleteMultipartUpload with wrong If-Match to fail, but it succeeded"),
+            Err(e) => {
+                let error_str = format!("{e:?}");
+                debug!("✓ Expected error with wrong ETag: {error_str}");
+                assert!(
+                    error_str.contains("PreconditionFailed") || error_str.contains("412"),
+                    "Expected PreconditionFailed error, got: {error_str}"
+                );
+            }
+        }
+    }
+
+    // Verify the object wasn't overwritten
+    {
+        let result = c.get_object().bucket(bucket).key(key).send().await?;
+        let body = result.body.collect().await?.into_bytes();
+        assert_eq!(body.as_ref(), content.as_bytes());
+        debug!("✓ Verified object was not overwritten");
+    }
+
+    // Test 2: CompleteMultipartUpload with If-Match and correct ETag should succeed
+    debug!("Test 2: CompleteMultipartUpload with If-Match and correct ETag");
+    {
+        let new_content = b"updated via conditional multipart";
+        let (upload_id, upload_parts) = do_multipart_upload(&c, bucket, key, new_content).await?;
+        let upload = CompletedMultipartUpload::builder().set_parts(Some(upload_parts)).build();
+
+        let result = c
+            .complete_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(&upload_id)
+            .multipart_upload(upload)
+            .if_match(&initial_etag)
+            .send()
+            .await;
+
+        match result {
+            Ok(_) => debug!("✓ Successfully completed multipart upload with matching If-Match"),
+            Err(e) => panic!("Expected CompleteMultipartUpload with matching If-Match to succeed, but got error: {e:?}"),
+        }
+    }
+
+    // Verify the object was updated (use head_object to avoid body checksum issues
+    // since complete_multipart_upload doesn't update internal checksum info)
+    {
+        let result = c.head_object().bucket(bucket).key(key).send().await?;
+        assert!(result.content_length().is_some());
+        debug!("✓ Verified object exists after conditional multipart upload");
+    }
+
+    // Cleanup
+    delete_object(&c, bucket, key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}

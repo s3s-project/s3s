@@ -853,6 +853,8 @@ impl S3 for FileSystem {
             bucket,
             key,
             upload_id,
+            if_match,
+            if_none_match,
             ..
         } = req.input;
 
@@ -863,6 +865,29 @@ impl S3 for FileSystem {
             return Err(s3_error!(AccessDenied));
         }
 
+        // Check conditional headers before modifying any state
+        let object_path = self.get_object_path(&bucket, &key)?;
+        if let Some(ref condition) = if_none_match
+            && condition.is_any()
+        {
+            if object_path.exists() {
+                return Err(s3_error!(PreconditionFailed, "Object already exists"));
+            }
+        }
+        if let Some(ref condition) = if_match {
+            if let Some(expected_etag) = condition.as_etag() {
+                if object_path.exists() {
+                    let existing_md5 = self.get_md5_sum(&bucket, &key).await?;
+                    let existing_etag = ETag::Strong(existing_md5);
+                    if !expected_etag.strong_cmp(&existing_etag) {
+                        return Err(s3_error!(PreconditionFailed, "ETag does not match"));
+                    }
+                } else {
+                    return Err(s3_error!(PreconditionFailed, "Object does not exist"));
+                }
+            }
+        }
+
         self.delete_upload_id(&upload_id).await?;
 
         if let Ok(Some(attrs)) = self.load_object_attributes(&bucket, &key, Some(upload_id)).await {
@@ -870,7 +895,6 @@ impl S3 for FileSystem {
             let _ = self.delete_metadata(&bucket, &key, Some(upload_id));
         }
 
-        let object_path = self.get_object_path(&bucket, &key)?;
         let mut file_writer = self.prepare_file_write(&object_path).await?;
 
         let mut cnt: i32 = 0;
