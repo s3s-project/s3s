@@ -1415,12 +1415,7 @@ async fn test_head_object_no_such_key() -> Result<()> {
     let result = c.head_object().bucket(bucket).key("nonexistent-object").send().await;
     let err = result.expect_err("Expected NoSuchKey for missing object");
     let service_err = err.into_service_error();
-    assert_eq!(
-        service_err.code(),
-        Some("NoSuchKey"),
-        "Expected NoSuchKey, got: {:?}",
-        service_err.code()
-    );
+    assert_eq!(service_err.code(), Some("NoSuchKey"), "Expected NoSuchKey, got: {:?}", service_err.code());
 
     delete_bucket(&c, bucket).await?;
     Ok(())
