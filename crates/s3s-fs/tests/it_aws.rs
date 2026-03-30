@@ -631,6 +631,89 @@ async fn test_upload_part_copy() -> Result<()> {
 
 #[tokio::test]
 #[tracing::instrument]
+async fn test_upload_part_copy_invalid_source_range() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-upc-bad-range-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let src_key = "src.txt";
+    let src_content = "hello";
+    c.put_object()
+        .bucket(bucket)
+        .key(src_key)
+        .body(ByteStream::from_static(src_content.as_bytes()))
+        .send()
+        .await?;
+
+    let dst_key = "dst.txt";
+    let upload_id = c
+        .create_multipart_upload()
+        .bucket(bucket)
+        .key(dst_key)
+        .send()
+        .await?
+        .upload_id
+        .expect("upload_id");
+    let upload_id = upload_id.as_str();
+
+    let copy_source = format!("{bucket}/{src_key}");
+    // Object length is 5; inclusive end index must be <= 4. End 5 is past EOF and must not truncate.
+    let err = c
+        .upload_part_copy()
+        .bucket(bucket)
+        .key(dst_key)
+        .copy_source(&copy_source)
+        .copy_source_range("bytes=0-5")
+        .upload_id(upload_id)
+        .part_number(1)
+        .send()
+        .await
+        .expect_err("Expected InvalidRange when copy range end is past EOF");
+    let service_err = err.into_service_error();
+    assert_eq!(
+        service_err.code(),
+        Some("InvalidRange"),
+        "past-EOF range: expected InvalidRange, got {:?}",
+        service_err.code()
+    );
+
+    let err = c
+        .upload_part_copy()
+        .bucket(bucket)
+        .key(dst_key)
+        .copy_source(&copy_source)
+        .copy_source_range("bytes=0-18446744073709551615")
+        .upload_id(upload_id)
+        .part_number(1)
+        .send()
+        .await
+        .expect_err("Expected InvalidRange for end=u64::MAX");
+    let service_err = err.into_service_error();
+    assert_eq!(
+        service_err.code(),
+        Some("InvalidRange"),
+        "u64::MAX end: expected InvalidRange, got {:?}",
+        service_err.code()
+    );
+
+    c.abort_multipart_upload()
+        .bucket(bucket)
+        .key(dst_key)
+        .upload_id(upload_id)
+        .send()
+        .await?;
+
+    delete_object(&c, bucket, src_key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
 async fn test_single_object_get_range() -> Result<()> {
     let _guard = serial().await;
 
@@ -1440,7 +1523,8 @@ async fn test_upload_part_copy_empty_source() -> Result<()> {
         .send()
         .await?;
 
-    let _ = c.abort_multipart_upload()
+    let _ = c
+        .abort_multipart_upload()
         .bucket(bucket)
         .key(dst_key)
         .upload_id(&upload_id)

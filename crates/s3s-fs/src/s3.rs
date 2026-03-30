@@ -813,10 +813,11 @@ impl S3 for FileSystem {
             } else {
                 parts[1].parse().map_err(|_| s3_error!(InvalidArgument))?
             };
-            if start > end_inclusive || start >= file_len {
+            if start > end_inclusive || start >= file_len || end_inclusive >= file_len {
                 return Err(s3_error!(InvalidRange));
             }
-            (start, end_inclusive - start + 1)
+            let content_length = end_inclusive - start + 1;
+            (start, content_length)
         } else {
             (0, file_len)
         };
