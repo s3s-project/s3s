@@ -220,6 +220,7 @@ dependencies = [
     { name = "lxml" },
     { name = "requests" },
     { name = "typer" },
+    { name = "urllib3" },
 ]
 
 [package.metadata]
@@ -229,6 +230,7 @@ requires-dist = [
     { name = "lxml", specifier = ">=5.3.0" },
     { name = "requests", specifier = ">=2.32.3" },
     { name = "typer", specifier = ">=0.12.5" },
+    { name = "urllib3", specifier = ">=2.6.3" },
 ]
 
 [[package]]
