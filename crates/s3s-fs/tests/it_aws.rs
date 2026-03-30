@@ -1401,3 +1401,260 @@ async fn test_multipart_upload_id_auth() -> Result<()> {
 
     Ok(())
 }
+
+/// Test conditional copy with `x-amz-copy-source-if-match`
+#[tokio::test]
+#[tracing::instrument]
+async fn test_copy_object_if_match() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-cond-copy-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let src_key = "source.txt";
+    let content = "conditional copy content";
+    c.put_object()
+        .bucket(bucket)
+        .key(src_key)
+        .body(ByteStream::from_static(content.as_bytes()))
+        .send()
+        .await?;
+
+    // Get the source ETag from put_object response or get_object
+    let get_result = c.get_object().bucket(bucket).key(src_key).send().await?;
+    let etag = get_result.e_tag().unwrap().to_owned();
+    // Consume the body to avoid dropped stream warnings
+    let _ = get_result.body.collect().await?;
+    debug!("Source ETag: {etag}");
+
+    // Copy with matching ETag should succeed
+    let dst_key = "dest-match.txt";
+    let copy_source = format!("{bucket}/{src_key}");
+    c.copy_object()
+        .bucket(bucket)
+        .key(dst_key)
+        .copy_source(&copy_source)
+        .copy_source_if_match(&etag)
+        .send()
+        .await?;
+
+    let ans = c.get_object().bucket(bucket).key(dst_key).send().await?;
+    let body = ans.body.collect().await?.into_bytes();
+    assert_eq!(body.as_ref(), content.as_bytes());
+
+    // Copy with non-matching ETag should fail with PreconditionFailed
+    let dst_key2 = "dest-nomatch.txt";
+    let result = c
+        .copy_object()
+        .bucket(bucket)
+        .key(dst_key2)
+        .copy_source(&copy_source)
+        .copy_source_if_match("\"nonexistent-etag\"")
+        .send()
+        .await;
+
+    match result {
+        Ok(_) => panic!("Expected copy with non-matching If-Match to fail"),
+        Err(e) => {
+            let error_str = format!("{e:?}");
+            debug!("✓ Expected error: {error_str}");
+            assert!(
+                error_str.contains("PreconditionFailed") || error_str.contains("412"),
+                "Expected PreconditionFailed error, got: {error_str}"
+            );
+        }
+    }
+
+    // Cleanup
+    delete_object(&c, bucket, src_key).await?;
+    delete_object(&c, bucket, dst_key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+/// Test conditional copy with `x-amz-copy-source-if-none-match`
+#[tokio::test]
+#[tracing::instrument]
+async fn test_copy_object_if_none_match() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-cond-copy-nm-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let src_key = "source.txt";
+    let content = "conditional copy none match";
+    c.put_object()
+        .bucket(bucket)
+        .key(src_key)
+        .body(ByteStream::from_static(content.as_bytes()))
+        .send()
+        .await?;
+
+    // Get the source ETag
+    let get_result = c.get_object().bucket(bucket).key(src_key).send().await?;
+    let etag = get_result.e_tag().unwrap().to_owned();
+    let _ = get_result.body.collect().await?;
+    debug!("Source ETag: {etag}");
+
+    // Copy with non-matching ETag (if-none-match) should succeed
+    let dst_key = "dest-none-match-ok.txt";
+    let copy_source = format!("{bucket}/{src_key}");
+    c.copy_object()
+        .bucket(bucket)
+        .key(dst_key)
+        .copy_source(&copy_source)
+        .copy_source_if_none_match("\"different-etag\"")
+        .send()
+        .await?;
+
+    let ans = c.get_object().bucket(bucket).key(dst_key).send().await?;
+    let body = ans.body.collect().await?.into_bytes();
+    assert_eq!(body.as_ref(), content.as_bytes());
+
+    // Copy with matching ETag (if-none-match) should fail with PreconditionFailed
+    let dst_key2 = "dest-none-match-fail.txt";
+    let result = c
+        .copy_object()
+        .bucket(bucket)
+        .key(dst_key2)
+        .copy_source(&copy_source)
+        .copy_source_if_none_match(&etag)
+        .send()
+        .await;
+
+    match result {
+        Ok(_) => panic!("Expected copy with matching If-None-Match to fail"),
+        Err(e) => {
+            let error_str = format!("{e:?}");
+            debug!("✓ Expected error: {error_str}");
+            assert!(
+                error_str.contains("PreconditionFailed") || error_str.contains("412"),
+                "Expected PreconditionFailed error, got: {error_str}"
+            );
+        }
+    }
+
+    // Cleanup
+    delete_object(&c, bucket, src_key).await?;
+    delete_object(&c, bucket, dst_key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+/// Test conditional copy with `x-amz-copy-source-if-modified-since` and `x-amz-copy-source-if-unmodified-since`
+#[tokio::test]
+#[tracing::instrument]
+async fn test_copy_object_if_modified_since() -> Result<()> {
+    use aws_sdk_s3::primitives::DateTime;
+    use aws_sdk_s3::primitives::DateTimeFormat;
+
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-cond-copy-ts-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let src_key = "source.txt";
+    let content = "conditional copy timestamp";
+    c.put_object()
+        .bucket(bucket)
+        .key(src_key)
+        .body(ByteStream::from_static(content.as_bytes()))
+        .send()
+        .await?;
+
+    let copy_source = format!("{bucket}/{src_key}");
+
+    // Copy with if-modified-since far in the past should succeed (object was modified after that)
+    let dst_key = "dest-modified-ok.txt";
+    let past = DateTime::from_str("Thu, 01 Jan 2000 00:00:00 GMT", DateTimeFormat::HttpDate)?;
+    c.copy_object()
+        .bucket(bucket)
+        .key(dst_key)
+        .copy_source(&copy_source)
+        .copy_source_if_modified_since(past)
+        .send()
+        .await?;
+
+    let ans = c.get_object().bucket(bucket).key(dst_key).send().await?;
+    let body = ans.body.collect().await?.into_bytes();
+    assert_eq!(body.as_ref(), content.as_bytes());
+
+    // Copy with if-modified-since far in the future should fail
+    let dst_key2 = "dest-modified-fail.txt";
+    let future = DateTime::from_str("Thu, 01 Jan 2099 00:00:00 GMT", DateTimeFormat::HttpDate)?;
+    let result = c
+        .copy_object()
+        .bucket(bucket)
+        .key(dst_key2)
+        .copy_source(&copy_source)
+        .copy_source_if_modified_since(future)
+        .send()
+        .await;
+
+    match result {
+        Ok(_) => panic!("Expected copy with future if-modified-since to fail"),
+        Err(e) => {
+            let error_str = format!("{e:?}");
+            debug!("✓ Expected error: {error_str}");
+            assert!(
+                error_str.contains("PreconditionFailed") || error_str.contains("412"),
+                "Expected PreconditionFailed error, got: {error_str}"
+            );
+        }
+    }
+
+    // Copy with if-unmodified-since far in the future should succeed
+    let dst_key3 = "dest-unmodified-ok.txt";
+    let future = DateTime::from_str("Thu, 01 Jan 2099 00:00:00 GMT", DateTimeFormat::HttpDate)?;
+    c.copy_object()
+        .bucket(bucket)
+        .key(dst_key3)
+        .copy_source(&copy_source)
+        .copy_source_if_unmodified_since(future)
+        .send()
+        .await?;
+
+    let ans = c.get_object().bucket(bucket).key(dst_key3).send().await?;
+    let body = ans.body.collect().await?.into_bytes();
+    assert_eq!(body.as_ref(), content.as_bytes());
+
+    // Copy with if-unmodified-since far in the past should fail
+    let dst_key4 = "dest-unmodified-fail.txt";
+    let past = DateTime::from_str("Thu, 01 Jan 2000 00:00:00 GMT", DateTimeFormat::HttpDate)?;
+    let result = c
+        .copy_object()
+        .bucket(bucket)
+        .key(dst_key4)
+        .copy_source(&copy_source)
+        .copy_source_if_unmodified_since(past)
+        .send()
+        .await;
+
+    match result {
+        Ok(_) => panic!("Expected copy with past if-unmodified-since to fail"),
+        Err(e) => {
+            let error_str = format!("{e:?}");
+            debug!("✓ Expected error: {error_str}");
+            assert!(
+                error_str.contains("PreconditionFailed") || error_str.contains("412"),
+                "Expected PreconditionFailed error, got: {error_str}"
+            );
+        }
+    }
+
+    // Cleanup
+    delete_object(&c, bucket, src_key).await?;
+    delete_object(&c, bucket, dst_key).await?;
+    delete_object(&c, bucket, dst_key3).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}

@@ -89,12 +89,47 @@ impl S3 for FileSystem {
             return Err(s3_error!(NoSuchBucket));
         }
 
+        let file_metadata = try_!(fs::metadata(&src_path).await);
+        let last_modified = Timestamp::from(try_!(file_metadata.modified()));
+        let md5_sum = self.get_md5_sum(bucket, key).await?;
+        let src_etag = ETag::Strong(md5_sum.clone());
+
+        // Check conditional copy preconditions
+        if let Some(ref condition) = input.copy_source_if_match {
+            let matches = match condition {
+                ETagCondition::Any => true,
+                ETagCondition::ETag(etag) => src_etag.strong_cmp(etag),
+            };
+            if !matches {
+                return Err(s3_error!(PreconditionFailed));
+            }
+        }
+
+        if let Some(ref if_unmodified_since) = input.copy_source_if_unmodified_since
+            && last_modified > *if_unmodified_since
+        {
+            return Err(s3_error!(PreconditionFailed));
+        }
+
+        if let Some(ref condition) = input.copy_source_if_none_match {
+            let matches = match condition {
+                ETagCondition::Any => true,
+                ETagCondition::ETag(etag) => src_etag.weak_cmp(etag),
+            };
+            if matches {
+                return Err(s3_error!(PreconditionFailed));
+            }
+        }
+
+        if let Some(ref if_modified_since) = input.copy_source_if_modified_since
+            && last_modified <= *if_modified_since
+        {
+            return Err(s3_error!(PreconditionFailed));
+        }
+
         if let Some(dir_path) = dst_path.parent() {
             try_!(fs::create_dir_all(&dir_path).await);
         }
-
-        let file_metadata = try_!(fs::metadata(&src_path).await);
-        let last_modified = Timestamp::from(try_!(file_metadata.modified()));
 
         let _ = try_!(fs::copy(&src_path, &dst_path).await);
 
@@ -105,8 +140,6 @@ impl S3 for FileSystem {
             let dst_metadata_path = self.get_metadata_path(&input.bucket, &input.key, None)?;
             let _ = try_!(fs::copy(src_metadata_path, dst_metadata_path).await);
         }
-
-        let md5_sum = self.get_md5_sum(bucket, key).await?;
 
         let copy_object_result = CopyObjectResult {
             e_tag: Some(ETag::Strong(md5_sum)),
