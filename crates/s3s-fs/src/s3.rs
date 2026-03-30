@@ -169,18 +169,23 @@ impl S3 for FileSystem {
                         }
                     }
                     Err(e) if e.kind() == io::ErrorKind::NotFound => {}
-                    Err(e) => return Err(s3s::S3Error::internal_error(e)),
+                    Err(e) => {
+                        let _: () = try_!(Err(e));
+                    }
                 }
             } else {
                 match fs::remove_file(&path).await {
                     Ok(()) => {}
                     Err(e) if e.kind() == io::ErrorKind::NotFound => {}
-                    Err(e) => return Err(s3s::S3Error::internal_error(e)),
+                    Err(e) => {
+                        let _: () = try_!(Err(e));
+                    }
                 }
             }
 
             let deleted_object = DeletedObject {
                 key: Some(object.key),
+                version_id: object.version_id,
                 ..Default::default()
             };
 
