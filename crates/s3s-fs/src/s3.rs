@@ -138,7 +138,11 @@ impl S3 for FileSystem {
         let input = req.input;
         let path = self.get_object_path(&input.bucket, &input.key)?;
         if path.exists().not() {
-            return Err(s3_error!(NoSuchKey));
+            if self.get_bucket_path(&input.bucket)?.exists().not() {
+                return Err(s3_error!(NoSuchBucket));
+            }
+            let output = DeleteObjectOutput::default();
+            return Ok(S3Response::new(output));
         }
         if input.key.ends_with('/') {
             let mut dir = try_!(fs::read_dir(&path).await);
