@@ -364,6 +364,7 @@ impl S3 for FileSystem {
             prefix: v2.prefix,
             max_keys: v2.max_keys,
             is_truncated: v2.is_truncated,
+            next_marker: v2.next_continuation_token,
             ..Default::default()
         }))
     }
@@ -418,6 +419,7 @@ impl S3 for FileSystem {
 
         let mut obj_idx = 0;
         let mut prefix_idx = 0;
+        let mut last_key: Option<String> = None;
 
         while total_count < max_keys_usize {
             let obj_key = objects.get(obj_idx).and_then(|o| o.key.as_deref());
@@ -426,20 +428,24 @@ impl S3 for FileSystem {
             match (obj_key, prefix_key) {
                 (Some(ok), Some(pk)) => {
                     if ok < pk {
+                        last_key = Some(ok.to_owned());
                         result_objects.push(objects[obj_idx].clone());
                         obj_idx += 1;
                     } else {
+                        last_key = Some(pk.to_owned());
                         result_prefixes.push(common_prefixes_list[prefix_idx].clone());
                         prefix_idx += 1;
                     }
                     total_count += 1;
                 }
-                (Some(_), None) => {
+                (Some(ok), None) => {
+                    last_key = Some(ok.to_owned());
                     result_objects.push(objects[obj_idx].clone());
                     obj_idx += 1;
                     total_count += 1;
                 }
-                (None, Some(_)) => {
+                (None, Some(pk)) => {
+                    last_key = Some(pk.to_owned());
                     result_prefixes.push(common_prefixes_list[prefix_idx].clone());
                     prefix_idx += 1;
                     total_count += 1;
@@ -451,6 +457,8 @@ impl S3 for FileSystem {
         let is_truncated = obj_idx < objects.len() || prefix_idx < common_prefixes_list.len();
         let key_count = try_!(i32::try_from(total_count));
 
+        let next_continuation_token = if is_truncated { last_key } else { None };
+
         let contents = result_objects.is_empty().not().then_some(result_objects);
         let common_prefixes = result_prefixes.is_empty().not().then_some(result_prefixes);
 
@@ -458,6 +466,7 @@ impl S3 for FileSystem {
             key_count: Some(key_count),
             max_keys: Some(max_keys),
             is_truncated: Some(is_truncated),
+            next_continuation_token,
             contents,
             common_prefixes,
             delimiter: input.delimiter,

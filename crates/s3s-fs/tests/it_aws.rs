@@ -376,6 +376,53 @@ async fn test_list_objects_v1_with_prefixes() -> Result<()> {
 
 #[tokio::test]
 #[tracing::instrument]
+async fn test_list_objects_v1_next_marker_with_delimiter() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-v1-next-marker-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    // Objects: a.txt, dir/1.txt (→ common prefix "dir/"), z.txt
+    // With delimiter="/", max_keys=2 → page 1 = [a.txt, dir/], truncated
+    let keys = ["a.txt", "dir/1.txt", "z.txt"];
+    for key in &keys {
+        c.put_object()
+            .bucket(bucket)
+            .key(*key)
+            .body(ByteStream::from_static(b"x"))
+            .send()
+            .await?;
+    }
+
+    let page = c
+        .list_objects()
+        .bucket(bucket)
+        .delimiter("/")
+        .max_keys(2)
+        .send()
+        .await?;
+
+    assert_eq!(page.is_truncated(), Some(true));
+    // Per S3 spec: when delimiter is set and is_truncated is true,
+    // next_marker must be returned so the client can paginate.
+    assert!(
+        page.next_marker().is_some(),
+        "is_truncated is true with delimiter but next_marker is missing"
+    );
+
+    // Cleanup
+    for key in &keys {
+        delete_object(&c, bucket, key).await?;
+    }
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
 async fn test_list_objects_v2_max_keys() -> Result<()> {
     let _guard = serial().await;
 
