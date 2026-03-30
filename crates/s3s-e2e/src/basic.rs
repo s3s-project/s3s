@@ -209,6 +209,9 @@ impl Essential {
             // Verify object no longer exists
             let result = s3.head_object().bucket(bucket).key(key).send().await;
             assert!(result.is_err());
+
+            // Delete non-existent object should succeed (S3 delete is idempotent)
+            s3.delete_object().bucket(bucket).key(key).send().await?;
         }
 
         {
