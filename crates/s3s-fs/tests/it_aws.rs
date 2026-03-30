@@ -1450,6 +1450,9 @@ async fn test_upload_part_copy_empty_source() -> Result<()> {
         .unwrap();
 
     delete_object(&c, bucket, src_key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
 }
 
 #[tokio::test]
