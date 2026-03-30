@@ -544,6 +544,95 @@ async fn test_multipart() -> Result<()> {
     Ok(())
 }
 
+/// Test that multipart uploaded objects have the correct ETag format: `{hash}-{part_count}`
+#[tokio::test]
+#[tracing::instrument]
+async fn test_multipart_etag_format() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+
+    let bucket = format!("test-multipart-etag-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let key = "multipart-etag.txt";
+    let content = "abcdefghijklmnopqrstuvwxyz/0123456789/!@#$%^&*();\n";
+
+    let upload_id = {
+        let ans = c.create_multipart_upload().bucket(bucket).key(key).send().await?;
+        ans.upload_id.unwrap()
+    };
+    let upload_id = upload_id.as_str();
+
+    let upload_parts = {
+        let body = ByteStream::from_static(content.as_bytes());
+        let part_number = 1;
+
+        let ans = c
+            .upload_part()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(upload_id)
+            .body(body)
+            .part_number(part_number)
+            .send()
+            .await?;
+
+        let part = CompletedPart::builder()
+            .e_tag(ans.e_tag.unwrap_or_default())
+            .part_number(part_number)
+            .build();
+
+        vec![part]
+    };
+
+    {
+        let upload = CompletedMultipartUpload::builder().set_parts(Some(upload_parts)).build();
+
+        let ans = c
+            .complete_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .multipart_upload(upload)
+            .upload_id(upload_id)
+            .send()
+            .await?;
+
+        let e_tag = ans.e_tag().unwrap();
+        debug!(?e_tag, "multipart etag");
+
+        // Multipart ETags must have the format: {hex_md5}-{part_count}
+        assert!(e_tag.contains('-'), "multipart ETag should contain a dash: {e_tag}");
+        let (hash_part, count_part) = e_tag.rsplit_once('-').unwrap();
+        // Remove surrounding quotes if present
+        let hash_part = hash_part.trim_start_matches('"');
+        assert_eq!(hash_part.len(), 32, "hash part should be 32 hex characters: {hash_part}");
+        assert!(
+            hash_part.chars().all(|c| c.is_ascii_hexdigit()),
+            "hash part should be hex: {hash_part}"
+        );
+        let count_part = count_part.trim_end_matches('"');
+        let part_count: usize = count_part.parse().expect("count part should be a number");
+        assert_eq!(part_count, 1, "part count should match number of parts uploaded");
+    }
+
+    {
+        // Also verify the ETag from head_object
+        let ans = c.head_object().bucket(bucket).key(key).send().await?;
+        let e_tag = ans.e_tag().unwrap();
+        debug!(?e_tag, "head_object etag");
+        assert!(e_tag.contains('-'), "head_object ETag should also have multipart format: {e_tag}");
+    }
+
+    {
+        delete_object(&c, bucket, key).await?;
+        delete_bucket(&c, bucket).await?;
+    }
+
+    Ok(())
+}
+
 #[tokio::test]
 #[tracing::instrument]
 async fn test_upload_part_copy() -> Result<()> {

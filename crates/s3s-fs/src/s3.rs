@@ -18,7 +18,9 @@ use std::path::Component;
 use std::path::{Path, PathBuf};
 
 use tokio::fs;
+use tokio::io::AsyncReadExt;
 use tokio::io::AsyncSeekExt;
+use tokio::io::AsyncWriteExt;
 use tokio_util::io::ReaderStream;
 
 use futures::TryStreamExt;
@@ -234,9 +236,14 @@ impl S3 for FileSystem {
 
         let obj_attrs = self.load_object_attributes(&input.bucket, &input.key, None).await?;
 
-        let md5_sum = self.get_md5_sum(&input.bucket, &input.key).await?;
-
         let info = self.load_internal_info(&input.bucket, &input.key).await?;
+
+        // Use stored ETag (e.g. multipart format) if available, otherwise compute MD5
+        let e_tag = match info.as_ref().and_then(|i| i.get("e_tag")).and_then(|v| v.as_str()) {
+            Some(stored) => stored.to_owned(),
+            None => self.get_md5_sum(&input.bucket, &input.key).await?,
+        };
+
         let checksum = match &info {
             // S3 skips returning the checksum if a range is specified that is
             // less than the whole file
@@ -258,7 +265,7 @@ impl S3 for FileSystem {
             cache_control: obj_attrs.as_ref().and_then(|a| a.cache_control.clone()),
             expires: obj_attrs.as_ref().and_then(|a| a.get_expires_timestamp()),
             website_redirect_location: obj_attrs.as_ref().and_then(|a| a.website_redirect_location.clone()),
-            e_tag: Some(ETag::Strong(md5_sum)),
+            e_tag: Some(ETag::Strong(e_tag)),
             checksum_crc32: checksum.checksum_crc32,
             checksum_crc32c: checksum.checksum_crc32c,
             checksum_sha1: checksum.checksum_sha1,
@@ -296,6 +303,14 @@ impl S3 for FileSystem {
 
         let obj_attrs = self.load_object_attributes(&input.bucket, &input.key, None).await?;
 
+        let info = self.load_internal_info(&input.bucket, &input.key).await?;
+
+        // Use stored ETag (e.g. multipart format) if available, otherwise compute MD5
+        let e_tag = match info.as_ref().and_then(|i| i.get("e_tag")).and_then(|v| v.as_str()) {
+            Some(stored) => stored.to_owned(),
+            None => self.get_md5_sum(&input.bucket, &input.key).await?,
+        };
+
         #[allow(clippy::redundant_closure_for_method_calls)]
         let output = HeadObjectOutput {
             content_length: Some(try_!(i64::try_from(file_len))),
@@ -308,6 +323,7 @@ impl S3 for FileSystem {
             website_redirect_location: obj_attrs.as_ref().and_then(|a| a.website_redirect_location.clone()),
             last_modified: Some(last_modified),
             metadata: obj_attrs.as_ref().and_then(|a| a.user_metadata.clone()),
+            e_tag: Some(ETag::Strong(e_tag)),
             ..Default::default()
         };
         Ok(S3Response::new(output))
@@ -880,6 +896,8 @@ impl S3 for FileSystem {
             .map(|parts| i32::try_from(parts.len()).expect("total number of parts must be <= 10000."))
             .unwrap_or_default();
 
+        let mut part_md5_hashes: Vec<[u8; 16]> = Vec::new();
+
         for part in multipart_upload.parts.into_iter().flatten() {
             let part_number = part
                 .part_number
@@ -892,7 +910,20 @@ impl S3 for FileSystem {
             let part_path = self.resolve_upload_part_path(upload_id, part_number)?;
 
             let mut reader = try_!(fs::File::open(&part_path).await);
-            let size = try_!(tokio::io::copy(&mut reader, &mut file_writer.writer()).await);
+            let mut part_md5 = Md5::new();
+            let mut buf = vec![0u8; 65536];
+            let mut size: u64 = 0;
+            loop {
+                let nread = try_!(reader.read(&mut buf).await);
+                if nread == 0 {
+                    break;
+                }
+                part_md5.update(&buf[..nread]);
+                try_!(file_writer.writer().write_all(&buf[..nread]).await);
+                size += nread as u64;
+            }
+            try_!(file_writer.writer().flush().await);
+            part_md5_hashes.push(part_md5.finalize());
 
             if part_number != total_parts_cnt && size < 5 * 1024 * 1024 {
                 return Err(s3_error!(EntityTooSmall));
@@ -903,10 +934,24 @@ impl S3 for FileSystem {
         }
         file_writer.done().await?;
 
-        let file_size = try_!(fs::metadata(&object_path).await).len();
-        let md5_sum = self.get_md5_sum(&bucket, &key).await?;
+        // Compute multipart ETag: MD5 of concatenated part MD5 hashes, suffixed with part count
+        let mut etag_hash = Md5::new();
+        for hash in &part_md5_hashes {
+            etag_hash.update(hash);
+        }
+        let e_tag = format!("{}-{}", hex(etag_hash.finalize()), part_md5_hashes.len());
 
-        debug!(?md5_sum, path = %object_path.display(), size = ?file_size, "file md5 sum");
+        debug!(?e_tag, path = %object_path.display(), "multipart etag");
+
+        // Store the multipart ETag in internal info so get_object/head_object return it correctly
+        let mut info: InternalInfo = self
+            .load_internal_info(&bucket, &key)
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or_default();
+        info.insert("e_tag".to_owned(), serde_json::Value::String(e_tag.clone()));
+        self.save_internal_info(&bucket, &key, &info).await?;
 
         let output = CompleteMultipartUploadOutput {
             // TODO: better example of AWS-like keep-alive behavior
@@ -914,7 +959,7 @@ impl S3 for FileSystem {
                 Ok(CompleteMultipartUploadOutput {
                     bucket: Some(bucket),
                     key: Some(key),
-                    e_tag: Some(ETag::Strong(md5_sum)),
+                    e_tag: Some(ETag::Strong(e_tag)),
                     ..Default::default()
                 })
             })),
