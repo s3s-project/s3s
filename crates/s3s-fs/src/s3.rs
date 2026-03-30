@@ -400,14 +400,17 @@ impl S3 for FileSystem {
             lhs_key.cmp(rhs_key)
         });
 
-        // Apply start_after filter if provided
-        if let Some(marker) = &input.start_after {
-            objects.retain(|obj| obj.key.as_deref().unwrap_or("") > marker.as_str());
+        let cursor = input.continuation_token.as_ref().or(input.start_after.as_ref());
+
+        // Apply pagination cursor before limiting/interleaving results.
+        if let Some(cursor) = cursor {
+            objects.retain(|obj| obj.key.as_deref().unwrap_or("") > cursor.as_str());
         }
 
         // Convert common_prefixes to sorted list
         let common_prefixes_list: Vec<CommonPrefix> = common_prefixes
             .into_iter()
+            .filter(|prefix| cursor.is_none_or(|cursor| prefix.as_str() > cursor.as_str()))
             .map(|prefix| CommonPrefix { prefix: Some(prefix) })
             .collect();
 

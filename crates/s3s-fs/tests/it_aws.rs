@@ -405,6 +405,29 @@ async fn test_list_objects_v1_next_marker_with_delimiter() -> Result<()> {
         page.next_marker().is_some(),
         "is_truncated is true with delimiter but next_marker is missing"
     );
+    let page1_contents: Vec<_> = page.contents().iter().filter_map(|obj| obj.key()).collect();
+    let page1_prefixes: Vec<_> = page.common_prefixes().iter().filter_map(|cp| cp.prefix()).collect();
+    assert_eq!(page1_contents, vec!["a.txt"]);
+    assert_eq!(page1_prefixes, vec!["dir/"]);
+    let next_marker = page.next_marker().expect("truncated v1 listing should include next_marker");
+
+    let page2 = c
+        .list_objects()
+        .bucket(bucket)
+        .delimiter("/")
+        .max_keys(2)
+        .marker(next_marker)
+        .send()
+        .await?;
+
+    assert_eq!(page2.is_truncated(), Some(false));
+    let page2_contents: Vec<_> = page2.contents().iter().filter_map(|obj| obj.key()).collect();
+    let page2_prefixes: Vec<_> = page2.common_prefixes().iter().filter_map(|cp| cp.prefix()).collect();
+    assert_eq!(page2_contents, vec!["z.txt"]);
+    assert!(
+        page2_prefixes.is_empty(),
+        "second page should not repeat the already-returned common prefix"
+    );
 
     // Cleanup
     for key in &keys {
@@ -1204,6 +1227,66 @@ async fn test_list_objects_v2_start_after() -> Result<()> {
     assert_eq!(contents, vec!["ccc.txt", "ddd.txt"]);
 
     // Cleanup
+    for key in &keys {
+        delete_object(&c, bucket, key).await?;
+    }
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
+async fn test_list_objects_v2_continuation_token_with_delimiter() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-continuation-token-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let content = "test";
+    let keys = ["a.txt", "dir/1.txt", "z.txt"];
+    for key in &keys {
+        c.put_object()
+            .bucket(bucket)
+            .key(*key)
+            .body(ByteStream::from_static(content.as_bytes()))
+            .send()
+            .await?;
+    }
+
+    let page1 = c.list_objects_v2().bucket(bucket).delimiter("/").max_keys(2).send().await?;
+    assert_eq!(page1.is_truncated(), Some(true));
+    assert_eq!(page1.contents().iter().filter_map(|obj| obj.key()).collect::<Vec<_>>(), vec!["a.txt"]);
+    assert_eq!(
+        page1
+            .common_prefixes()
+            .iter()
+            .filter_map(|prefix| prefix.prefix())
+            .collect::<Vec<_>>(),
+        vec!["dir/"]
+    );
+    let next_token = page1
+        .next_continuation_token()
+        .expect("truncated v2 listing should include next_continuation_token");
+
+    let page2 = c
+        .list_objects_v2()
+        .bucket(bucket)
+        .delimiter("/")
+        .max_keys(2)
+        .continuation_token(next_token)
+        .send()
+        .await?;
+
+    assert_eq!(page2.is_truncated(), Some(false));
+    assert_eq!(page2.contents().iter().filter_map(|obj| obj.key()).collect::<Vec<_>>(), vec!["z.txt"]);
+    assert!(
+        page2.common_prefixes().is_empty(),
+        "continuation token should advance past the previous common prefix"
+    );
+
     for key in &keys {
         delete_object(&c, bucket, key).await?;
     }
