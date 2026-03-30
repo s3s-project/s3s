@@ -396,20 +396,20 @@ async fn test_list_objects_v1_next_marker_with_delimiter() -> Result<()> {
             .await?;
     }
 
-    let page = c.list_objects().bucket(bucket).delimiter("/").max_keys(2).send().await?;
+    let page1 = c.list_objects().bucket(bucket).delimiter("/").max_keys(2).send().await?;
 
-    assert_eq!(page.is_truncated(), Some(true));
+    assert_eq!(page1.is_truncated(), Some(true));
     // Per S3 spec: when delimiter is set and is_truncated is true,
     // next_marker must be returned so the client can paginate.
     assert!(
-        page.next_marker().is_some(),
+        page1.next_marker().is_some(),
         "is_truncated is true with delimiter but next_marker is missing"
     );
-    let page1_contents: Vec<_> = page.contents().iter().filter_map(|obj| obj.key()).collect();
-    let page1_prefixes: Vec<_> = page.common_prefixes().iter().filter_map(|cp| cp.prefix()).collect();
+    let page1_contents: Vec<_> = page1.contents().iter().filter_map(|obj| obj.key()).collect();
+    let page1_prefixes: Vec<_> = page1.common_prefixes().iter().filter_map(|cp| cp.prefix()).collect();
     assert_eq!(page1_contents, vec!["a.txt"]);
     assert_eq!(page1_prefixes, vec!["dir/"]);
-    let next_marker = page.next_marker().expect("truncated v1 listing should include next_marker");
+    let next_marker = page1.next_marker().expect("truncated v1 listing should include next_marker");
 
     let page2 = c
         .list_objects()
