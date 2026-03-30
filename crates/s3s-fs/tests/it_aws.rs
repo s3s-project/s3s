@@ -1428,12 +1428,20 @@ async fn test_head_object_etag_and_checksum() -> Result<()> {
     let put_e_tag = put_result.e_tag().unwrap().to_owned();
 
     // Head object and verify e_tag is present and matches put_object
-    let head_result = c.head_object().bucket(bucket).key(key).checksum_mode(ChecksumMode::Enabled).send().await?;
+    let head_result = c
+        .head_object()
+        .bucket(bucket)
+        .key(key)
+        .checksum_mode(ChecksumMode::Enabled)
+        .send()
+        .await?;
     let head_e_tag = head_result.e_tag().expect("head_object should return e_tag").to_owned();
     assert_eq!(head_e_tag, put_e_tag, "head_object e_tag should match put_object e_tag");
 
     // Verify checksum is returned
-    let head_crc32c = head_result.checksum_crc32_c().expect("head_object should return checksum_crc32c");
+    let head_crc32c = head_result
+        .checksum_crc32_c()
+        .expect("head_object should return checksum_crc32c");
     assert_eq!(head_crc32c, crc32c);
 
     // Get object and verify e_tag matches
