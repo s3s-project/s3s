@@ -156,20 +156,16 @@ impl S3 for FileSystem {
     #[tracing::instrument]
     async fn delete_objects(&self, req: S3Request<DeleteObjectsInput>) -> S3Result<S3Response<DeleteObjectsOutput>> {
         let input = req.input;
-        let mut objects: Vec<(PathBuf, String)> = Vec::new();
+
+        let mut deleted_objects: Vec<DeletedObject> = Vec::new();
         for object in input.delete.objects {
             let path = self.get_object_path(&input.bucket, &object.key)?;
             if path.exists() {
-                objects.push((path, object.key));
+                try_!(fs::remove_file(path).await);
             }
-        }
-
-        let mut deleted_objects: Vec<DeletedObject> = Vec::new();
-        for (path, key) in objects {
-            try_!(fs::remove_file(path).await);
 
             let deleted_object = DeletedObject {
-                key: Some(key),
+                key: Some(object.key),
                 ..Default::default()
             };
 
