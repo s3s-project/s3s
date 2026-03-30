@@ -108,6 +108,12 @@ impl S3 for FileSystem {
 
         let md5_sum = self.get_md5_sum(bucket, key).await?;
 
+        {
+            let mut info = self.load_internal_info(bucket, key).await?.unwrap_or_default();
+            crate::checksum::save_e_tag(&mut info, &md5_sum);
+            self.save_internal_info(&input.bucket, &input.key, &info).await?;
+        }
+
         let copy_object_result = CopyObjectResult {
             e_tag: Some(ETag::Strong(md5_sum)),
             last_modified: Some(last_modified),
@@ -238,9 +244,13 @@ impl S3 for FileSystem {
 
         let obj_attrs = self.load_object_attributes(&input.bucket, &input.key, None).await?;
 
-        let md5_sum = self.get_md5_sum(&input.bucket, &input.key).await?;
-
         let info = self.load_internal_info(&input.bucket, &input.key).await?;
+
+        let md5_sum = match info.as_ref().and_then(crate::checksum::load_e_tag) {
+            Some(e_tag) => e_tag,
+            None => self.get_md5_sum(&input.bucket, &input.key).await?,
+        };
+
         let checksum = match &info {
             // S3 skips returning the checksum if a range is specified that is
             // less than the whole file
@@ -300,6 +310,18 @@ impl S3 for FileSystem {
 
         let obj_attrs = self.load_object_attributes(&input.bucket, &input.key, None).await?;
 
+        let info = self.load_internal_info(&input.bucket, &input.key).await?;
+
+        let md5_sum = match info.as_ref().and_then(crate::checksum::load_e_tag) {
+            Some(e_tag) => e_tag,
+            None => self.get_md5_sum(&input.bucket, &input.key).await?,
+        };
+
+        let checksum = match &info {
+            Some(info) => crate::checksum::from_internal_info(info),
+            _ => default(),
+        };
+
         #[allow(clippy::redundant_closure_for_method_calls)]
         let output = HeadObjectOutput {
             content_length: Some(try_!(i64::try_from(file_len))),
@@ -312,6 +334,12 @@ impl S3 for FileSystem {
             website_redirect_location: obj_attrs.as_ref().and_then(|a| a.website_redirect_location.clone()),
             last_modified: Some(last_modified),
             metadata: obj_attrs.as_ref().and_then(|a| a.user_metadata.clone()),
+            e_tag: Some(ETag::Strong(md5_sum)),
+            checksum_crc32: checksum.checksum_crc32,
+            checksum_crc32c: checksum.checksum_crc32c,
+            checksum_sha1: checksum.checksum_sha1,
+            checksum_sha256: checksum.checksum_sha256,
+            checksum_crc64nvme: checksum.checksum_crc64nvme,
             ..Default::default()
         };
         Ok(S3Response::new(output))
@@ -639,6 +667,7 @@ impl S3 for FileSystem {
         self.save_object_attributes(&bucket, &key, &obj_attrs, None).await?;
 
         let mut info: InternalInfo = default();
+        crate::checksum::save_e_tag(&mut info, &md5_sum);
         crate::checksum::modify_internal_info(&mut info, &checksum);
         self.save_internal_info(&bucket, &key, &info).await?;
 
@@ -911,6 +940,12 @@ impl S3 for FileSystem {
         let md5_sum = self.get_md5_sum(&bucket, &key).await?;
 
         debug!(?md5_sum, path = %object_path.display(), size = ?file_size, "file md5 sum");
+
+        {
+            let mut info = self.load_internal_info(&bucket, &key).await?.unwrap_or_default();
+            crate::checksum::save_e_tag(&mut info, &md5_sum);
+            self.save_internal_info(&bucket, &key, &info).await?;
+        }
 
         let output = CompleteMultipartUploadOutput {
             // TODO: better example of AWS-like keep-alive behavior
