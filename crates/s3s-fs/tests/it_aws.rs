@@ -1523,14 +1523,12 @@ async fn test_upload_part_copy_empty_source() -> Result<()> {
         .send()
         .await?;
 
-    let _ = c
-        .abort_multipart_upload()
+    c.abort_multipart_upload()
         .bucket(bucket)
         .key(dst_key)
         .upload_id(&upload_id)
         .send()
-        .await
-        .unwrap();
+        .await?;
 
     delete_object(&c, bucket, src_key).await?;
     delete_bucket(&c, bucket).await?;
