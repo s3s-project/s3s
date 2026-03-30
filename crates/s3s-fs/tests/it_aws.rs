@@ -396,13 +396,7 @@ async fn test_list_objects_v1_next_marker_with_delimiter() -> Result<()> {
             .await?;
     }
 
-    let page = c
-        .list_objects()
-        .bucket(bucket)
-        .delimiter("/")
-        .max_keys(2)
-        .send()
-        .await?;
+    let page = c.list_objects().bucket(bucket).delimiter("/").max_keys(2).send().await?;
 
     assert_eq!(page.is_truncated(), Some(true));
     // Per S3 spec: when delimiter is set and is_truncated is true,
