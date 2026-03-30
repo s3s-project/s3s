@@ -7,7 +7,7 @@ pub fn save_e_tag(info: &mut serde_json::Map<String, serde_json::Value>, e_tag: 
 }
 
 pub fn load_e_tag(info: &serde_json::Map<String, serde_json::Value>) -> Option<String> {
-    info.get("e_tag").and_then(|v| v.as_str()).map(|s| s.to_owned())
+    info.get("e_tag").and_then(|v| v.as_str()).map(str::to_owned)
 }
 
 pub fn modify_internal_info(info: &mut serde_json::Map<String, serde_json::Value>, checksum: &s3s::dto::Checksum) {
