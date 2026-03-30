@@ -1401,3 +1401,55 @@ async fn test_multipart_upload_id_auth() -> Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+#[tracing::instrument]
+async fn test_head_object_etag_and_checksum() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-head-etag-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    let key = "sample.txt";
+    let content = "hello world\n";
+    let crc32c = base64_simd::STANDARD.encode_to_string(crc32c::crc32c(content.as_bytes()).to_be_bytes());
+
+    create_bucket(&c, bucket).await?;
+
+    // Put object with checksum
+    let put_result = c
+        .put_object()
+        .bucket(bucket)
+        .key(key)
+        .body(ByteStream::from_static(content.as_bytes()))
+        .checksum_crc32_c(crc32c.as_str())
+        .send()
+        .await?;
+    let put_e_tag = put_result.e_tag().unwrap().to_owned();
+
+    // Head object and verify e_tag is present and matches put_object
+    let head_result = c.head_object().bucket(bucket).key(key).checksum_mode(ChecksumMode::Enabled).send().await?;
+    let head_e_tag = head_result.e_tag().expect("head_object should return e_tag").to_owned();
+    assert_eq!(head_e_tag, put_e_tag, "head_object e_tag should match put_object e_tag");
+
+    // Verify checksum is returned
+    let head_crc32c = head_result.checksum_crc32_c().expect("head_object should return checksum_crc32c");
+    assert_eq!(head_crc32c, crc32c);
+
+    // Get object and verify e_tag matches
+    let get_result = c
+        .get_object()
+        .bucket(bucket)
+        .key(key)
+        .checksum_mode(ChecksumMode::Enabled)
+        .send()
+        .await?;
+    let get_e_tag = get_result.e_tag().expect("get_object should return e_tag").to_owned();
+    assert_eq!(head_e_tag, get_e_tag, "head_object e_tag should match get_object e_tag");
+
+    // Cleanup
+    delete_object(&c, bucket, key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}

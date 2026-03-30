@@ -2,6 +2,14 @@ use crate::fs::InternalInfo;
 
 use stdx::default::default;
 
+pub fn save_e_tag(info: &mut serde_json::Map<String, serde_json::Value>, e_tag: &str) {
+    info.insert("e_tag".to_owned(), serde_json::Value::String(e_tag.to_owned()));
+}
+
+pub fn load_e_tag(info: &serde_json::Map<String, serde_json::Value>) -> Option<String> {
+    info.get("e_tag").and_then(|v| v.as_str()).map(|s| s.to_owned())
+}
+
 pub fn modify_internal_info(info: &mut serde_json::Map<String, serde_json::Value>, checksum: &s3s::dto::Checksum) {
     if let Some(checksum_crc32) = &checksum.checksum_crc32 {
         info.insert("checksum_crc32".to_owned(), serde_json::Value::String(checksum_crc32.clone()));
