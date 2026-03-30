@@ -289,10 +289,12 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
     {
         // HTTP/2 and HTTP/3 replace the Host header with the :authority pseudo-header.
         // hyper exposes :authority via uri.authority() but does not insert a Host entry
-        // into the header map.  Signature verification (V4 and V2) includes the host
-        // header in the canonical request, so inject it here for uniform handling.
-        // Only do this for HTTP/2+ to avoid synthesizing a Host header for HTTP/1.x
-        // requests that happen to use absolute-form URIs.
+        // into the header map. For SigV4 (including presigned SigV4), the `host` header
+        // is part of the canonical request, so inject it here for uniform handling.
+        // This is primarily needed for SigV4 header canonicalization; SigV2 does not
+        // include `Host` in its string-to-sign. Only do this for HTTP/2+ to avoid
+        // synthesizing a Host header for HTTP/1.x requests that happen to use
+        // absolute-form URIs.
         if !req.headers.contains_key(hyper::header::HOST)
             && let Some(authority) = extract_http2_authority(req)
             && let Ok(val) = hyper::header::HeaderValue::from_str(authority)
