@@ -166,20 +166,36 @@ impl S3 for FileSystem {
     #[tracing::instrument]
     async fn delete_objects(&self, req: S3Request<DeleteObjectsInput>) -> S3Result<S3Response<DeleteObjectsOutput>> {
         let input = req.input;
-        let mut objects: Vec<(PathBuf, String)> = Vec::new();
-        for object in input.delete.objects {
-            let path = self.get_object_path(&input.bucket, &object.key)?;
-            if path.exists() {
-                objects.push((path, object.key));
-            }
-        }
 
         let mut deleted_objects: Vec<DeletedObject> = Vec::new();
-        for (path, key) in objects {
-            try_!(fs::remove_file(path).await);
+        for object in input.delete.objects {
+            let path = self.get_object_path(&input.bucket, &object.key)?;
+            if object.key.ends_with('/') {
+                match fs::read_dir(&path).await {
+                    Ok(mut dir) => {
+                        let is_empty = try_!(dir.next_entry().await).is_none();
+                        if is_empty {
+                            try_!(fs::remove_dir(&path).await);
+                        }
+                    }
+                    Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+                    Err(e) => {
+                        let _: () = try_!(Err(e));
+                    }
+                }
+            } else {
+                match fs::remove_file(&path).await {
+                    Ok(()) => {}
+                    Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+                    Err(e) => {
+                        let _: () = try_!(Err(e));
+                    }
+                }
+            }
 
             let deleted_object = DeletedObject {
-                key: Some(key),
+                key: Some(object.key),
+                version_id: object.version_id,
                 ..Default::default()
             };
 
