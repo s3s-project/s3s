@@ -1438,10 +1438,9 @@ async fn test_upload_part_copy_empty_source() -> Result<()> {
         .upload_id(&upload_id)
         .part_number(1)
         .send()
-        .await
-        .unwrap();
+        .await?;
 
-    c.abort_multipart_upload()
+    let _ = c.abort_multipart_upload()
         .bucket(bucket)
         .key(dst_key)
         .upload_id(&upload_id)
