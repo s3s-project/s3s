@@ -1404,6 +1404,47 @@ async fn test_multipart_upload_id_auth() -> Result<()> {
 
 #[tokio::test]
 #[tracing::instrument]
+async fn test_head_object_no_such_key() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-head-no-such-key-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let result = c.head_object().bucket(bucket).key("nonexistent-object").send().await;
+    let err = result.expect_err("Expected NoSuchKey for missing object");
+    let service_err = err.into_service_error();
+    assert_eq!(service_err.code(), Some("NoSuchKey"), "Expected NoSuchKey, got: {:?}", service_err.code());
+
+    delete_bucket(&c, bucket).await?;
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
+async fn test_head_object_no_such_bucket() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-head-no-such-bucket-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+
+    let result = c.head_object().bucket(bucket).key("some-key").send().await;
+    let err = result.expect_err("Expected NoSuchBucket for missing bucket");
+    let service_err = err.into_service_error();
+    assert_eq!(
+        service_err.code(),
+        Some("NoSuchBucket"),
+        "Expected NoSuchBucket, got: {:?}",
+        service_err.code()
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
 async fn test_head_object_etag_and_checksum() -> Result<()> {
     let _guard = serial().await;
 
