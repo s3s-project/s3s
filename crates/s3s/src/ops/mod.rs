@@ -291,9 +291,11 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
         // hyper exposes :authority via uri.authority() but does not insert a Host entry
         // into the header map.  Signature verification (V4 and V2) includes the host
         // header in the canonical request, so inject it here for uniform handling.
+        // Only do this for HTTP/2+ to avoid synthesizing a Host header for HTTP/1.x
+        // requests that happen to use absolute-form URIs.
         if !req.headers.contains_key(hyper::header::HOST)
-            && let Some(authority) = req.uri.authority()
-            && let Ok(val) = hyper::header::HeaderValue::from_str(authority.as_str())
+            && let Some(authority) = extract_http2_authority(req)
+            && let Ok(val) = hyper::header::HeaderValue::from_str(authority)
         {
             req.headers.insert(hyper::header::HOST, val);
         }

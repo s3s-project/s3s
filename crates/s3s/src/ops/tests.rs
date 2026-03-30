@@ -276,6 +276,49 @@ async fn http2_authority_injected_as_host_header() {
     assert_eq!(host.to_str().unwrap(), "s3.example.com");
 }
 
+/// HTTP/1.1 request with an absolute URI (authority present) but no Host header.
+/// `prepare()` must NOT inject Host in this case — injection is only for HTTP/2+.
+#[tokio::test]
+async fn http1_absolute_uri_no_host_injection() {
+    use crate::config::{S3ConfigProvider, StaticConfigProvider};
+    use crate::http::{Body, Request};
+    use std::sync::Arc;
+
+    struct NoOpS3;
+    #[async_trait::async_trait]
+    impl crate::s3_trait::S3 for NoOpS3 {}
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(NoOpS3);
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+    let ccx = CallContext {
+        s3: &s3,
+        config: &config,
+        host: None,
+        auth: None,
+        access: None,
+        route: None,
+        validation: None,
+    };
+
+    let mut req = Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .version(::http::Version::HTTP_11)
+            .uri("http://s3.example.com/test-bucket/test-key")
+            .body(Body::empty())
+            .unwrap(),
+    );
+
+    // Authority is present in the URI but this is HTTP/1.1 — no injection expected.
+    assert!(req.uri.authority().is_some());
+    assert!(req.headers.get(crate::header::HOST).is_none());
+
+    let _ = super::prepare(&mut req, &ccx).await;
+
+    // Host should still be absent (not injected for HTTP/1.x).
+    assert!(req.headers.get(crate::header::HOST).is_none());
+}
+
 /// Existing Host header (HTTP/1.1) must not be overwritten.
 #[tokio::test]
 async fn http1_host_header_not_overwritten() {
