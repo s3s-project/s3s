@@ -163,6 +163,34 @@ async fn delete_bucket(c: &Client, bucket: &str) -> Result<()> {
     Ok(())
 }
 
+async fn do_multipart_upload(c: &Client, bucket: &str, key: &str, content: &[u8]) -> Result<(String, Vec<CompletedPart>)> {
+    let upload_id = c
+        .create_multipart_upload()
+        .bucket(bucket)
+        .key(key)
+        .send()
+        .await?
+        .upload_id
+        .unwrap();
+
+    let ans = c
+        .upload_part()
+        .bucket(bucket)
+        .key(key)
+        .upload_id(&upload_id)
+        .body(ByteStream::from(content.to_vec()))
+        .part_number(1)
+        .send()
+        .await?;
+
+    let part = CompletedPart::builder()
+        .e_tag(ans.e_tag.unwrap_or_default())
+        .part_number(1)
+        .build();
+
+    Ok((upload_id, vec![part]))
+}
+
 macro_rules! log_and_unwrap {
     ($result:expr) => {
         match $result {
@@ -1417,35 +1445,6 @@ async fn test_complete_multipart_if_none_match() -> Result<()> {
 
     create_bucket(&c, bucket).await?;
 
-    // Helper: create and upload a single part, returning (upload_id, upload_parts)
-    async fn do_multipart_upload(c: &Client, bucket: &str, key: &str, content: &[u8]) -> Result<(String, Vec<CompletedPart>)> {
-        let upload_id = c
-            .create_multipart_upload()
-            .bucket(bucket)
-            .key(key)
-            .send()
-            .await?
-            .upload_id
-            .unwrap();
-
-        let ans = c
-            .upload_part()
-            .bucket(bucket)
-            .key(key)
-            .upload_id(&upload_id)
-            .body(ByteStream::from(content.to_vec()))
-            .part_number(1)
-            .send()
-            .await?;
-
-        let part = CompletedPart::builder()
-            .e_tag(ans.e_tag.unwrap_or_default())
-            .part_number(1)
-            .build();
-
-        Ok((upload_id, vec![part]))
-    }
-
     // Test 1: CompleteMultipartUpload with If-None-Match: * should succeed when object doesn't exist
     debug!("Test 1: CompleteMultipartUpload with If-None-Match: * on non-existent object");
     {
@@ -1542,35 +1541,6 @@ async fn test_complete_multipart_if_match() -> Result<()> {
         result.e_tag().unwrap().to_owned()
     };
     debug!("Initial ETag: {initial_etag}");
-
-    // Helper: create and upload a single part
-    async fn do_multipart_upload(c: &Client, bucket: &str, key: &str, content: &[u8]) -> Result<(String, Vec<CompletedPart>)> {
-        let upload_id = c
-            .create_multipart_upload()
-            .bucket(bucket)
-            .key(key)
-            .send()
-            .await?
-            .upload_id
-            .unwrap();
-
-        let ans = c
-            .upload_part()
-            .bucket(bucket)
-            .key(key)
-            .upload_id(&upload_id)
-            .body(ByteStream::from(content.to_vec()))
-            .part_number(1)
-            .send()
-            .await?;
-
-        let part = CompletedPart::builder()
-            .e_tag(ans.e_tag.unwrap_or_default())
-            .part_number(1)
-            .build();
-
-        Ok((upload_id, vec![part]))
-    }
 
     // Test 1: CompleteMultipartUpload with If-Match and wrong ETag should fail
     debug!("Test 1: CompleteMultipartUpload with If-Match and wrong ETag");
