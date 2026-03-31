@@ -580,14 +580,14 @@ async fn test_multipart_etag_format() -> Result<()> {
             .await?;
 
         let part = CompletedPart::builder()
-            .e_tag(ans.e_tag.unwrap_or_default())
+            .e_tag(ans.e_tag.expect("upload_part response missing e_tag"))
             .part_number(part_number)
             .build();
 
         vec![part]
     };
 
-    {
+    let complete_e_tag = {
         let upload = CompletedMultipartUpload::builder().set_parts(Some(upload_parts)).build();
 
         let ans = c
@@ -599,30 +599,37 @@ async fn test_multipart_etag_format() -> Result<()> {
             .send()
             .await?;
 
-        let e_tag = ans.e_tag().unwrap();
+        let e_tag = ans.e_tag().unwrap().to_owned();
         debug!(?e_tag, "multipart etag");
 
         // Multipart ETags must have the format: {hex_md5}-{part_count}
-        assert!(e_tag.contains('-'), "multipart ETag should contain a dash: {e_tag}");
-        let (hash_part, count_part) = e_tag.rsplit_once('-').unwrap();
-        // Remove surrounding quotes if present
-        let hash_part = hash_part.trim_start_matches('"');
+        let unquoted = e_tag.trim_matches('"');
+        let (hash_part, count_part) = unquoted.rsplit_once('-').expect("multipart ETag should contain a dash");
         assert_eq!(hash_part.len(), 32, "hash part should be 32 hex characters: {hash_part}");
         assert!(
             hash_part.chars().all(|c| c.is_ascii_hexdigit()),
             "hash part should be hex: {hash_part}"
         );
-        let count_part = count_part.trim_end_matches('"');
         let part_count: usize = count_part.parse().expect("count part should be a number");
         assert_eq!(part_count, 1, "part count should match number of parts uploaded");
+
+        e_tag
+    };
+
+    {
+        // Verify the ETag from head_object matches complete_multipart_upload
+        let ans = c.head_object().bucket(bucket).key(key).send().await?;
+        let head_e_tag = ans.e_tag().unwrap();
+        debug!(?head_e_tag, "head_object etag");
+        assert_eq!(head_e_tag, complete_e_tag, "head_object ETag should match complete_multipart_upload ETag");
     }
 
     {
-        // Also verify the ETag from head_object
-        let ans = c.head_object().bucket(bucket).key(key).send().await?;
-        let e_tag = ans.e_tag().unwrap();
-        debug!(?e_tag, "head_object etag");
-        assert!(e_tag.contains('-'), "head_object ETag should also have multipart format: {e_tag}");
+        // Verify the ETag from get_object matches complete_multipart_upload
+        let ans = c.get_object().bucket(bucket).key(key).send().await?;
+        let get_e_tag = ans.e_tag().unwrap();
+        debug!(?get_e_tag, "get_object etag");
+        assert_eq!(get_e_tag, complete_e_tag, "get_object ETag should match complete_multipart_upload ETag");
     }
 
     {
@@ -714,6 +721,89 @@ async fn test_upload_part_copy() -> Result<()> {
         delete_object(&c, src_bucket, src_key).await?;
         delete_bucket(&c, src_bucket).await?;
     }
+
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
+async fn test_upload_part_copy_invalid_source_range() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-upc-bad-range-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let src_key = "src.txt";
+    let src_content = "hello";
+    c.put_object()
+        .bucket(bucket)
+        .key(src_key)
+        .body(ByteStream::from_static(src_content.as_bytes()))
+        .send()
+        .await?;
+
+    let dst_key = "dst.txt";
+    let upload_id = c
+        .create_multipart_upload()
+        .bucket(bucket)
+        .key(dst_key)
+        .send()
+        .await?
+        .upload_id
+        .expect("upload_id");
+    let upload_id = upload_id.as_str();
+
+    let copy_source = format!("{bucket}/{src_key}");
+    // Object length is 5; inclusive end index must be <= 4. End 5 is past EOF and must not truncate.
+    let err = c
+        .upload_part_copy()
+        .bucket(bucket)
+        .key(dst_key)
+        .copy_source(&copy_source)
+        .copy_source_range("bytes=0-5")
+        .upload_id(upload_id)
+        .part_number(1)
+        .send()
+        .await
+        .expect_err("Expected InvalidRange when copy range end is past EOF");
+    let service_err = err.into_service_error();
+    assert_eq!(
+        service_err.code(),
+        Some("InvalidRange"),
+        "past-EOF range: expected InvalidRange, got {:?}",
+        service_err.code()
+    );
+
+    let err = c
+        .upload_part_copy()
+        .bucket(bucket)
+        .key(dst_key)
+        .copy_source(&copy_source)
+        .copy_source_range("bytes=0-18446744073709551615")
+        .upload_id(upload_id)
+        .part_number(1)
+        .send()
+        .await
+        .expect_err("Expected InvalidRange for end=u64::MAX");
+    let service_err = err.into_service_error();
+    assert_eq!(
+        service_err.code(),
+        Some("InvalidRange"),
+        "u64::MAX end: expected InvalidRange, got {:?}",
+        service_err.code()
+    );
+
+    c.abort_multipart_upload()
+        .bucket(bucket)
+        .key(dst_key)
+        .upload_id(upload_id)
+        .send()
+        .await?;
+
+    delete_object(&c, bucket, src_key).await?;
+    delete_bucket(&c, bucket).await?;
 
     Ok(())
 }
@@ -1487,6 +1577,158 @@ async fn test_multipart_upload_id_auth() -> Result<()> {
     // Cleanup
     delete_object(&c1, bucket, key).await?;
     delete_bucket(&c1, bucket).await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
+async fn test_head_object_no_such_key() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-head-no-such-key-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let result = c.head_object().bucket(bucket).key("nonexistent-object").send().await;
+    let err = result.expect_err("Expected NoSuchKey for missing object");
+    let service_err = err.into_service_error();
+    assert_eq!(service_err.code(), Some("NoSuchKey"), "Expected NoSuchKey, got: {:?}", service_err.code());
+
+    delete_bucket(&c, bucket).await?;
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
+async fn test_head_object_no_such_bucket() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-head-no-such-bucket-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+
+    let result = c.head_object().bucket(bucket).key("some-key").send().await;
+    let err = result.expect_err("Expected NoSuchBucket for missing bucket");
+    let service_err = err.into_service_error();
+    assert_eq!(
+        service_err.code(),
+        Some("NoSuchBucket"),
+        "Expected NoSuchBucket, got: {:?}",
+        service_err.code()
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
+async fn test_upload_part_copy_empty_source() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-upc-empty-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let src_key = "empty.txt";
+    c.put_object()
+        .bucket(bucket)
+        .key(src_key)
+        .body(ByteStream::from_static(b""))
+        .send()
+        .await?;
+
+    let dst_key = "dst.txt";
+    let upload_id = c
+        .create_multipart_upload()
+        .bucket(bucket)
+        .key(dst_key)
+        .send()
+        .await?
+        .upload_id
+        .unwrap();
+
+    let copy_source = format!("{bucket}/{src_key}");
+    c.upload_part_copy()
+        .bucket(bucket)
+        .key(dst_key)
+        .copy_source(copy_source)
+        .upload_id(&upload_id)
+        .part_number(1)
+        .send()
+        .await?;
+
+    c.abort_multipart_upload()
+        .bucket(bucket)
+        .key(dst_key)
+        .upload_id(&upload_id)
+        .send()
+        .await?;
+
+    delete_object(&c, bucket, src_key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
+async fn test_head_object_etag_and_checksum() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-head-etag-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    let key = "sample.txt";
+    let content = "hello world\n";
+    let crc32c = base64_simd::STANDARD.encode_to_string(crc32c::crc32c(content.as_bytes()).to_be_bytes());
+
+    create_bucket(&c, bucket).await?;
+
+    // Put object with checksum
+    let put_result = c
+        .put_object()
+        .bucket(bucket)
+        .key(key)
+        .body(ByteStream::from_static(content.as_bytes()))
+        .checksum_crc32_c(crc32c.as_str())
+        .send()
+        .await?;
+    let put_e_tag = put_result.e_tag().unwrap().to_owned();
+
+    // Head object and verify e_tag is present and matches put_object
+    let head_result = c
+        .head_object()
+        .bucket(bucket)
+        .key(key)
+        .checksum_mode(ChecksumMode::Enabled)
+        .send()
+        .await?;
+    let head_e_tag = head_result.e_tag().expect("head_object should return e_tag").to_owned();
+    assert_eq!(head_e_tag, put_e_tag, "head_object e_tag should match put_object e_tag");
+
+    // Verify checksum is returned
+    let head_crc32c = head_result
+        .checksum_crc32_c()
+        .expect("head_object should return checksum_crc32c");
+    assert_eq!(head_crc32c, crc32c);
+
+    // Get object and verify e_tag matches
+    let get_result = c
+        .get_object()
+        .bucket(bucket)
+        .key(key)
+        .checksum_mode(ChecksumMode::Enabled)
+        .send()
+        .await?;
+    let get_e_tag = get_result.e_tag().expect("get_object should return e_tag").to_owned();
+    assert_eq!(head_e_tag, get_e_tag, "head_object e_tag should match get_object e_tag");
+
+    // Cleanup
+    delete_object(&c, bucket, key).await?;
+    delete_bucket(&c, bucket).await?;
 
     Ok(())
 }

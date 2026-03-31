@@ -110,6 +110,12 @@ impl S3 for FileSystem {
 
         let md5_sum = self.get_md5_sum(bucket, key).await?;
 
+        {
+            let mut info = self.load_internal_info(bucket, key).await?.unwrap_or_default();
+            crate::checksum::save_e_tag(&mut info, &md5_sum);
+            self.save_internal_info(&input.bucket, &input.key, &info).await?;
+        }
+
         let copy_object_result = CopyObjectResult {
             e_tag: Some(ETag::Strong(md5_sum)),
             last_modified: Some(last_modified),
@@ -140,7 +146,11 @@ impl S3 for FileSystem {
         let input = req.input;
         let path = self.get_object_path(&input.bucket, &input.key)?;
         if path.exists().not() {
-            return Err(s3_error!(NoSuchKey));
+            if self.get_bucket_path(&input.bucket)?.exists().not() {
+                return Err(s3_error!(NoSuchBucket));
+            }
+            let output = DeleteObjectOutput::default();
+            return Ok(S3Response::new(output));
         }
         if input.key.ends_with('/') {
             let mut dir = try_!(fs::read_dir(&path).await);
@@ -158,20 +168,36 @@ impl S3 for FileSystem {
     #[tracing::instrument]
     async fn delete_objects(&self, req: S3Request<DeleteObjectsInput>) -> S3Result<S3Response<DeleteObjectsOutput>> {
         let input = req.input;
-        let mut objects: Vec<(PathBuf, String)> = Vec::new();
-        for object in input.delete.objects {
-            let path = self.get_object_path(&input.bucket, &object.key)?;
-            if path.exists() {
-                objects.push((path, object.key));
-            }
-        }
 
         let mut deleted_objects: Vec<DeletedObject> = Vec::new();
-        for (path, key) in objects {
-            try_!(fs::remove_file(path).await);
+        for object in input.delete.objects {
+            let path = self.get_object_path(&input.bucket, &object.key)?;
+            if object.key.ends_with('/') {
+                match fs::read_dir(&path).await {
+                    Ok(mut dir) => {
+                        let is_empty = try_!(dir.next_entry().await).is_none();
+                        if is_empty {
+                            try_!(fs::remove_dir(&path).await);
+                        }
+                    }
+                    Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+                    Err(e) => {
+                        let _: () = try_!(Err(e));
+                    }
+                }
+            } else {
+                match fs::remove_file(&path).await {
+                    Ok(()) => {}
+                    Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+                    Err(e) => {
+                        let _: () = try_!(Err(e));
+                    }
+                }
+            }
 
             let deleted_object = DeletedObject {
-                key: Some(key),
+                key: Some(object.key),
+                version_id: object.version_id,
                 ..Default::default()
             };
 
@@ -238,9 +264,8 @@ impl S3 for FileSystem {
 
         let info = self.load_internal_info(&input.bucket, &input.key).await?;
 
-        // Use stored ETag (e.g. multipart format) if available, otherwise compute MD5
-        let e_tag = match info.as_ref().and_then(|i| i.get("e_tag")).and_then(|v| v.as_str()) {
-            Some(stored) => stored.to_owned(),
+        let md5_sum = match info.as_ref().and_then(crate::checksum::load_e_tag) {
+            Some(e_tag) => e_tag,
             None => self.get_md5_sum(&input.bucket, &input.key).await?,
         };
 
@@ -265,7 +290,7 @@ impl S3 for FileSystem {
             cache_control: obj_attrs.as_ref().and_then(|a| a.cache_control.clone()),
             expires: obj_attrs.as_ref().and_then(|a| a.get_expires_timestamp()),
             website_redirect_location: obj_attrs.as_ref().and_then(|a| a.website_redirect_location.clone()),
-            e_tag: Some(ETag::Strong(e_tag)),
+            e_tag: Some(ETag::Strong(md5_sum)),
             checksum_crc32: checksum.checksum_crc32,
             checksum_crc32c: checksum.checksum_crc32c,
             checksum_sha1: checksum.checksum_sha1,
@@ -294,7 +319,10 @@ impl S3 for FileSystem {
         let path = self.get_object_path(&input.bucket, &input.key)?;
 
         if !path.exists() {
-            return Err(s3_error!(NoSuchBucket));
+            if self.get_bucket_path(&input.bucket)?.exists().not() {
+                return Err(s3_error!(NoSuchBucket));
+            }
+            return Err(s3_error!(NoSuchKey));
         }
 
         let file_metadata = try_!(fs::metadata(path).await);
@@ -305,10 +333,14 @@ impl S3 for FileSystem {
 
         let info = self.load_internal_info(&input.bucket, &input.key).await?;
 
-        // Use stored ETag (e.g. multipart format) if available, otherwise compute MD5
-        let e_tag = match info.as_ref().and_then(|i| i.get("e_tag")).and_then(|v| v.as_str()) {
-            Some(stored) => stored.to_owned(),
+        let md5_sum = match info.as_ref().and_then(crate::checksum::load_e_tag) {
+            Some(e_tag) => e_tag,
             None => self.get_md5_sum(&input.bucket, &input.key).await?,
+        };
+
+        let checksum = match &info {
+            Some(info) => crate::checksum::from_internal_info(info),
+            _ => default(),
         };
 
         #[allow(clippy::redundant_closure_for_method_calls)]
@@ -323,7 +355,12 @@ impl S3 for FileSystem {
             website_redirect_location: obj_attrs.as_ref().and_then(|a| a.website_redirect_location.clone()),
             last_modified: Some(last_modified),
             metadata: obj_attrs.as_ref().and_then(|a| a.user_metadata.clone()),
-            e_tag: Some(ETag::Strong(e_tag)),
+            e_tag: Some(ETag::Strong(md5_sum)),
+            checksum_crc32: checksum.checksum_crc32,
+            checksum_crc32c: checksum.checksum_crc32c,
+            checksum_sha1: checksum.checksum_sha1,
+            checksum_sha256: checksum.checksum_sha256,
+            checksum_crc64nvme: checksum.checksum_crc64nvme,
             ..Default::default()
         };
         Ok(S3Response::new(output))
@@ -651,6 +688,7 @@ impl S3 for FileSystem {
         self.save_object_attributes(&bucket, &key, &obj_attrs, None).await?;
 
         let mut info: InternalInfo = default();
+        crate::checksum::save_e_tag(&mut info, &md5_sum);
         crate::checksum::modify_internal_info(&mut info, &checksum);
         self.save_internal_info(&bucket, &key, &info).await?;
 
@@ -764,7 +802,7 @@ impl S3 for FileSystem {
         let mut src_file = fs::File::open(&src_path).await.map_err(|e| s3_error!(e, NoSuchKey))?;
         let file_len = try_!(src_file.metadata().await).len();
 
-        let (start, end) = if let Some(copy_range) = &input.copy_source_range {
+        let (start, content_length) = if let Some(copy_range) = &input.copy_source_range {
             if !copy_range.starts_with("bytes=") {
                 return Err(s3_error!(InvalidArgument));
             }
@@ -775,16 +813,19 @@ impl S3 for FileSystem {
             }
 
             let start: u64 = parts[0].parse().map_err(|_| s3_error!(InvalidArgument))?;
-            let mut end = file_len - 1;
-            if parts[1].is_empty().not() {
-                end = parts[1].parse().map_err(|_| s3_error!(InvalidArgument))?;
+            let end_inclusive = if parts[1].is_empty() {
+                file_len.saturating_sub(1)
+            } else {
+                parts[1].parse().map_err(|_| s3_error!(InvalidArgument))?
+            };
+            if start > end_inclusive || start >= file_len || end_inclusive >= file_len {
+                return Err(s3_error!(InvalidRange));
             }
-            (start, end)
+            let content_length = end_inclusive - start + 1;
+            (start, content_length)
         } else {
-            (0, file_len - 1)
+            (0, file_len)
         };
-
-        let content_length = end - start + 1;
         let content_length_usize = try_!(usize::try_from(content_length));
 
         let _ = try_!(src_file.seek(io::SeekFrom::Start(start)).await);
@@ -874,6 +915,11 @@ impl S3 for FileSystem {
 
         let Some(multipart_upload) = multipart_upload else { return Err(s3_error!(InvalidPart)) };
 
+        let parts_count = multipart_upload.parts.as_ref().map_or(0, Vec::len);
+        if parts_count == 0 {
+            return Err(s3_error!(InvalidPart, "You must specify at least one part"));
+        }
+
         let upload_id = Uuid::parse_str(&upload_id).map_err(|_| s3_error!(InvalidRequest))?;
         if self.verify_upload_id(req.credentials.as_ref(), &upload_id).await?.not() {
             return Err(s3_error!(AccessDenied));
@@ -890,13 +936,10 @@ impl S3 for FileSystem {
         let mut file_writer = self.prepare_file_write(&object_path).await?;
 
         let mut cnt: i32 = 0;
-        let total_parts_cnt = multipart_upload
-            .parts
-            .as_ref()
-            .map(|parts| i32::try_from(parts.len()).expect("total number of parts must be <= 10000."))
-            .unwrap_or_default();
+        let total_parts_cnt = i32::try_from(parts_count).expect("total number of parts must be <= 10000.");
 
         let mut part_md5_hashes: Vec<[u8; 16]> = Vec::new();
+        let mut buf = vec![0u8; 65536];
 
         for part in multipart_upload.parts.into_iter().flatten() {
             let part_number = part
@@ -911,7 +954,6 @@ impl S3 for FileSystem {
 
             let mut reader = try_!(fs::File::open(&part_path).await);
             let mut part_md5 = Md5::new();
-            let mut buf = vec![0u8; 65536];
             let mut size: u64 = 0;
             loop {
                 let nread = try_!(reader.read(&mut buf).await);
@@ -943,15 +985,11 @@ impl S3 for FileSystem {
 
         debug!(?e_tag, path = %object_path.display(), "multipart etag");
 
-        // Store the multipart ETag in internal info so get_object/head_object return it correctly
-        let mut info: InternalInfo = self
-            .load_internal_info(&bucket, &key)
-            .await
-            .ok()
-            .flatten()
-            .unwrap_or_default();
-        info.insert("e_tag".to_owned(), serde_json::Value::String(e_tag.clone()));
-        self.save_internal_info(&bucket, &key, &info).await?;
+        {
+            let mut info = self.load_internal_info(&bucket, &key).await?.unwrap_or_default();
+            crate::checksum::save_e_tag(&mut info, &e_tag);
+            self.save_internal_info(&bucket, &key, &info).await?;
+        }
 
         let output = CompleteMultipartUploadOutput {
             // TODO: better example of AWS-like keep-alive behavior
