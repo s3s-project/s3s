@@ -544,7 +544,7 @@ async fn test_multipart() -> Result<()> {
     Ok(())
 }
 
-/// Test that multipart uploaded objects have the correct ETag format: `{hash}-{part_count}`
+/// Test that multipart uploaded objects have the correct `ETag` format: `{hash}-{part_count}`
 #[tokio::test]
 #[tracing::instrument]
 async fn test_multipart_etag_format() -> Result<()> {
@@ -606,10 +606,7 @@ async fn test_multipart_etag_format() -> Result<()> {
         let unquoted = e_tag.trim_matches('"');
         let (hash_part, count_part) = unquoted.rsplit_once('-').expect("multipart ETag should contain a dash");
         assert_eq!(hash_part.len(), 32, "hash part should be 32 hex characters: {hash_part}");
-        assert!(
-            hash_part.chars().all(|c| c.is_ascii_hexdigit()),
-            "hash part should be hex: {hash_part}"
-        );
+        assert!(hash_part.chars().all(|c| c.is_ascii_hexdigit()), "hash part should be hex: {hash_part}");
         let part_count: usize = count_part.parse().expect("count part should be a number");
         assert_eq!(part_count, 1, "part count should match number of parts uploaded");
 
