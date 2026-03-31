@@ -512,7 +512,20 @@ impl S3 for FileSystem {
 
         let is_truncated = max_keys_usize > 0 && (obj_idx < objects.len() || prefix_idx < common_prefixes_list.len());
         let key_count = try_!(i32::try_from(total_count));
-        let next_continuation_token = if is_truncated { last_key } else { None };
+        let next_continuation_token = if is_truncated {
+            last_key.or_else(|| {
+                let obj_key = objects.get(obj_idx).and_then(|o| o.key.clone());
+                let prefix_key = common_prefixes_list.get(prefix_idx).and_then(|p| p.prefix.clone());
+                match (obj_key, prefix_key) {
+                    (Some(ok), Some(pk)) => Some(if ok < pk { ok } else { pk }),
+                    (Some(ok), None) => Some(ok),
+                    (None, Some(pk)) => Some(pk),
+                    (None, None) => None,
+                }
+            })
+        } else {
+            None
+        };
 
         let contents = result_objects.is_empty().not().then_some(result_objects);
         let common_prefixes = result_prefixes.is_empty().not().then_some(result_prefixes);
