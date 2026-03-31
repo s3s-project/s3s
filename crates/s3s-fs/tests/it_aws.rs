@@ -1535,14 +1535,15 @@ async fn test_list_objects_v2_continuation_token_pagination() -> Result<()> {
     Ok(())
 }
 
-/// When both `continuation_token` and `start_after` are present, the token takes precedence
+/// When both `continuation_token` and `start_after` are present, the stricter
+/// (larger) bound wins so we never re-list keys the caller already skipped.
 #[tokio::test]
 #[tracing::instrument]
-async fn test_list_objects_v2_continuation_token_wins_over_start_after() -> Result<()> {
+async fn test_list_objects_v2_continuation_token_and_start_after_uses_max() -> Result<()> {
     let _guard = serial().await;
 
     let c = Client::new(config());
-    let bucket = format!("test-ct-wins-{}", Uuid::new_v4());
+    let bucket = format!("test-ct-max-{}", Uuid::new_v4());
     let bucket = bucket.as_str();
     create_bucket(&c, bucket).await?;
 
@@ -1556,7 +1557,7 @@ async fn test_list_objects_v2_continuation_token_wins_over_start_after() -> Resu
             .await?;
     }
 
-    // continuation_token="b.txt" wins even though start_after="d.txt" is larger
+    // start_after="d.txt" is larger than continuation_token="b.txt", so we resume after d.txt
     let result = c
         .list_objects_v2()
         .bucket(bucket)
@@ -1565,9 +1566,9 @@ async fn test_list_objects_v2_continuation_token_wins_over_start_after() -> Resu
         .send()
         .await?;
     let result_keys: Vec<_> = result.contents().iter().filter_map(|o| o.key()).collect();
-    assert_eq!(result_keys, vec!["c.txt", "d.txt", "e.txt"], "token wins: resume after b.txt");
+    assert_eq!(result_keys, vec!["e.txt"], "should resume after the larger value (d.txt)");
 
-    // continuation_token="c.txt" wins, start_after="a.txt" ignored
+    // continuation_token="c.txt" is larger than start_after="a.txt", so we resume after c.txt
     let result = c
         .list_objects_v2()
         .bucket(bucket)
@@ -1576,7 +1577,7 @@ async fn test_list_objects_v2_continuation_token_wins_over_start_after() -> Resu
         .send()
         .await?;
     let result_keys: Vec<_> = result.contents().iter().filter_map(|o| o.key()).collect();
-    assert_eq!(result_keys, vec!["d.txt", "e.txt"], "token wins: resume after c.txt");
+    assert_eq!(result_keys, vec!["d.txt", "e.txt"], "should resume after the larger value (c.txt)");
 
     // Cleanup
     for key in &keys {
@@ -1588,7 +1589,7 @@ async fn test_list_objects_v2_continuation_token_wins_over_start_after() -> Resu
     Ok(())
 }
 
-/// max_keys=0 must return is_truncated=false with no continuation token (S3-aligned).
+/// `max_keys=0` return `is_truncated=false` with no continuation token
 #[tokio::test]
 #[tracing::instrument]
 async fn test_list_objects_v2_max_keys_zero() -> Result<()> {

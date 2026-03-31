@@ -450,10 +450,12 @@ impl S3 for FileSystem {
             lhs_key.cmp(rhs_key)
         });
 
-        // `continuation_token` takes precedence: it is an opaque pagination
-        // cursor that the client must round-trip unchanged.  `start_after` is
-        // only used on the first page (when no token is supplied).
-        let start_after = input.continuation_token.as_deref().or(input.start_after.as_deref());
+        let start_after = match (input.continuation_token.as_deref(), input.start_after.as_deref()) {
+            (Some(ct), Some(sa)) => Some(if ct >= sa { ct } else { sa }),
+            (Some(ct), None) => Some(ct),
+            (None, Some(sa)) => Some(sa),
+            (None, None) => None,
+        };
 
         // Filter out objects and common prefixes at or before the resume point
         if let Some(marker) = start_after {
