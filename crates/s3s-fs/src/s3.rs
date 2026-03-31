@@ -447,13 +447,10 @@ impl S3 for FileSystem {
             lhs_key.cmp(rhs_key)
         });
 
-        // Determine the resume-after key.
-        let start_after = match (input.continuation_token.as_deref(), input.start_after.as_deref()) {
-            (Some(ct), Some(sa)) => Some(if ct >= sa { ct } else { sa }),
-            (Some(ct), None) => Some(ct),
-            (None, Some(sa)) => Some(sa),
-            (None, None) => None,
-        };
+        // `continuation_token` takes precedence: it is an opaque pagination
+        // cursor that the client must round-trip unchanged.  `start_after` is
+        // only used on the first page (when no token is supplied).
+        let start_after = input.continuation_token.as_deref().or(input.start_after.as_deref());
 
         // Filter out objects and common prefixes at or before the resume point
         if let Some(marker) = start_after {
@@ -510,7 +507,7 @@ impl S3 for FileSystem {
             }
         }
 
-        let is_truncated = obj_idx < objects.len() || prefix_idx < common_prefixes_list.len();
+        let is_truncated = max_keys_usize > 0 && (obj_idx < objects.len() || prefix_idx < common_prefixes_list.len());
         let key_count = try_!(i32::try_from(total_count));
         let next_continuation_token = if is_truncated { last_key } else { None };
 

@@ -1452,14 +1452,14 @@ async fn test_list_objects_v2_continuation_token_pagination() -> Result<()> {
     Ok(())
 }
 
-/// When both `continuation_token` and `start_after` are present, we use whichever is larger
+/// When both `continuation_token` and `start_after` are present, the token takes precedence
 #[tokio::test]
 #[tracing::instrument]
-async fn test_list_objects_v2_continuation_token_and_start_after_uses_max() -> Result<()> {
+async fn test_list_objects_v2_continuation_token_wins_over_start_after() -> Result<()> {
     let _guard = serial().await;
 
     let c = Client::new(config());
-    let bucket = format!("test-ct-max-{}", Uuid::new_v4());
+    let bucket = format!("test-ct-wins-{}", Uuid::new_v4());
     let bucket = bucket.as_str();
     create_bucket(&c, bucket).await?;
 
@@ -1473,7 +1473,7 @@ async fn test_list_objects_v2_continuation_token_and_start_after_uses_max() -> R
             .await?;
     }
 
-    // Case 1: start_after is larger
+    // continuation_token="b.txt" wins even though start_after="d.txt" is larger
     let result = c
         .list_objects_v2()
         .bucket(bucket)
@@ -1482,9 +1482,9 @@ async fn test_list_objects_v2_continuation_token_and_start_after_uses_max() -> R
         .send()
         .await?;
     let result_keys: Vec<_> = result.contents().iter().filter_map(|o| o.key()).collect();
-    assert_eq!(result_keys, vec!["e.txt"], "should resume after the larger value (d.txt)");
+    assert_eq!(result_keys, vec!["c.txt", "d.txt", "e.txt"], "token wins: resume after b.txt");
 
-    // Case 2: continuation_token is larger
+    // continuation_token="c.txt" wins, start_after="a.txt" ignored
     let result = c
         .list_objects_v2()
         .bucket(bucket)
@@ -1493,13 +1493,52 @@ async fn test_list_objects_v2_continuation_token_and_start_after_uses_max() -> R
         .send()
         .await?;
     let result_keys: Vec<_> = result.contents().iter().filter_map(|o| o.key()).collect();
-    assert_eq!(result_keys, vec!["d.txt", "e.txt"], "should resume after the larger value (c.txt)");
+    assert_eq!(result_keys, vec!["d.txt", "e.txt"], "token wins: resume after c.txt");
 
     // Cleanup
     for key in &keys {
         delete_object(&c, bucket, key).await?;
     }
 
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+/// max_keys=0 must return is_truncated=false with no continuation token (S3-aligned).
+#[tokio::test]
+#[tracing::instrument]
+async fn test_list_objects_v2_max_keys_zero() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-max-keys-zero-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let keys = ["a.txt", "b.txt", "c.txt"];
+    for key in &keys {
+        c.put_object()
+            .bucket(bucket)
+            .key(*key)
+            .body(ByteStream::from_static(b"x"))
+            .send()
+            .await?;
+    }
+
+    let result = c.list_objects_v2().bucket(bucket).max_keys(0).send().await?;
+
+    assert_eq!(result.is_truncated(), Some(false), "max_keys=0 should not be truncated");
+    assert!(
+        result.next_continuation_token().is_none(),
+        "max_keys=0 should not return a continuation token"
+    );
+    assert!(result.contents().is_empty(), "max_keys=0 should return no objects");
+
+    // Cleanup
+    for key in &keys {
+        delete_object(&c, bucket, key).await?;
+    }
     delete_bucket(&c, bucket).await?;
 
     Ok(())
