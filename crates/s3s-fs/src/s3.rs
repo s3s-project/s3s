@@ -317,7 +317,10 @@ impl S3 for FileSystem {
         let path = self.get_object_path(&input.bucket, &input.key)?;
 
         if !path.exists() {
-            return Err(s3_error!(NoSuchBucket));
+            if self.get_bucket_path(&input.bucket)?.exists().not() {
+                return Err(s3_error!(NoSuchBucket));
+            }
+            return Err(s3_error!(NoSuchKey));
         }
 
         let file_metadata = try_!(fs::metadata(path).await);
@@ -812,7 +815,7 @@ impl S3 for FileSystem {
         let mut src_file = fs::File::open(&src_path).await.map_err(|e| s3_error!(e, NoSuchKey))?;
         let file_len = try_!(src_file.metadata().await).len();
 
-        let (start, end) = if let Some(copy_range) = &input.copy_source_range {
+        let (start, content_length) = if let Some(copy_range) = &input.copy_source_range {
             if !copy_range.starts_with("bytes=") {
                 return Err(s3_error!(InvalidArgument));
             }
@@ -823,16 +826,19 @@ impl S3 for FileSystem {
             }
 
             let start: u64 = parts[0].parse().map_err(|_| s3_error!(InvalidArgument))?;
-            let mut end = file_len - 1;
-            if parts[1].is_empty().not() {
-                end = parts[1].parse().map_err(|_| s3_error!(InvalidArgument))?;
+            let end_inclusive = if parts[1].is_empty() {
+                file_len.saturating_sub(1)
+            } else {
+                parts[1].parse().map_err(|_| s3_error!(InvalidArgument))?
+            };
+            if start > end_inclusive || start >= file_len || end_inclusive >= file_len {
+                return Err(s3_error!(InvalidRange));
             }
-            (start, end)
+            let content_length = end_inclusive - start + 1;
+            (start, content_length)
         } else {
-            (0, file_len - 1)
+            (0, file_len)
         };
-
-        let content_length = end - start + 1;
         let content_length_usize = try_!(usize::try_from(content_length));
 
         let _ = try_!(src_file.seek(io::SeekFrom::Start(start)).await);
