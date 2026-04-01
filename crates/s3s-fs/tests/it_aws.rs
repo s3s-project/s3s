@@ -1623,6 +1623,7 @@ async fn test_list_objects_v2_max_keys_zero() -> Result<()> {
     for key in &keys {
         delete_object(&c, bucket, key).await?;
     }
+    delete_bucket(&c, bucket).await?;
 
     Ok(())
 }
