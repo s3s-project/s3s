@@ -659,6 +659,89 @@ async fn test_upload_part_copy() -> Result<()> {
 
 #[tokio::test]
 #[tracing::instrument]
+async fn test_upload_part_copy_invalid_source_range() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-upc-bad-range-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let src_key = "src.txt";
+    let src_content = "hello";
+    c.put_object()
+        .bucket(bucket)
+        .key(src_key)
+        .body(ByteStream::from_static(src_content.as_bytes()))
+        .send()
+        .await?;
+
+    let dst_key = "dst.txt";
+    let upload_id = c
+        .create_multipart_upload()
+        .bucket(bucket)
+        .key(dst_key)
+        .send()
+        .await?
+        .upload_id
+        .expect("upload_id");
+    let upload_id = upload_id.as_str();
+
+    let copy_source = format!("{bucket}/{src_key}");
+    // Object length is 5; inclusive end index must be <= 4. End 5 is past EOF and must not truncate.
+    let err = c
+        .upload_part_copy()
+        .bucket(bucket)
+        .key(dst_key)
+        .copy_source(&copy_source)
+        .copy_source_range("bytes=0-5")
+        .upload_id(upload_id)
+        .part_number(1)
+        .send()
+        .await
+        .expect_err("Expected InvalidRange when copy range end is past EOF");
+    let service_err = err.into_service_error();
+    assert_eq!(
+        service_err.code(),
+        Some("InvalidRange"),
+        "past-EOF range: expected InvalidRange, got {:?}",
+        service_err.code()
+    );
+
+    let err = c
+        .upload_part_copy()
+        .bucket(bucket)
+        .key(dst_key)
+        .copy_source(&copy_source)
+        .copy_source_range("bytes=0-18446744073709551615")
+        .upload_id(upload_id)
+        .part_number(1)
+        .send()
+        .await
+        .expect_err("Expected InvalidRange for end=u64::MAX");
+    let service_err = err.into_service_error();
+    assert_eq!(
+        service_err.code(),
+        Some("InvalidRange"),
+        "u64::MAX end: expected InvalidRange, got {:?}",
+        service_err.code()
+    );
+
+    c.abort_multipart_upload()
+        .bucket(bucket)
+        .key(dst_key)
+        .upload_id(upload_id)
+        .send()
+        .await?;
+
+    delete_object(&c, bucket, src_key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
 async fn test_single_object_get_range() -> Result<()> {
     let _guard = serial().await;
 
@@ -1430,8 +1513,8 @@ async fn test_multipart_upload_id_auth() -> Result<()> {
     Ok(())
 }
 
-/// Test that CompleteMultipartUpload with If-None-Match: * succeeds when object doesn't exist
-/// and fails with PreconditionFailed (412) when object already exists.
+/// Test that `CompleteMultipartUpload` with `If-None-Match: *` succeeds when object doesn't exist
+/// and fails with `PreconditionFailed` (412) when object already exists.
 #[tokio::test]
 #[tracing::instrument]
 async fn test_complete_multipart_if_none_match() -> Result<()> {
@@ -1463,7 +1546,9 @@ async fn test_complete_multipart_if_none_match() -> Result<()> {
 
         match result {
             Ok(_) => debug!("✓ Successfully completed multipart upload with If-None-Match: *"),
-            Err(e) => panic!("Expected CompleteMultipartUpload with If-None-Match: * to succeed when object doesn't exist, but got error: {e:?}"),
+            Err(e) => panic!(
+                "Expected CompleteMultipartUpload with If-None-Match: * to succeed when object doesn't exist, but got error: {e:?}"
+            ),
         }
     }
 
@@ -1492,7 +1577,9 @@ async fn test_complete_multipart_if_none_match() -> Result<()> {
             .await;
 
         match result {
-            Ok(_) => panic!("Expected CompleteMultipartUpload with If-None-Match: * to fail when object exists, but it succeeded"),
+            Ok(_) => {
+                panic!("Expected CompleteMultipartUpload with If-None-Match: * to fail when object exists, but it succeeded")
+            }
             Err(e) => {
                 let error_str = format!("{e:?}");
                 debug!("✓ Expected error when object exists: {error_str}");
@@ -1519,10 +1606,11 @@ async fn test_complete_multipart_if_none_match() -> Result<()> {
     Ok(())
 }
 
-/// Test that CompleteMultipartUpload with If-Match succeeds when ETag matches
-/// and fails with PreconditionFailed (412) when ETag doesn't match.
+/// Test that `CompleteMultipartUpload` with `If-Match` succeeds when `ETag` matches
+/// and fails with `PreconditionFailed` (412) when `ETag` doesn't match or object is absent.
 #[tokio::test]
 #[tracing::instrument]
+#[allow(clippy::too_many_lines)]
 async fn test_complete_multipart_if_match() -> Result<()> {
     let _guard = serial().await;
 
@@ -1534,7 +1622,53 @@ async fn test_complete_multipart_if_match() -> Result<()> {
 
     create_bucket(&c, bucket).await?;
 
-    // First, create the object with a known ETag via put_object
+    // Test 1: CompleteMultipartUpload with If-Match on absent object should fail
+    debug!("Test 1: CompleteMultipartUpload with If-Match on absent object");
+    {
+        let (upload_id, upload_parts) = do_multipart_upload(&c, bucket, key, b"some content").await?;
+        let upload = CompletedMultipartUpload::builder()
+            .set_parts(Some(upload_parts.clone()))
+            .build();
+
+        let result = c
+            .complete_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(&upload_id)
+            .multipart_upload(upload)
+            .if_match("\"some-etag\"")
+            .send()
+            .await;
+
+        match result {
+            Ok(_) => panic!("Expected CompleteMultipartUpload with If-Match on absent object to fail, but it succeeded"),
+            Err(e) => {
+                let error_str = format!("{e:?}");
+                debug!("✓ Expected error on absent object: {error_str}");
+                assert!(
+                    error_str.contains("PreconditionFailed") || error_str.contains("412"),
+                    "Expected PreconditionFailed error, got: {error_str}"
+                );
+            }
+        }
+
+        // Verify the upload was not consumed: retry the same upload_id should still fail with precondition
+        let upload2 = CompletedMultipartUpload::builder().set_parts(Some(upload_parts)).build();
+        let result2 = c
+            .complete_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(&upload_id)
+            .multipart_upload(upload2)
+            .if_match("\"some-etag\"")
+            .send()
+            .await;
+
+        assert!(result2.is_err(), "Expected retry to also fail");
+        debug!("✓ Upload was not consumed by failed precondition check");
+    }
+
+    // Create the object with a known ETag via put_object
     let initial_etag = {
         let body = ByteStream::from_static(content.as_bytes());
         let result = c.put_object().bucket(bucket).key(key).body(body).send().await?;
@@ -1542,8 +1676,8 @@ async fn test_complete_multipart_if_match() -> Result<()> {
     };
     debug!("Initial ETag: {initial_etag}");
 
-    // Test 1: CompleteMultipartUpload with If-Match and wrong ETag should fail
-    debug!("Test 1: CompleteMultipartUpload with If-Match and wrong ETag");
+    // Test 2: CompleteMultipartUpload with If-Match and wrong ETag should fail
+    debug!("Test 2: CompleteMultipartUpload with If-Match and wrong ETag");
     {
         let (upload_id, upload_parts) = do_multipart_upload(&c, bucket, key, b"new content").await?;
         let upload = CompletedMultipartUpload::builder().set_parts(Some(upload_parts)).build();
@@ -1579,8 +1713,8 @@ async fn test_complete_multipart_if_match() -> Result<()> {
         debug!("✓ Verified object was not overwritten");
     }
 
-    // Test 2: CompleteMultipartUpload with If-Match and correct ETag should succeed
-    debug!("Test 2: CompleteMultipartUpload with If-Match and correct ETag");
+    // Test 3: CompleteMultipartUpload with If-Match and correct ETag should succeed
+    debug!("Test 3: CompleteMultipartUpload with If-Match and correct ETag");
     {
         let new_content = b"updated via conditional multipart";
         let (upload_id, upload_parts) = do_multipart_upload(&c, bucket, key, new_content).await?;
@@ -1609,6 +1743,158 @@ async fn test_complete_multipart_if_match() -> Result<()> {
         assert!(result.content_length().is_some());
         debug!("✓ Verified object exists after conditional multipart upload");
     }
+
+    // Cleanup
+    delete_object(&c, bucket, key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
+async fn test_head_object_no_such_key() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-head-no-such-key-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let result = c.head_object().bucket(bucket).key("nonexistent-object").send().await;
+    let err = result.expect_err("Expected NoSuchKey for missing object");
+    let service_err = err.into_service_error();
+    assert_eq!(service_err.code(), Some("NoSuchKey"), "Expected NoSuchKey, got: {:?}", service_err.code());
+
+    delete_bucket(&c, bucket).await?;
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
+async fn test_head_object_no_such_bucket() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-head-no-such-bucket-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+
+    let result = c.head_object().bucket(bucket).key("some-key").send().await;
+    let err = result.expect_err("Expected NoSuchBucket for missing bucket");
+    let service_err = err.into_service_error();
+    assert_eq!(
+        service_err.code(),
+        Some("NoSuchBucket"),
+        "Expected NoSuchBucket, got: {:?}",
+        service_err.code()
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
+async fn test_upload_part_copy_empty_source() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-upc-empty-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let src_key = "empty.txt";
+    c.put_object()
+        .bucket(bucket)
+        .key(src_key)
+        .body(ByteStream::from_static(b""))
+        .send()
+        .await?;
+
+    let dst_key = "dst.txt";
+    let upload_id = c
+        .create_multipart_upload()
+        .bucket(bucket)
+        .key(dst_key)
+        .send()
+        .await?
+        .upload_id
+        .unwrap();
+
+    let copy_source = format!("{bucket}/{src_key}");
+    c.upload_part_copy()
+        .bucket(bucket)
+        .key(dst_key)
+        .copy_source(copy_source)
+        .upload_id(&upload_id)
+        .part_number(1)
+        .send()
+        .await?;
+
+    c.abort_multipart_upload()
+        .bucket(bucket)
+        .key(dst_key)
+        .upload_id(&upload_id)
+        .send()
+        .await?;
+
+    delete_object(&c, bucket, src_key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
+async fn test_head_object_etag_and_checksum() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-head-etag-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    let key = "sample.txt";
+    let content = "hello world\n";
+    let crc32c = base64_simd::STANDARD.encode_to_string(crc32c::crc32c(content.as_bytes()).to_be_bytes());
+
+    create_bucket(&c, bucket).await?;
+
+    // Put object with checksum
+    let put_result = c
+        .put_object()
+        .bucket(bucket)
+        .key(key)
+        .body(ByteStream::from_static(content.as_bytes()))
+        .checksum_crc32_c(crc32c.as_str())
+        .send()
+        .await?;
+    let put_e_tag = put_result.e_tag().unwrap().to_owned();
+
+    // Head object and verify e_tag is present and matches put_object
+    let head_result = c
+        .head_object()
+        .bucket(bucket)
+        .key(key)
+        .checksum_mode(ChecksumMode::Enabled)
+        .send()
+        .await?;
+    let head_e_tag = head_result.e_tag().expect("head_object should return e_tag").to_owned();
+    assert_eq!(head_e_tag, put_e_tag, "head_object e_tag should match put_object e_tag");
+
+    // Verify checksum is returned
+    let head_crc32c = head_result
+        .checksum_crc32_c()
+        .expect("head_object should return checksum_crc32c");
+    assert_eq!(head_crc32c, crc32c);
+
+    // Get object and verify e_tag matches
+    let get_result = c
+        .get_object()
+        .bucket(bucket)
+        .key(key)
+        .checksum_mode(ChecksumMode::Enabled)
+        .send()
+        .await?;
+    let get_e_tag = get_result.e_tag().expect("get_object should return e_tag").to_owned();
+    assert_eq!(head_e_tag, get_e_tag, "head_object e_tag should match get_object e_tag");
 
     // Cleanup
     delete_object(&c, bucket, key).await?;
