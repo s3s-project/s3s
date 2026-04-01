@@ -450,9 +450,17 @@ impl S3 for FileSystem {
             lhs_key.cmp(rhs_key)
         });
 
-        // Apply start_after filter if provided
-        if let Some(marker) = &input.start_after {
-            objects.retain(|obj| obj.key.as_deref().unwrap_or("") > marker.as_str());
+        let start_after = match (input.continuation_token.as_deref(), input.start_after.as_deref()) {
+            (Some(ct), Some(sa)) => Some(if ct >= sa { ct } else { sa }),
+            (Some(ct), None) => Some(ct),
+            (None, Some(sa)) => Some(sa),
+            (None, None) => None,
+        };
+
+        // Filter out objects and common prefixes at or before the resume point
+        if let Some(marker) = start_after {
+            objects.retain(|obj| obj.key.as_deref().unwrap_or("") > marker);
+            common_prefixes.retain(|cp| cp.as_str() > marker);
         }
 
         // Convert common_prefixes to sorted list
@@ -466,6 +474,7 @@ impl S3 for FileSystem {
         let mut result_prefixes = Vec::new();
         let mut total_count = 0;
         let max_keys_usize = usize::try_from(max_keys).unwrap_or(1000);
+        let mut last_key: Option<String> = None;
 
         let mut obj_idx = 0;
         let mut prefix_idx = 0;
@@ -477,20 +486,24 @@ impl S3 for FileSystem {
             match (obj_key, prefix_key) {
                 (Some(ok), Some(pk)) => {
                     if ok < pk {
+                        last_key = Some(ok.to_owned());
                         result_objects.push(objects[obj_idx].clone());
                         obj_idx += 1;
                     } else {
+                        last_key = Some(pk.to_owned());
                         result_prefixes.push(common_prefixes_list[prefix_idx].clone());
                         prefix_idx += 1;
                     }
                     total_count += 1;
                 }
-                (Some(_), None) => {
+                (Some(ok), None) => {
+                    last_key = Some(ok.to_owned());
                     result_objects.push(objects[obj_idx].clone());
                     obj_idx += 1;
                     total_count += 1;
                 }
-                (None, Some(_)) => {
+                (None, Some(pk)) => {
+                    last_key = Some(pk.to_owned());
                     result_prefixes.push(common_prefixes_list[prefix_idx].clone());
                     prefix_idx += 1;
                     total_count += 1;
@@ -499,8 +512,22 @@ impl S3 for FileSystem {
             }
         }
 
-        let is_truncated = obj_idx < objects.len() || prefix_idx < common_prefixes_list.len();
+        let is_truncated = max_keys_usize > 0 && (obj_idx < objects.len() || prefix_idx < common_prefixes_list.len());
         let key_count = try_!(i32::try_from(total_count));
+        let next_continuation_token = if is_truncated {
+            last_key.or_else(|| {
+                let obj_key = objects.get(obj_idx).and_then(|o| o.key.clone());
+                let prefix_key = common_prefixes_list.get(prefix_idx).and_then(|p| p.prefix.clone());
+                match (obj_key, prefix_key) {
+                    (Some(ok), Some(pk)) => Some(if ok < pk { ok } else { pk }),
+                    (Some(ok), None) => Some(ok),
+                    (None, Some(pk)) => Some(pk),
+                    (None, None) => None,
+                }
+            })
+        } else {
+            None
+        };
 
         let contents = result_objects.is_empty().not().then_some(result_objects);
         let common_prefixes = result_prefixes.is_empty().not().then_some(result_prefixes);
@@ -511,10 +538,13 @@ impl S3 for FileSystem {
             is_truncated: Some(is_truncated),
             contents,
             common_prefixes,
+            continuation_token: input.continuation_token,
+            next_continuation_token,
             delimiter: input.delimiter,
             encoding_type: input.encoding_type,
             name: Some(input.bucket),
             prefix: input.prefix,
+            start_after: input.start_after,
             ..Default::default()
         };
         Ok(S3Response::new(output))
