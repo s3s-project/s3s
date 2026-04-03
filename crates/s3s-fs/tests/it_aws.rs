@@ -1487,6 +1487,149 @@ async fn test_multipart_upload_id_auth() -> Result<()> {
 
 #[tokio::test]
 #[tracing::instrument]
+async fn test_list_objects_v2_continuation_token_pagination() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-continuation-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let keys = ["a.txt", "b.txt", "c.txt", "d.txt", "e.txt"];
+    for key in &keys {
+        c.put_object()
+            .bucket(bucket)
+            .key(*key)
+            .body(ByteStream::from_static(b"x"))
+            .send()
+            .await?;
+    }
+
+    // Walk all pages with max_keys=2
+    let mut all_keys: Vec<String> = Vec::new();
+    let mut token: Option<String> = None;
+    loop {
+        let mut req = c.list_objects_v2().bucket(bucket).max_keys(2);
+        if let Some(t) = &token {
+            req = req.continuation_token(t.clone());
+        }
+        let page = req.send().await?;
+
+        all_keys.extend(page.contents().iter().filter_map(|o| o.key().map(String::from)));
+
+        if page.is_truncated() != Some(true) {
+            break;
+        }
+        token = page.next_continuation_token().map(String::from);
+        assert!(token.is_some(), "is_truncated is true but next_continuation_token is missing");
+    }
+
+    assert_eq!(all_keys, vec!["a.txt", "b.txt", "c.txt", "d.txt", "e.txt"]);
+
+    // Cleanup
+    for key in &keys {
+        delete_object(&c, bucket, key).await?;
+    }
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+/// When both `continuation_token` and `start_after` are present, the stricter
+/// (larger) bound wins so we never re-list keys the caller already skipped.
+#[tokio::test]
+#[tracing::instrument]
+async fn test_list_objects_v2_continuation_token_and_start_after_uses_max() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-ct-max-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let keys = ["a.txt", "b.txt", "c.txt", "d.txt", "e.txt"];
+    for key in &keys {
+        c.put_object()
+            .bucket(bucket)
+            .key(*key)
+            .body(ByteStream::from_static(b"x"))
+            .send()
+            .await?;
+    }
+
+    // start_after="d.txt" is larger than continuation_token="b.txt", so we resume after d.txt
+    let result = c
+        .list_objects_v2()
+        .bucket(bucket)
+        .continuation_token("b.txt")
+        .start_after("d.txt")
+        .send()
+        .await?;
+    let result_keys: Vec<_> = result.contents().iter().filter_map(|o| o.key()).collect();
+    assert_eq!(result_keys, vec!["e.txt"], "should resume after the larger value (d.txt)");
+
+    // continuation_token="c.txt" is larger than start_after="a.txt", so we resume after c.txt
+    let result = c
+        .list_objects_v2()
+        .bucket(bucket)
+        .continuation_token("c.txt")
+        .start_after("a.txt")
+        .send()
+        .await?;
+    let result_keys: Vec<_> = result.contents().iter().filter_map(|o| o.key()).collect();
+    assert_eq!(result_keys, vec!["d.txt", "e.txt"], "should resume after the larger value (c.txt)");
+
+    // Cleanup
+    for key in &keys {
+        delete_object(&c, bucket, key).await?;
+    }
+
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+/// `max_keys=0` return `is_truncated=false` with no continuation token
+#[tokio::test]
+#[tracing::instrument]
+async fn test_list_objects_v2_max_keys_zero() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-max-keys-zero-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let keys = ["a.txt", "b.txt", "c.txt"];
+    for key in &keys {
+        c.put_object()
+            .bucket(bucket)
+            .key(*key)
+            .body(ByteStream::from_static(b"x"))
+            .send()
+            .await?;
+    }
+
+    let result = c.list_objects_v2().bucket(bucket).max_keys(0).send().await?;
+
+    assert_eq!(result.is_truncated(), Some(false), "max_keys=0 should not be truncated");
+    assert!(
+        result.next_continuation_token().is_none(),
+        "max_keys=0 should not return a continuation token"
+    );
+    assert!(result.contents().is_empty(), "max_keys=0 should return no objects");
+
+    // Cleanup
+    for key in &keys {
+        delete_object(&c, bucket, key).await?;
+    }
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
 async fn test_head_object_no_such_key() -> Result<()> {
     let _guard = serial().await;
 
