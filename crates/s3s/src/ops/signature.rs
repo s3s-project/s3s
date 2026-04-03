@@ -312,7 +312,12 @@ impl SignatureContext<'_> {
             let method = &self.req_method;
             let uri_path = &self.decoded_uri_path;
 
-            let canonical_request = sig_v4::create_presigned_canonical_request(method, uri_path, qs.as_ref(), &headers);
+            let payload = match headers.get_unique(crate::header::X_AMZ_CONTENT_SHA256) {
+                Some(content_sha256) => sig_v4::Payload::SingleChunk(content_sha256),
+                None => sig_v4::Payload::Unsigned,
+            };
+
+            let canonical_request = sig_v4::create_presigned_canonical_request(method, uri_path, qs.as_ref(), &headers, payload);
 
             let amz_date = &presigned_url.amz_date;
             let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, amz_date, region, service);
@@ -901,8 +906,13 @@ file content\r\n\
             ("X-Amz-Expires", "999999999"),
             ("X-Amz-SignedHeaders", "host;x-amz-content-sha256"),
         ];
-        let canonical_request =
-            sig_v4::create_presigned_canonical_request(&method, "/test.txt", query_strings_for_signing, &headers);
+        let canonical_request = sig_v4::create_presigned_canonical_request(
+            &method,
+            "/test.txt",
+            query_strings_for_signing,
+            &headers,
+            sig_v4::Payload::SingleChunk("invalid-sha256"),
+        );
         let amz_date = AmzDate::parse("20130524T000000Z").unwrap();
         let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
         let signature = sig_v4::calculate_signature(&string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
