@@ -417,6 +417,7 @@ impl S3 for FileSystem {
             prefix: v2.prefix,
             max_keys: v2.max_keys,
             is_truncated: v2.is_truncated,
+            next_marker: v2.next_continuation_token,
             ..Default::default()
         }))
     }
