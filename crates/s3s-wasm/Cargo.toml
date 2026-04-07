@@ -9,7 +9,7 @@ publish = false
 
 [dependencies]
 futures = { workspace = true, features = ["executor"] }
-getrandom = { version = "0.4.1", features = ["wasm_js"] }
+getrandom = { version = "0.4.2", features = ["wasm_js"] }
 http.workspace = true
 s3s = { version = "0.14.0-dev", path = "../s3s", default-features = false }
 

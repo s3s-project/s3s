@@ -28,12 +28,12 @@ debug = "line-tables-only"
 
 [workspace.dependencies]
 # Data structures
-arc-swap = "1.8.2"
+arc-swap = "1.9.1"
 arrayvec = "0.7.6"
 bytes = "1.11.1"
 bytestring = "1.5.0"
-indexmap = "2.13.0"
-once_cell = "1.21.3"
+indexmap = "2.13.1"
+once_cell = "1.21.4"
 smallvec = "1.15.1"
 uuid = "1.23.0"
 
@@ -41,7 +41,7 @@ uuid = "1.23.0"
 atoi = { version = "2.0.0", default-features = false }
 base64-simd = "0.8.0"
 hex-simd = "0.8.0"
-itoa = "1.0.17"
+itoa = "1.0.18"
 nom = "8.0.0"
 
 # Date & time
@@ -61,7 +61,7 @@ crc-fast = "1.9.0"
 crc32c = "0.6.8"
 hmac = "0.13.0"
 md-5 = "0.11.0"
-openssl = "0.10.75"
+openssl = "0.10.76"
 sha1 = "0.11.0"
 sha2 = "0.11.0"
 subtle = "2.6.1"
@@ -83,7 +83,7 @@ futures = { version = "0.3.32", default-features = false }
 futures-util = "0.3.32"
 pin-project-lite = "0.2.17"
 sync_wrapper = { version = "1.0.2", default-features = false }
-tokio = "1.49.0"
+tokio = "1.51.0"
 tokio-util = "0.7.18"
 transform-stream = "0.3.1"
 
@@ -100,23 +100,24 @@ tokio-rustls = "0.26.4"
 tower = { version = "0.5.3", default-features = false }
 url = "2.5.8"
 urlencoding = "2.1.3"
+reqwest = { version = "0.13.2", default-features = false, features = ["rustls", "form", "query"] }
 
 # Logging & observability
 tracing = "0.1.44"
 tracing-error = "0.2.1"
-tracing-subscriber = { version = "0.3.22", features = ["env-filter", "time"] }
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "time"] }
 
 # CLI
-clap = { version = "4.5.60", features = ["derive"] }
+clap = { version = "4.6.0", features = ["derive"] }
 
 # Storage backends
 opendal = "0.55.0"
 
 # AWS SDK
 aws-config = { version = "1.8.15", default-features = false }
-aws-credential-types = "1.2.13"
+aws-credential-types = "1.2.14"
 aws-sdk-s3 = { version = "1.128.0", default-features = false, features = ["default-https-client", "http-1x", "rt-tokio", "sigv4a"] }
 aws-sdk-sts = { version = "1.101.0", default-features = false, features = ["default-https-client", "rt-tokio"] }
 aws-smithy-runtime-api = "1.11.6"
 aws-smithy-types = "1.4.7"
-aws-smithy-types-convert = "0.60.13"
+aws-smithy-types-convert = "0.60.14"
