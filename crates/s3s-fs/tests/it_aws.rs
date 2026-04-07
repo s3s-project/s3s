@@ -544,6 +544,99 @@ async fn test_multipart() -> Result<()> {
     Ok(())
 }
 
+/// Test that multipart uploaded objects have the correct `ETag` format: `{hash}-{part_count}`
+#[tokio::test]
+#[tracing::instrument]
+async fn test_multipart_etag_format() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+
+    let bucket = format!("test-multipart-etag-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let key = "multipart-etag.txt";
+    let content = "abcdefghijklmnopqrstuvwxyz/0123456789/!@#$%^&*();\n";
+
+    let upload_id = {
+        let ans = c.create_multipart_upload().bucket(bucket).key(key).send().await?;
+        ans.upload_id.unwrap()
+    };
+    let upload_id = upload_id.as_str();
+
+    let upload_parts = {
+        let body = ByteStream::from_static(content.as_bytes());
+        let part_number = 1;
+
+        let ans = c
+            .upload_part()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(upload_id)
+            .body(body)
+            .part_number(part_number)
+            .send()
+            .await?;
+
+        let part = CompletedPart::builder()
+            .e_tag(ans.e_tag.expect("upload_part response missing e_tag"))
+            .part_number(part_number)
+            .build();
+
+        vec![part]
+    };
+
+    let complete_e_tag = {
+        let upload = CompletedMultipartUpload::builder().set_parts(Some(upload_parts)).build();
+
+        let ans = c
+            .complete_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .multipart_upload(upload)
+            .upload_id(upload_id)
+            .send()
+            .await?;
+
+        let e_tag = ans.e_tag().unwrap().to_owned();
+        debug!(?e_tag, "multipart etag");
+
+        // Multipart ETags must have the format: {hex_md5}-{part_count}
+        let unquoted = e_tag.trim_matches('"');
+        let (hash_part, count_part) = unquoted.rsplit_once('-').expect("multipart ETag should contain a dash");
+        assert_eq!(hash_part.len(), 32, "hash part should be 32 hex characters: {hash_part}");
+        assert!(hash_part.chars().all(|c| c.is_ascii_hexdigit()), "hash part should be hex: {hash_part}");
+        let part_count: usize = count_part.parse().expect("count part should be a number");
+        assert_eq!(part_count, 1, "part count should match number of parts uploaded");
+
+        e_tag
+    };
+
+    {
+        // Verify the ETag from head_object matches complete_multipart_upload
+        let ans = c.head_object().bucket(bucket).key(key).send().await?;
+        let head_e_tag = ans.e_tag().unwrap();
+        debug!(?head_e_tag, "head_object etag");
+        assert_eq!(head_e_tag, complete_e_tag, "head_object ETag should match complete_multipart_upload ETag");
+    }
+
+    {
+        // Verify the ETag from get_object matches complete_multipart_upload
+        let ans = c.get_object().bucket(bucket).key(key).send().await?;
+        let get_e_tag = ans.e_tag().unwrap();
+        debug!(?get_e_tag, "get_object etag");
+        assert_eq!(get_e_tag, complete_e_tag, "get_object ETag should match complete_multipart_upload ETag");
+    }
+
+    {
+        delete_object(&c, bucket, key).await?;
+        delete_bucket(&c, bucket).await?;
+    }
+
+    Ok(())
+}
+
 #[tokio::test]
 #[tracing::instrument]
 async fn test_upload_part_copy() -> Result<()> {
@@ -1862,6 +1955,9 @@ async fn test_copy_object_if_match() -> Result<()> {
 #[tokio::test]
 #[tracing::instrument]
 async fn test_copy_object_if_none_match() -> Result<()> {
+    use aws_sdk_s3::primitives::DateTime;
+    use aws_sdk_s3::primitives::DateTimeFormat;
+
     let _guard = serial().await;
 
     let c = Client::new(config());
@@ -1923,8 +2019,24 @@ async fn test_copy_object_if_none_match() -> Result<()> {
     let service_err = err.into_service_error();
     assert_eq!(service_err.code(), Some("PreconditionFailed"));
 
+    let dst_key4 = "dest-none-match-precedence.txt";
+    let future = DateTime::from_str("Thu, 01 Jan 2099 00:00:00 GMT", DateTimeFormat::HttpDate)?;
+    c.copy_object()
+        .bucket(bucket)
+        .key(dst_key4)
+        .copy_source(&copy_source)
+        .copy_source_if_none_match("\"different-etag\"")
+        .copy_source_if_modified_since(future)
+        .send()
+        .await?;
+
+    let ans = c.get_object().bucket(bucket).key(dst_key4).send().await?;
+    let body = ans.body.collect().await?.into_bytes();
+    assert_eq!(body.as_ref(), content.as_bytes());
+
     delete_object(&c, bucket, src_key).await?;
     delete_object(&c, bucket, dst_key).await?;
+    delete_object(&c, bucket, dst_key4).await?;
     delete_bucket(&c, bucket).await?;
 
     Ok(())
@@ -2014,6 +2126,96 @@ async fn test_copy_object_if_modified_since() -> Result<()> {
     delete_object(&c, bucket, src_key).await?;
     delete_object(&c, bucket, dst_key).await?;
     delete_object(&c, bucket, dst_key3).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+/// Test conditional copy against a multipart source object's persisted `ETag`.
+#[tokio::test]
+#[tracing::instrument]
+async fn test_copy_object_conditional_with_multipart_source_etag() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-cond-copy-multipart-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let src_key = "source-multipart.txt";
+    let content = "multipart conditional copy content";
+
+    let upload_id = c
+        .create_multipart_upload()
+        .bucket(bucket)
+        .key(src_key)
+        .send()
+        .await?
+        .upload_id
+        .expect("create_multipart_upload should return upload_id");
+
+    let upload_result = c
+        .upload_part()
+        .bucket(bucket)
+        .key(src_key)
+        .upload_id(&upload_id)
+        .body(ByteStream::from_static(content.as_bytes()))
+        .part_number(1)
+        .send()
+        .await?;
+
+    let upload = CompletedMultipartUpload::builder()
+        .set_parts(Some(vec![
+            CompletedPart::builder()
+                .e_tag(upload_result.e_tag.expect("upload_part should return e_tag"))
+                .part_number(1)
+                .build(),
+        ]))
+        .build();
+
+    let complete_result = c
+        .complete_multipart_upload()
+        .bucket(bucket)
+        .key(src_key)
+        .multipart_upload(upload)
+        .upload_id(&upload_id)
+        .send()
+        .await?;
+    let multipart_etag = complete_result
+        .e_tag()
+        .expect("complete_multipart_upload should return e_tag")
+        .to_owned();
+
+    let copy_source = format!("{bucket}/{src_key}");
+
+    let dst_key = "dest-multipart-match.txt";
+    c.copy_object()
+        .bucket(bucket)
+        .key(dst_key)
+        .copy_source(&copy_source)
+        .copy_source_if_match(&multipart_etag)
+        .send()
+        .await?;
+
+    let ans = c.get_object().bucket(bucket).key(dst_key).send().await?;
+    let body = ans.body.collect().await?.into_bytes();
+    assert_eq!(body.as_ref(), content.as_bytes());
+
+    let dst_key2 = "dest-multipart-none-match.txt";
+    let err = c
+        .copy_object()
+        .bucket(bucket)
+        .key(dst_key2)
+        .copy_source(&copy_source)
+        .copy_source_if_none_match(&multipart_etag)
+        .send()
+        .await
+        .expect_err("Expected matching multipart ETag to fail If-None-Match");
+    let service_err = err.into_service_error();
+    assert_eq!(service_err.code(), Some("PreconditionFailed"));
+
+    delete_object(&c, bucket, src_key).await?;
+    delete_object(&c, bucket, dst_key).await?;
     delete_bucket(&c, bucket).await?;
 
     Ok(())
