@@ -631,6 +631,89 @@ async fn test_upload_part_copy() -> Result<()> {
 
 #[tokio::test]
 #[tracing::instrument]
+async fn test_upload_part_copy_invalid_source_range() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-upc-bad-range-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let src_key = "src.txt";
+    let src_content = "hello";
+    c.put_object()
+        .bucket(bucket)
+        .key(src_key)
+        .body(ByteStream::from_static(src_content.as_bytes()))
+        .send()
+        .await?;
+
+    let dst_key = "dst.txt";
+    let upload_id = c
+        .create_multipart_upload()
+        .bucket(bucket)
+        .key(dst_key)
+        .send()
+        .await?
+        .upload_id
+        .expect("upload_id");
+    let upload_id = upload_id.as_str();
+
+    let copy_source = format!("{bucket}/{src_key}");
+    // Object length is 5; inclusive end index must be <= 4. End 5 is past EOF and must not truncate.
+    let err = c
+        .upload_part_copy()
+        .bucket(bucket)
+        .key(dst_key)
+        .copy_source(&copy_source)
+        .copy_source_range("bytes=0-5")
+        .upload_id(upload_id)
+        .part_number(1)
+        .send()
+        .await
+        .expect_err("Expected InvalidRange when copy range end is past EOF");
+    let service_err = err.into_service_error();
+    assert_eq!(
+        service_err.code(),
+        Some("InvalidRange"),
+        "past-EOF range: expected InvalidRange, got {:?}",
+        service_err.code()
+    );
+
+    let err = c
+        .upload_part_copy()
+        .bucket(bucket)
+        .key(dst_key)
+        .copy_source(&copy_source)
+        .copy_source_range("bytes=0-18446744073709551615")
+        .upload_id(upload_id)
+        .part_number(1)
+        .send()
+        .await
+        .expect_err("Expected InvalidRange for end=u64::MAX");
+    let service_err = err.into_service_error();
+    assert_eq!(
+        service_err.code(),
+        Some("InvalidRange"),
+        "u64::MAX end: expected InvalidRange, got {:?}",
+        service_err.code()
+    );
+
+    c.abort_multipart_upload()
+        .bucket(bucket)
+        .key(dst_key)
+        .upload_id(upload_id)
+        .send()
+        .await?;
+
+    delete_object(&c, bucket, src_key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
 async fn test_single_object_get_range() -> Result<()> {
     let _guard = serial().await;
 
@@ -1402,10 +1485,308 @@ async fn test_multipart_upload_id_auth() -> Result<()> {
     Ok(())
 }
 
+#[tokio::test]
+#[tracing::instrument]
+async fn test_list_objects_v2_continuation_token_pagination() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-continuation-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let keys = ["a.txt", "b.txt", "c.txt", "d.txt", "e.txt"];
+    for key in &keys {
+        c.put_object()
+            .bucket(bucket)
+            .key(*key)
+            .body(ByteStream::from_static(b"x"))
+            .send()
+            .await?;
+    }
+
+    // Walk all pages with max_keys=2
+    let mut all_keys: Vec<String> = Vec::new();
+    let mut token: Option<String> = None;
+    loop {
+        let mut req = c.list_objects_v2().bucket(bucket).max_keys(2);
+        if let Some(t) = &token {
+            req = req.continuation_token(t.clone());
+        }
+        let page = req.send().await?;
+
+        all_keys.extend(page.contents().iter().filter_map(|o| o.key().map(String::from)));
+
+        if page.is_truncated() != Some(true) {
+            break;
+        }
+        token = page.next_continuation_token().map(String::from);
+        assert!(token.is_some(), "is_truncated is true but next_continuation_token is missing");
+    }
+
+    assert_eq!(all_keys, vec!["a.txt", "b.txt", "c.txt", "d.txt", "e.txt"]);
+
+    // Cleanup
+    for key in &keys {
+        delete_object(&c, bucket, key).await?;
+    }
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+/// When both `continuation_token` and `start_after` are present, the stricter
+/// (larger) bound wins so we never re-list keys the caller already skipped.
+#[tokio::test]
+#[tracing::instrument]
+async fn test_list_objects_v2_continuation_token_and_start_after_uses_max() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-ct-max-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let keys = ["a.txt", "b.txt", "c.txt", "d.txt", "e.txt"];
+    for key in &keys {
+        c.put_object()
+            .bucket(bucket)
+            .key(*key)
+            .body(ByteStream::from_static(b"x"))
+            .send()
+            .await?;
+    }
+
+    // start_after="d.txt" is larger than continuation_token="b.txt", so we resume after d.txt
+    let result = c
+        .list_objects_v2()
+        .bucket(bucket)
+        .continuation_token("b.txt")
+        .start_after("d.txt")
+        .send()
+        .await?;
+    let result_keys: Vec<_> = result.contents().iter().filter_map(|o| o.key()).collect();
+    assert_eq!(result_keys, vec!["e.txt"], "should resume after the larger value (d.txt)");
+
+    // continuation_token="c.txt" is larger than start_after="a.txt", so we resume after c.txt
+    let result = c
+        .list_objects_v2()
+        .bucket(bucket)
+        .continuation_token("c.txt")
+        .start_after("a.txt")
+        .send()
+        .await?;
+    let result_keys: Vec<_> = result.contents().iter().filter_map(|o| o.key()).collect();
+    assert_eq!(result_keys, vec!["d.txt", "e.txt"], "should resume after the larger value (c.txt)");
+
+    // Cleanup
+    for key in &keys {
+        delete_object(&c, bucket, key).await?;
+    }
+
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+/// `max_keys=0` return `is_truncated=false` with no continuation token
+#[tokio::test]
+#[tracing::instrument]
+async fn test_list_objects_v2_max_keys_zero() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-max-keys-zero-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let keys = ["a.txt", "b.txt", "c.txt"];
+    for key in &keys {
+        c.put_object()
+            .bucket(bucket)
+            .key(*key)
+            .body(ByteStream::from_static(b"x"))
+            .send()
+            .await?;
+    }
+
+    let result = c.list_objects_v2().bucket(bucket).max_keys(0).send().await?;
+
+    assert_eq!(result.is_truncated(), Some(false), "max_keys=0 should not be truncated");
+    assert!(
+        result.next_continuation_token().is_none(),
+        "max_keys=0 should not return a continuation token"
+    );
+    assert!(result.contents().is_empty(), "max_keys=0 should return no objects");
+
+    // Cleanup
+    for key in &keys {
+        delete_object(&c, bucket, key).await?;
+    }
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
+async fn test_head_object_no_such_key() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-head-no-such-key-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let result = c.head_object().bucket(bucket).key("nonexistent-object").send().await;
+    let err = result.expect_err("Expected NoSuchKey for missing object");
+    let service_err = err.into_service_error();
+    assert_eq!(service_err.code(), Some("NoSuchKey"), "Expected NoSuchKey, got: {:?}", service_err.code());
+
+    delete_bucket(&c, bucket).await?;
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
+async fn test_head_object_no_such_bucket() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-head-no-such-bucket-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+
+    let result = c.head_object().bucket(bucket).key("some-key").send().await;
+    let err = result.expect_err("Expected NoSuchBucket for missing bucket");
+    let service_err = err.into_service_error();
+    assert_eq!(
+        service_err.code(),
+        Some("NoSuchBucket"),
+        "Expected NoSuchBucket, got: {:?}",
+        service_err.code()
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
+async fn test_upload_part_copy_empty_source() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-upc-empty-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let src_key = "empty.txt";
+    c.put_object()
+        .bucket(bucket)
+        .key(src_key)
+        .body(ByteStream::from_static(b""))
+        .send()
+        .await?;
+
+    let dst_key = "dst.txt";
+    let upload_id = c
+        .create_multipart_upload()
+        .bucket(bucket)
+        .key(dst_key)
+        .send()
+        .await?
+        .upload_id
+        .unwrap();
+
+    let copy_source = format!("{bucket}/{src_key}");
+    c.upload_part_copy()
+        .bucket(bucket)
+        .key(dst_key)
+        .copy_source(copy_source)
+        .upload_id(&upload_id)
+        .part_number(1)
+        .send()
+        .await?;
+
+    c.abort_multipart_upload()
+        .bucket(bucket)
+        .key(dst_key)
+        .upload_id(&upload_id)
+        .send()
+        .await?;
+
+    delete_object(&c, bucket, src_key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
+async fn test_head_object_etag_and_checksum() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-head-etag-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    let key = "sample.txt";
+    let content = "hello world\n";
+    let crc32c = base64_simd::STANDARD.encode_to_string(crc32c::crc32c(content.as_bytes()).to_be_bytes());
+
+    create_bucket(&c, bucket).await?;
+
+    // Put object with checksum
+    let put_result = c
+        .put_object()
+        .bucket(bucket)
+        .key(key)
+        .body(ByteStream::from_static(content.as_bytes()))
+        .checksum_crc32_c(crc32c.as_str())
+        .send()
+        .await?;
+    let put_e_tag = put_result.e_tag().unwrap().to_owned();
+
+    // Head object and verify e_tag is present and matches put_object
+    let head_result = c
+        .head_object()
+        .bucket(bucket)
+        .key(key)
+        .checksum_mode(ChecksumMode::Enabled)
+        .send()
+        .await?;
+    let head_e_tag = head_result.e_tag().expect("head_object should return e_tag").to_owned();
+    assert_eq!(head_e_tag, put_e_tag, "head_object e_tag should match put_object e_tag");
+
+    // Verify checksum is returned
+    let head_crc32c = head_result
+        .checksum_crc32_c()
+        .expect("head_object should return checksum_crc32c");
+    assert_eq!(head_crc32c, crc32c);
+
+    // Get object and verify e_tag matches
+    let get_result = c
+        .get_object()
+        .bucket(bucket)
+        .key(key)
+        .checksum_mode(ChecksumMode::Enabled)
+        .send()
+        .await?;
+    let get_e_tag = get_result.e_tag().expect("get_object should return e_tag").to_owned();
+    assert_eq!(head_e_tag, get_e_tag, "head_object e_tag should match get_object e_tag");
+
+    // Cleanup
+    delete_object(&c, bucket, key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
 /// Test conditional copy with `x-amz-copy-source-if-match`
 #[tokio::test]
 #[tracing::instrument]
 async fn test_copy_object_if_match() -> Result<()> {
+    use aws_sdk_s3::primitives::DateTime;
+    use aws_sdk_s3::primitives::DateTimeFormat;
+
     let _guard = serial().await;
 
     let c = Client::new(config());
@@ -1422,16 +1803,13 @@ async fn test_copy_object_if_match() -> Result<()> {
         .send()
         .await?;
 
-    // Get the source ETag from put_object response or get_object
     let get_result = c.get_object().bucket(bucket).key(src_key).send().await?;
-    let etag = get_result.e_tag().unwrap().to_owned();
-    // Consume the body to avoid dropped stream warnings
+    let etag = get_result.e_tag().expect("get_object should return e_tag").to_owned();
     let _ = get_result.body.collect().await?;
-    debug!("Source ETag: {etag}");
 
-    // Copy with matching ETag should succeed
-    let dst_key = "dest-match.txt";
     let copy_source = format!("{bucket}/{src_key}");
+
+    let dst_key = "dest-match.txt";
     c.copy_object()
         .bucket(bucket)
         .key(dst_key)
@@ -1444,32 +1822,37 @@ async fn test_copy_object_if_match() -> Result<()> {
     let body = ans.body.collect().await?.into_bytes();
     assert_eq!(body.as_ref(), content.as_bytes());
 
-    // Copy with non-matching ETag should fail with PreconditionFailed
-    let dst_key2 = "dest-nomatch.txt";
-    let result = c
-        .copy_object()
+    let dst_key2 = "dest-match-wildcard.txt";
+    let past = DateTime::from_str("Thu, 01 Jan 2000 00:00:00 GMT", DateTimeFormat::HttpDate)?;
+    c.copy_object()
         .bucket(bucket)
         .key(dst_key2)
         .copy_source(&copy_source)
+        .copy_source_if_match("*")
+        .copy_source_if_unmodified_since(past)
+        .send()
+        .await?;
+
+    let ans = c.get_object().bucket(bucket).key(dst_key2).send().await?;
+    let body = ans.body.collect().await?.into_bytes();
+    assert_eq!(body.as_ref(), content.as_bytes());
+
+    let dst_key3 = "dest-nomatch.txt";
+    let err = c
+        .copy_object()
+        .bucket(bucket)
+        .key(dst_key3)
+        .copy_source(&copy_source)
         .copy_source_if_match("\"nonexistent-etag\"")
         .send()
-        .await;
+        .await
+        .expect_err("Expected copy with non-matching If-Match to fail");
+    let service_err = err.into_service_error();
+    assert_eq!(service_err.code(), Some("PreconditionFailed"));
 
-    match result {
-        Ok(_) => panic!("Expected copy with non-matching If-Match to fail"),
-        Err(e) => {
-            let error_str = format!("{e:?}");
-            debug!("✓ Expected error: {error_str}");
-            assert!(
-                error_str.contains("PreconditionFailed") || error_str.contains("412"),
-                "Expected PreconditionFailed error, got: {error_str}"
-            );
-        }
-    }
-
-    // Cleanup
     delete_object(&c, bucket, src_key).await?;
     delete_object(&c, bucket, dst_key).await?;
+    delete_object(&c, bucket, dst_key2).await?;
     delete_bucket(&c, bucket).await?;
 
     Ok(())
@@ -1495,15 +1878,13 @@ async fn test_copy_object_if_none_match() -> Result<()> {
         .send()
         .await?;
 
-    // Get the source ETag
     let get_result = c.get_object().bucket(bucket).key(src_key).send().await?;
-    let etag = get_result.e_tag().unwrap().to_owned();
+    let etag = get_result.e_tag().expect("get_object should return e_tag").to_owned();
     let _ = get_result.body.collect().await?;
-    debug!("Source ETag: {etag}");
 
-    // Copy with non-matching ETag (if-none-match) should succeed
-    let dst_key = "dest-none-match-ok.txt";
     let copy_source = format!("{bucket}/{src_key}");
+
+    let dst_key = "dest-none-match-ok.txt";
     c.copy_object()
         .bucket(bucket)
         .key(dst_key)
@@ -1516,30 +1897,32 @@ async fn test_copy_object_if_none_match() -> Result<()> {
     let body = ans.body.collect().await?.into_bytes();
     assert_eq!(body.as_ref(), content.as_bytes());
 
-    // Copy with matching ETag (if-none-match) should fail with PreconditionFailed
     let dst_key2 = "dest-none-match-fail.txt";
-    let result = c
+    let err = c
         .copy_object()
         .bucket(bucket)
         .key(dst_key2)
         .copy_source(&copy_source)
         .copy_source_if_none_match(&etag)
         .send()
-        .await;
+        .await
+        .expect_err("Expected copy with matching If-None-Match to fail");
+    let service_err = err.into_service_error();
+    assert_eq!(service_err.code(), Some("PreconditionFailed"));
 
-    match result {
-        Ok(_) => panic!("Expected copy with matching If-None-Match to fail"),
-        Err(e) => {
-            let error_str = format!("{e:?}");
-            debug!("✓ Expected error: {error_str}");
-            assert!(
-                error_str.contains("PreconditionFailed") || error_str.contains("412"),
-                "Expected PreconditionFailed error, got: {error_str}"
-            );
-        }
-    }
+    let dst_key3 = "dest-none-match-wildcard.txt";
+    let err = c
+        .copy_object()
+        .bucket(bucket)
+        .key(dst_key3)
+        .copy_source(&copy_source)
+        .copy_source_if_none_match("*")
+        .send()
+        .await
+        .expect_err("Expected copy with wildcard If-None-Match to fail for existing source");
+    let service_err = err.into_service_error();
+    assert_eq!(service_err.code(), Some("PreconditionFailed"));
 
-    // Cleanup
     delete_object(&c, bucket, src_key).await?;
     delete_object(&c, bucket, dst_key).await?;
     delete_bucket(&c, bucket).await?;
@@ -1572,7 +1955,6 @@ async fn test_copy_object_if_modified_since() -> Result<()> {
 
     let copy_source = format!("{bucket}/{src_key}");
 
-    // Copy with if-modified-since far in the past should succeed (object was modified after that)
     let dst_key = "dest-modified-ok.txt";
     let past = DateTime::from_str("Thu, 01 Jan 2000 00:00:00 GMT", DateTimeFormat::HttpDate)?;
     c.copy_object()
@@ -1587,31 +1969,20 @@ async fn test_copy_object_if_modified_since() -> Result<()> {
     let body = ans.body.collect().await?.into_bytes();
     assert_eq!(body.as_ref(), content.as_bytes());
 
-    // Copy with if-modified-since far in the future should fail
     let dst_key2 = "dest-modified-fail.txt";
     let future = DateTime::from_str("Thu, 01 Jan 2099 00:00:00 GMT", DateTimeFormat::HttpDate)?;
-    let result = c
+    let err = c
         .copy_object()
         .bucket(bucket)
         .key(dst_key2)
         .copy_source(&copy_source)
         .copy_source_if_modified_since(future)
         .send()
-        .await;
+        .await
+        .expect_err("Expected copy with future if-modified-since to fail");
+    let service_err = err.into_service_error();
+    assert_eq!(service_err.code(), Some("PreconditionFailed"));
 
-    match result {
-        Ok(_) => panic!("Expected copy with future if-modified-since to fail"),
-        Err(e) => {
-            let error_str = format!("{e:?}");
-            debug!("✓ Expected error: {error_str}");
-            assert!(
-                error_str.contains("PreconditionFailed") || error_str.contains("412"),
-                "Expected PreconditionFailed error, got: {error_str}"
-            );
-        }
-    }
-
-    // Copy with if-unmodified-since far in the future should succeed
     let dst_key3 = "dest-unmodified-ok.txt";
     let future = DateTime::from_str("Thu, 01 Jan 2099 00:00:00 GMT", DateTimeFormat::HttpDate)?;
     c.copy_object()
@@ -1626,31 +1997,20 @@ async fn test_copy_object_if_modified_since() -> Result<()> {
     let body = ans.body.collect().await?.into_bytes();
     assert_eq!(body.as_ref(), content.as_bytes());
 
-    // Copy with if-unmodified-since far in the past should fail
     let dst_key4 = "dest-unmodified-fail.txt";
     let past = DateTime::from_str("Thu, 01 Jan 2000 00:00:00 GMT", DateTimeFormat::HttpDate)?;
-    let result = c
+    let err = c
         .copy_object()
         .bucket(bucket)
         .key(dst_key4)
         .copy_source(&copy_source)
         .copy_source_if_unmodified_since(past)
         .send()
-        .await;
+        .await
+        .expect_err("Expected copy with past if-unmodified-since to fail");
+    let service_err = err.into_service_error();
+    assert_eq!(service_err.code(), Some("PreconditionFailed"));
 
-    match result {
-        Ok(_) => panic!("Expected copy with past if-unmodified-since to fail"),
-        Err(e) => {
-            let error_str = format!("{e:?}");
-            debug!("✓ Expected error: {error_str}");
-            assert!(
-                error_str.contains("PreconditionFailed") || error_str.contains("412"),
-                "Expected PreconditionFailed error, got: {error_str}"
-            );
-        }
-    }
-
-    // Cleanup
     delete_object(&c, bucket, src_key).await?;
     delete_object(&c, bucket, dst_key).await?;
     delete_object(&c, bucket, dst_key3).await?;

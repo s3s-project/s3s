@@ -143,7 +143,8 @@ else
     REQUIREMENTS_HASH=$(python3 -c "import hashlib; print(hashlib.sha256(open('$S3TESTS_DIR/requirements.txt','rb').read()).hexdigest())")
 fi
 HASH_FILE="$S3TESTS_DIR/.venv/.requirements-hash"
-if [ ! -d "$S3TESTS_DIR/.venv" ] || [ ! -f "$HASH_FILE" ] || [ "$(cat "$HASH_FILE")" != "$REQUIREMENTS_HASH" ]; then
+VENV_PYTHON="$S3TESTS_DIR/.venv/bin/python"
+if [ ! -d "$S3TESTS_DIR/.venv" ] || [ ! -x "$VENV_PYTHON" ] || ! "$VENV_PYTHON" -c "import sys" >/dev/null 2>&1 || [ ! -f "$HASH_FILE" ] || [ "$(cat "$HASH_FILE")" != "$REQUIREMENTS_HASH" ]; then
     python3 -m venv --clear "$S3TESTS_DIR/.venv"
     "$S3TESTS_DIR/.venv/bin/pip" install -r "$S3TESTS_DIR/requirements.txt"
     echo "$REQUIREMENTS_HASH" > "$HASH_FILE"
