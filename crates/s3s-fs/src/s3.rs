@@ -941,6 +941,8 @@ impl S3 for FileSystem {
             bucket,
             key,
             upload_id,
+            if_match,
+            if_none_match,
             ..
         } = req.input;
 
@@ -956,6 +958,37 @@ impl S3 for FileSystem {
             return Err(s3_error!(AccessDenied));
         }
 
+        // Check conditional headers before modifying any state
+        let object_path = self.get_object_path(&bucket, &key)?;
+        if let Some(ref condition) = if_none_match
+            && condition.is_any()
+            && object_path.exists()
+        {
+            return Err(s3_error!(PreconditionFailed, "Object already exists"));
+        }
+        if let Some(ref condition) = if_match {
+            if condition.is_any() {
+                // If-Match: * — require the object to exist
+                if !object_path.exists() {
+                    return Err(s3_error!(PreconditionFailed, "Object does not exist"));
+                }
+            } else if let Some(expected_etag) = condition.as_etag() {
+                if object_path.exists() {
+                    let info = self.load_internal_info(&bucket, &key).await?;
+                    let etag_value = match info.as_ref().and_then(crate::checksum::load_e_tag) {
+                        Some(e_tag) => e_tag,
+                        None => self.get_md5_sum(&bucket, &key).await?,
+                    };
+                    let existing_etag = ETag::Strong(etag_value);
+                    if !expected_etag.strong_cmp(&existing_etag) {
+                        return Err(s3_error!(PreconditionFailed, "ETag does not match"));
+                    }
+                } else {
+                    return Err(s3_error!(PreconditionFailed, "Object does not exist"));
+                }
+            }
+        }
+
         self.delete_upload_id(&upload_id).await?;
 
         if let Ok(Some(attrs)) = self.load_object_attributes(&bucket, &key, Some(upload_id)).await {
@@ -963,7 +996,6 @@ impl S3 for FileSystem {
             let _ = self.delete_metadata(&bucket, &key, Some(upload_id));
         }
 
-        let object_path = self.get_object_path(&bucket, &key)?;
         let mut file_writer = self.prepare_file_write(&object_path).await?;
 
         let mut cnt: i32 = 0;
