@@ -937,11 +937,11 @@ impl S3 for FileSystem {
             } else if let Some(expected_etag) = condition.as_etag() {
                 if object_path.exists() {
                     let info = self.load_internal_info(&bucket, &key).await?;
-                    let existing_md5 = match info.as_ref().and_then(crate::checksum::load_e_tag) {
+                    let etag_value = match info.as_ref().and_then(crate::checksum::load_e_tag) {
                         Some(e_tag) => e_tag,
                         None => self.get_md5_sum(&bucket, &key).await?,
                     };
-                    let existing_etag = ETag::Strong(existing_md5);
+                    let existing_etag = ETag::Strong(etag_value);
                     if !expected_etag.strong_cmp(&existing_etag) {
                         return Err(s3_error!(PreconditionFailed, "ETag does not match"));
                     }
