@@ -604,7 +604,9 @@ async fn test_multipart_etag_format() -> Result<()> {
 
         // Multipart ETags must have the format: {hex_md5}-{part_count}
         let unquoted = e_tag.trim_matches('"');
-        let (hash_part, count_part) = unquoted.rsplit_once('-').expect("multipart ETag should contain a dash");
+        let (hash_part, count_part) = unquoted
+            .rsplit_once('-')
+            .unwrap_or_else(|| panic!("multipart ETag should contain a dash: {unquoted}"));
         assert_eq!(hash_part.len(), 32, "hash part should be 32 hex characters: {hash_part}");
         assert!(hash_part.chars().all(|c| c.is_ascii_hexdigit()), "hash part should be hex: {hash_part}");
         let part_count: usize = count_part.parse().expect("count part should be a number");

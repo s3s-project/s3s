@@ -1017,7 +1017,7 @@ impl S3 for FileSystem {
         let mut cnt: i32 = 0;
         let total_parts_cnt = i32::try_from(parts_count).expect("total number of parts must be <= 10000.");
 
-        let mut part_md5_hashes: Vec<[u8; 16]> = Vec::new();
+        let mut part_md5_hashes: Vec<[u8; 16]> = Vec::with_capacity(parts_count);
         let mut buf = vec![0u8; 65536];
 
         for part in multipart_upload.parts.into_iter().flatten() {
