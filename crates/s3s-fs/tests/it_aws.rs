@@ -1939,6 +1939,11 @@ async fn test_copy_object_conditional_with_multipart_source_etag() -> Result<()>
     let body = ans.body.collect().await?.into_bytes();
     assert_eq!(body.as_ref(), content.as_bytes());
 
+    // The destination ETag should match the source multipart ETag (format preserved during copy).
+    let head = c.head_object().bucket(bucket).key(dst_key).send().await?;
+    let dst_etag = head.e_tag().expect("head_object should return e_tag");
+    assert_eq!(dst_etag, multipart_e_tag, "destination ETag should match source multipart ETag after copy");
+
     let dst_key2 = "dest-multipart-none-match.txt";
     let err = c
         .copy_object()
