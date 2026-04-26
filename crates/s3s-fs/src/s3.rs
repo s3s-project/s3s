@@ -93,55 +93,63 @@ impl S3 for FileSystem {
 
         let file_metadata = try_!(fs::metadata(&src_path).await);
         let src_last_modified = Timestamp::from(try_!(file_metadata.modified()));
-        let src_info = self.load_internal_info(bucket, key).await?;
-        let content_md5_sum = self.get_md5_sum(bucket, key).await?;
-        let src_etag = ETag::Strong(
-            src_info
-                .as_ref()
-                .and_then(crate::checksum::load_e_tag)
-                .unwrap_or_else(|| content_md5_sum.clone()),
-        );
+        let has_etag_conditions = input.copy_source_if_match.is_some() || input.copy_source_if_none_match.is_some();
 
-        // `If-Match` and `If-None-Match` take precedence over the date-based
-        // copy preconditions, matching S3's conditional copy behavior.
-        let has_if_match = if let Some(ref condition) = input.copy_source_if_match {
+        // Date-only conditions can fail fast without loading source metadata or hashing.
+        if !has_etag_conditions {
+            if let Some(ref if_unmodified_since) = input.copy_source_if_unmodified_since
+                && src_last_modified > *if_unmodified_since
+            {
+                return Err(s3_error!(PreconditionFailed));
+            }
+
+            if let Some(ref if_modified_since) = input.copy_source_if_modified_since
+                && src_last_modified <= *if_modified_since
+            {
+                return Err(s3_error!(PreconditionFailed));
+            }
+        }
+
+        let mut src_info = if has_etag_conditions {
+            self.load_internal_info(bucket, key).await?
+        } else {
+            None
+        };
+
+        let mut src_etag = src_info.as_ref().and_then(crate::checksum::load_e_tag).map(ETag::Strong);
+
+        if has_etag_conditions && src_etag.is_none() {
+            src_etag = Some(ETag::Strong(self.get_md5_sum(bucket, key).await?));
+        }
+
+        if let Some(ref condition) = input.copy_source_if_match {
             let matches = match condition {
                 ETagCondition::Any => true,
-                ETagCondition::ETag(etag) => src_etag.strong_cmp(etag),
+                ETagCondition::ETag(etag) => src_etag
+                    .as_ref()
+                    .expect("source etag should be initialized before comparison")
+                    .strong_cmp(etag),
             };
             if !matches {
                 return Err(s3_error!(PreconditionFailed));
             }
-            true
-        } else {
-            false
-        };
-
-        if !has_if_match
-            && let Some(ref if_unmodified_since) = input.copy_source_if_unmodified_since
-            && src_last_modified > *if_unmodified_since
-        {
-            return Err(s3_error!(PreconditionFailed));
         }
 
-        let has_if_none_match = if let Some(ref condition) = input.copy_source_if_none_match {
+        if let Some(ref condition) = input.copy_source_if_none_match {
             let matches = match condition {
                 ETagCondition::Any => true,
-                ETagCondition::ETag(etag) => src_etag.weak_cmp(etag),
+                ETagCondition::ETag(etag) => src_etag
+                    .as_ref()
+                    .expect("source etag should be initialized before comparison")
+                    .weak_cmp(etag),
             };
             if matches {
                 return Err(s3_error!(PreconditionFailed));
             }
-            true
-        } else {
-            false
-        };
+        }
 
-        if !has_if_none_match
-            && let Some(ref if_modified_since) = input.copy_source_if_modified_since
-            && src_last_modified <= *if_modified_since
-        {
-            return Err(s3_error!(PreconditionFailed));
+        if src_info.is_none() {
+            src_info = self.load_internal_info(bucket, key).await?;
         }
 
         if let Some(dir_path) = dst_path.parent() {
@@ -154,6 +162,7 @@ impl S3 for FileSystem {
 
         let dst_metadata = try_!(fs::metadata(&dst_path).await);
         let dst_last_modified = Timestamp::from(try_!(dst_metadata.modified()));
+        let dst_etag = self.get_md5_sum(&input.bucket, &input.key).await?;
 
         let src_metadata_path = self.get_metadata_path(bucket, key, None)?;
         if src_metadata_path.exists() {
@@ -163,12 +172,12 @@ impl S3 for FileSystem {
 
         {
             let mut info = src_info.unwrap_or_default();
-            crate::checksum::save_e_tag(&mut info, &content_md5_sum);
+            crate::checksum::save_e_tag(&mut info, &dst_etag);
             self.save_internal_info(&input.bucket, &input.key, &info).await?;
         }
 
         let copy_object_result = CopyObjectResult {
-            e_tag: Some(ETag::Strong(content_md5_sum)),
+            e_tag: Some(ETag::Strong(dst_etag)),
             last_modified: Some(dst_last_modified),
             ..Default::default()
         };
