@@ -1610,6 +1610,363 @@ async fn test_copy_object_nested_dst() -> Result<()> {
     Ok(())
 }
 
+/// Test conditional copy with `x-amz-copy-source-if-match`.
+#[tokio::test]
+#[tracing::instrument]
+async fn test_copy_object_if_match() -> Result<()> {
+    use aws_sdk_s3::primitives::DateTime;
+    use aws_sdk_s3::primitives::DateTimeFormat;
+
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-cond-copy-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let src_key = "source.txt";
+    let content = "conditional copy content";
+    c.put_object()
+        .bucket(bucket)
+        .key(src_key)
+        .body(ByteStream::from_static(content.as_bytes()))
+        .send()
+        .await?;
+
+    let get_result = c.get_object().bucket(bucket).key(src_key).send().await?;
+    let e_tag = get_result.e_tag().expect("get_object should return e_tag").to_owned();
+    let _ = get_result.body.collect().await?;
+
+    let copy_source = format!("{bucket}/{src_key}");
+
+    let dst_key = "dest-match.txt";
+    c.copy_object()
+        .bucket(bucket)
+        .key(dst_key)
+        .copy_source(&copy_source)
+        .copy_source_if_match(&e_tag)
+        .send()
+        .await?;
+
+    let ans = c.get_object().bucket(bucket).key(dst_key).send().await?;
+    let body = ans.body.collect().await?.into_bytes();
+    assert_eq!(body.as_ref(), content.as_bytes());
+
+    let dst_key2 = "dest-match-wildcard.txt";
+    let past = DateTime::from_str("Thu, 01 Jan 2000 00:00:00 GMT", DateTimeFormat::HttpDate)?;
+    c.copy_object()
+        .bucket(bucket)
+        .key(dst_key2)
+        .copy_source(&copy_source)
+        .copy_source_if_match("*")
+        .copy_source_if_unmodified_since(past)
+        .send()
+        .await?;
+
+    let ans = c.get_object().bucket(bucket).key(dst_key2).send().await?;
+    let body = ans.body.collect().await?.into_bytes();
+    assert_eq!(body.as_ref(), content.as_bytes());
+
+    let dst_key3 = "dest-nomatch.txt";
+    let err = c
+        .copy_object()
+        .bucket(bucket)
+        .key(dst_key3)
+        .copy_source(&copy_source)
+        .copy_source_if_match("\"nonexistent-etag\"")
+        .send()
+        .await
+        .expect_err("Expected copy with non-matching If-Match to fail");
+    let service_err = err.into_service_error();
+    assert_eq!(service_err.code(), Some("PreconditionFailed"));
+
+    delete_object(&c, bucket, src_key).await?;
+    delete_object(&c, bucket, dst_key).await?;
+    delete_object(&c, bucket, dst_key2).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+/// Test conditional copy with `x-amz-copy-source-if-none-match`.
+#[tokio::test]
+#[tracing::instrument]
+async fn test_copy_object_if_none_match() -> Result<()> {
+    use aws_sdk_s3::primitives::DateTime;
+    use aws_sdk_s3::primitives::DateTimeFormat;
+
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-cond-copy-nm-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let src_key = "source.txt";
+    let content = "conditional copy none match";
+    c.put_object()
+        .bucket(bucket)
+        .key(src_key)
+        .body(ByteStream::from_static(content.as_bytes()))
+        .send()
+        .await?;
+
+    let get_result = c.get_object().bucket(bucket).key(src_key).send().await?;
+    let e_tag = get_result.e_tag().expect("get_object should return e_tag").to_owned();
+    let _ = get_result.body.collect().await?;
+
+    let copy_source = format!("{bucket}/{src_key}");
+
+    let dst_key = "dest-none-match-ok.txt";
+    c.copy_object()
+        .bucket(bucket)
+        .key(dst_key)
+        .copy_source(&copy_source)
+        .copy_source_if_none_match("\"different-etag\"")
+        .send()
+        .await?;
+
+    let ans = c.get_object().bucket(bucket).key(dst_key).send().await?;
+    let body = ans.body.collect().await?.into_bytes();
+    assert_eq!(body.as_ref(), content.as_bytes());
+
+    let dst_key2 = "dest-none-match-fail.txt";
+    let err = c
+        .copy_object()
+        .bucket(bucket)
+        .key(dst_key2)
+        .copy_source(&copy_source)
+        .copy_source_if_none_match(&e_tag)
+        .send()
+        .await
+        .expect_err("Expected copy with matching If-None-Match to fail");
+    let service_err = err.into_service_error();
+    assert_eq!(service_err.code(), Some("PreconditionFailed"));
+
+    let dst_key3 = "dest-none-match-wildcard.txt";
+    let err = c
+        .copy_object()
+        .bucket(bucket)
+        .key(dst_key3)
+        .copy_source(&copy_source)
+        .copy_source_if_none_match("*")
+        .send()
+        .await
+        .expect_err("Expected copy with wildcard If-None-Match to fail for existing source");
+    let service_err = err.into_service_error();
+    assert_eq!(service_err.code(), Some("PreconditionFailed"));
+
+    let dst_key4 = "dest-none-match-precedence.txt";
+    let future = DateTime::from_str("Thu, 01 Jan 2099 00:00:00 GMT", DateTimeFormat::HttpDate)?;
+    c.copy_object()
+        .bucket(bucket)
+        .key(dst_key4)
+        .copy_source(&copy_source)
+        .copy_source_if_none_match("\"different-etag\"")
+        .copy_source_if_modified_since(future)
+        .send()
+        .await?;
+
+    let ans = c.get_object().bucket(bucket).key(dst_key4).send().await?;
+    let body = ans.body.collect().await?.into_bytes();
+    assert_eq!(body.as_ref(), content.as_bytes());
+
+    delete_object(&c, bucket, src_key).await?;
+    delete_object(&c, bucket, dst_key).await?;
+    delete_object(&c, bucket, dst_key4).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+/// Test conditional copy with `x-amz-copy-source-if-modified-since` and
+/// `x-amz-copy-source-if-unmodified-since`.
+#[tokio::test]
+#[tracing::instrument]
+async fn test_copy_object_if_modified_since() -> Result<()> {
+    use aws_sdk_s3::primitives::DateTime;
+    use aws_sdk_s3::primitives::DateTimeFormat;
+
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-cond-copy-ts-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let src_key = "source.txt";
+    let content = "conditional copy timestamp";
+    c.put_object()
+        .bucket(bucket)
+        .key(src_key)
+        .body(ByteStream::from_static(content.as_bytes()))
+        .send()
+        .await?;
+
+    let copy_source = format!("{bucket}/{src_key}");
+
+    let dst_key = "dest-modified-ok.txt";
+    let past = DateTime::from_str("Thu, 01 Jan 2000 00:00:00 GMT", DateTimeFormat::HttpDate)?;
+    c.copy_object()
+        .bucket(bucket)
+        .key(dst_key)
+        .copy_source(&copy_source)
+        .copy_source_if_modified_since(past)
+        .send()
+        .await?;
+
+    let ans = c.get_object().bucket(bucket).key(dst_key).send().await?;
+    let body = ans.body.collect().await?.into_bytes();
+    assert_eq!(body.as_ref(), content.as_bytes());
+
+    let dst_key2 = "dest-modified-fail.txt";
+    let future = DateTime::from_str("Thu, 01 Jan 2099 00:00:00 GMT", DateTimeFormat::HttpDate)?;
+    let err = c
+        .copy_object()
+        .bucket(bucket)
+        .key(dst_key2)
+        .copy_source(&copy_source)
+        .copy_source_if_modified_since(future)
+        .send()
+        .await
+        .expect_err("Expected copy with future if-modified-since to fail");
+    let service_err = err.into_service_error();
+    assert_eq!(service_err.code(), Some("PreconditionFailed"));
+
+    let dst_key3 = "dest-unmodified-ok.txt";
+    let future = DateTime::from_str("Thu, 01 Jan 2099 00:00:00 GMT", DateTimeFormat::HttpDate)?;
+    c.copy_object()
+        .bucket(bucket)
+        .key(dst_key3)
+        .copy_source(&copy_source)
+        .copy_source_if_unmodified_since(future)
+        .send()
+        .await?;
+
+    let ans = c.get_object().bucket(bucket).key(dst_key3).send().await?;
+    let body = ans.body.collect().await?.into_bytes();
+    assert_eq!(body.as_ref(), content.as_bytes());
+
+    let dst_key4 = "dest-unmodified-fail.txt";
+    let past = DateTime::from_str("Thu, 01 Jan 2000 00:00:00 GMT", DateTimeFormat::HttpDate)?;
+    let err = c
+        .copy_object()
+        .bucket(bucket)
+        .key(dst_key4)
+        .copy_source(&copy_source)
+        .copy_source_if_unmodified_since(past)
+        .send()
+        .await
+        .expect_err("Expected copy with past if-unmodified-since to fail");
+    let service_err = err.into_service_error();
+    assert_eq!(service_err.code(), Some("PreconditionFailed"));
+
+    delete_object(&c, bucket, src_key).await?;
+    delete_object(&c, bucket, dst_key).await?;
+    delete_object(&c, bucket, dst_key3).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+/// Test conditional copy against a multipart source object's persisted `ETag`.
+#[tokio::test]
+#[tracing::instrument]
+async fn test_copy_object_conditional_with_multipart_source_etag() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-cond-copy-multipart-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let src_key = "source-multipart.txt";
+    let content = "multipart conditional copy content";
+
+    let upload_id = c
+        .create_multipart_upload()
+        .bucket(bucket)
+        .key(src_key)
+        .send()
+        .await?
+        .upload_id
+        .expect("create_multipart_upload should return upload_id");
+
+    let upload_result = c
+        .upload_part()
+        .bucket(bucket)
+        .key(src_key)
+        .upload_id(&upload_id)
+        .body(ByteStream::from_static(content.as_bytes()))
+        .part_number(1)
+        .send()
+        .await?;
+
+    let upload = CompletedMultipartUpload::builder()
+        .set_parts(Some(vec![
+            CompletedPart::builder()
+                .e_tag(upload_result.e_tag.expect("upload_part should return e_tag"))
+                .part_number(1)
+                .build(),
+        ]))
+        .build();
+
+    let complete_result = c
+        .complete_multipart_upload()
+        .bucket(bucket)
+        .key(src_key)
+        .multipart_upload(upload)
+        .upload_id(&upload_id)
+        .send()
+        .await?;
+    let multipart_e_tag = complete_result
+        .e_tag()
+        .expect("complete_multipart_upload should return e_tag")
+        .to_owned();
+
+    let copy_source = format!("{bucket}/{src_key}");
+
+    let dst_key = "dest-multipart-match.txt";
+    c.copy_object()
+        .bucket(bucket)
+        .key(dst_key)
+        .copy_source(&copy_source)
+        .copy_source_if_match(&multipart_e_tag)
+        .send()
+        .await?;
+
+    let ans = c.get_object().bucket(bucket).key(dst_key).send().await?;
+    let body = ans.body.collect().await?.into_bytes();
+    assert_eq!(body.as_ref(), content.as_bytes());
+
+    // The destination ETag should match the source multipart ETag (format preserved during copy).
+    let head = c.head_object().bucket(bucket).key(dst_key).send().await?;
+    let dst_etag = head.e_tag().expect("head_object should return e_tag");
+    assert_eq!(
+        dst_etag, multipart_e_tag,
+        "destination ETag should match source multipart ETag after copy"
+    );
+
+    let dst_key2 = "dest-multipart-none-match.txt";
+    let err = c
+        .copy_object()
+        .bucket(bucket)
+        .key(dst_key2)
+        .copy_source(&copy_source)
+        .copy_source_if_none_match(&multipart_e_tag)
+        .send()
+        .await
+        .expect_err("Expected matching multipart ETag to fail If-None-Match");
+    let service_err = err.into_service_error();
+    assert_eq!(service_err.code(), Some("PreconditionFailed"));
+
+    delete_object(&c, bucket, src_key).await?;
+    delete_object(&c, bucket, dst_key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
 /// Regression test for <https://github.com/s3s-project/s3s/issues/112>
 ///
 /// `list_objects_v2` prefix matching should use string-based matching (not `Path::starts_with`)
