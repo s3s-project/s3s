@@ -3,6 +3,7 @@
 ROOT_DIR="$(pwd)"
 TARGET_DIR="$ROOT_DIR/target"
 S3TESTS_DIR="/tmp/s3-tests"
+S3TESTS_REF="${S3TESTS_REF:-fb8b73092bb1dd8db829f1205a9e52e73bf9a232}"
 CONF_PATH="/tmp/s3tests.conf"
 REPORT_DIR="/tmp/s3s-s3tests-report"
 MINIO_DIR="/tmp/s3s-s3tests-minio"
@@ -122,18 +123,14 @@ ensure_proxy_running
 ensure_minio_running "$MINIO_CONTAINER_ID"
 
 if [ -d "$S3TESTS_DIR/.git" ]; then
-    default_branch=$(git -C "$S3TESTS_DIR" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||')
-    if [ -z "$default_branch" ]; then
-        default_branch=$(git -C "$S3TESTS_DIR" remote show origin | awk '/HEAD branch/ {print $NF}')
-    fi
-    if [ -z "$default_branch" ]; then
-        default_branch="master"
-    fi
-    git -C "$S3TESTS_DIR" fetch --depth 1 origin "$default_branch"
-    git -C "$S3TESTS_DIR" reset --hard "origin/$default_branch"
+    git -C "$S3TESTS_DIR" fetch --depth 1 origin "$S3TESTS_REF"
+    git -C "$S3TESTS_DIR" reset --hard FETCH_HEAD
 else
     rm -rf "$S3TESTS_DIR"
-    git clone --depth 1 https://github.com/ceph/s3-tests.git "$S3TESTS_DIR"
+    git init "$S3TESTS_DIR"
+    git -C "$S3TESTS_DIR" remote add origin https://github.com/ceph/s3-tests.git
+    git -C "$S3TESTS_DIR" fetch --depth 1 origin "$S3TESTS_REF"
+    git -C "$S3TESTS_DIR" reset --hard FETCH_HEAD
 fi
 if command -v sha256sum >/dev/null 2>&1; then
     REQUIREMENTS_HASH=$(sha256sum "$S3TESTS_DIR/requirements.txt" | cut -d' ' -f1)
