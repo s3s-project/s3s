@@ -31,11 +31,11 @@ debug = "line-tables-only"
 arc-swap = "1.9.1"
 arrayvec = "0.7.6"
 bytes = "1.11.1"
-bytestring = "1.5.0"
-indexmap = "2.13.1"
+bytestring = "1.5.1"
+indexmap = "2.14.0"
 once_cell = "1.21.4"
 smallvec = "1.15.1"
-uuid = "1.23.0"
+uuid = "1.23.1"
 
 # Text encoding
 atoi = { version = "2.0.0", default-features = false }
@@ -83,12 +83,12 @@ futures = { version = "0.3.32", default-features = false }
 futures-util = "0.3.32"
 pin-project-lite = "0.2.17"
 sync_wrapper = { version = "1.0.2", default-features = false }
-tokio = "1.51.0"
+tokio = "1.52.1"
 tokio-util = "0.7.18"
 transform-stream = "0.3.1"
 
 # HTTP
-axum = "0.8.8"
+axum = "0.8.9"
 http = "1.4.0"
 http-body = "1.0.1"
 http-body-util = "0.1.3"
@@ -100,7 +100,7 @@ tokio-rustls = "0.26.4"
 tower = { version = "0.5.3", default-features = false }
 url = "2.5.8"
 urlencoding = "2.1.3"
-reqwest = { version = "0.13.2", default-features = false, features = ["rustls", "form", "query"] }
+reqwest = { version = "0.13.3", default-features = false, features = ["rustls", "form", "query"] }
 
 # Logging & observability
 tracing = "0.1.44"
@@ -108,7 +108,7 @@ tracing-error = "0.2.1"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "time"] }
 
 # CLI
-clap = { version = "4.6.0", features = ["derive"] }
+clap = { version = "4.6.1", features = ["derive"] }
 
 # Storage backends
 opendal = "0.55.0"
@@ -116,8 +116,8 @@ opendal = "0.55.0"
 # AWS SDK
 aws-config = { version = "1.8.15", default-features = false }
 aws-credential-types = "1.2.14"
-aws-sdk-s3 = { version = "1.128.0", default-features = false, features = ["default-https-client", "http-1x", "rt-tokio", "sigv4a"] }
-aws-sdk-sts = { version = "1.101.0", default-features = false, features = ["default-https-client", "rt-tokio"] }
-aws-smithy-runtime-api = "1.11.6"
+aws-sdk-s3 = { version = "1.129.0", default-features = false, features = ["default-https-client", "http-1x", "rt-tokio", "sigv4a"] }
+aws-sdk-sts = { version = "1.102.0", default-features = false, features = ["default-https-client", "rt-tokio"] }
+aws-smithy-runtime-api = "1.12.0"
 aws-smithy-types = "1.4.7"
 aws-smithy-types-convert = "0.60.14"
