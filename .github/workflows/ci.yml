@@ -195,7 +195,7 @@ jobs:
       - uses: ./.github/actions/setup
       - name: Clone s3-tests
         run: |
-          S3TESTS_REF="$(cat scripts/s3tests-ref)"
+          S3TESTS_REF="$(tr -d '[:space:]' < scripts/s3tests-ref)"
           git init /tmp/s3-tests
           git -C /tmp/s3-tests remote add origin https://github.com/ceph/s3-tests.git
           git -C /tmp/s3-tests fetch --depth 1 origin "$S3TESTS_REF"
