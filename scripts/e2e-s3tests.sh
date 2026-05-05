@@ -3,23 +3,12 @@
 ROOT_DIR="$(pwd)"
 TARGET_DIR="$ROOT_DIR/target"
 S3TESTS_DIR="/tmp/s3-tests"
-S3TESTS_REF_FILE="$ROOT_DIR/scripts/s3tests.env"
 CONF_PATH="/tmp/s3tests.conf"
 REPORT_DIR="/tmp/s3s-s3tests-report"
 MINIO_DIR="/tmp/s3s-s3tests-minio"
 S3S_PROXY_PID=""
 
-if [ -z "${S3TESTS_REF:-}" ]; then
-    if [ ! -r "$S3TESTS_REF_FILE" ]; then
-        echo "s3-tests ref file not readable: $S3TESTS_REF_FILE" >&2
-        exit 1
-    fi
-    . "$S3TESTS_REF_FILE"
-fi
-if [ -z "${S3TESTS_REF:-}" ]; then
-    echo "s3-tests ref is empty" >&2
-    exit 1
-fi
+. "$ROOT_DIR/scripts/source-s3tests-ref.sh"
 
 mkdir -p "$TARGET_DIR"
 mkdir -p "$REPORT_DIR"
