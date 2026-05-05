@@ -364,7 +364,8 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                 qs: req.s3ext.qs.as_ref(),
                 hs,
 
-                decoded_uri_path,
+                decoded_uri_path: &decoded_uri_path,
+                raw_uri_path: req.uri.path(),
                 vh_bucket,
 
                 content_length,
