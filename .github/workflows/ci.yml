@@ -187,8 +187,6 @@ jobs:
     needs: skip-check
     if: github.event_name != 'pull_request' && needs.skip-check.outputs.should_skip != 'true'
     runs-on: ubuntu-latest
-    env:
-      S3TESTS_REF: fb8b73092bb1dd8db829f1205a9e52e73bf9a232
     permissions:
       contents: read
       actions: write
@@ -197,6 +195,7 @@ jobs:
       - uses: ./.github/actions/setup
       - name: Clone s3-tests
         run: |
+          S3TESTS_REF="$(cat scripts/s3tests-ref)"
           git init /tmp/s3-tests
           git -C /tmp/s3-tests remote add origin https://github.com/ceph/s3-tests.git
           git -C /tmp/s3-tests fetch --depth 1 origin "$S3TESTS_REF"
