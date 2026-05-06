@@ -5,6 +5,7 @@ use super::{dto, rust, smithy};
 use super::{headers, o};
 
 use crate::declare_codegen;
+use crate::v1::Patch;
 
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -151,7 +152,7 @@ pub fn is_op_output(name: &str, ops: &Operations) -> bool {
     name.strip_suffix("Output").is_some_and(|x| ops.contains_key(x))
 }
 
-pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
+pub fn codegen(ops: &Operations, rust_types: &RustTypes, patch: Option<Patch>) {
     declare_codegen!();
 
     for op in ops.values() {
@@ -178,7 +179,7 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
         "",
     ]);
 
-    codegen_http(ops, rust_types);
+    codegen_http(ops, rust_types, patch);
     codegen_router(ops, rust_types);
 }
 
@@ -190,7 +191,7 @@ fn status_code_name(code: u16) -> &'static str {
     }
 }
 
-fn codegen_http(ops: &Operations, rust_types: &RustTypes) {
+fn codegen_http(ops: &Operations, rust_types: &RustTypes, patch: Option<Patch>) {
     codegen_header_value(ops, rust_types);
 
     for op in ops.values() {
@@ -202,7 +203,7 @@ fn codegen_http(ops: &Operations, rust_types: &RustTypes) {
 
         g!("impl {} {{", op.name);
 
-        codegen_op_http_de(op, rust_types);
+        codegen_op_http_de(op, rust_types, patch);
         codegen_op_http_ser(op, rust_types);
 
         g!("}}");
@@ -563,7 +564,7 @@ fn codegen_op_http_ser(op: &Operation, rust_types: &RustTypes) {
 }
 
 #[allow(clippy::too_many_lines)]
-fn codegen_op_http_de(op: &Operation, rust_types: &RustTypes) {
+fn codegen_op_http_de(op: &Operation, rust_types: &RustTypes, patch: Option<Patch>) {
     let input = op.input.as_str();
     let rust_type = &rust_types[input];
     match rust_type {
@@ -708,9 +709,54 @@ fn codegen_op_http_de(op: &Operation, rust_types: &RustTypes) {
                                     g!("    Err(e) => return Err(e),");
                                     g!("}};");
                                 } else if field.option_type {
-                                    g!("let {}: Option<{}> = http::take_opt_xml_body(req)?;", field.name, field.type_);
+                                    // MinIO compatibility: accept a trimmed bare
+                                    // `Enabled` body as an object-lock shorthand.
+                                    //
+                                    // Current MinIO source does not expose the same
+                                    // raw-body parser on the S3 HTTP path; this
+                                    // helper is derived from the ObjectLock config
+                                    // shape and its required Enabled state:
+                                    // - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/object/lock/lock.go#L232-L319
+                                    if op.name == "PutObjectLockConfiguration"
+                                        && field.name == "object_lock_configuration"
+                                        && matches!(patch, Some(Patch::Minio))
+                                    {
+                                        g!("// MinIO reference:");
+                                        g!(
+                                            "// - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/object/lock/lock.go#L232-L319"
+                                        );
+                                        g!(
+                                            "let {}: Option<{}> = http::take_opt_object_lock_configuration(req)?;",
+                                            field.name,
+                                            field.type_
+                                        );
+                                    } else {
+                                        g!("let {}: Option<{}> = http::take_opt_xml_body(req)?;", field.name, field.type_);
+                                    }
                                 } else {
-                                    g!("let {}: {} = http::take_xml_body(req)?;", field.name, field.type_);
+                                    // MinIO compatibility: accept a trimmed bare
+                                    // `Enabled` body as a versioning shorthand.
+                                    //
+                                    // Current MinIO source models versioning
+                                    // enablement via VersioningConfiguration and
+                                    // the `Enabled` status value:
+                                    // - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/versioning/versioning.go#L49-L84
+                                    // - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/versioning/versioning.go#L157-L166
+                                    if op.name == "PutBucketVersioning"
+                                        && field.name == "versioning_configuration"
+                                        && matches!(patch, Some(Patch::Minio))
+                                    {
+                                        g!("// MinIO reference:");
+                                        g!(
+                                            "// - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/versioning/versioning.go#L49-L84"
+                                        );
+                                        g!(
+                                            "// - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/versioning/versioning.go#L157-L166"
+                                        );
+                                        g!("let {}: {} = http::take_versioning_configuration(req)?;", field.name, field.type_);
+                                    } else {
+                                        g!("let {}: {} = http::take_xml_body(req)?;", field.name, field.type_);
+                                    }
                                 }
                             }
                         },
