@@ -142,6 +142,7 @@ mod time;
 
 pub mod access;
 pub mod auth;
+pub mod capability;
 pub mod checksum;
 pub mod config;
 pub mod crypto;
@@ -157,6 +158,7 @@ pub mod stream;
 pub mod validation;
 pub mod xml;
 
+pub use self::capability::{Capabilities, Capability};
 pub use self::error::*;
 pub use self::http::Body;
 pub use self::s3_op::S3Operation;
