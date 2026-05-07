@@ -143,7 +143,17 @@ impl S3 for FileSystem {
             try_!(fs::create_dir_all(&dir_path).await);
         }
 
-        let _ = try_!(fs::copy(&src_path, &dst_path).await);
+        // `tokio::fs::copy(p, p)` (and the underlying `std::fs::copy`)
+        // opens the destination with `O_TRUNC` before reading the source,
+        // which zeroes the file when src and dst resolve to the same
+        // path. AWS S3 explicitly supports self-replace as a way to
+        // update an object's metadata without altering its content
+        // (CopyObject same bucket+key with `MetadataDirective: REPLACE`),
+        // so detect that case and skip the payload copy — the bytes are
+        // already in place.
+        if src_path != dst_path {
+            let _ = try_!(fs::copy(&src_path, &dst_path).await);
+        }
 
         debug!(from = %src_path.display(), to = %dst_path.display(), "copy file");
 
@@ -159,9 +169,11 @@ impl S3 for FileSystem {
         };
 
         let src_metadata_path = self.get_metadata_path(bucket, key, None)?;
-        if src_metadata_path.exists() {
-            let dst_metadata_path = self.get_metadata_path(&input.bucket, &input.key, None)?;
-            let _ = try_!(fs::copy(src_metadata_path, dst_metadata_path).await);
+        let dst_metadata_path = self.get_metadata_path(&input.bucket, &input.key, None)?;
+        // Same self-replace guard as for the payload above — `fs::copy`
+        // would zero the metadata sidecar when src == dst.
+        if src_metadata_path.exists() && src_metadata_path != dst_metadata_path {
+            let _ = try_!(fs::copy(&src_metadata_path, &dst_metadata_path).await);
         }
 
         {
