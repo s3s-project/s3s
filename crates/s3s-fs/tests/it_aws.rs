@@ -1610,6 +1610,125 @@ async fn test_copy_object_nested_dst() -> Result<()> {
     Ok(())
 }
 
+/// `MetadataDirective: REPLACE` must drop the source metadata and
+/// install the request's metadata + `content_type` on the destination.
+/// Before the fix, `copy_object` ignored both `metadata_directive`
+/// and `metadata` and unconditionally copied the source sidecar
+/// verbatim.
+#[tokio::test]
+#[tracing::instrument]
+async fn test_copy_object_metadata_directive_replace() -> Result<()> {
+    use aws_sdk_s3::types::MetadataDirective;
+
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-meta-replace-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+
+    create_bucket(&c, bucket).await?;
+
+    let src_key = "src.bin";
+    c.put_object()
+        .bucket(bucket)
+        .key(src_key)
+        .body(ByteStream::from_static(b"x"))
+        .content_type("application/octet-stream")
+        .metadata("origin", "v1")
+        .metadata("rev", "1")
+        .send()
+        .await?;
+
+    let dst_key = "dst.bin";
+    let copy_source = format!("{bucket}/{src_key}");
+    c.copy_object()
+        .bucket(bucket)
+        .key(dst_key)
+        .copy_source(&copy_source)
+        .metadata_directive(MetadataDirective::Replace)
+        .content_type("application/pdf")
+        .metadata("origin", "v2")
+        .metadata("rev", "2")
+        .send()
+        .await?;
+
+    let head = c.head_object().bucket(bucket).key(dst_key).send().await?;
+    assert_eq!(
+        head.content_type().unwrap_or(""),
+        "application/pdf",
+        "REPLACE must install the request's content_type on the destination"
+    );
+    let dst_meta = head.metadata().cloned().unwrap_or_default();
+    assert_eq!(dst_meta.get("origin").map(String::as_str), Some("v2"));
+    assert_eq!(dst_meta.get("rev").map(String::as_str), Some("2"));
+
+    delete_object(&c, bucket, src_key).await?;
+    delete_object(&c, bucket, dst_key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+/// `MetadataDirective: COPY` (the default) must propagate the source
+/// metadata to the destination, ignoring any metadata fields supplied
+/// in the request — exactly as documented at
+/// <https://docs.aws.amazon.com/AmazonS3/latest/API/API_CopyObject.html>.
+#[allow(clippy::doc_markdown)]
+#[tokio::test]
+#[tracing::instrument]
+async fn test_copy_object_metadata_directive_copy_ignores_request_fields() -> Result<()> {
+    use aws_sdk_s3::types::MetadataDirective;
+
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-meta-copy-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+
+    create_bucket(&c, bucket).await?;
+
+    let src_key = "src.bin";
+    c.put_object()
+        .bucket(bucket)
+        .key(src_key)
+        .body(ByteStream::from_static(b"x"))
+        .content_type("application/octet-stream")
+        .metadata("origin", "v1")
+        .send()
+        .await?;
+
+    let dst_key = "dst.bin";
+    let copy_source = format!("{bucket}/{src_key}");
+    c.copy_object()
+        .bucket(bucket)
+        .key(dst_key)
+        .copy_source(&copy_source)
+        .metadata_directive(MetadataDirective::Copy)
+        .content_type("application/pdf") // expected to be ignored under COPY
+        .metadata("origin", "v2")
+        .send()
+        .await?;
+
+    let head = c.head_object().bucket(bucket).key(dst_key).send().await?;
+    assert_eq!(
+        head.content_type().unwrap_or(""),
+        "application/octet-stream",
+        "COPY must propagate the source content_type and ignore the request override"
+    );
+    let dst_meta = head.metadata().cloned().unwrap_or_default();
+    assert_eq!(
+        dst_meta.get("origin").map(String::as_str),
+        Some("v1"),
+        "COPY must propagate the source metadata, not the request fields"
+    );
+
+    delete_object(&c, bucket, src_key).await?;
+    delete_object(&c, bucket, dst_key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
 /// Test conditional copy with `x-amz-copy-source-if-match`.
 #[tokio::test]
 #[tracing::instrument]
