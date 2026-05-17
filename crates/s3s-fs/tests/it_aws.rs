@@ -2028,7 +2028,6 @@ async fn test_copy_object_metadata_directive_replace() -> Result<()> {
 
     create_bucket(&c, bucket).await?;
 
-
     let src_key = "src.bin";
     c.put_object()
         .bucket(bucket)
