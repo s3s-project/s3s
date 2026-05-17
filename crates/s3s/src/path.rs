@@ -6,6 +6,7 @@
 //! + [Bucket naming rules](https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucketnamingrules.html)
 
 use crate::validation::{AwsNameValidation, NameValidation};
+use std::borrow::Cow;
 use std::net::IpAddr;
 
 /// A path in the S3 storage
@@ -156,6 +157,23 @@ pub const fn check_key(key: &str) -> bool {
     key.len() <= 1024
 }
 
+pub(crate) fn normalize_path_style_object_key(uri_path: &str) -> Cow<'_, str> {
+    let Some(path) = uri_path.strip_prefix('/') else { return Cow::Borrowed(uri_path) };
+    let Some((bucket, key)) = path.split_once('/') else { return Cow::Borrowed(uri_path) };
+
+    let normalized_key = key.trim_start_matches('/');
+    if normalized_key.len() == key.len() {
+        return Cow::Borrowed(uri_path);
+    }
+
+    let mut normalized = String::with_capacity(uri_path.len() - (key.len() - normalized_key.len()));
+    normalized.push('/');
+    normalized.push_str(bucket);
+    normalized.push('/');
+    normalized.push_str(normalized_key);
+    Cow::Owned(normalized)
+}
+
 /// Parses a path-style request
 /// # Errors
 /// Returns an `Err` if the s3 path is invalid
@@ -273,6 +291,23 @@ mod tests {
 
         for (uri_path, expected) in cases {
             assert_eq!(parse_path_style(uri_path), expected);
+        }
+    }
+
+    #[test]
+    fn path_style_object_key_normalization() {
+        let cases = [
+            ("/", "/"),
+            ("/bucket", "/bucket"),
+            ("/bucket/", "/bucket/"),
+            ("/bucket/key", "/bucket/key"),
+            ("/bucket//key", "/bucket/key"),
+            ("/bucket///key", "/bucket/key"),
+            ("no-slash", "no-slash"),
+        ];
+
+        for (uri_path, expected) in cases {
+            assert_eq!(normalize_path_style_object_key(uri_path), expected);
         }
     }
 

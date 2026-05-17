@@ -133,6 +133,15 @@ pub struct S3Config {
     ///
     /// Default: 900 (15 minutes)
     pub presigned_url_max_skew_time_secs: u32,
+
+    /// Whether to strip leading `/` characters from the object-key portion of
+    /// path-style request paths before route resolution.
+    ///
+    /// When enabled, a request like `/bucket//key` is treated as object key
+    /// `key` instead of `/key`.
+    ///
+    /// Default: false
+    pub path_style_object_key_strip_leading_slashes: bool,
 }
 
 impl Default for S3Config {
@@ -144,6 +153,7 @@ impl Default for S3Config {
             form_max_fields_size: 20 * 1024 * 1024,            // 20 MB
             form_max_parts: 1000,
             presigned_url_max_skew_time_secs: 900, // 15 minutes
+            path_style_object_key_strip_leading_slashes: false,
         }
     }
 }
@@ -261,6 +271,7 @@ mod tests {
         assert_eq!(config.form_max_fields_size, 20 * 1024 * 1024);
         assert_eq!(config.form_max_parts, 1000);
         assert_eq!(config.presigned_url_max_skew_time_secs, 900);
+        assert!(!config.path_style_object_key_strip_leading_slashes);
     }
 
     #[test]
@@ -349,6 +360,7 @@ mod tests {
             form_max_fields_size: 5 * 1024 * 1024,
             form_max_parts: 500,
             presigned_url_max_skew_time_secs: 600,
+            path_style_object_key_strip_leading_slashes: true,
         };
 
         let json = serde_json::to_string(&config).expect("serialize failed");
@@ -367,6 +379,7 @@ mod tests {
         // Other fields should have defaults
         assert_eq!(config.post_object_max_file_size, 5 * 1024 * 1024 * 1024);
         assert_eq!(config.form_max_field_size, 1024 * 1024);
+        assert!(!config.path_style_object_key_strip_leading_slashes);
     }
 
     #[test]

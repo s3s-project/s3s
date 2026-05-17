@@ -138,6 +138,85 @@ async fn vh_region_fallback_for_anonymous_request() {
     );
 }
 
+#[tokio::test]
+async fn path_style_double_slash_is_preserved_by_default() {
+    use crate::config::{S3ConfigProvider, StaticConfigProvider};
+    use crate::http::{Body, Request};
+    use std::sync::Arc;
+
+    struct NoOpS3;
+    #[async_trait::async_trait]
+    impl crate::s3_trait::S3 for NoOpS3 {}
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(NoOpS3);
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+    let ccx = CallContext {
+        s3: &s3,
+        config: &config,
+        host: None,
+        auth: None,
+        access: None,
+        route: None,
+        validation: None,
+    };
+
+    let mut req = Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri("http://localhost/test-bucket//test-key")
+            .body(Body::empty())
+            .unwrap(),
+    );
+
+    let result = super::prepare(&mut req, &ccx).await;
+    assert!(result.is_ok(), "prepare should succeed, got {result:?}");
+    assert_eq!(
+        req.s3ext.s3_path.as_ref().and_then(crate::path::S3Path::get_object_key),
+        Some("/test-key")
+    );
+}
+
+#[tokio::test]
+async fn path_style_double_slash_can_be_normalized() {
+    use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
+    use crate::http::{Body, Request};
+    use std::sync::Arc;
+
+    struct NoOpS3;
+    #[async_trait::async_trait]
+    impl crate::s3_trait::S3 for NoOpS3 {}
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(NoOpS3);
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(S3Config {
+        path_style_object_key_strip_leading_slashes: true,
+        ..Default::default()
+    })));
+    let ccx = CallContext {
+        s3: &s3,
+        config: &config,
+        host: None,
+        auth: None,
+        access: None,
+        route: None,
+        validation: None,
+    };
+
+    let mut req = Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri("http://localhost/test-bucket//test-key")
+            .body(Body::empty())
+            .unwrap(),
+    );
+
+    let result = super::prepare(&mut req, &ccx).await;
+    assert!(result.is_ok(), "prepare should succeed, got {result:?}");
+    assert_eq!(
+        req.s3ext.s3_path.as_ref().and_then(crate::path::S3Path::get_object_key),
+        Some("test-key")
+    );
+}
+
 #[test]
 fn error_custom_headers() {
     fn redirect307(location: &str) -> S3Error {

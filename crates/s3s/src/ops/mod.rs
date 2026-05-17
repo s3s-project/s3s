@@ -41,6 +41,7 @@ use crate::route::S3Route;
 use crate::s3_trait::S3;
 use crate::validation::{AwsNameValidation, NameValidation};
 
+use std::borrow::Cow;
 use std::mem;
 use std::net::{IpAddr, SocketAddr};
 use std::ops::Not;
@@ -305,6 +306,11 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
         let decoded_uri_path = urlencoding::decode(req.uri.path())
             .map_err(|_| S3ErrorCode::InvalidURI)?
             .into_owned();
+        let parsed_uri_path = if ccx.config.snapshot().path_style_object_key_strip_leading_slashes {
+            crate::path::normalize_path_style_object_key(&decoded_uri_path)
+        } else {
+            Cow::Borrowed(decoded_uri_path.as_str())
+        };
 
         let host_header = extract_host(req)?;
         let vh;
@@ -335,7 +341,7 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                 debug!(?decoded_uri_path, "parsing path-style request");
                 vh_bucket = None;
                 vh_region = None;
-                crate::path::parse_path_style_with_validation(&decoded_uri_path, validation)
+                crate::path::parse_path_style_with_validation(parsed_uri_path.as_ref(), validation)
             };
 
             req.s3ext.s3_path = Some(result.map_err(|err| convert_parse_s3_path_error(&err))?);
