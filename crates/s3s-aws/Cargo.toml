@@ -18,7 +18,7 @@ minio = ["s3s/minio"]
 
 [dependencies]
 async-trait.workspace = true
-aws-sdk-s3.workspace = true
+aws-sdk-s3 = { workspace = true, default-features = false, features = ["default-https-client", "http-1x", "rt-tokio", "sigv4a"] }
 aws-smithy-runtime-api = { workspace = true, features = ["client", "http-1x"] }
 aws-smithy-types = { workspace = true, features = ["http-body-1-x"] }
 aws-smithy-types-convert = { workspace = true, features = ["convert-time"] }
