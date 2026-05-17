@@ -168,12 +168,42 @@ impl S3 for FileSystem {
             None => self.get_md5_sum(&input.bucket, &input.key).await?,
         };
 
-        let src_metadata_path = self.get_metadata_path(bucket, key, None)?;
-        let dst_metadata_path = self.get_metadata_path(&input.bucket, &input.key, None)?;
-        // Same self-replace guard as for the payload above — `fs::copy`
-        // would zero the metadata sidecar when src == dst.
-        if src_metadata_path.exists() && src_metadata_path != dst_metadata_path {
-            let _ = try_!(fs::copy(&src_metadata_path, &dst_metadata_path).await);
+        // `MetadataDirective` defaults to `COPY` per AWS API: when the
+        // header is absent the destination should inherit the source's
+        // metadata sidecar verbatim. When set to `REPLACE`, the
+        // destination's metadata is built fresh from the request and
+        // anything from the source is dropped (matching the behaviour
+        // documented at
+        // https://docs.aws.amazon.com/AmazonS3/latest/API/API_CopyObject.html).
+        let replace_metadata = input
+            .metadata_directive
+            .as_ref()
+            .is_some_and(|d| d.as_str() == MetadataDirective::REPLACE);
+
+        if replace_metadata {
+            let mut dst_attrs = crate::fs::ObjectAttributes {
+                user_metadata: input.metadata,
+                content_encoding: input.content_encoding,
+                content_type: input.content_type,
+                content_disposition: input.content_disposition,
+                content_language: input.content_language,
+                cache_control: input.cache_control,
+                expires: None,
+                website_redirect_location: input.website_redirect_location,
+            };
+            dst_attrs.set_expires_timestamp(input.expires);
+            self.save_object_attributes(&input.bucket, &input.key, &dst_attrs, None)
+                .await?;
+        } else {
+            let src_metadata_path = self.get_metadata_path(bucket, key, None)?;
+            if src_metadata_path.exists() {
+                let dst_metadata_path = self.get_metadata_path(&input.bucket, &input.key, None)?;
+                // Same self-replace guard as for the payload above — `fs::copy`
+                // would zero the metadata sidecar when src == dst.
+                if src_metadata_path != dst_metadata_path {
+                    let _ = try_!(fs::copy(src_metadata_path, dst_metadata_path).await);
+                }
+            }
         }
 
         {
@@ -645,20 +675,36 @@ impl S3 for FileSystem {
             cache_control,
             expires,
             website_redirect_location,
+            if_match,
             if_none_match,
             ..
         } = input;
 
         let Some(body) = body else { return Err(s3_error!(IncompleteBody)) };
 
-        // Check If-None-Match condition
-        // If-None-Match: * means "only create if the object doesn't exist"
+        // Check conditional headers before modifying any state.
+        // If-None-Match: * means "only create if the object doesn't exist".
+        // If-Match: <etag> means "only overwrite if ETag matches" (CAS).
+        let object_path = self.get_object_path(&bucket, &key)?;
         if let Some(ref condition) = if_none_match
             && condition.is_any()
+            && object_path.exists()
         {
-            let object_path = self.get_object_path(&bucket, &key)?;
-            if object_path.exists() {
-                return Err(s3_error!(PreconditionFailed, "Object already exists"));
+            return Err(s3_error!(PreconditionFailed, "Object already exists"));
+        }
+        if let Some(ref condition) = if_match {
+            if !object_path.exists() {
+                return Err(s3_error!(PreconditionFailed, "Object does not exist"));
+            }
+            if let ETagCondition::ETag(expected) = condition {
+                let info = self.load_internal_info(&bucket, &key).await?;
+                let etag_value = match info.as_ref().and_then(crate::checksum::load_e_tag) {
+                    Some(v) => v,
+                    None => self.get_md5_sum(&bucket, &key).await?,
+                };
+                if !ETag::Strong(etag_value).strong_cmp(expected) {
+                    return Err(s3_error!(PreconditionFailed, "ETag does not match"));
+                }
             }
         }
 
@@ -695,13 +741,11 @@ impl S3 for FileSystem {
             {
                 return Err(s3_error!(UnexpectedContent, "Unexpected request body when creating a directory object."));
             }
-            let object_path = self.get_object_path(&bucket, &key)?;
             try_!(fs::create_dir_all(&object_path).await);
             let output = PutObjectOutput::default();
             return Ok(S3Response::new(output));
         }
 
-        let object_path = self.get_object_path(&bucket, &key)?;
         let mut file_writer = self.prepare_file_write(&object_path).await?;
 
         let mut md5_hash = Md5::new();
