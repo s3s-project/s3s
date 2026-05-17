@@ -661,20 +661,36 @@ impl S3 for FileSystem {
             cache_control,
             expires,
             website_redirect_location,
+            if_match,
             if_none_match,
             ..
         } = input;
 
         let Some(body) = body else { return Err(s3_error!(IncompleteBody)) };
 
-        // Check If-None-Match condition
-        // If-None-Match: * means "only create if the object doesn't exist"
+        // Check conditional headers before modifying any state.
+        // If-None-Match: * means "only create if the object doesn't exist".
+        // If-Match: <etag> means "only overwrite if ETag matches" (CAS).
+        let object_path = self.get_object_path(&bucket, &key)?;
         if let Some(ref condition) = if_none_match
             && condition.is_any()
+            && object_path.exists()
         {
-            let object_path = self.get_object_path(&bucket, &key)?;
-            if object_path.exists() {
-                return Err(s3_error!(PreconditionFailed, "Object already exists"));
+            return Err(s3_error!(PreconditionFailed, "Object already exists"));
+        }
+        if let Some(ref condition) = if_match {
+            if !object_path.exists() {
+                return Err(s3_error!(PreconditionFailed, "Object does not exist"));
+            }
+            if let ETagCondition::ETag(expected) = condition {
+                let info = self.load_internal_info(&bucket, &key).await?;
+                let etag_value = match info.as_ref().and_then(crate::checksum::load_e_tag) {
+                    Some(v) => v,
+                    None => self.get_md5_sum(&bucket, &key).await?,
+                };
+                if !ETag::Strong(etag_value).strong_cmp(expected) {
+                    return Err(s3_error!(PreconditionFailed, "ETag does not match"));
+                }
             }
         }
 
@@ -711,13 +727,11 @@ impl S3 for FileSystem {
             {
                 return Err(s3_error!(UnexpectedContent, "Unexpected request body when creating a directory object."));
             }
-            let object_path = self.get_object_path(&bucket, &key)?;
             try_!(fs::create_dir_all(&object_path).await);
             let output = PutObjectOutput::default();
             return Ok(S3Response::new(output));
         }
 
-        let object_path = self.get_object_path(&bucket, &key)?;
         let mut file_writer = self.prepare_file_write(&object_path).await?;
 
         let mut md5_hash = Md5::new();
