@@ -173,7 +173,7 @@ pub(crate) fn normalize_path_style_object_key(uri_path: &str) -> Cow<'_, str> {
         return Cow::Borrowed(uri_path);
     }
 
-    let mut normalized = String::with_capacity(uri_path.len() - (key.len() - normalized_key.len()));
+    let mut normalized = String::with_capacity(uri_path.len().saturating_sub(key.len() - normalized_key.len()));
     normalized.push('/');
     normalized.push_str(bucket);
     normalized.push('/');

@@ -144,7 +144,7 @@ struct PathStyleNormalizationS3;
 impl crate::s3_trait::S3 for PathStyleNormalizationS3 {}
 
 #[tokio::test]
-async fn path_style_double_slash_is_preserved_by_default() {
+async fn path_style_leading_slash_is_preserved_by_default() {
     use crate::config::{S3ConfigProvider, StaticConfigProvider};
     use crate::http::{Body, Request};
     use std::sync::Arc;
@@ -180,7 +180,7 @@ async fn path_style_double_slash_is_preserved_by_default() {
 }
 
 #[tokio::test]
-async fn path_style_double_slash_can_be_normalized() {
+async fn path_style_leading_slashes_are_stripped_when_enabled() {
     use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
     use crate::http::{Body, Request};
     use std::sync::Arc;
