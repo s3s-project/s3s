@@ -11,11 +11,13 @@ use s3s::s3_error;
 use s3s::{S3Request, S3Response};
 
 use std::collections::VecDeque;
+use std::fs::FileTimes;
 use std::io;
 use std::ops::Neg;
 use std::ops::Not;
 use std::path::Component;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use tokio::fs;
 use tokio::io::AsyncReadExt;
@@ -143,22 +145,20 @@ impl S3 for FileSystem {
             try_!(fs::create_dir_all(&dir_path).await);
         }
 
-        // `tokio::fs::copy(p, p)` (and the underlying `std::fs::copy`)
-        // opens the destination with `O_TRUNC` before reading the source,
-        // which zeroes the file when src and dst resolve to the same
-        // path. AWS S3 explicitly supports self-replace as a way to
-        // update an object's metadata without altering its content
-        // (CopyObject same bucket+key with `MetadataDirective: REPLACE`),
-        // so detect that case and skip the payload copy — the bytes are
-        // already in place.
-        if src_path != dst_path {
+        // `fs::copy(p, p)` truncates the file before reading it, so self-replace
+        // must preserve bytes in place while still updating LastModified.
+        let dst_last_modified = if src_path == dst_path {
+            let now = SystemTime::now();
+            let file = try_!(std::fs::OpenOptions::new().write(true).open(&dst_path));
+            try_!(file.set_times(FileTimes::new().set_modified(now)));
+            debug!(path = %dst_path.display(), "replace file in place");
+            Timestamp::from(now)
+        } else {
             let _ = try_!(fs::copy(&src_path, &dst_path).await);
-        }
-
-        debug!(from = %src_path.display(), to = %dst_path.display(), "copy file");
-
-        let dst_metadata = try_!(fs::metadata(&dst_path).await);
-        let dst_last_modified = Timestamp::from(try_!(dst_metadata.modified()));
+            debug!(from = %src_path.display(), to = %dst_path.display(), "copy file");
+            let dst_metadata = try_!(fs::metadata(&dst_path).await);
+            Timestamp::from(try_!(dst_metadata.modified()))
+        };
 
         // Derive the destination ETag from the source ETag when available.
         // This preserves non-MD5 ETag formats (e.g., multipart `{hash}-{part_count}`)

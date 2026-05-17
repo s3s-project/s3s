@@ -1635,6 +1635,14 @@ async fn test_copy_object_self_replace_preserves_content() -> Result<()> {
         .send()
         .await?;
 
+    let before_head = c.head_object().bucket(bucket).key(key).send().await?;
+    let before_last_modified = before_head
+        .last_modified()
+        .expect("head_object should return last_modified")
+        .to_owned();
+
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
     let copy_source = format!("{bucket}/{key}");
     c.copy_object()
         .bucket(bucket)
@@ -1642,6 +1650,16 @@ async fn test_copy_object_self_replace_preserves_content() -> Result<()> {
         .copy_source(&copy_source)
         .send()
         .await?;
+
+    let after_head = c.head_object().bucket(bucket).key(key).send().await?;
+    let after_last_modified = after_head
+        .last_modified()
+        .expect("head_object should return last_modified")
+        .to_owned();
+    assert!(
+        after_last_modified > before_last_modified,
+        "CopyObject self-replace must update LastModified"
+    );
 
     let got = c.get_object().bucket(bucket).key(key).send().await?;
     let body = got.body.collect().await?.into_bytes();
