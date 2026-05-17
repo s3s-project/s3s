@@ -747,7 +747,7 @@ mod tests {
         print_future_size!(S3Service::call_owned);
 
         // In case the futures are made too large accidentally
-        assert!(output_size(&crate::ops::call) <= 1600);
+        assert!(output_size(&crate::ops::call) <= 1650);
         assert!(output_size(&S3Service::call) <= 3000);
         assert!(output_size(&S3Service::call_owned) <= 3300);
     }

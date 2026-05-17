@@ -169,7 +169,9 @@ async fn path_style_double_slash_is_preserved_by_default() {
     );
 
     let result = super::prepare(&mut req, &ccx).await;
-    assert!(result.is_ok(), "prepare should succeed, got {result:?}");
+    if let Err(err) = result {
+        panic!("prepare should succeed, got {err:?}");
+    }
     assert_eq!(
         req.s3ext.s3_path.as_ref().and_then(crate::path::S3Path::get_object_key),
         Some("/test-key")
@@ -210,11 +212,10 @@ async fn path_style_double_slash_can_be_normalized() {
     );
 
     let result = super::prepare(&mut req, &ccx).await;
-    assert!(result.is_ok(), "prepare should succeed, got {result:?}");
-    assert_eq!(
-        req.s3ext.s3_path.as_ref().and_then(crate::path::S3Path::get_object_key),
-        Some("test-key")
-    );
+    if let Err(err) = result {
+        panic!("prepare should succeed, got {err:?}");
+    }
+    assert_eq!(req.s3ext.s3_path.as_ref().and_then(crate::path::S3Path::get_object_key), Some("test-key"));
 }
 
 #[test]
