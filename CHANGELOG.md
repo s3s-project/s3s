@@ -9,10 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 [Unreleased]: https://github.com/s3s-project/s3s/compare/v0.13.0...HEAD
 
-### s3s-fs
-
-+ Honor `If-Match` on `PutObject` for compare-and-swap writes
-
 ## [v0.13.0] - 2026-03-01
 
 [v0.13.0]: https://github.com/s3s-project/s3s/compare/v0.12.0...v0.13.0
