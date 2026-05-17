@@ -1728,6 +1728,180 @@ async fn test_put_object_if_match_etag() -> Result<()> {
     Ok(())
 }
 
+#[tokio::test]
+#[tracing::instrument]
+async fn test_put_object_if_match_multipart_etag() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("if-match-multipart-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    let key = "multipart-source.txt";
+    let initial = b"multipart initial content";
+    let updated = b"updated through put object";
+
+    create_bucket(&c, bucket).await?;
+
+    let multipart_etag = {
+        let (upload_id, upload_parts) = do_multipart_upload(&c, bucket, key, initial).await?;
+        let upload = CompletedMultipartUpload::builder().set_parts(Some(upload_parts)).build();
+        let result = c
+            .complete_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(&upload_id)
+            .multipart_upload(upload)
+            .send()
+            .await?;
+        result
+            .e_tag()
+            .expect("complete_multipart_upload should return e_tag")
+            .to_owned()
+    };
+    assert!(multipart_etag.contains('-'), "expected multipart ETag format");
+
+    let err = c
+        .put_object()
+        .bucket(bucket)
+        .key(key)
+        .body(ByteStream::from_static(b"wrong overwrite"))
+        .if_match("\"wrong-etag-value\"")
+        .send()
+        .await
+        .expect_err("wrong ETag should fail");
+    assert_eq!(err.into_service_error().code(), Some("PreconditionFailed"));
+
+    let result = c.get_object().bucket(bucket).key(key).send().await?;
+    let body = result.body.collect().await?.into_bytes();
+    assert_eq!(body.as_ref(), initial);
+
+    c.put_object()
+        .bucket(bucket)
+        .key(key)
+        .body(ByteStream::from_static(updated))
+        .if_match(&multipart_etag)
+        .send()
+        .await?;
+
+    let result = c.get_object().bucket(bucket).key(key).send().await?;
+    let body = result.body.collect().await?.into_bytes();
+    assert_eq!(body.as_ref(), updated);
+
+    delete_object(&c, bucket, key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
+async fn test_put_object_if_match_legacy_md5_fallback() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("if-match-legacy-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    let key = "legacy-object.txt";
+    let initial = b"legacy initial content";
+    let updated = b"legacy updated content";
+
+    create_bucket(&c, bucket).await?;
+
+    let initial_etag = {
+        let result = c
+            .put_object()
+            .bucket(bucket)
+            .key(key)
+            .body(ByteStream::from_static(initial))
+            .send()
+            .await?;
+        result.e_tag().expect("put_object should return e_tag").to_owned()
+    };
+
+    let encode = |s: &str| base64_simd::URL_SAFE_NO_PAD.encode_to_string(s);
+    let internal_info_path =
+        std::path::Path::new(FS_ROOT).join(format!(".bucket-{}.object-{}.internal.json", encode(bucket), encode(key)));
+    fs::remove_file(internal_info_path)?;
+
+    let err = c
+        .put_object()
+        .bucket(bucket)
+        .key(key)
+        .body(ByteStream::from_static(b"wrong overwrite"))
+        .if_match("\"wrong-etag-value\"")
+        .send()
+        .await
+        .expect_err("wrong ETag should fail through MD5 fallback");
+    assert_eq!(err.into_service_error().code(), Some("PreconditionFailed"));
+
+    let result = c.get_object().bucket(bucket).key(key).send().await?;
+    let body = result.body.collect().await?.into_bytes();
+    assert_eq!(body.as_ref(), initial);
+
+    c.put_object()
+        .bucket(bucket)
+        .key(key)
+        .body(ByteStream::from_static(updated))
+        .if_match(&initial_etag)
+        .send()
+        .await?;
+
+    let result = c.get_object().bucket(bucket).key(key).send().await?;
+    let body = result.body.collect().await?.into_bytes();
+    assert_eq!(body.as_ref(), updated);
+
+    delete_object(&c, bucket, key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
+async fn test_put_object_if_match_rejects_weak_etag() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("if-match-weak-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    let key = "weak-etag.txt";
+    let initial = b"weak etag initial content";
+
+    create_bucket(&c, bucket).await?;
+
+    let initial_etag = {
+        let result = c
+            .put_object()
+            .bucket(bucket)
+            .key(key)
+            .body(ByteStream::from_static(initial))
+            .send()
+            .await?;
+        result.e_tag().expect("put_object should return e_tag").to_owned()
+    };
+    let weak_etag = format!("W/{initial_etag}");
+
+    let err = c
+        .put_object()
+        .bucket(bucket)
+        .key(key)
+        .body(ByteStream::from_static(b"weak overwrite"))
+        .if_match(weak_etag)
+        .send()
+        .await
+        .expect_err("weak ETag must not satisfy If-Match");
+    assert_eq!(err.into_service_error().code(), Some("PreconditionFailed"));
+
+    let result = c.get_object().bucket(bucket).key(key).send().await?;
+    let body = result.body.collect().await?.into_bytes();
+    assert_eq!(body.as_ref(), initial);
+
+    delete_object(&c, bucket, key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
 /// Regression test for <https://github.com/s3s-project/s3s/issues/67>
 ///
 /// `copy_object` should create parent directories when the destination key contains "/"
