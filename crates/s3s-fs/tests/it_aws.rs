@@ -1636,6 +1636,7 @@ async fn test_copy_object_metadata_directive_replace() -> Result<()> {
         .content_type("application/octet-stream")
         .metadata("origin", "v1")
         .metadata("rev", "1")
+        .metadata("source-only", "keep-out")
         .send()
         .await?;
 
@@ -1661,6 +1662,65 @@ async fn test_copy_object_metadata_directive_replace() -> Result<()> {
     let dst_meta = head.metadata().cloned().unwrap_or_default();
     assert_eq!(dst_meta.get("origin").map(String::as_str), Some("v2"));
     assert_eq!(dst_meta.get("rev").map(String::as_str), Some("2"));
+    assert_eq!(
+        dst_meta.get("source-only"),
+        None,
+        "REPLACE must drop metadata that only exists on the source object"
+    );
+
+    delete_object(&c, bucket, src_key).await?;
+    delete_object(&c, bucket, dst_key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+/// Omitting `MetadataDirective` must use S3's default `COPY` behavior:
+/// propagate source metadata and ignore replacement fields from the request.
+#[tokio::test]
+#[tracing::instrument]
+async fn test_copy_object_metadata_directive_default_copies_source() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-meta-default-copy-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+
+    create_bucket(&c, bucket).await?;
+
+    let src_key = "src.bin";
+    c.put_object()
+        .bucket(bucket)
+        .key(src_key)
+        .body(ByteStream::from_static(b"x"))
+        .content_type("application/octet-stream")
+        .metadata("origin", "v1")
+        .send()
+        .await?;
+
+    let dst_key = "dst.bin";
+    let copy_source = format!("{bucket}/{src_key}");
+    c.copy_object()
+        .bucket(bucket)
+        .key(dst_key)
+        .copy_source(&copy_source)
+        .content_type("application/pdf")
+        .metadata("origin", "v2")
+        .send()
+        .await?;
+
+    let head = c.head_object().bucket(bucket).key(dst_key).send().await?;
+    assert_eq!(
+        head.content_type().unwrap_or(""),
+        "application/octet-stream",
+        "default MetadataDirective must propagate the source content_type"
+    );
+    let dst_meta = head.metadata().cloned().unwrap_or_default();
+    assert_eq!(
+        dst_meta.get("origin").map(String::as_str),
+        Some("v1"),
+        "default MetadataDirective must propagate the source metadata"
+    );
 
     delete_object(&c, bucket, src_key).await?;
     delete_object(&c, bucket, dst_key).await?;
