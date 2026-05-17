@@ -158,10 +158,38 @@ impl S3 for FileSystem {
             None => self.get_md5_sum(&input.bucket, &input.key).await?,
         };
 
-        let src_metadata_path = self.get_metadata_path(bucket, key, None)?;
-        if src_metadata_path.exists() {
-            let dst_metadata_path = self.get_metadata_path(&input.bucket, &input.key, None)?;
-            let _ = try_!(fs::copy(src_metadata_path, dst_metadata_path).await);
+        // `MetadataDirective` defaults to `COPY` per AWS API: when the
+        // header is absent the destination should inherit the source's
+        // metadata sidecar verbatim. When set to `REPLACE`, the
+        // destination's metadata is built fresh from the request and
+        // anything from the source is dropped (matching the behaviour
+        // documented at
+        // https://docs.aws.amazon.com/AmazonS3/latest/API/API_CopyObject.html).
+        let replace_metadata = input
+            .metadata_directive
+            .as_ref()
+            .is_some_and(|d| d.as_str() == MetadataDirective::REPLACE);
+
+        if replace_metadata {
+            let mut dst_attrs = crate::fs::ObjectAttributes {
+                user_metadata: input.metadata,
+                content_encoding: input.content_encoding,
+                content_type: input.content_type,
+                content_disposition: input.content_disposition,
+                content_language: input.content_language,
+                cache_control: input.cache_control,
+                expires: None,
+                website_redirect_location: input.website_redirect_location,
+            };
+            dst_attrs.set_expires_timestamp(input.expires);
+            self.save_object_attributes(&input.bucket, &input.key, &dst_attrs, None)
+                .await?;
+        } else {
+            let src_metadata_path = self.get_metadata_path(bucket, key, None)?;
+            if src_metadata_path.exists() {
+                let dst_metadata_path = self.get_metadata_path(&input.bucket, &input.key, None)?;
+                let _ = try_!(fs::copy(src_metadata_path, dst_metadata_path).await);
+            }
         }
 
         {
