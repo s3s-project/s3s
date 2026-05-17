@@ -157,6 +157,13 @@ pub const fn check_key(key: &str) -> bool {
     key.len() <= 1024
 }
 
+/// Returns a normalized path-style request path for object-key extraction.
+///
+/// Paths without an object component, paths whose object component does not
+/// start with `/`, and invalid non-absolute paths are returned unchanged as
+/// [`Cow::Borrowed`]. When the object-key portion starts with one or more `/`
+/// characters, those leading slashes are removed and the normalized path is
+/// returned as [`Cow::Owned`].
 pub(crate) fn normalize_path_style_object_key(uri_path: &str) -> Cow<'_, str> {
     let Some(path) = uri_path.strip_prefix('/') else { return Cow::Borrowed(uri_path) };
     let Some((bucket, key)) = path.split_once('/') else { return Cow::Borrowed(uri_path) };

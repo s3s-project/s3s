@@ -138,17 +138,18 @@ async fn vh_region_fallback_for_anonymous_request() {
     );
 }
 
+struct PathStyleNormalizationS3;
+
+#[async_trait::async_trait]
+impl crate::s3_trait::S3 for PathStyleNormalizationS3 {}
+
 #[tokio::test]
 async fn path_style_double_slash_is_preserved_by_default() {
     use crate::config::{S3ConfigProvider, StaticConfigProvider};
     use crate::http::{Body, Request};
     use std::sync::Arc;
 
-    struct NoOpS3;
-    #[async_trait::async_trait]
-    impl crate::s3_trait::S3 for NoOpS3 {}
-
-    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(NoOpS3);
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(PathStyleNormalizationS3);
     let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
     let ccx = CallContext {
         s3: &s3,
@@ -184,11 +185,7 @@ async fn path_style_double_slash_can_be_normalized() {
     use crate::http::{Body, Request};
     use std::sync::Arc;
 
-    struct NoOpS3;
-    #[async_trait::async_trait]
-    impl crate::s3_trait::S3 for NoOpS3 {}
-
-    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(NoOpS3);
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(PathStyleNormalizationS3);
     let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(S3Config {
         path_style_object_key_strip_leading_slashes: true,
         ..Default::default()
