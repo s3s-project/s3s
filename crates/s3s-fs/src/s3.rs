@@ -11,11 +11,13 @@ use s3s::s3_error;
 use s3s::{S3Request, S3Response};
 
 use std::collections::VecDeque;
+use std::fs::FileTimes;
 use std::io;
 use std::ops::Neg;
 use std::ops::Not;
 use std::path::Component;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use tokio::fs;
 use tokio::io::AsyncReadExt;
@@ -143,12 +145,20 @@ impl S3 for FileSystem {
             try_!(fs::create_dir_all(&dir_path).await);
         }
 
-        let _ = try_!(fs::copy(&src_path, &dst_path).await);
-
-        debug!(from = %src_path.display(), to = %dst_path.display(), "copy file");
-
-        let dst_metadata = try_!(fs::metadata(&dst_path).await);
-        let dst_last_modified = Timestamp::from(try_!(dst_metadata.modified()));
+        // `fs::copy(p, p)` truncates the file before reading it, so self-replace
+        // must preserve bytes in place while still updating LastModified.
+        let dst_last_modified = if src_path == dst_path {
+            let now = SystemTime::now();
+            let file = try_!(std::fs::OpenOptions::new().write(true).open(&dst_path));
+            try_!(file.set_times(FileTimes::new().set_modified(now)));
+            debug!(path = %dst_path.display(), "replace file in place");
+            Timestamp::from(now)
+        } else {
+            let _ = try_!(fs::copy(&src_path, &dst_path).await);
+            debug!(from = %src_path.display(), to = %dst_path.display(), "copy file");
+            let dst_metadata = try_!(fs::metadata(&dst_path).await);
+            Timestamp::from(try_!(dst_metadata.modified()))
+        };
 
         // Derive the destination ETag from the source ETag when available.
         // This preserves non-MD5 ETag formats (e.g., multipart `{hash}-{part_count}`)
@@ -188,7 +198,11 @@ impl S3 for FileSystem {
             let src_metadata_path = self.get_metadata_path(bucket, key, None)?;
             if src_metadata_path.exists() {
                 let dst_metadata_path = self.get_metadata_path(&input.bucket, &input.key, None)?;
-                let _ = try_!(fs::copy(src_metadata_path, dst_metadata_path).await);
+                // Same self-replace guard as for the payload above — `fs::copy`
+                // would zero the metadata sidecar when src == dst.
+                if src_metadata_path != dst_metadata_path {
+                    let _ = try_!(fs::copy(src_metadata_path, dst_metadata_path).await);
+                }
             }
         }
 
