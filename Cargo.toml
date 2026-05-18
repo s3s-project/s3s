@@ -111,7 +111,7 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter", "time"] }
 clap = { version = "4.6.1", features = ["derive"] }
 
 # Storage backends
-opendal = "0.55.0"
+opendal = { version = "0.56.0", default-features = false }
 
 # AWS SDK
 aws-config = { version = "1.8.15", default-features = false }
