@@ -199,9 +199,8 @@ fn tagging() {
 #[test]
 fn lifecycle_expiration() {
     let val = s3s::dto::LifecycleExpiration {
-        date: None,
         days: Some(365),
-        expired_object_delete_marker: None,
+        ..Default::default()
     };
 
     let ans = serialize_content(&val).unwrap();
@@ -283,6 +282,37 @@ fn assume_role_output() {
 
     let val = deserialize::<s3s::dto::AssumeRoleOutput>(xml.as_bytes()).unwrap();
     test_serde(&val);
+}
+
+#[cfg(feature = "minio")]
+#[test]
+fn minio_bucket_lifecycle_configuration_root() {
+    // MinIO compatibility: accept both LifecycleConfiguration and BucketLifecycleConfiguration
+    let xml_bucket = r"
+<BucketLifecycleConfiguration>
+  <Rule>
+    <ID>r1</ID>
+    <Status>Enabled</Status>
+    <Expiration><Days>30</Days></Expiration>
+  </Rule>
+</BucketLifecycleConfiguration>
+    ";
+    let val = deserialize::<s3s::dto::BucketLifecycleConfiguration>(xml_bucket.as_bytes()).unwrap();
+    assert_eq!(val.rules.len(), 1);
+    assert_eq!(val.rules[0].id.as_deref(), Some("r1"));
+
+    let xml_std = r"
+<LifecycleConfiguration>
+  <Rule>
+    <ID>r2</ID>
+    <Status>Enabled</Status>
+    <Expiration><Days>30</Days></Expiration>
+  </Rule>
+</LifecycleConfiguration>
+    ";
+    let val2 = deserialize::<s3s::dto::BucketLifecycleConfiguration>(xml_std.as_bytes()).unwrap();
+    assert_eq!(val2.rules.len(), 1);
+    assert_eq!(val2.rules[0].id.as_deref(), Some("r2"));
 }
 
 #[cfg(feature = "minio")]

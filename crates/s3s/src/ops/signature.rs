@@ -43,6 +43,15 @@ fn extract_amz_content_sha256<'a>(hs: &'_ OrderedHeaders<'a>) -> S3Result<Option
     }
 }
 
+fn x_amz_content_sha256_mismatch() -> S3Error {
+    let mut err = S3Error::with_message(
+        S3ErrorCode::Custom("XAmzContentSHA256Mismatch".into()),
+        "The provided 'x-amz-content-sha256' header does not match what was computed.",
+    );
+    err.set_status_code(hyper::StatusCode::BAD_REQUEST);
+    err
+}
+
 fn extract_authorization_v4<'a>(hs: &'_ OrderedHeaders<'a>) -> S3Result<Option<AuthorizationV4<'a>>> {
     let Some(val) = hs.get_unique(crate::header::AUTHORIZATION) else { return Ok(None) };
     match AuthorizationV4::parse(val) {
@@ -297,9 +306,6 @@ impl SignatureContext<'_> {
             ));
         }
 
-        // ASK: how to use it?
-        let _content_sha256: Option<AmzContentSha256<'_>> = extract_amz_content_sha256(&self.hs)?;
-
         {
             // check expiration
             let now = time::OffsetDateTime::now_utc();
@@ -355,6 +361,11 @@ impl SignatureContext<'_> {
             None
         });
 
+        let payload = match headers.get_unique(crate::header::X_AMZ_CONTENT_SHA256) {
+            Some(content_sha256) => sig_v4::Payload::SingleChunk(content_sha256),
+            None => sig_v4::Payload::Unsigned,
+        };
+
         let method = &self.req_method;
         let amz_date = &presigned_url.amz_date;
         let verifier = SignatureVerificationContext {
@@ -365,10 +376,27 @@ impl SignatureContext<'_> {
             region,
             service,
         };
-        let canonical_request = sig_v4::create_presigned_canonical_request(method, self.decoded_uri_path, qs.as_ref(), &headers);
+        let canonical_request = sig_v4::create_presigned_canonical_request(method, self.decoded_uri_path, qs.as_ref(), &headers, payload);
         verifier.verify_with_raw_path_fallback(&canonical_request, || {
-            sig_v4::create_presigned_canonical_request_with_raw_uri_path(method, self.raw_uri_path, qs.as_ref(), &headers)
+            sig_v4::create_presigned_canonical_request_with_raw_uri_path(method, self.raw_uri_path, qs.as_ref(), &headers, payload)
         })?;
+
+        if let Some(content_sha256) = self.hs.get_unique(crate::header::X_AMZ_CONTENT_SHA256)
+            && content_sha256 != "UNSIGNED-PAYLOAD"
+        {
+            let length = if let Some(content_length) = self.content_length {
+                usize::try_from(content_length).map_err(|_| invalid_request!("content-length exceeds platform limits"))?
+            } else {
+                self.req_body
+                    .remaining_length()
+                    .exact()
+                    .ok_or_else(|| s3_error!(MissingContentLength, "missing header: content-length"))?
+            };
+
+            let body = mem::take(self.req_body);
+            let stream = UploadStream::new(body, length, content_sha256).map_err(|_| x_amz_content_sha256_mismatch())?;
+            *self.req_body = Body::from(stream.into_byte_stream());
+        }
 
         Ok(CredentialsExt {
             access_key: access_key.into(),
@@ -672,6 +700,12 @@ impl SignatureContext<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::S3ErrorCode;
+    use crate::auth::{SecretKey, SimpleAuth};
+    use crate::config::{S3ConfigProvider, StaticConfigProvider};
+    use crate::sig_v4;
+    use crate::sig_v4::AmzDate;
+    use std::sync::Arc;
 
     #[test]
     fn test_extract_amz_content_sha256_missing() {
@@ -887,11 +921,6 @@ file content\r\n\
     /// Covers the service whitelist fix in `v4_check_presigned_url`.
     #[tokio::test]
     async fn v4_presigned_url_rejects_unknown_service() {
-        use crate::S3ErrorCode;
-        use crate::auth::SecretKey;
-        use crate::config::{S3ConfigProvider, StaticConfigProvider};
-        use std::sync::Arc;
-
         // Credential scope uses "custom-svc" instead of the allowed "s3" or "sts".
         // The date is old (2013) with a huge Expires so the expiry check does not fire first.
         let qs = OrderedQs::parse(concat!(
@@ -959,6 +988,7 @@ file content\r\n\
         let raw_uri_path = "/test-bucket/path/sitemap.xmlage=";
         let amz_date = AmzDate::parse("20130524T000000Z").unwrap();
         let headers_for_signing = OrderedHeaders::from_slice_unchecked(&[("host", "s3.amazonaws.com")]);
+
         let query_strings_for_signing = &[
             ("X-Amz-Algorithm", "AWS4-HMAC-SHA256"),
             ("X-Amz-Credential", "AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request"),
@@ -973,12 +1003,14 @@ file content\r\n\
                 decoded_uri_path,
                 query_strings_for_signing,
                 &headers_for_signing,
+                sig_v4::Payload::Unsigned,
             ),
             sig_v4::create_presigned_canonical_request_with_raw_uri_path(
                 &method,
                 raw_uri_path,
                 query_strings_for_signing,
                 &headers_for_signing,
+                sig_v4::Payload::Unsigned,
             ),
         ];
         assert_ne!(canonical_requests[0], canonical_requests[1]);
@@ -1058,6 +1090,7 @@ file content\r\n\
             decoded_uri_path,
             query_strings_for_signing,
             &headers_for_signing,
+            sig_v4::Payload::Unsigned,
         );
         let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
         let signature = sig_v4::calculate_signature(&string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
@@ -1099,6 +1132,84 @@ file content\r\n\
             .await
             .expect("HTTP/2 authority should be used for a signed host header");
         assert_eq!(cred.access_key, access_key);
+    }
+
+    #[tokio::test]
+    async fn v4_presigned_url_invalid_content_sha256_returns_checksum_mismatch() {
+        use crate::auth::SecretKey;
+        use crate::auth::SimpleAuth;
+        use crate::config::{S3ConfigProvider, StaticConfigProvider};
+        use std::sync::Arc;
+
+        let access_key = "AKIAIOSFODNN7EXAMPLE";
+        let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+        let auth = SimpleAuth::from_single(access_key, secret_key.clone());
+        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+
+        let method = Method::PUT;
+        let uri = Uri::from_static("https://examplebucket.s3.amazonaws.com/test.txt");
+        let headers = OrderedHeaders::from_slice_unchecked(&[
+            ("host", "examplebucket.s3.amazonaws.com"),
+            ("x-amz-content-sha256", "invalid-sha256"),
+        ]);
+
+        let query_strings_for_signing = &[
+            ("X-Amz-Algorithm", "AWS4-HMAC-SHA256"),
+            ("X-Amz-Credential", "AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request"),
+            ("X-Amz-Date", "20130524T000000Z"),
+            ("X-Amz-Expires", "999999999"),
+            ("X-Amz-SignedHeaders", "host;x-amz-content-sha256"),
+        ];
+        let canonical_request = sig_v4::create_presigned_canonical_request(
+            &method,
+            "/test.txt",
+            query_strings_for_signing,
+            &headers,
+            sig_v4::Payload::SingleChunk("invalid-sha256"),
+        );
+        let amz_date = AmzDate::parse("20130524T000000Z").unwrap();
+        let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
+        let signature = sig_v4::calculate_signature(&string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
+
+        let qs = OrderedQs::parse(&format!(
+            "{}&X-Amz-Signature={signature}",
+            concat!(
+                "X-Amz-Algorithm=AWS4-HMAC-SHA256",
+                "&X-Amz-Credential=AKIAIOSFODNN7EXAMPLE%2F20130524%2Fus-east-1%2Fs3%2Faws4_request",
+                "&X-Amz-Date=20130524T000000Z",
+                "&X-Amz-Expires=999999999",
+                "&X-Amz-SignedHeaders=host%3Bx-amz-content-sha256"
+            )
+        ))
+        .unwrap();
+
+        let mut body = Body::empty();
+        let mut cx = SignatureContext {
+            auth: Some(&auth),
+            config: &config,
+            req_version: ::http::Version::HTTP_11,
+            req_method: &method,
+            req_uri: &uri,
+            req_body: &mut body,
+            qs: Some(&qs),
+            hs: headers,
+            decoded_uri_path: "/test.txt",
+            raw_uri_path: "/test.txt",
+            vh_bucket: None,
+            content_length: Some(0),
+            mime: None,
+            decoded_content_length: None,
+            transformed_body: None,
+            multipart: None,
+            trailing_headers: None,
+        };
+
+        let err = cx
+            .v4_check_presigned_url()
+            .await
+            .expect_err("invalid x-amz-content-sha256 should map to checksum mismatch");
+        assert_eq!(err.code().as_str(), "XAmzContentSHA256Mismatch");
+        assert_eq!(err.status_code(), Some(hyper::StatusCode::BAD_REQUEST));
     }
 
     #[tokio::test]

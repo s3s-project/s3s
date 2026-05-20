@@ -48,7 +48,11 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
                     continue;
                 }
             }
-            rust::Type::StructEnum(_) => {}
+            rust::Type::StructEnum(ty) => {
+                if ty.is_custom_extension {
+                    continue;
+                }
+            }
         }
 
         let s3s_path = f!("s3s::dto::{name}");

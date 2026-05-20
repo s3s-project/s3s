@@ -4152,6 +4152,19 @@ pub trait S3: Send + Sync + 'static {
         Err(s3_error!(NotImplemented, "ListObjectVersions is not implemented yet"))
     }
 
+    #[cfg(feature = "minio")]
+    /// `MinIO` compatibility extension for `GET /{bucket}?versions&metadata=true`.
+    ///
+    /// This is not part of the AWS S3 API. Implementations may return MinIO-specific
+    /// metadata fields for each listed version/delete marker while preserving the
+    /// standard `ListObjectVersions` behavior for plain `?versions` requests.
+    async fn list_object_versions_m(
+        &self,
+        _req: S3Request<ListObjectVersionsInput>,
+    ) -> S3Result<S3Response<ListObjectVersionsMOutput>> {
+        Err(s3_error!(NotImplemented, "ListObjectVersionsM is not implemented yet"))
+    }
+
     /// <note>
     /// <p>This operation is not supported for directory buckets.</p>
     /// </note>
@@ -4300,6 +4313,16 @@ pub trait S3: Send + Sync + 'static {
     /// </ul>
     async fn list_objects_v2(&self, _req: S3Request<ListObjectsV2Input>) -> S3Result<S3Response<ListObjectsV2Output>> {
         Err(s3_error!(NotImplemented, "ListObjectsV2 is not implemented yet"))
+    }
+
+    #[cfg(feature = "minio")]
+    /// `MinIO` compatibility extension for `GET /{bucket}?list-type=2&metadata=true`.
+    ///
+    /// This is not part of the AWS S3 API. Implementations may return MinIO-specific
+    /// metadata fields for each listed object while preserving the standard
+    /// `ListObjectsV2` behavior for plain `?list-type=2` requests.
+    async fn list_objects_v2m(&self, _req: S3Request<ListObjectsV2Input>) -> S3Result<S3Response<ListObjectsV2MOutput>> {
+        Err(s3_error!(NotImplemented, "ListObjectsV2M is not implemented yet"))
     }
 
     /// <p>Lists the parts that have been uploaded for a specific multipart upload.</p>

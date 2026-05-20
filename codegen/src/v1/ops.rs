@@ -1,10 +1,12 @@
 use super::dto::RustTypes;
 use super::rust::default_value_literal;
+use super::smithy::SmithyTraitsExt;
 use super::xml::{is_xml_output, is_xml_payload};
 use super::{dto, rust, smithy};
 use super::{headers, o};
 
 use crate::declare_codegen;
+use crate::v1::Patch;
 
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -16,7 +18,7 @@ use heck::ToSnakeCase;
 use scoped_writer::g;
 use stdx::default::default;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Operation {
     pub name: String,
 
@@ -33,6 +35,8 @@ pub struct Operation {
     pub http_method: String,
     pub http_uri: String,
     pub http_code: u16,
+
+    pub is_minio_extension: bool,
 }
 
 pub type Operations = BTreeMap<String, Operation>;
@@ -111,6 +115,7 @@ pub fn collect_operations(model: &smithy::Model) -> Operations {
             http_method: sh.traits.http_method().unwrap().to_owned(),
             http_uri: sh.traits.http_uri().unwrap().to_owned(),
             http_code,
+            is_minio_extension: sh.traits.minio(),
         };
         insert(&mut operations, op_name, op);
     }
@@ -136,11 +141,52 @@ pub fn collect_operations(model: &smithy::Model) -> Operations {
             http_method: o("POST"),
             http_uri: o("/{Bucket}"),
             http_code: 200,
+            is_minio_extension: false,
         };
         insert(&mut operations, op_name, op);
     }
 
     operations
+}
+
+pub fn augment_operations(mut ops: Operations, patch: Option<Patch>) -> Operations {
+    if matches!(patch, Some(Patch::Minio)) && ops.contains_key("ListObjectVersionsM").not() {
+        let op_name = o("ListObjectVersionsM");
+        let op = Operation {
+            name: op_name.clone(),
+            input: o("ListObjectVersionsInput"),
+            output: o("ListObjectVersionsMOutput"),
+            smithy_input: o("ListObjectVersionsRequest"),
+            smithy_output: o("ListObjectVersionsMOutput"),
+            s3_unwrapped_xml_output: false,
+            doc: Some(o("MinIO compatibility extension for `GET /{bucket}?versions&metadata=true`.")),
+            http_method: o("GET"),
+            http_uri: o("/{Bucket}?versions&metadata=true"),
+            http_code: 200,
+            is_minio_extension: true,
+        };
+        assert!(ops.insert(op_name, op).is_none());
+    }
+
+    if matches!(patch, Some(Patch::Minio)) && ops.contains_key("ListObjectsV2M").not() {
+        let op_name = o("ListObjectsV2M");
+        let op = Operation {
+            name: op_name.clone(),
+            input: o("ListObjectsV2Input"),
+            output: o("ListObjectsV2MOutput"),
+            smithy_input: o("ListObjectsV2Request"),
+            smithy_output: o("ListObjectsV2MOutput"),
+            s3_unwrapped_xml_output: false,
+            doc: Some(o("MinIO compatibility extension for `GET /{bucket}?list-type=2&metadata=true`.")),
+            http_method: o("GET"),
+            http_uri: o("/{Bucket}?list-type=2&metadata=true"),
+            http_code: 200,
+            is_minio_extension: true,
+        };
+        assert!(ops.insert(op_name, op).is_none());
+    }
+
+    ops
 }
 
 pub fn is_op_input(name: &str, ops: &Operations) -> bool {
@@ -151,7 +197,7 @@ pub fn is_op_output(name: &str, ops: &Operations) -> bool {
     name.strip_suffix("Output").is_some_and(|x| ops.contains_key(x))
 }
 
-pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
+pub fn codegen(ops: &Operations, rust_types: &RustTypes, patch: Option<Patch>) {
     declare_codegen!();
 
     for op in ops.values() {
@@ -178,7 +224,7 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
         "",
     ]);
 
-    codegen_http(ops, rust_types);
+    codegen_http(ops, rust_types, patch);
     codegen_router(ops, rust_types);
 }
 
@@ -190,11 +236,17 @@ fn status_code_name(code: u16) -> &'static str {
     }
 }
 
-fn codegen_http(ops: &Operations, rust_types: &RustTypes) {
+fn codegen_http(ops: &Operations, rust_types: &RustTypes, patch: Option<Patch>) {
     codegen_header_value(ops, rust_types);
 
     for op in ops.values() {
         if op.name == "PostObject" {
+            continue;
+        }
+        if matches!(op.name.as_str(), "ListObjectVersionsM" | "ListObjectsV2M") {
+            codegen_metadata_extension_op(op);
+            codegen_op_http_call(op);
+            g!();
             continue;
         }
         g!("pub struct {};", op.name);
@@ -202,7 +254,7 @@ fn codegen_http(ops: &Operations, rust_types: &RustTypes) {
 
         g!("impl {} {{", op.name);
 
-        codegen_op_http_de(op, rust_types);
+        codegen_op_http_de(op, rust_types, patch);
         codegen_op_http_ser(op, rust_types);
 
         g!("}}");
@@ -213,6 +265,35 @@ fn codegen_http(ops: &Operations, rust_types: &RustTypes) {
     }
 
     codegen_post_object_fork_op(rust_types);
+}
+
+fn codegen_metadata_extension_op(op: &Operation) {
+    g!("pub struct {};", op.name);
+    g!();
+    g!("impl {} {{", op.name);
+    g([
+        "    pub fn deserialize_http(req: &mut http::Request) -> S3Result<",
+        op.input.as_str(),
+        "> {",
+        "        ",
+        if op.name == "ListObjectVersionsM" {
+            "ListObjectVersions::deserialize_http(req)"
+        } else {
+            "ListObjectsV2::deserialize_http(req)"
+        },
+        "    }",
+        "",
+        "    pub fn serialize_http(x: ",
+        op.output.as_str(),
+        ") -> S3Result<http::Response> {",
+        "        let mut res = http::Response::with_status(http::StatusCode::OK);",
+        "        http::set_xml_body(&mut res, &x)?;",
+        "        http::add_opt_header(&mut res, X_AMZ_REQUEST_CHARGED, x.request_charged)?;",
+        "        Ok(res)",
+        "    }",
+    ]);
+    g!("}}");
+    g!();
 }
 
 #[allow(clippy::too_many_lines)]
@@ -375,7 +456,7 @@ fn codegen_header_value(ops: &Operations, rust_types: &RustTypes) {
 
     for op in ops.values() {
         for ty_name in [op.input.as_str(), op.output.as_str()] {
-            let rust_type = &rust_types[ty_name];
+            let Some(rust_type) = rust_types.get(ty_name) else { continue };
             match rust_type {
                 rust::Type::Provided(_) => {}
                 rust::Type::Struct(ty) => {
@@ -563,7 +644,7 @@ fn codegen_op_http_ser(op: &Operation, rust_types: &RustTypes) {
 }
 
 #[allow(clippy::too_many_lines)]
-fn codegen_op_http_de(op: &Operation, rust_types: &RustTypes) {
+fn codegen_op_http_de(op: &Operation, rust_types: &RustTypes, patch: Option<Patch>) {
     let input = op.input.as_str();
     let rust_type = &rust_types[input];
     match rust_type {
@@ -708,9 +789,54 @@ fn codegen_op_http_de(op: &Operation, rust_types: &RustTypes) {
                                     g!("    Err(e) => return Err(e),");
                                     g!("}};");
                                 } else if field.option_type {
-                                    g!("let {}: Option<{}> = http::take_opt_xml_body(req)?;", field.name, field.type_);
+                                    // MinIO compatibility: accept a trimmed bare
+                                    // `Enabled` body as an object-lock shorthand.
+                                    //
+                                    // Current MinIO source does not expose the same
+                                    // raw-body parser on the S3 HTTP path; this
+                                    // helper is derived from the ObjectLock config
+                                    // shape and its required Enabled state:
+                                    // - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/object/lock/lock.go#L232-L319
+                                    if op.name == "PutObjectLockConfiguration"
+                                        && field.name == "object_lock_configuration"
+                                        && matches!(patch, Some(Patch::Minio))
+                                    {
+                                        g!("// MinIO reference:");
+                                        g!(
+                                            "// - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/object/lock/lock.go#L232-L319"
+                                        );
+                                        g!(
+                                            "let {}: Option<{}> = http::take_opt_object_lock_configuration(req)?;",
+                                            field.name,
+                                            field.type_
+                                        );
+                                    } else {
+                                        g!("let {}: Option<{}> = http::take_opt_xml_body(req)?;", field.name, field.type_);
+                                    }
                                 } else {
-                                    g!("let {}: {} = http::take_xml_body(req)?;", field.name, field.type_);
+                                    // MinIO compatibility: accept a trimmed bare
+                                    // `Enabled` body as a versioning shorthand.
+                                    //
+                                    // Current MinIO source models versioning
+                                    // enablement via VersioningConfiguration and
+                                    // the `Enabled` status value:
+                                    // - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/versioning/versioning.go#L49-L84
+                                    // - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/versioning/versioning.go#L157-L166
+                                    if op.name == "PutBucketVersioning"
+                                        && field.name == "versioning_configuration"
+                                        && matches!(patch, Some(Patch::Minio))
+                                    {
+                                        g!("// MinIO reference:");
+                                        g!(
+                                            "// - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/versioning/versioning.go#L49-L84"
+                                        );
+                                        g!(
+                                            "// - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/versioning/versioning.go#L157-L166"
+                                        );
+                                        g!("let {}: {} = http::take_versioning_configuration(req)?;", field.name, field.type_);
+                                    } else {
+                                        g!("let {}: {} = http::take_xml_body(req)?;", field.name, field.type_);
+                                    }
                                 }
                             }
                         },
@@ -1182,18 +1308,16 @@ fn codegen_router(ops: &Operations, rust_types: &RustTypes) {
                                 let tag = route.query_tag.as_deref().unwrap();
                                 assert!(tag.as_bytes().iter().all(|&x| x == b'-' || x.is_ascii_alphabetic()), "{tag}");
                             }
-                            if has_query_patterns {
-                                assert!(qp.len() <= 1);
-                            }
-
                             match (has_query_tag, has_query_patterns) {
                                 (true, true) => {
-                                    assert_eq!(route.op.name, "SelectObjectContent");
-
                                     let tag = route.query_tag.as_deref().unwrap();
-                                    let (n, v) = qp.first().unwrap();
+                                    let pattern_check = qp
+                                        .iter()
+                                        .map(|(n, v)| format!("super::check_query_pattern(qs, \"{n}\",\"{v}\")"))
+                                        .collect::<Vec<_>>()
+                                        .join(" && ");
 
-                                    g!("if qs.has(\"{tag}\") && super::check_query_pattern(qs, \"{n}\",\"{v}\") {{");
+                                    g!("if qs.has(\"{tag}\") && {pattern_check} {{");
                                     succ(route, true);
                                     g!("}}");
                                 }
@@ -1232,8 +1356,12 @@ fn codegen_router(ops: &Operations, rust_types: &RustTypes) {
                                     }
                                 }
                                 (false, true) => {
-                                    let (n, v) = qp.first().unwrap();
-                                    g!("if super::check_query_pattern(qs, \"{n}\",\"{v}\") {{");
+                                    let pattern_check = qp
+                                        .iter()
+                                        .map(|(n, v)| format!("super::check_query_pattern(qs, \"{n}\",\"{v}\")"))
+                                        .collect::<Vec<_>>()
+                                        .join(" && ");
+                                    g!("if {pattern_check} {{");
                                     succ(route, true);
                                     g!("}}");
                                 }

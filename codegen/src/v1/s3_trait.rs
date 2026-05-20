@@ -26,6 +26,10 @@ pub fn codegen(ops: &Operations) {
         let input = &op.input;
         let output = &op.output;
 
+        if op.is_minio_extension {
+            g!("#[cfg(feature = \"minio\")]");
+        }
+
         if op.name == "PostObject" {
             g([
                 "/// POST Object (multipart form upload)",
@@ -41,7 +45,26 @@ pub fn codegen(ops: &Operations) {
             continue;
         }
 
-        codegen_doc(op.doc.as_deref());
+        if op.name == "ListObjectVersionsM" {
+            g([
+                "/// `MinIO` compatibility extension for `GET /{bucket}?versions&metadata=true`.",
+                "///",
+                "/// This is not part of the AWS S3 API. Implementations may return MinIO-specific",
+                "/// metadata fields for each listed version/delete marker while preserving the",
+                "/// standard `ListObjectVersions` behavior for plain `?versions` requests.",
+            ]);
+        } else if op.name == "ListObjectsV2M" {
+            g([
+                "/// `MinIO` compatibility extension for `GET /{bucket}?list-type=2&metadata=true`.",
+                "///",
+                "/// This is not part of the AWS S3 API. Implementations may return MinIO-specific",
+                "/// metadata fields for each listed object while preserving the standard",
+                "/// `ListObjectsV2` behavior for plain `?list-type=2` requests.",
+            ]);
+        } else {
+            codegen_doc(op.doc.as_deref());
+        }
+
         g!("async fn {method_name}(&self, _req: S3Request<{input}>) -> S3Result<S3Response<{output}>> {{");
         g!("Err(s3_error!(NotImplemented, \"{} is not implemented yet\"))", op.name);
         g!("}}");

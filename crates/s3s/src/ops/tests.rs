@@ -1778,6 +1778,162 @@ fn create_session_deserialize_http() {
     assert!(input.bucket_key_enabled.is_none());
 }
 
+#[cfg(feature = "minio")]
+#[test]
+fn list_object_versions_m_route_resolved_before_standard_versions() {
+    use crate::http::{Body, OrderedQs};
+    use crate::path::S3Path;
+
+    let req = crate::http::Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri("http://localhost/my-bucket?versions&metadata=true")
+            .body(Body::empty())
+            .unwrap(),
+    );
+
+    let s3_path = S3Path::Bucket {
+        bucket: "my-bucket".into(),
+    };
+    let qs = OrderedQs::parse("versions&metadata=true").unwrap();
+    let (op, needs_full_body) = generated::resolve_route(&req, &s3_path, Some(&qs)).unwrap();
+
+    assert_eq!(op.name(), "ListObjectVersionsM");
+    assert!(!needs_full_body);
+}
+
+#[cfg(feature = "minio")]
+#[test]
+fn list_object_versions_m_serialize_http_includes_minio_metadata_fields() {
+    use crate::dto::{
+        DeleteMarkerM, ListObjectVersionMEntry, ListObjectVersionsMOutput, ObjectInternalInfo, ObjectVersionM, Owner,
+        UserMetadataCollection, UserMetadataEntry,
+    };
+
+    let output = ListObjectVersionsMOutput {
+        name: Some("my-bucket".to_string()),
+        prefix: Some(String::new()),
+        key_marker: Some(String::new()),
+        max_keys: Some(1000),
+        is_truncated: Some(false),
+        version_id_marker: Some(String::new()),
+        next_version_id_marker: Some(String::new()),
+        entries: vec![
+            ListObjectVersionMEntry::Version(ObjectVersionM {
+                key: Some("obj-a".to_string()),
+                version_id: Some("v1".to_string()),
+                is_latest: Some(true),
+                user_tags: Some("env=prod".to_string()),
+                user_metadata: Some(UserMetadataCollection {
+                    items: vec![UserMetadataEntry {
+                        key: "project".to_string(),
+                        value: "alpha".to_string(),
+                    }],
+                }),
+                internal: Some(ObjectInternalInfo { k: 4, m: 2 }),
+                owner: Some(Owner {
+                    id: Some("owner-id".to_string()),
+                    display_name: Some("owner-name".to_string()),
+                }),
+                ..Default::default()
+            }),
+            ListObjectVersionMEntry::DeleteMarker(DeleteMarkerM {
+                key: Some("obj-b".to_string()),
+                version_id: Some("v2".to_string()),
+                is_latest: Some(false),
+                user_metadata: Some(UserMetadataCollection {
+                    items: vec![UserMetadataEntry {
+                        key: "marker".to_string(),
+                        value: "true".to_string(),
+                    }],
+                }),
+                internal: Some(ObjectInternalInfo { k: 6, m: 3 }),
+                ..Default::default()
+            }),
+        ],
+        ..Default::default()
+    };
+
+    let response = generated::ListObjectVersionsM::serialize_http(output).unwrap();
+    let body = response.body.bytes().unwrap();
+    let body = std::str::from_utf8(&body).unwrap();
+
+    assert!(body.contains("<Version>"));
+    assert!(body.contains("<DeleteMarker>"));
+    assert!(body.contains("<UserMetadata><project>alpha</project></UserMetadata>"));
+    assert!(body.contains("<UserTags>env=prod</UserTags>"));
+    assert!(body.contains("<Internal><K>4</K><M>2</M></Internal>"));
+    assert!(body.contains("<UserMetadata><marker>true</marker></UserMetadata>"));
+}
+
+#[cfg(feature = "minio")]
+#[test]
+fn list_objects_v2_m_route_resolved_before_standard_list_objects_v2() {
+    use crate::http::{Body, OrderedQs};
+    use crate::path::S3Path;
+    use hyper::Method;
+
+    let req = crate::http::Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri("http://localhost/my-bucket?list-type=2&metadata=true")
+            .body(Body::empty())
+            .unwrap(),
+    );
+
+    let s3_path = S3Path::Bucket {
+        bucket: "my-bucket".into(),
+    };
+    let qs = OrderedQs::parse("list-type=2&metadata=true").unwrap();
+    let (op, needs_full_body) = generated::resolve_route(&req, &s3_path, Some(&qs)).unwrap();
+
+    assert_eq!(op.name(), "ListObjectsV2M");
+    assert!(!needs_full_body);
+}
+
+#[cfg(feature = "minio")]
+#[test]
+fn list_objects_v2_m_serialize_http_includes_metadata_fields() {
+    use crate::dto::{ListObjectsV2MOutput, ObjectInternalInfo, ObjectM, Owner, UserMetadataCollection, UserMetadataEntry};
+
+    let output = ListObjectsV2MOutput {
+        name: Some("my-bucket".to_string()),
+        prefix: Some("prefix/".to_string()),
+        max_keys: Some(1000),
+        key_count: Some(1),
+        continuation_token: Some(String::new()),
+        next_continuation_token: Some(String::new()),
+        is_truncated: Some(false),
+        contents: Some(vec![ObjectM {
+            key: Some("prefix/object.txt".to_string()),
+            user_tags: Some("env=prod".to_string()),
+            user_metadata: Some(UserMetadataCollection {
+                items: vec![UserMetadataEntry {
+                    key: "project".to_string(),
+                    value: "alpha".to_string(),
+                }],
+            }),
+            internal: Some(ObjectInternalInfo { k: 4, m: 2 }),
+            owner: Some(Owner {
+                id: Some("owner-id".to_string()),
+                display_name: Some("owner-name".to_string()),
+            }),
+            ..Default::default()
+        }]),
+        ..Default::default()
+    };
+
+    let response = generated::ListObjectsV2M::serialize_http(output).unwrap();
+    let body = response.body.bytes().unwrap();
+    let body = std::str::from_utf8(&body).unwrap();
+
+    assert!(body.contains("<ListBucketResult"));
+    assert!(body.contains("<Contents>"));
+    assert!(body.contains("<UserMetadata><project>alpha</project></UserMetadata>"));
+    assert!(body.contains("<UserTags>env=prod</UserTags>"));
+    assert!(body.contains("<Internal><K>4</K><M>2</M></Internal>"));
+}
+
 #[test]
 fn create_session_serialize_http() {
     use crate::dto::{CreateSessionOutput, SessionCredentials, Timestamp, TimestampFormat};

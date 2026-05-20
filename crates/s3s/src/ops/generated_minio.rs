@@ -65,8 +65,10 @@
 // ListDirectoryBuckets
 // ListMultipartUploads
 // ListObjectVersions
+// ListObjectVersionsM
 // ListObjects
 // ListObjectsV2
+// ListObjectsV2M
 // ListParts
 // PostObject
 // PutBucketAccelerateConfiguration
@@ -4257,6 +4259,46 @@ impl super::Operation for ListObjectVersions {
     }
 }
 
+pub struct ListObjectVersionsM;
+
+impl ListObjectVersionsM {
+    pub fn deserialize_http(req: &mut http::Request) -> S3Result<ListObjectVersionsInput> {
+        ListObjectVersions::deserialize_http(req)
+    }
+
+    pub fn serialize_http(x: ListObjectVersionsMOutput) -> S3Result<http::Response> {
+        let mut res = http::Response::with_status(http::StatusCode::OK);
+        http::set_xml_body(&mut res, &x)?;
+        http::add_opt_header(&mut res, X_AMZ_REQUEST_CHARGED, x.request_charged)?;
+        Ok(res)
+    }
+}
+
+#[async_trait::async_trait]
+impl super::Operation for ListObjectVersionsM {
+    fn name(&self) -> &'static str {
+        "ListObjectVersionsM"
+    }
+
+    async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
+        let input = Self::deserialize_http(req)?;
+        let mut s3_req = super::build_s3_request(input, req);
+        let s3 = ccx.s3;
+        if let Some(access) = ccx.access {
+            access.list_object_versions_m(&mut s3_req).await?;
+        }
+        let result = s3.list_object_versions_m(s3_req).await;
+        let s3_resp = match result {
+            Ok(val) => val,
+            Err(err) => return super::serialize_error(err, false),
+        };
+        let mut resp = Self::serialize_http(s3_resp.output)?;
+        resp.headers.extend(s3_resp.headers);
+        resp.extensions.extend(s3_resp.extensions);
+        Ok(resp)
+    }
+}
+
 pub struct ListObjects;
 
 impl ListObjects {
@@ -4390,6 +4432,46 @@ impl super::Operation for ListObjectsV2 {
             access.list_objects_v2(&mut s3_req).await?;
         }
         let result = s3.list_objects_v2(s3_req).await;
+        let s3_resp = match result {
+            Ok(val) => val,
+            Err(err) => return super::serialize_error(err, false),
+        };
+        let mut resp = Self::serialize_http(s3_resp.output)?;
+        resp.headers.extend(s3_resp.headers);
+        resp.extensions.extend(s3_resp.extensions);
+        Ok(resp)
+    }
+}
+
+pub struct ListObjectsV2M;
+
+impl ListObjectsV2M {
+    pub fn deserialize_http(req: &mut http::Request) -> S3Result<ListObjectsV2Input> {
+        ListObjectsV2::deserialize_http(req)
+    }
+
+    pub fn serialize_http(x: ListObjectsV2MOutput) -> S3Result<http::Response> {
+        let mut res = http::Response::with_status(http::StatusCode::OK);
+        http::set_xml_body(&mut res, &x)?;
+        http::add_opt_header(&mut res, X_AMZ_REQUEST_CHARGED, x.request_charged)?;
+        Ok(res)
+    }
+}
+
+#[async_trait::async_trait]
+impl super::Operation for ListObjectsV2M {
+    fn name(&self) -> &'static str {
+        "ListObjectsV2M"
+    }
+
+    async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
+        let input = Self::deserialize_http(req)?;
+        let mut s3_req = super::build_s3_request(input, req);
+        let s3 = ccx.s3;
+        if let Some(access) = ccx.access {
+            access.list_objects_v2m(&mut s3_req).await?;
+        }
+        let result = s3.list_objects_v2m(s3_req).await;
         let s3_resp = match result {
             Ok(val) => val,
             Err(err) => return super::serialize_error(err, false),
@@ -5345,7 +5427,10 @@ impl PutBucketVersioning {
 
         let mfa: Option<MFA> = http::parse_opt_header(req, &X_AMZ_MFA)?;
 
-        let versioning_configuration: VersioningConfiguration = http::take_xml_body(req)?;
+        // MinIO reference:
+        // - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/versioning/versioning.go#L49-L84
+        // - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/versioning/versioning.go#L157-L166
+        let versioning_configuration: VersioningConfiguration = http::take_versioning_configuration(req)?;
 
         Ok(PutBucketVersioningInput {
             bucket,
@@ -5943,7 +6028,9 @@ impl PutObjectLockConfiguration {
 
         let expected_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_EXPECTED_BUCKET_OWNER)?;
 
-        let object_lock_configuration: Option<ObjectLockConfiguration> = http::take_opt_xml_body(req)?;
+        // MinIO reference:
+        // - https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/object/lock/lock.go#L232-L319
+        let object_lock_configuration: Option<ObjectLockConfiguration> = http::take_opt_object_lock_configuration(req)?;
 
         let request_payer: Option<RequestPayer> = http::parse_opt_header(req, &X_AMZ_REQUEST_PAYER)?;
 
@@ -6843,6 +6930,9 @@ pub fn resolve_route(
             }
             S3Path::Bucket { .. } => {
                 if let Some(qs) = qs {
+                    if qs.has("versions") && super::check_query_pattern(qs, "metadata", "true") {
+                        return Ok((&ListObjectVersionsM as &'static dyn super::Operation, false));
+                    }
                     if qs.has("analytics") && qs.has("id") {
                         return Ok((&GetBucketAnalyticsConfiguration as &'static dyn super::Operation, false));
                     }
@@ -6932,6 +7022,9 @@ pub fn resolve_route(
                     }
                     if qs.has("versions") {
                         return Ok((&ListObjectVersions as &'static dyn super::Operation, false));
+                    }
+                    if super::check_query_pattern(qs, "list-type", "2") && super::check_query_pattern(qs, "metadata", "true") {
+                        return Ok((&ListObjectsV2M as &'static dyn super::Operation, false));
                     }
                     if super::check_query_pattern(qs, "list-type", "2") {
                         return Ok((&ListObjectsV2 as &'static dyn super::Operation, false));

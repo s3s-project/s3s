@@ -279,6 +279,7 @@ pub fn collect_rust_types(model: &smithy::Model, ops: &Operations) -> RustTypes 
                     name: rs_shape_name.clone(),
                     variants,
                     doc: shape.traits.doc().map(o),
+                    is_custom_extension: shape.traits.minio(),
                 });
                 insert(rs_shape_name, ty);
             }

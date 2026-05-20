@@ -108,6 +108,16 @@ pub enum Payload<'a> {
     UnsignedMultipleChunksWithTrailer,
 }
 
+fn append_payload(ans: &mut String, payload: Payload<'_>) {
+    match payload {
+        Payload::Unsigned => ans.push_str("UNSIGNED-PAYLOAD"),
+        Payload::SingleChunk(checksum) => ans.push_str(checksum),
+        Payload::MultipleChunks => ans.push_str("STREAMING-AWS4-HMAC-SHA256-PAYLOAD"),
+        Payload::MultipleChunksWithTrailer => ans.push_str("STREAMING-AWS4-HMAC-SHA256-PAYLOAD-TRAILER"),
+        Payload::UnsignedMultipleChunksWithTrailer => ans.push_str("STREAMING-UNSIGNED-PAYLOAD-TRAILER"),
+    }
+}
+
 #[cfg(test)]
 impl Payload<'_> {
     pub fn empty() -> Self {
@@ -237,13 +247,7 @@ fn create_canonical_request_with_uri_mode(
 
     {
         // <HashedPayload>
-        match payload {
-            Payload::Unsigned => ans.push_str("UNSIGNED-PAYLOAD"),
-            Payload::SingleChunk(checksum) => ans.push_str(checksum),
-            Payload::MultipleChunks => ans.push_str("STREAMING-AWS4-HMAC-SHA256-PAYLOAD"),
-            Payload::MultipleChunksWithTrailer => ans.push_str("STREAMING-AWS4-HMAC-SHA256-PAYLOAD-TRAILER"),
-            Payload::UnsignedMultipleChunksWithTrailer => ans.push_str("STREAMING-UNSIGNED-PAYLOAD-TRAILER"),
-        }
+        append_payload(&mut ans, payload);
     }
 
     ans
@@ -429,6 +433,7 @@ fn create_presigned_canonical_request_with_uri_mode(
     decoded_query_strings: &[(impl AsRef<str>, impl AsRef<str>)],
     signed_headers: &OrderedHeaders<'_>,
     raw_uri_path: bool,
+    payload: Payload<'_>,
 ) -> String {
     let mut ans = String::with_capacity(256);
     {
@@ -539,7 +544,7 @@ fn create_presigned_canonical_request_with_uri_mode(
     }
     {
         // <Payload>
-        ans.push_str("UNSIGNED-PAYLOAD");
+        append_payload(&mut ans, payload);
     }
     ans
 }
@@ -550,8 +555,9 @@ pub fn create_presigned_canonical_request(
     uri_path: &str,
     decoded_query_strings: &[(impl AsRef<str>, impl AsRef<str>)],
     signed_headers: &OrderedHeaders<'_>,
+    payload: Payload<'_>,
 ) -> String {
-    create_presigned_canonical_request_with_uri_mode(method, uri_path, decoded_query_strings, signed_headers, false)
+    create_presigned_canonical_request_with_uri_mode(method, uri_path, decoded_query_strings, signed_headers, false, payload)
 }
 
 pub(crate) fn create_presigned_canonical_request_with_raw_uri_path(
@@ -559,8 +565,9 @@ pub(crate) fn create_presigned_canonical_request_with_raw_uri_path(
     raw_uri_path: &str,
     decoded_query_strings: &[(impl AsRef<str>, impl AsRef<str>)],
     signed_headers: &OrderedHeaders<'_>,
+    payload: Payload<'_>,
 ) -> String {
-    create_presigned_canonical_request_with_uri_mode(method, raw_uri_path, decoded_query_strings, signed_headers, true)
+    create_presigned_canonical_request_with_uri_mode(method, raw_uri_path, decoded_query_strings, signed_headers, true, payload)
 }
 
 #[cfg(test)]
@@ -1147,7 +1154,8 @@ mod tests {
 
         let info = PresignedUrlV4::parse(&qs).unwrap();
 
-        let canonical_request = create_presigned_canonical_request(&method, uri.path(), query_strings, &headers);
+        let canonical_request =
+            create_presigned_canonical_request(&method, uri.path(), query_strings, &headers, Payload::Unsigned);
 
         assert_eq!(
             canonical_request,
@@ -1358,7 +1366,8 @@ mod tests {
             ("X-Amz-SignedHeaders", "host"),
         ];
 
-        let canonical_request = create_presigned_canonical_request(&method, "/test.txt", query_strings_for_signing, &headers);
+        let canonical_request =
+            create_presigned_canonical_request(&method, "/test.txt", query_strings_for_signing, &headers, Payload::Unsigned);
 
         // Canonical request for PUT should be similar to GET, just with PUT method
         assert_eq!(
@@ -1403,7 +1412,8 @@ mod tests {
             ("X-Amz-SignedHeaders", "content-type;host"),
         ];
 
-        let canonical_request = create_presigned_canonical_request(&method, "/test.txt", query_strings_for_signing, &headers);
+        let canonical_request =
+            create_presigned_canonical_request(&method, "/test.txt", query_strings_for_signing, &headers, Payload::Unsigned);
 
         // Canonical request should include content-type header
         assert_eq!(
@@ -1426,6 +1436,45 @@ mod tests {
 
         // Signature value derived from the test inputs above; not from official AWS test vectors.
         assert_eq!(signature, "fd31b71961609f4b313497cb07ab0aedd268863bd547cc198db23cf04b8f663d");
+    }
+
+    #[test]
+    fn example_put_presigned_url_with_content_sha256_header() {
+        let method = Method::PUT;
+        let headers = OrderedHeaders::from_slice_unchecked(&[
+            ("host", "examplebucket.s3.amazonaws.com"),
+            ("x-amz-content-sha256", "invalid-sha256"),
+        ]);
+
+        let query_strings_for_signing = &[
+            ("X-Amz-Algorithm", "AWS4-HMAC-SHA256"),
+            ("X-Amz-Credential", "AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request"),
+            ("X-Amz-Date", "20130524T000000Z"),
+            ("X-Amz-Expires", "86400"),
+            ("X-Amz-SignedHeaders", "host;x-amz-content-sha256"),
+        ];
+
+        let canonical_request = create_presigned_canonical_request(
+            &method,
+            "/test.txt",
+            query_strings_for_signing,
+            &headers,
+            Payload::SingleChunk("invalid-sha256"),
+        );
+
+        assert_eq!(
+            canonical_request,
+            concat!(
+                "PUT\n",
+                "/test.txt\n",
+                "X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAIOSFODNN7EXAMPLE%2F20130524%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20130524T000000Z&X-Amz-Expires=86400&X-Amz-SignedHeaders=host%3Bx-amz-content-sha256\n",
+                "host:examplebucket.s3.amazonaws.com\n",
+                "x-amz-content-sha256:invalid-sha256\n",
+                "\n",
+                "host;x-amz-content-sha256\n",
+                "invalid-sha256",
+            )
+        );
     }
 
     #[test]
@@ -1485,7 +1534,7 @@ mod tests {
             ),
         ];
 
-        let canonical_request = create_presigned_canonical_request(&method, "/bucket/key", qs, &headers);
+        let canonical_request = create_presigned_canonical_request(&method, "/bucket/key", qs, &headers, Payload::Unsigned);
 
         // Verify that x-amz-object-attributes values are comma-separated
         // and the header name appears only once in SignedHeaders
