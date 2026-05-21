@@ -114,10 +114,10 @@ clap = { version = "4.6.1", features = ["derive"] }
 opendal = { version = "0.56.0", default-features = false }
 
 # AWS SDK
-aws-config = { version = "1.8.16", default-features = false }
+aws-config = { version = "1.8.17", default-features = false }
 aws-credential-types = "1.2.14"
-aws-sdk-s3 = { version = "1.132.0", default-features = false, features = ["default-https-client", "http-1x", "rt-tokio", "sigv4a"] }
-aws-sdk-sts = { version = "1.103.0", default-features = false, features = ["default-https-client", "rt-tokio"] }
+aws-sdk-s3 = { version = "1.133.0", default-features = false, features = ["default-https-client", "http-1x", "rt-tokio", "sigv4a"] }
+aws-sdk-sts = { version = "1.104.0", default-features = false, features = ["default-https-client", "rt-tokio"] }
 aws-smithy-runtime-api = "1.12.1"
 aws-smithy-types = "1.4.8"
 aws-smithy-types-convert = "0.60.14"
