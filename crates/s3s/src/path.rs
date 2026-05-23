@@ -6,6 +6,7 @@
 //! + [Bucket naming rules](https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucketnamingrules.html)
 
 use crate::validation::{AwsNameValidation, NameValidation};
+use std::borrow::Cow;
 use std::net::IpAddr;
 
 /// A path in the S3 storage
@@ -156,17 +157,48 @@ pub const fn check_key(key: &str) -> bool {
     key.len() <= 1024
 }
 
+/// Normalizes forward slash for a path:
+fn normalize_forward_slash(path: &str) -> Cow<'_, str> {
+    if !path.starts_with('/') {
+        return Cow::Borrowed(path);
+    }
+    let end_with_slash = path.ends_with('/');
+    let parts: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+
+    if parts.is_empty() {
+        Cow::Borrowed("/")
+    } else {
+        let joined = parts.join("/");
+        if end_with_slash {
+            Cow::Owned(format!("{joined}/"))
+        } else {
+            Cow::Owned(joined)
+        }
+    }
+}
+
 /// Parses a path-style request
 /// # Errors
 /// Returns an `Err` if the s3 path is invalid
 pub fn parse_path_style(uri_path: &str) -> Result<S3Path, ParseS3PathError> {
-    parse_path_style_with_validation(uri_path, &AwsNameValidation::new())
+    parse_path_style_with_validation_and_normalization(uri_path, &AwsNameValidation::new(), false)
 }
 
 /// Parses a path-style request with custom validation
 /// # Errors
 /// Returns an `Err` if the s3 path is invalid
 pub fn parse_path_style_with_validation(uri_path: &str, validation: &dyn NameValidation) -> Result<S3Path, ParseS3PathError> {
+    parse_path_style_with_validation_and_normalization(uri_path, validation, false)
+}
+
+/// Parses a path-style request with custom validation and optional path normalization
+/// # Errors
+/// Returns an `Err` if the s3 path is invalid
+pub fn parse_path_style_with_validation_and_normalization(
+    uri_path: &str,
+    validation: &dyn NameValidation,
+    normalize_path: bool,
+) -> Result<S3Path, ParseS3PathError> {
     let Some(path) = uri_path.strip_prefix('/') else { return Err(ParseS3PathError::InvalidPath) };
 
     if path.is_empty() {
@@ -185,18 +217,24 @@ pub fn parse_path_style_with_validation(uri_path: &str, validation: &dyn NameVal
 
     let Some(key) = key else { return Ok(S3Path::bucket(bucket)) };
 
-    if !check_key(key) {
+    let key = if normalize_path {
+        normalize_forward_slash(key)
+    } else {
+        Cow::Borrowed(key)
+    };
+
+    if !check_key(&key) {
         return Err(ParseS3PathError::KeyTooLong);
     }
 
-    Ok(S3Path::object(bucket, key))
+    Ok(S3Path::object(bucket, &key))
 }
 
 /// Parses a virtual-hosted-style request
 /// # Errors
 /// Returns an `Err` if the s3 path is invalid
 pub fn parse_virtual_hosted_style(vh_bucket: Option<&str>, uri_path: &str) -> Result<S3Path, ParseS3PathError> {
-    parse_virtual_hosted_style_with_validation(vh_bucket, uri_path, &AwsNameValidation::new())
+    parse_virtual_hosted_style_with_validation_and_normalization(vh_bucket, uri_path, &AwsNameValidation::new(), false)
 }
 
 /// Parses a virtual-hosted-style request with custom validation
@@ -207,7 +245,21 @@ pub fn parse_virtual_hosted_style_with_validation(
     uri_path: &str,
     validation: &dyn NameValidation,
 ) -> Result<S3Path, ParseS3PathError> {
-    let Some(bucket) = vh_bucket else { return parse_path_style_with_validation(uri_path, validation) };
+    parse_virtual_hosted_style_with_validation_and_normalization(vh_bucket, uri_path, validation, false)
+}
+
+/// Parses a virtual-hosted-style request with custom validation and optional path normalization
+/// # Errors
+/// Returns an `Err` if the s3 path is invalid
+pub fn parse_virtual_hosted_style_with_validation_and_normalization(
+    vh_bucket: Option<&str>,
+    uri_path: &str,
+    validation: &dyn NameValidation,
+    normalize_path: bool,
+) -> Result<S3Path, ParseS3PathError> {
+    let Some(bucket) = vh_bucket else {
+        return parse_path_style_with_validation(uri_path, validation);
+    };
 
     let Some(key) = uri_path.strip_prefix('/') else { return Err(ParseS3PathError::InvalidPath) };
 
@@ -219,7 +271,13 @@ pub fn parse_virtual_hosted_style_with_validation(
         return Ok(S3Path::Bucket { bucket: bucket.into() });
     }
 
-    if !check_key(key) {
+    let key = if normalize_path {
+        normalize_forward_slash(key)
+    } else {
+        Cow::Borrowed(key)
+    };
+
+    if !check_key(&key) {
         return Err(ParseS3PathError::KeyTooLong);
     }
 
@@ -393,6 +451,52 @@ mod tests {
         assert_eq!(result1.is_err(), result2.is_err());
     }
 
+    #[test]
+    fn test_path_style_normalize_forward_slash() {
+        let cases = [
+            ("/bucket-name//", Ok(S3Path::object("bucket-name", "/"))),
+            ("/bucket-name/object-name", Ok(S3Path::object("bucket-name", "object-name"))),
+            ("/bucket-name//object-name", Ok(S3Path::object("bucket-name", "object-name"))),
+            ("/bucket-name///object-name/", Ok(S3Path::object("bucket-name", "object-name/"))),
+            ("/bucket-name/dir/object-name", Ok(S3Path::object("bucket-name", "dir/object-name"))),
+            ("/bucket-name/dir//object-name", Ok(S3Path::object("bucket-name", "dir//object-name"))),
+            ("/bucket-name//dir/object-name/", Ok(S3Path::object("bucket-name", "dir/object-name/"))),
+        ];
+
+        for (uri_path, expected) in cases {
+            assert_eq!(
+                parse_path_style_with_validation_and_normalization(uri_path, &AwsNameValidation::new(), true),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn test_virtual_hosted_style_normalize_forward_slash() {
+        let cases = [
+            ("/", Ok(S3Path::bucket("bucket-name"))),
+            ("//", Ok(S3Path::object("bucket-name", "/"))),
+            ("///", Ok(S3Path::object("bucket-name", "/"))),
+            ("/object-name", Ok(S3Path::object("bucket-name", "object-name"))),
+            ("//object-name", Ok(S3Path::object("bucket-name", "object-name"))),
+            ("///object-name/", Ok(S3Path::object("bucket-name", "object-name/"))),
+            ("/dir//object-name/", Ok(S3Path::object("bucket-name", "dir//object-name/"))),
+            ("//dir//object-name/", Ok(S3Path::object("bucket-name", "dir/object-name/"))),
+        ];
+
+        for (uri_path, expected) in cases {
+            assert_eq!(
+                parse_virtual_hosted_style_with_validation_and_normalization(
+                    Some("bucket-name"),
+                    uri_path,
+                    &AwsNameValidation::new(),
+                    true
+                ),
+                expected
+            );
+        }
+    }
+
     // --- S3Path accessor coverage ---
 
     #[test]
@@ -480,5 +584,26 @@ mod tests {
         assert!(!format!("{err}").is_empty());
         let err = ParseS3PathError::KeyTooLong;
         assert!(!format!("{err}").is_empty());
+    }
+
+    #[test]
+    fn key_name_normalize_forward_slash() {
+        let cases = [
+            ("/", "/"),
+            ("/////", "/"),
+            ("object-name", "object-name"),
+            ("object-name/", "object-name/"),
+            ("object-name///", "object-name///"),
+            ("/object-name", "object-name"),
+            ("///object-name", "object-name"),
+            ("///object-name/", "object-name/"),
+            ("/dir/object-name", "dir/object-name"),
+            ("///dir/object-name", "dir/object-name"),
+            ("/dir////object-name", "dir/object-name"),
+            ("///dir1////dir2/object-name////////", "dir1/dir2/object-name/"),
+        ];
+        for (input, expected) in &cases {
+            assert_eq!(normalize_forward_slash(input).as_ref(), *expected);
+        }
     }
 }

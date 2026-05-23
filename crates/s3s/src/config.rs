@@ -133,6 +133,27 @@ pub struct S3Config {
     ///
     /// Default: 900 (15 minutes)
     pub presigned_url_max_skew_time_secs: u32,
+
+    /// Whether to normalize forward slashes in object keys.
+    ///
+    /// If enabled, multiple consecutive slashes will be treated as a single slash:
+    ///
+    /// - If the path does not start with `/`, no normalization is performed.
+    /// - If the path starts with `/`, normalization:
+    ///   - removes all leading slashes (unless the entire path is one or more `/`)
+    ///   - replaces consecutive internal slashes with a single slash
+    ///   - reduces one or more trailing slashes to a single trailing slash
+    /// - Examples:
+    ///   - "/"                 -> "/"
+    ///   - "/keyname"          -> "keyname"
+    ///   - "//keyname"         -> "keyname"
+    ///   - "//keyname/"        -> "keyname/"
+    ///   - "//dir////keyname"  -> "dir/keyname"
+    ///   - "dir///sub//file"   -> "dir///sub//file"
+    ///   - "/dir///sub//file"  -> "dir/sub/file"
+    ///
+    /// Default: false
+    pub normalize_forward_slash_path: bool,
 }
 
 impl Default for S3Config {
@@ -144,6 +165,7 @@ impl Default for S3Config {
             form_max_fields_size: 20 * 1024 * 1024,            // 20 MB
             form_max_parts: 1000,
             presigned_url_max_skew_time_secs: 900, // 15 minutes
+            normalize_forward_slash_path: false,
         }
     }
 }
@@ -349,6 +371,7 @@ mod tests {
             form_max_fields_size: 5 * 1024 * 1024,
             form_max_parts: 500,
             presigned_url_max_skew_time_secs: 600,
+            normalize_forward_slash_path: false,
         };
 
         let json = serde_json::to_string(&config).expect("serialize failed");
