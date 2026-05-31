@@ -16,6 +16,8 @@ use futures::StreamExt as _;
 use http_body_util::StreamBody;
 use md5::Digest as _;
 
+use std::future::Future;
+
 pub fn register(tcx: &mut TestContext) {
     case!(tcx, Basic, Essential, test_list_buckets);
     case!(tcx, Basic, Essential, test_list_objects);
@@ -55,8 +57,8 @@ struct Essential {
 }
 
 impl TestFixture<Basic> for Essential {
-    async fn setup(suite: Arc<Basic>) -> Result<Self> {
-        Ok(Self { s3: suite.s3.clone() })
+    fn setup(suite: Arc<Basic>) -> impl Future<Output = Result<Self>> + Send + 'static {
+        std::future::ready(Ok(Self { s3: suite.s3.clone() }))
     }
 }
 

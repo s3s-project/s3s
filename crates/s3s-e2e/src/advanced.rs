@@ -15,6 +15,8 @@ use aws_sdk_s3::types::ChecksumAlgorithm;
 
 use tracing::debug;
 
+use std::future::Future;
+
 pub fn register(tcx: &mut TestContext) {
     case!(tcx, Advanced, STS, test_assume_role);
     case!(tcx, Advanced, Multipart, test_multipart_upload);
@@ -49,8 +51,8 @@ struct STS {
 }
 
 impl TestFixture<Advanced> for STS {
-    async fn setup(suite: Arc<Advanced>) -> Result<Self> {
-        Ok(Self { sts: suite.sts.clone() })
+    fn setup(suite: Arc<Advanced>) -> impl Future<Output = Result<Self>> + Send + 'static {
+        std::future::ready(Ok(Self { sts: suite.sts.clone() }))
     }
 }
 

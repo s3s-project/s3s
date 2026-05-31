@@ -166,8 +166,8 @@ fn check_query_pattern(qs: &OrderedQs, name: &str, val: &str) -> bool {
     }
 }
 
-fn extract_headers(headers: &HeaderMap) -> S3Result<OrderedHeaders<'_>> {
-    OrderedHeaders::from_headers(headers).map_err(|source| invalid_request!(source, "invalid headers"))
+fn extract_headers(headers: &HeaderMap) -> OrderedHeaders<'_> {
+    OrderedHeaders::from_headers(headers)
 }
 
 fn extract_mime(hs: &OrderedHeaders<'_>) -> Option<Mime> {
@@ -345,7 +345,7 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
         req.s3ext.qs = extract_qs(&req.uri)?;
         content_length = extract_content_length(req);
 
-        let hs = extract_headers(&req.headers)?;
+        let hs = extract_headers(&req.headers);
         let mime = extract_mime(&hs);
         let decoded_content_length = extract_decoded_content_length(&hs)?;
 

@@ -1,7 +1,5 @@
 //! Ordered headers
 
-use std::str::Utf8Error;
-
 use hyper::HeaderMap;
 
 use crate::utils::stable_sort_by_first;
@@ -33,18 +31,23 @@ impl<'a> OrderedHeaders<'a> {
 
     /// Constructs [`OrderedHeaders`] from a header map
     ///
-    /// # Errors
-    /// Returns [`ToStrError`] if header value cannot be converted to string slice
-    pub fn from_headers(map: &'a HeaderMap) -> Result<Self, Utf8Error> {
+    /// Header values that are not valid UTF-8 are ignored because the S3
+    /// signature and operation layers consume string-valued headers. If a
+    /// client signs a non-UTF-8 header, that header cannot be represented in
+    /// the canonical request and signature verification will fail instead of
+    /// accepting a mismatched signature.
+    #[must_use]
+    pub fn from_headers(map: &'a HeaderMap) -> Self {
         let mut headers: Vec<(&'a str, &'a str)> = Vec::with_capacity(map.len());
 
         for (name, value) in map {
-            let value = std::str::from_utf8(value.as_bytes())?;
-            headers.push((name.as_str(), value));
+            if let Ok(value) = std::str::from_utf8(value.as_bytes()) {
+                headers.push((name.as_str(), value));
+            }
         }
         stable_sort_by_first(&mut headers);
 
-        Ok(Self { headers })
+        Self { headers }
     }
 
     fn get_all_pairs(&self, name: &str) -> impl Iterator<Item = (&'a str, &'a str)> + '_ + use<'a, '_> {
@@ -118,5 +121,24 @@ impl<'a> OrderedHeaders<'a> {
 impl<'a> AsRef<[(&'a str, &'a str)]> for OrderedHeaders<'a> {
     fn as_ref(&self) -> &[(&'a str, &'a str)] {
         self.headers.as_ref()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::OrderedHeaders;
+    use hyper::HeaderMap;
+    use hyper::header::HeaderValue;
+
+    #[test]
+    fn from_headers_ignores_non_utf8_header_values() {
+        let mut map = HeaderMap::new();
+        map.insert("host", HeaderValue::from_static("example.com"));
+        map.insert("account-firstname", HeaderValue::from_bytes(b"JULI\xC1N").unwrap());
+
+        let headers = OrderedHeaders::from_headers(&map);
+
+        assert_eq!(headers.get_unique("host"), Some("example.com"));
+        assert_eq!(headers.get_unique("account-firstname"), None);
     }
 }
