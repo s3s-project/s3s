@@ -50,7 +50,7 @@ struct STS {
 }
 
 impl TestFixture<Advanced> for STS {
-    fn setup(suite: Arc<Advanced>) -> impl Future<Output = Result<Self>> {
+    fn setup(suite: Arc<Advanced>) -> impl Future<Output = Result<Self>> + Send + 'static {
         std::future::ready(Ok(Self { sts: suite.sts.clone() }))
     }
 }

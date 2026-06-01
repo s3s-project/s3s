@@ -56,7 +56,7 @@ struct Essential {
 }
 
 impl TestFixture<Basic> for Essential {
-    fn setup(suite: Arc<Basic>) -> impl Future<Output = Result<Self>> {
+    fn setup(suite: Arc<Basic>) -> impl Future<Output = Result<Self>> + Send + 'static {
         std::future::ready(Ok(Self { s3: suite.s3.clone() }))
     }
 }
