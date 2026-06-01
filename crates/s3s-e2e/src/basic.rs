@@ -1,6 +1,7 @@
 use crate::case;
 use crate::utils::*;
 
+use std::future::Future;
 use std::sync::Arc;
 
 use s3s_test::Result;
@@ -55,8 +56,8 @@ struct Essential {
 }
 
 impl TestFixture<Basic> for Essential {
-    async fn setup(suite: Arc<Basic>) -> Result<Self> {
-        Ok(Self { s3: suite.s3.clone() })
+    fn setup(suite: Arc<Basic>) -> impl Future<Output = Result<Self>> {
+        std::future::ready(Ok(Self { s3: suite.s3.clone() }))
     }
 }
 
