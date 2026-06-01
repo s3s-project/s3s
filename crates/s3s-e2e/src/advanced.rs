@@ -5,6 +5,7 @@ use s3s_test::TestFixture;
 use s3s_test::TestSuite;
 use s3s_test::tcx::TestContext;
 
+use std::future::Future;
 use std::ops::Not;
 use std::sync::Arc;
 use std::time::Duration;
@@ -49,8 +50,8 @@ struct STS {
 }
 
 impl TestFixture<Advanced> for STS {
-    async fn setup(suite: Arc<Advanced>) -> Result<Self> {
-        Ok(Self { sts: suite.sts.clone() })
+    fn setup(suite: Arc<Advanced>) -> impl Future<Output = Result<Self>> + Send + 'static {
+        std::future::ready(Ok(Self { sts: suite.sts.clone() }))
     }
 }
 
