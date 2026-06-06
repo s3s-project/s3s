@@ -35,23 +35,23 @@ bytestring = "1.5.1"
 indexmap = "2.14.0"
 once_cell = "1.21.4"
 smallvec = "1.15.1"
-uuid = "1.23.1"
+uuid = "1.23.2"
 
 # Text encoding
-atoi = { version = "2.0.0", default-features = false }
+atoi = { version = "3.0.0", default-features = false }
 base64-simd = "0.8.0"
 hex-simd = "0.8.0"
 itoa = "1.0.18"
 nom = "8.0.0"
 
 # Date & time
-chrono = { version = "0.4.44", default-features = false }
+chrono = { version = "0.4.45", default-features = false }
 time = "0.3.47"
 
 # Utilities
 cfg-if = "1.0.4"
 const-str = "1.1.0"
-memchr = "2.8.0"
+memchr = "2.8.1"
 numeric_cast = "0.3.0"
 path-absolutize = "3.1.1"
 std-next = "0.1.9"
@@ -72,9 +72,9 @@ anyhow = "1.0.102"
 thiserror = "2.0.18"
 
 # Serialization
-quick-xml = { version = "0.37.5", features = ["serialize"] }
+quick-xml = { version = "0.39.4", features = ["serialize"] }
 serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.149"
+serde_json = "1.0.150"
 serde_urlencoded = "0.7.1"
 
 # Async & concurrency
@@ -89,18 +89,18 @@ transform-stream = "0.3.1"
 
 # HTTP
 axum = "0.8.9"
-http = "1.4.0"
+http = "1.4.1"
 http-body = "1.0.1"
 http-body-util = "0.1.3"
 httparse = "1.10.1"
-hyper = "1.9.0"
+hyper = "1.10.1"
 hyper-util = "0.1.20"
 mime = "0.3.17"
 tokio-rustls = "0.26.4"
 tower = { version = "0.5.3", default-features = false }
 url = "2.5.8"
 urlencoding = "2.1.3"
-reqwest = { version = "0.13.3", default-features = false, features = ["rustls", "form", "query"] }
+reqwest = { version = "0.13.4", default-features = false, features = ["rustls", "form", "query"] }
 
 # Logging & observability
 tracing = "0.1.44"
@@ -111,13 +111,13 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter", "time"] }
 clap = { version = "4.6.1", features = ["derive"] }
 
 # Storage backends
-opendal = { version = "0.56.0", default-features = false }
+opendal = { version = "0.57.0", default-features = false }
 
 # AWS SDK
 aws-config = { version = "1.8.17", default-features = false }
 aws-credential-types = "1.2.14"
-aws-sdk-s3 = { version = "1.133.0", default-features = false, features = ["default-https-client", "http-1x", "rt-tokio", "sigv4a"] }
-aws-sdk-sts = { version = "1.104.0", default-features = false, features = ["default-https-client", "rt-tokio"] }
+aws-sdk-s3 = { version = "1.134.0", default-features = false, features = ["default-https-client", "http-1x", "rt-tokio", "sigv4a"] }
+aws-sdk-sts = { version = "1.106.0", default-features = false, features = ["default-https-client", "rt-tokio"] }
 aws-smithy-runtime-api = "1.12.1"
 aws-smithy-types = "1.4.8"
 aws-smithy-types-convert = "0.60.14"
