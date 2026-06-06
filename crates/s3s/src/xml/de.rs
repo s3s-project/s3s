@@ -131,11 +131,9 @@ impl<'xml> Deserializer<'xml> {
 
                 // expand predefined XML entities (e.g. &quot; → ")
                 Event::GeneralRef(r) => {
-                    let name = std::str::from_utf8(r.as_ref()).unwrap_or("");
-                    match resolve_xml_entity(name) {
-                        Some(value) => DeEvent::Text(BytesText::from_escaped(value)),
-                        None => continue,
-                    }
+                    let name = std::str::from_utf8(r.as_ref()).map_err(|_| DeError::InvalidContent)?;
+                    let value = resolve_xml_entity(name).ok_or(DeError::InvalidContent)?;
+                    DeEvent::Text(BytesText::from_escaped(value))
                 }
 
                 // ignore the others
@@ -311,9 +309,15 @@ impl<'xml> Deserializer<'xml> {
                     self.consume_peeked();
                     return Err(unexpected_start());
                 }
-                // `End` and `Eof` terminate text accumulation without being consumed,
-                // so callers can still match them (e.g. `expect_end` / `expect_eof`).
-                DeEvent::End(_) | DeEvent::Eof => break,
+                // `End` terminates text accumulation without being consumed, so callers can
+                // still match it (e.g. `expect_end`).
+                DeEvent::End(_) => break,
+                DeEvent::Eof => {
+                    if buf.is_none() {
+                        return Err(unexpected_eof());
+                    }
+                    break;
+                }
                 DeEvent::Text(x) => {
                     self.consume_peeked();
                     let s = x.decode().map_err(Into::into).map_err(invalid_xml)?;
