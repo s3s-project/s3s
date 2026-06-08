@@ -419,7 +419,7 @@ fn resolve_char_ref(name: &str) -> Option<String> {
     // (#x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF])
     if !matches!(
         codepoint,
-        0x9 | 0xA | 0xD | 0x20..=0xD7FF | 0xE000..=0xFFFD | 0x10000..=0x10FFFF
+        0x9 | 0xA | 0xD | 0x20..=0xD7FF | 0xE000..=0xFFFD | 0x0010_0000..=0x0010_FFFF
     ) {
         return None;
     }
