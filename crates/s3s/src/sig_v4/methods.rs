@@ -1227,9 +1227,8 @@ mod tests {
             let qs = req.uri().query().map(|q| OrderedQs::parse(q).unwrap());
             let query_strings: &[_] = qs.as_ref().map_or(&[], |x| x.as_ref());
 
-            let signed_headers = OrderedHeaders::from_headers(req.headers())
-                .unwrap()
-                .find_multiple_with_on_missing(signed_header_names, |_| None);
+            let signed_headers =
+                OrderedHeaders::from_headers(req.headers()).find_multiple_with_on_missing(signed_header_names, |_| None);
 
             let canonical_request = create_canonical_request(req.method(), uri_path, query_strings, &signed_headers, payload);
 
@@ -1297,9 +1296,8 @@ mod tests {
             let qs = req.uri().query().map(|q| OrderedQs::parse(q).unwrap());
             let query_strings: &[_] = qs.as_ref().map_or(&[], |x| x.as_ref());
 
-            let signed_headers = OrderedHeaders::from_headers(req.headers())
-                .unwrap()
-                .find_multiple_with_on_missing(signed_header_names, |_| panic!());
+            let signed_headers =
+                OrderedHeaders::from_headers(req.headers()).find_multiple_with_on_missing(signed_header_names, |_| panic!());
 
             let canonical_request = create_canonical_request(
                 req.method(),
