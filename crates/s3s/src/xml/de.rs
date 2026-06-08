@@ -414,10 +414,16 @@ fn resolve_char_ref(name: &str) -> Option<String> {
     } else {
         entity.parse::<u32>().ok()?
     };
-    // Reject surrogate codepoints
-    if (0xD800..=0xDFFF).contains(&codepoint) {
+
+    // XML 1.0 valid character ranges:
+    // (#x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF])
+    if !matches!(
+        codepoint,
+        0x9 | 0xA | 0xD | 0x20..=0xD7FF | 0xE000..=0xFFFD | 0x10000..=0x10FFFF
+    ) {
         return None;
     }
+
     char::from_u32(codepoint).map(|c| c.to_string())
 }
 
