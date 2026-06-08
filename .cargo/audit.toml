@@ -2,3 +2,9 @@
 # See: https://github.com/RustSec/rustsec/blob/main/cargo-audit/audit.toml.example
 
 [advisories]
+# rsa v0.9.10: Marvin Attack timing sidechannel in RSA PKCS#1 decryption.
+# Transitive dependency via reqsign-core → opendal → s3s-fs (dev-dependency).
+# Only used for S3 signature verification, not decryption. Low risk. No fix available.
+ignore = [
+    "RUSTSEC-2023-0071",
+]

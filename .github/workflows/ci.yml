@@ -102,7 +102,7 @@ jobs:
       - uses: taiki-e/install-action@cargo-llvm-cov
       - run: |
           cargo llvm-cov -p s3s --all-features --codecov --output-path target/codecov.json
-      - uses: codecov/codecov-action@v5
+      - uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: target/codecov.json
@@ -194,13 +194,18 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup
       - name: Clone s3-tests
-        run: git clone --depth 1 https://github.com/ceph/s3-tests.git /tmp/s3-tests
+        run: |
+          . scripts/source-s3tests-ref.sh
+          git init /tmp/s3-tests
+          git -C /tmp/s3-tests remote add origin https://github.com/ceph/s3-tests.git
+          git -C /tmp/s3-tests fetch --depth 1 origin "$S3TESTS_REF"
+          git -C /tmp/s3-tests reset --hard FETCH_HEAD
       - name: Get s3-tests requirements hash
         id: s3tests-hash
         run: echo "hash=$(sha256sum /tmp/s3-tests/requirements.txt | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
       - name: Get Python version
         id: python-version
-        run: python3 -c "import sys, os; f=open(os.environ['GITHUB_OUTPUT'],'a'); f.write(f'version={sys.version_info[0]}.{sys.version_info[1]}\n'); f.close()"
+        run: python3 -c "import os, platform; f=open(os.environ['GITHUB_OUTPUT'],'a'); f.write(f'version={platform.python_version()}\n'); f.close()"
       - name: Restore s3tests venv cache
         uses: actions/cache@v5
         with:

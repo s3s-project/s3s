@@ -8,6 +8,8 @@ REPORT_DIR="/tmp/s3s-s3tests-report"
 MINIO_DIR="/tmp/s3s-s3tests-minio"
 S3S_PROXY_PID=""
 
+. "$ROOT_DIR/scripts/source-s3tests-ref.sh"
+
 mkdir -p "$TARGET_DIR"
 mkdir -p "$REPORT_DIR"
 mkdir -p "$MINIO_DIR"
@@ -122,18 +124,14 @@ ensure_proxy_running
 ensure_minio_running "$MINIO_CONTAINER_ID"
 
 if [ -d "$S3TESTS_DIR/.git" ]; then
-    default_branch=$(git -C "$S3TESTS_DIR" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||')
-    if [ -z "$default_branch" ]; then
-        default_branch=$(git -C "$S3TESTS_DIR" remote show origin | awk '/HEAD branch/ {print $NF}')
-    fi
-    if [ -z "$default_branch" ]; then
-        default_branch="master"
-    fi
-    git -C "$S3TESTS_DIR" fetch --depth 1 origin "$default_branch"
-    git -C "$S3TESTS_DIR" reset --hard "origin/$default_branch"
+    git -C "$S3TESTS_DIR" fetch --depth 1 origin "$S3TESTS_REF"
+    git -C "$S3TESTS_DIR" reset --hard FETCH_HEAD
 else
     rm -rf "$S3TESTS_DIR"
-    git clone --depth 1 https://github.com/ceph/s3-tests.git "$S3TESTS_DIR"
+    git init "$S3TESTS_DIR"
+    git -C "$S3TESTS_DIR" remote add origin https://github.com/ceph/s3-tests.git
+    git -C "$S3TESTS_DIR" fetch --depth 1 origin "$S3TESTS_REF"
+    git -C "$S3TESTS_DIR" reset --hard FETCH_HEAD
 fi
 if command -v sha256sum >/dev/null 2>&1; then
     REQUIREMENTS_HASH=$(sha256sum "$S3TESTS_DIR/requirements.txt" | cut -d' ' -f1)
@@ -143,7 +141,8 @@ else
     REQUIREMENTS_HASH=$(python3 -c "import hashlib; print(hashlib.sha256(open('$S3TESTS_DIR/requirements.txt','rb').read()).hexdigest())")
 fi
 HASH_FILE="$S3TESTS_DIR/.venv/.requirements-hash"
-if [ ! -d "$S3TESTS_DIR/.venv" ] || [ ! -f "$HASH_FILE" ] || [ "$(cat "$HASH_FILE")" != "$REQUIREMENTS_HASH" ]; then
+VENV_PYTHON="$S3TESTS_DIR/.venv/bin/python"
+if [ ! -d "$S3TESTS_DIR/.venv" ] || [ ! -x "$VENV_PYTHON" ] || ! "$VENV_PYTHON" -c "import sys" >/dev/null 2>&1 || [ ! -f "$HASH_FILE" ] || [ "$(cat "$HASH_FILE")" != "$REQUIREMENTS_HASH" ]; then
     python3 -m venv --clear "$S3TESTS_DIR/.venv"
     "$S3TESTS_DIR/.venv/bin/pip" install -r "$S3TESTS_DIR/requirements.txt"
     echo "$REQUIREMENTS_HASH" > "$HASH_FILE"

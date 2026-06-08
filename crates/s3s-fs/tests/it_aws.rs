@@ -163,6 +163,33 @@ async fn delete_bucket(c: &Client, bucket: &str) -> Result<()> {
     Ok(())
 }
 
+async fn do_multipart_upload(c: &Client, bucket: &str, key: &str, content: &[u8]) -> Result<(String, Vec<CompletedPart>)> {
+    let upload_id = c
+        .create_multipart_upload()
+        .bucket(bucket)
+        .key(key)
+        .send()
+        .await?
+        .upload_id
+        .ok_or_else(|| anyhow::anyhow!("create_multipart_upload response missing upload_id"))?;
+
+    let ans = c
+        .upload_part()
+        .bucket(bucket)
+        .key(key)
+        .upload_id(&upload_id)
+        .body(ByteStream::from(content.to_vec()))
+        .part_number(1)
+        .send()
+        .await?;
+
+    let e_tag = ans.e_tag.ok_or_else(|| anyhow::anyhow!("upload_part returned no ETag"))?;
+
+    let part = CompletedPart::builder().e_tag(e_tag).part_number(1).build();
+
+    Ok((upload_id, vec![part]))
+}
+
 macro_rules! log_and_unwrap {
     ($result:expr) => {
         match $result {
@@ -376,6 +403,282 @@ async fn test_list_objects_v1_with_prefixes() -> Result<()> {
 
 #[tokio::test]
 #[tracing::instrument]
+async fn test_list_objects_v1_next_marker_with_delimiter() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-v1-next-marker-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    // Objects: a.txt, dir/1.txt (→ common prefix "dir/"), z.txt
+    // With delimiter="/", max_keys=2 → page 1 = [a.txt, dir/], truncated
+    let keys = ["a.txt", "dir/1.txt", "z.txt"];
+    for key in &keys {
+        c.put_object()
+            .bucket(bucket)
+            .key(*key)
+            .body(ByteStream::from_static(b"x"))
+            .send()
+            .await?;
+    }
+
+    let page1 = c.list_objects().bucket(bucket).delimiter("/").max_keys(2).send().await?;
+
+    assert_eq!(page1.is_truncated(), Some(true));
+    // Per S3 spec: when delimiter is set and is_truncated is true,
+    // next_marker must be returned so the client can paginate.
+    assert!(
+        page1.next_marker().is_some(),
+        "is_truncated is true with delimiter but next_marker is missing"
+    );
+    let page1_contents: Vec<_> = page1.contents().iter().filter_map(|obj| obj.key()).collect();
+    let page1_prefixes: Vec<_> = page1.common_prefixes().iter().filter_map(|cp| cp.prefix()).collect();
+    assert_eq!(page1_contents, vec!["a.txt"]);
+    assert_eq!(page1_prefixes, vec!["dir/"]);
+    let next_marker = page1.next_marker().expect("truncated v1 listing should include next_marker");
+
+    let page2 = c
+        .list_objects()
+        .bucket(bucket)
+        .delimiter("/")
+        .max_keys(2)
+        .marker(next_marker)
+        .send()
+        .await?;
+
+    assert_eq!(page2.is_truncated(), Some(false));
+    let page2_contents: Vec<_> = page2.contents().iter().filter_map(|obj| obj.key()).collect();
+    let page2_prefixes: Vec<_> = page2.common_prefixes().iter().filter_map(|cp| cp.prefix()).collect();
+    assert_eq!(page2_contents, vec!["z.txt"]);
+    assert!(
+        page2_prefixes.is_empty(),
+        "second page should not repeat the already-returned common prefix"
+    );
+
+    // Cleanup
+    for key in &keys {
+        delete_object(&c, bucket, key).await?;
+    }
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+/// Walk all v1 pages using `marker` (no delimiter) and verify the full key set.
+#[tokio::test]
+#[tracing::instrument]
+async fn test_list_objects_v1_marker_pagination() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-v1-marker-pag-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let keys = ["a.txt", "b.txt", "c.txt", "d.txt", "e.txt"];
+    for key in &keys {
+        c.put_object()
+            .bucket(bucket)
+            .key(*key)
+            .body(ByteStream::from_static(b"x"))
+            .send()
+            .await?;
+    }
+
+    // Walk all pages with max_keys=2
+    let mut all_keys: Vec<String> = Vec::new();
+    let mut marker: Option<String> = None;
+    loop {
+        let mut req = c.list_objects().bucket(bucket).max_keys(2);
+        if let Some(m) = &marker {
+            req = req.marker(m.clone());
+        }
+        let page = req.send().await?;
+
+        all_keys.extend(page.contents().iter().filter_map(|o| o.key().map(String::from)));
+
+        if page.is_truncated() != Some(true) {
+            break;
+        }
+        marker = page.next_marker().map(String::from);
+        assert!(marker.is_some(), "is_truncated is true but next_marker is missing");
+    }
+
+    assert_eq!(all_keys, vec!["a.txt", "b.txt", "c.txt", "d.txt", "e.txt"]);
+
+    for key in &keys {
+        delete_object(&c, bucket, key).await?;
+    }
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+/// Walk all v1 pages with `max_keys=1` to verify single-item pages advance correctly.
+#[tokio::test]
+#[tracing::instrument]
+async fn test_list_objects_v1_max_keys_one() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-v1-maxkeys1-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let keys = ["a.txt", "b.txt", "c.txt"];
+    for key in &keys {
+        c.put_object()
+            .bucket(bucket)
+            .key(*key)
+            .body(ByteStream::from_static(b"x"))
+            .send()
+            .await?;
+    }
+
+    let mut all_keys: Vec<String> = Vec::new();
+    let mut marker: Option<String> = None;
+    let mut page_count = 0;
+    loop {
+        let mut req = c.list_objects().bucket(bucket).max_keys(1);
+        if let Some(m) = &marker {
+            req = req.marker(m.clone());
+        }
+        let page = req.send().await?;
+
+        let page_keys: Vec<_> = page.contents().iter().filter_map(|o| o.key().map(String::from)).collect();
+        assert!(page_keys.len() <= 1, "max_keys=1 but got {} results", page_keys.len());
+        all_keys.extend(page_keys);
+        page_count += 1;
+
+        if page.is_truncated() != Some(true) {
+            break;
+        }
+        marker = page.next_marker().map(String::from);
+        assert!(marker.is_some(), "is_truncated is true but next_marker is missing");
+    }
+
+    assert_eq!(all_keys, vec!["a.txt", "b.txt", "c.txt"]);
+    assert_eq!(page_count, 3, "expected 3 single-item pages");
+
+    for key in &keys {
+        delete_object(&c, bucket, key).await?;
+    }
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+/// Walk all v1 pages with `delimiter` and multiple common prefixes,
+/// verifying no duplicates and complete coverage.
+#[tokio::test]
+#[tracing::instrument]
+async fn test_list_objects_v1_delimiter_multi_prefix_pagination() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-v1-multi-pfx-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    // Objects sorted: a.txt, dir1/x.txt (→ "dir1/"), dir2/y.txt (→ "dir2/"), z.txt
+    // With delimiter="/", this produces entries: a.txt, dir1/, dir2/, z.txt
+    let keys = ["a.txt", "dir1/x.txt", "dir2/y.txt", "z.txt"];
+    for key in &keys {
+        c.put_object()
+            .bucket(bucket)
+            .key(*key)
+            .body(ByteStream::from_static(b"x"))
+            .send()
+            .await?;
+    }
+
+    let mut all_objects: Vec<String> = Vec::new();
+    let mut all_prefixes: Vec<String> = Vec::new();
+    let mut marker: Option<String> = None;
+    loop {
+        let mut req = c.list_objects().bucket(bucket).delimiter("/").max_keys(2);
+        if let Some(m) = &marker {
+            req = req.marker(m.clone());
+        }
+        let page = req.send().await?;
+
+        all_objects.extend(page.contents().iter().filter_map(|o| o.key().map(String::from)));
+        all_prefixes.extend(page.common_prefixes().iter().filter_map(|p| p.prefix().map(String::from)));
+
+        if page.is_truncated() != Some(true) {
+            break;
+        }
+        marker = page.next_marker().map(String::from);
+        assert!(marker.is_some(), "is_truncated is true but next_marker is missing");
+    }
+
+    assert_eq!(all_objects, vec!["a.txt", "z.txt"]);
+    assert_eq!(all_prefixes, vec!["dir1/", "dir2/"]);
+
+    for key in &keys {
+        delete_object(&c, bucket, key).await?;
+    }
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+/// Walk all v2 pages with `delimiter` and multiple common prefixes,
+/// verifying no duplicates and complete coverage.
+#[tokio::test]
+#[tracing::instrument]
+async fn test_list_objects_v2_delimiter_multi_prefix_pagination() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-v2-multi-pfx-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let keys = ["a.txt", "dir1/x.txt", "dir2/y.txt", "z.txt"];
+    for key in &keys {
+        c.put_object()
+            .bucket(bucket)
+            .key(*key)
+            .body(ByteStream::from_static(b"x"))
+            .send()
+            .await?;
+    }
+
+    let mut all_objects: Vec<String> = Vec::new();
+    let mut all_prefixes: Vec<String> = Vec::new();
+    let mut token: Option<String> = None;
+    loop {
+        let mut req = c.list_objects_v2().bucket(bucket).delimiter("/").max_keys(2);
+        if let Some(t) = &token {
+            req = req.continuation_token(t.clone());
+        }
+        let page = req.send().await?;
+
+        all_objects.extend(page.contents().iter().filter_map(|o| o.key().map(String::from)));
+        all_prefixes.extend(page.common_prefixes().iter().filter_map(|p| p.prefix().map(String::from)));
+
+        if page.is_truncated() != Some(true) {
+            break;
+        }
+        token = page.next_continuation_token().map(String::from);
+        assert!(token.is_some(), "is_truncated is true but next_continuation_token is missing");
+    }
+
+    assert_eq!(all_objects, vec!["a.txt", "z.txt"]);
+    assert_eq!(all_prefixes, vec!["dir1/", "dir2/"]);
+
+    for key in &keys {
+        delete_object(&c, bucket, key).await?;
+    }
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
 async fn test_list_objects_v2_max_keys() -> Result<()> {
     let _guard = serial().await;
 
@@ -544,6 +847,99 @@ async fn test_multipart() -> Result<()> {
     Ok(())
 }
 
+/// Test that multipart uploaded objects have the correct `ETag` format: `{hash}-{part_count}`
+#[tokio::test]
+#[tracing::instrument]
+async fn test_multipart_etag_format() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+
+    let bucket = format!("test-multipart-etag-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let key = "multipart-etag.txt";
+    let content = "abcdefghijklmnopqrstuvwxyz/0123456789/!@#$%^&*();\n";
+
+    let upload_id = {
+        let ans = c.create_multipart_upload().bucket(bucket).key(key).send().await?;
+        ans.upload_id.unwrap()
+    };
+    let upload_id = upload_id.as_str();
+
+    let upload_parts = {
+        let body = ByteStream::from_static(content.as_bytes());
+        let part_number = 1;
+
+        let ans = c
+            .upload_part()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(upload_id)
+            .body(body)
+            .part_number(part_number)
+            .send()
+            .await?;
+
+        let part = CompletedPart::builder()
+            .e_tag(ans.e_tag.expect("upload_part response missing e_tag"))
+            .part_number(part_number)
+            .build();
+
+        vec![part]
+    };
+
+    let complete_e_tag = {
+        let upload = CompletedMultipartUpload::builder().set_parts(Some(upload_parts)).build();
+
+        let ans = c
+            .complete_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .multipart_upload(upload)
+            .upload_id(upload_id)
+            .send()
+            .await?;
+
+        let e_tag = ans.e_tag().unwrap().to_owned();
+        debug!(?e_tag, "multipart etag");
+
+        // Multipart ETags must have the format: {hex_md5}-{part_count}
+        let unquoted = e_tag.trim_matches('"');
+        let (hash_part, count_part) = unquoted.rsplit_once('-').expect("multipart ETag should contain a dash");
+        assert_eq!(hash_part.len(), 32, "hash part should be 32 hex characters: {hash_part}");
+        assert!(hash_part.chars().all(|c| c.is_ascii_hexdigit()), "hash part should be hex: {hash_part}");
+        let part_count: usize = count_part.parse().expect("count part should be a number");
+        assert_eq!(part_count, 1, "part count should match number of parts uploaded");
+
+        e_tag
+    };
+
+    {
+        // Verify the ETag from head_object matches complete_multipart_upload
+        let ans = c.head_object().bucket(bucket).key(key).send().await?;
+        let head_e_tag = ans.e_tag().unwrap();
+        debug!(?head_e_tag, "head_object etag");
+        assert_eq!(head_e_tag, complete_e_tag, "head_object ETag should match complete_multipart_upload ETag");
+    }
+
+    {
+        // Verify the ETag from get_object matches complete_multipart_upload
+        let ans = c.get_object().bucket(bucket).key(key).send().await?;
+        let get_e_tag = ans.e_tag().unwrap();
+        debug!(?get_e_tag, "get_object etag");
+        assert_eq!(get_e_tag, complete_e_tag, "get_object ETag should match complete_multipart_upload ETag");
+    }
+
+    {
+        delete_object(&c, bucket, key).await?;
+        delete_bucket(&c, bucket).await?;
+    }
+
+    Ok(())
+}
+
 #[tokio::test]
 #[tracing::instrument]
 async fn test_upload_part_copy() -> Result<()> {
@@ -625,6 +1021,89 @@ async fn test_upload_part_copy() -> Result<()> {
         delete_object(&c, src_bucket, src_key).await?;
         delete_bucket(&c, src_bucket).await?;
     }
+
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
+async fn test_upload_part_copy_invalid_source_range() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-upc-bad-range-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let src_key = "src.txt";
+    let src_content = "hello";
+    c.put_object()
+        .bucket(bucket)
+        .key(src_key)
+        .body(ByteStream::from_static(src_content.as_bytes()))
+        .send()
+        .await?;
+
+    let dst_key = "dst.txt";
+    let upload_id = c
+        .create_multipart_upload()
+        .bucket(bucket)
+        .key(dst_key)
+        .send()
+        .await?
+        .upload_id
+        .expect("upload_id");
+    let upload_id = upload_id.as_str();
+
+    let copy_source = format!("{bucket}/{src_key}");
+    // Object length is 5; inclusive end index must be <= 4. End 5 is past EOF and must not truncate.
+    let err = c
+        .upload_part_copy()
+        .bucket(bucket)
+        .key(dst_key)
+        .copy_source(&copy_source)
+        .copy_source_range("bytes=0-5")
+        .upload_id(upload_id)
+        .part_number(1)
+        .send()
+        .await
+        .expect_err("Expected InvalidRange when copy range end is past EOF");
+    let service_err = err.into_service_error();
+    assert_eq!(
+        service_err.code(),
+        Some("InvalidRange"),
+        "past-EOF range: expected InvalidRange, got {:?}",
+        service_err.code()
+    );
+
+    let err = c
+        .upload_part_copy()
+        .bucket(bucket)
+        .key(dst_key)
+        .copy_source(&copy_source)
+        .copy_source_range("bytes=0-18446744073709551615")
+        .upload_id(upload_id)
+        .part_number(1)
+        .send()
+        .await
+        .expect_err("Expected InvalidRange for end=u64::MAX");
+    let service_err = err.into_service_error();
+    assert_eq!(
+        service_err.code(),
+        Some("InvalidRange"),
+        "u64::MAX end: expected InvalidRange, got {:?}",
+        service_err.code()
+    );
+
+    c.abort_multipart_upload()
+        .bucket(bucket)
+        .key(dst_key)
+        .upload_id(upload_id)
+        .send()
+        .await?;
+
+    delete_object(&c, bucket, src_key).await?;
+    delete_bucket(&c, bucket).await?;
 
     Ok(())
 }
@@ -1084,6 +1563,345 @@ async fn test_if_none_match_wildcard() -> Result<()> {
     Ok(())
 }
 
+/// Test that `PutObject` with `If-Match: *` succeeds when the object exists
+/// and fails with `PreconditionFailed` (412) when the object is absent.
+#[tokio::test]
+#[tracing::instrument]
+async fn test_put_object_if_match_wildcard() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("if-match-wc-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    let key = "test-file.txt";
+    let initial = "initial content";
+    let updated = "updated content";
+
+    create_bucket(&c, bucket).await?;
+
+    // Test 1: PUT with If-Match: * should fail when the object doesn't exist
+    {
+        let body = ByteStream::from_static(initial.as_bytes());
+        let err = c
+            .put_object()
+            .bucket(bucket)
+            .key(key)
+            .body(body)
+            .if_match("*")
+            .send()
+            .await
+            .expect_err("Expected If-Match: * on absent object to fail");
+
+        let service_err = err.into_service_error();
+        assert_eq!(
+            service_err.code(),
+            Some("PreconditionFailed"),
+            "Expected PreconditionFailed, got: {:?}",
+            service_err.code()
+        );
+    }
+
+    // Seed the object so the next steps have something to match against.
+    c.put_object()
+        .bucket(bucket)
+        .key(key)
+        .body(ByteStream::from_static(initial.as_bytes()))
+        .send()
+        .await?;
+
+    // Test 2: PUT with If-Match: * should succeed when the object exists
+    {
+        let body = ByteStream::from_static(updated.as_bytes());
+        c.put_object()
+            .bucket(bucket)
+            .key(key)
+            .body(body)
+            .if_match("*")
+            .send()
+            .await
+            .expect("Expected If-Match: * on existing object to succeed");
+    }
+
+    {
+        let result = c.get_object().bucket(bucket).key(key).send().await?;
+        let body = result.body.collect().await?.into_bytes();
+        assert_eq!(body.as_ref(), updated.as_bytes());
+    }
+
+    delete_object(&c, bucket, key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+/// Test that `PutObject` with `If-Match: <etag>` overwrites only when the
+/// stored `ETag` matches and returns `PreconditionFailed` (412) otherwise.
+#[tokio::test]
+#[tracing::instrument]
+async fn test_put_object_if_match_etag() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("if-match-etag-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    let key = "test-file.txt";
+    let initial = "initial content";
+    let updated = "updated content";
+
+    create_bucket(&c, bucket).await?;
+
+    // Test 1: PUT with If-Match: <etag> should fail when the object doesn't exist
+    {
+        let body = ByteStream::from_static(initial.as_bytes());
+        let err = c
+            .put_object()
+            .bucket(bucket)
+            .key(key)
+            .body(body)
+            .if_match("\"some-etag\"")
+            .send()
+            .await
+            .expect_err("Expected If-Match on absent object to fail");
+
+        let service_err = err.into_service_error();
+        assert_eq!(
+            service_err.code(),
+            Some("PreconditionFailed"),
+            "Expected PreconditionFailed, got: {:?}",
+            service_err.code()
+        );
+    }
+
+    // Seed the object and capture the real ETag.
+    let initial_etag = {
+        let body = ByteStream::from_static(initial.as_bytes());
+        let result = c.put_object().bucket(bucket).key(key).body(body).send().await?;
+        result.e_tag().expect("put_object should return e_tag").to_owned()
+    };
+
+    // Test 2: PUT with a wrong ETag should fail and not overwrite
+    {
+        let body = ByteStream::from_static(updated.as_bytes());
+        let err = c
+            .put_object()
+            .bucket(bucket)
+            .key(key)
+            .body(body)
+            .if_match("\"wrong-etag-value\"")
+            .send()
+            .await
+            .expect_err("Expected If-Match with wrong ETag to fail");
+
+        let service_err = err.into_service_error();
+        assert_eq!(
+            service_err.code(),
+            Some("PreconditionFailed"),
+            "Expected PreconditionFailed, got: {:?}",
+            service_err.code()
+        );
+
+        let result = c.get_object().bucket(bucket).key(key).send().await?;
+        let body = result.body.collect().await?.into_bytes();
+        assert_eq!(body.as_ref(), initial.as_bytes(), "Object should not be overwritten");
+    }
+
+    // Test 3: PUT with the matching ETag should succeed and replace the body
+    {
+        let body = ByteStream::from_static(updated.as_bytes());
+        c.put_object()
+            .bucket(bucket)
+            .key(key)
+            .body(body)
+            .if_match(&initial_etag)
+            .send()
+            .await
+            .expect("Expected If-Match with matching ETag to succeed");
+
+        let result = c.get_object().bucket(bucket).key(key).send().await?;
+        let body = result.body.collect().await?.into_bytes();
+        assert_eq!(body.as_ref(), updated.as_bytes());
+    }
+
+    delete_object(&c, bucket, key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
+async fn test_put_object_if_match_multipart_etag() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("if-match-multipart-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    let key = "multipart-source.txt";
+    let initial = b"multipart initial content";
+    let updated = b"updated through put object";
+
+    create_bucket(&c, bucket).await?;
+
+    let multipart_etag = {
+        let (upload_id, upload_parts) = do_multipart_upload(&c, bucket, key, initial).await?;
+        let upload = CompletedMultipartUpload::builder().set_parts(Some(upload_parts)).build();
+        let result = c
+            .complete_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(&upload_id)
+            .multipart_upload(upload)
+            .send()
+            .await?;
+        result
+            .e_tag()
+            .expect("complete_multipart_upload should return e_tag")
+            .to_owned()
+    };
+    assert!(multipart_etag.contains('-'), "expected multipart ETag format");
+
+    let err = c
+        .put_object()
+        .bucket(bucket)
+        .key(key)
+        .body(ByteStream::from_static(b"wrong overwrite"))
+        .if_match("\"wrong-etag-value\"")
+        .send()
+        .await
+        .expect_err("wrong ETag should fail");
+    assert_eq!(err.into_service_error().code(), Some("PreconditionFailed"));
+
+    let result = c.get_object().bucket(bucket).key(key).send().await?;
+    let body = result.body.collect().await?.into_bytes();
+    assert_eq!(body.as_ref(), initial);
+
+    c.put_object()
+        .bucket(bucket)
+        .key(key)
+        .body(ByteStream::from_static(updated))
+        .if_match(&multipart_etag)
+        .send()
+        .await?;
+
+    let result = c.get_object().bucket(bucket).key(key).send().await?;
+    let body = result.body.collect().await?.into_bytes();
+    assert_eq!(body.as_ref(), updated);
+
+    delete_object(&c, bucket, key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
+async fn test_put_object_if_match_legacy_md5_fallback() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("if-match-legacy-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    let key = "legacy-object.txt";
+    let initial = b"legacy initial content";
+    let updated = b"legacy updated content";
+
+    create_bucket(&c, bucket).await?;
+
+    let initial_etag = {
+        let result = c
+            .put_object()
+            .bucket(bucket)
+            .key(key)
+            .body(ByteStream::from_static(initial))
+            .send()
+            .await?;
+        result.e_tag().expect("put_object should return e_tag").to_owned()
+    };
+
+    let encode = |s: &str| base64_simd::URL_SAFE_NO_PAD.encode_to_string(s);
+    let internal_info_path =
+        std::path::Path::new(FS_ROOT).join(format!(".bucket-{}.object-{}.internal.json", encode(bucket), encode(key)));
+    fs::remove_file(internal_info_path)?;
+
+    let err = c
+        .put_object()
+        .bucket(bucket)
+        .key(key)
+        .body(ByteStream::from_static(b"wrong overwrite"))
+        .if_match("\"wrong-etag-value\"")
+        .send()
+        .await
+        .expect_err("wrong ETag should fail through MD5 fallback");
+    assert_eq!(err.into_service_error().code(), Some("PreconditionFailed"));
+
+    let result = c.get_object().bucket(bucket).key(key).send().await?;
+    let body = result.body.collect().await?.into_bytes();
+    assert_eq!(body.as_ref(), initial);
+
+    c.put_object()
+        .bucket(bucket)
+        .key(key)
+        .body(ByteStream::from_static(updated))
+        .if_match(&initial_etag)
+        .send()
+        .await?;
+
+    let result = c.get_object().bucket(bucket).key(key).send().await?;
+    let body = result.body.collect().await?.into_bytes();
+    assert_eq!(body.as_ref(), updated);
+
+    delete_object(&c, bucket, key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
+async fn test_put_object_if_match_rejects_weak_etag() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("if-match-weak-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    let key = "weak-etag.txt";
+    let initial = b"weak etag initial content";
+
+    create_bucket(&c, bucket).await?;
+
+    let initial_etag = {
+        let result = c
+            .put_object()
+            .bucket(bucket)
+            .key(key)
+            .body(ByteStream::from_static(initial))
+            .send()
+            .await?;
+        result.e_tag().expect("put_object should return e_tag").to_owned()
+    };
+    let weak_etag = format!("W/{initial_etag}");
+
+    let err = c
+        .put_object()
+        .bucket(bucket)
+        .key(key)
+        .body(ByteStream::from_static(b"weak overwrite"))
+        .if_match(weak_etag)
+        .send()
+        .await
+        .expect_err("weak ETag must not satisfy If-Match");
+    assert_eq!(err.into_service_error().code(), Some("PreconditionFailed"));
+
+    let result = c.get_object().bucket(bucket).key(key).send().await?;
+    let body = result.body.collect().await?.into_bytes();
+    assert_eq!(body.as_ref(), initial);
+
+    delete_object(&c, bucket, key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
 /// Regression test for <https://github.com/s3s-project/s3s/issues/67>
 ///
 /// `copy_object` should create parent directories when the destination key contains "/"
@@ -1131,6 +1949,603 @@ async fn test_copy_object_nested_dst() -> Result<()> {
     Ok(())
 }
 
+/// Regression test: `CopyObject` with `src == dst` (self-replace) must
+/// preserve the on-disk content. AWS S3 supports this shape as the
+/// canonical way to update an object's metadata in place. Before the
+/// fix, `tokio::fs::copy(src, dst)` opened the destination with
+/// `O_TRUNC` before reading the source, zeroing the file.
+#[tokio::test]
+#[tracing::instrument]
+async fn test_copy_object_self_replace_preserves_content() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-self-replace-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+
+    create_bucket(&c, bucket).await?;
+
+    let key = "obj.bin";
+    let content = "original content that must survive a self-replace";
+    c.put_object()
+        .bucket(bucket)
+        .key(key)
+        .body(ByteStream::from_static(content.as_bytes()))
+        .send()
+        .await?;
+
+    let before_head = c.head_object().bucket(bucket).key(key).send().await?;
+    let before_last_modified = before_head
+        .last_modified()
+        .expect("head_object should return last_modified")
+        .to_owned();
+
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    let copy_source = format!("{bucket}/{key}");
+    c.copy_object()
+        .bucket(bucket)
+        .key(key)
+        .copy_source(&copy_source)
+        .send()
+        .await?;
+
+    let after_head = c.head_object().bucket(bucket).key(key).send().await?;
+    let after_last_modified = after_head
+        .last_modified()
+        .expect("head_object should return last_modified")
+        .to_owned();
+    assert!(
+        after_last_modified > before_last_modified,
+        "CopyObject self-replace must update LastModified"
+    );
+
+    let got = c.get_object().bucket(bucket).key(key).send().await?;
+    let body = got.body.collect().await?.into_bytes();
+    assert_eq!(body.as_ref(), content.as_bytes(), "CopyObject self-replace must not zero the file");
+
+    delete_object(&c, bucket, key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+/// `MetadataDirective: REPLACE` must drop the source metadata and
+/// install the request's metadata + `content_type` on the destination.
+/// Before the fix, `copy_object` ignored both `metadata_directive`
+/// and `metadata` and unconditionally copied the source sidecar
+/// verbatim.
+#[tokio::test]
+#[tracing::instrument]
+async fn test_copy_object_metadata_directive_replace() -> Result<()> {
+    use aws_sdk_s3::types::MetadataDirective;
+
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-meta-replace-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+
+    create_bucket(&c, bucket).await?;
+
+    let src_key = "src.bin";
+    c.put_object()
+        .bucket(bucket)
+        .key(src_key)
+        .body(ByteStream::from_static(b"x"))
+        .content_type("application/octet-stream")
+        .metadata("origin", "v1")
+        .metadata("rev", "1")
+        .metadata("source-only", "keep-out")
+        .send()
+        .await?;
+
+    let dst_key = "dst.bin";
+    let copy_source = format!("{bucket}/{src_key}");
+    c.copy_object()
+        .bucket(bucket)
+        .key(dst_key)
+        .copy_source(&copy_source)
+        .metadata_directive(MetadataDirective::Replace)
+        .content_type("application/pdf")
+        .metadata("origin", "v2")
+        .metadata("rev", "2")
+        .send()
+        .await?;
+
+    let head = c.head_object().bucket(bucket).key(dst_key).send().await?;
+    assert_eq!(
+        head.content_type().unwrap_or(""),
+        "application/pdf",
+        "REPLACE must install the request's content_type on the destination"
+    );
+    let dst_meta = head.metadata().cloned().unwrap_or_default();
+    assert_eq!(dst_meta.get("origin").map(String::as_str), Some("v2"));
+    assert_eq!(dst_meta.get("rev").map(String::as_str), Some("2"));
+    assert_eq!(
+        dst_meta.get("source-only"),
+        None,
+        "REPLACE must drop metadata that only exists on the source object"
+    );
+
+    delete_object(&c, bucket, src_key).await?;
+    delete_object(&c, bucket, dst_key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+/// Omitting `MetadataDirective` must use S3's default `COPY` behavior:
+/// propagate source metadata and ignore replacement fields from the request.
+#[tokio::test]
+#[tracing::instrument]
+async fn test_copy_object_metadata_directive_default_copies_source() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-meta-default-copy-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+
+    create_bucket(&c, bucket).await?;
+
+    let src_key = "src.bin";
+    c.put_object()
+        .bucket(bucket)
+        .key(src_key)
+        .body(ByteStream::from_static(b"x"))
+        .content_type("application/octet-stream")
+        .metadata("origin", "v1")
+        .send()
+        .await?;
+
+    let dst_key = "dst.bin";
+    let copy_source = format!("{bucket}/{src_key}");
+    c.copy_object()
+        .bucket(bucket)
+        .key(dst_key)
+        .copy_source(&copy_source)
+        .content_type("application/pdf")
+        .metadata("origin", "v2")
+        .send()
+        .await?;
+
+    let head = c.head_object().bucket(bucket).key(dst_key).send().await?;
+    assert_eq!(
+        head.content_type().unwrap_or(""),
+        "application/octet-stream",
+        "default MetadataDirective must propagate the source content_type"
+    );
+    let dst_meta = head.metadata().cloned().unwrap_or_default();
+    assert_eq!(
+        dst_meta.get("origin").map(String::as_str),
+        Some("v1"),
+        "default MetadataDirective must propagate the source metadata"
+    );
+
+    delete_object(&c, bucket, src_key).await?;
+    delete_object(&c, bucket, dst_key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+/// `MetadataDirective: COPY` (the default) must propagate the source
+/// metadata to the destination, ignoring any metadata fields supplied
+/// in the request — exactly as documented at
+/// <https://docs.aws.amazon.com/AmazonS3/latest/API/API_CopyObject.html>.
+#[allow(clippy::doc_markdown)]
+#[tokio::test]
+#[tracing::instrument]
+async fn test_copy_object_metadata_directive_copy_ignores_request_fields() -> Result<()> {
+    use aws_sdk_s3::types::MetadataDirective;
+
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-meta-copy-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+
+    create_bucket(&c, bucket).await?;
+
+    let src_key = "src.bin";
+    c.put_object()
+        .bucket(bucket)
+        .key(src_key)
+        .body(ByteStream::from_static(b"x"))
+        .content_type("application/octet-stream")
+        .metadata("origin", "v1")
+        .send()
+        .await?;
+
+    let dst_key = "dst.bin";
+    let copy_source = format!("{bucket}/{src_key}");
+    c.copy_object()
+        .bucket(bucket)
+        .key(dst_key)
+        .copy_source(&copy_source)
+        .metadata_directive(MetadataDirective::Copy)
+        .content_type("application/pdf") // expected to be ignored under COPY
+        .metadata("origin", "v2")
+        .send()
+        .await?;
+
+    let head = c.head_object().bucket(bucket).key(dst_key).send().await?;
+    assert_eq!(
+        head.content_type().unwrap_or(""),
+        "application/octet-stream",
+        "COPY must propagate the source content_type and ignore the request override"
+    );
+    let dst_meta = head.metadata().cloned().unwrap_or_default();
+    assert_eq!(
+        dst_meta.get("origin").map(String::as_str),
+        Some("v1"),
+        "COPY must propagate the source metadata, not the request fields"
+    );
+
+    delete_object(&c, bucket, src_key).await?;
+    delete_object(&c, bucket, dst_key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+/// Test conditional copy with `x-amz-copy-source-if-match`.
+#[tokio::test]
+#[tracing::instrument]
+async fn test_copy_object_if_match() -> Result<()> {
+    use aws_sdk_s3::primitives::DateTime;
+    use aws_sdk_s3::primitives::DateTimeFormat;
+
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-cond-copy-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let src_key = "source.txt";
+    let content = "conditional copy content";
+    c.put_object()
+        .bucket(bucket)
+        .key(src_key)
+        .body(ByteStream::from_static(content.as_bytes()))
+        .send()
+        .await?;
+
+    let get_result = c.get_object().bucket(bucket).key(src_key).send().await?;
+    let e_tag = get_result.e_tag().expect("get_object should return e_tag").to_owned();
+    let _ = get_result.body.collect().await?;
+
+    let copy_source = format!("{bucket}/{src_key}");
+
+    let dst_key = "dest-match.txt";
+    c.copy_object()
+        .bucket(bucket)
+        .key(dst_key)
+        .copy_source(&copy_source)
+        .copy_source_if_match(&e_tag)
+        .send()
+        .await?;
+
+    let ans = c.get_object().bucket(bucket).key(dst_key).send().await?;
+    let body = ans.body.collect().await?.into_bytes();
+    assert_eq!(body.as_ref(), content.as_bytes());
+
+    let dst_key2 = "dest-match-wildcard.txt";
+    let past = DateTime::from_str("Thu, 01 Jan 2000 00:00:00 GMT", DateTimeFormat::HttpDate)?;
+    c.copy_object()
+        .bucket(bucket)
+        .key(dst_key2)
+        .copy_source(&copy_source)
+        .copy_source_if_match("*")
+        .copy_source_if_unmodified_since(past)
+        .send()
+        .await?;
+
+    let ans = c.get_object().bucket(bucket).key(dst_key2).send().await?;
+    let body = ans.body.collect().await?.into_bytes();
+    assert_eq!(body.as_ref(), content.as_bytes());
+
+    let dst_key3 = "dest-nomatch.txt";
+    let err = c
+        .copy_object()
+        .bucket(bucket)
+        .key(dst_key3)
+        .copy_source(&copy_source)
+        .copy_source_if_match("\"nonexistent-etag\"")
+        .send()
+        .await
+        .expect_err("Expected copy with non-matching If-Match to fail");
+    let service_err = err.into_service_error();
+    assert_eq!(service_err.code(), Some("PreconditionFailed"));
+
+    delete_object(&c, bucket, src_key).await?;
+    delete_object(&c, bucket, dst_key).await?;
+    delete_object(&c, bucket, dst_key2).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+/// Test conditional copy with `x-amz-copy-source-if-none-match`.
+#[tokio::test]
+#[tracing::instrument]
+async fn test_copy_object_if_none_match() -> Result<()> {
+    use aws_sdk_s3::primitives::DateTime;
+    use aws_sdk_s3::primitives::DateTimeFormat;
+
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-cond-copy-nm-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let src_key = "source.txt";
+    let content = "conditional copy none match";
+    c.put_object()
+        .bucket(bucket)
+        .key(src_key)
+        .body(ByteStream::from_static(content.as_bytes()))
+        .send()
+        .await?;
+
+    let get_result = c.get_object().bucket(bucket).key(src_key).send().await?;
+    let e_tag = get_result.e_tag().expect("get_object should return e_tag").to_owned();
+    let _ = get_result.body.collect().await?;
+
+    let copy_source = format!("{bucket}/{src_key}");
+
+    let dst_key = "dest-none-match-ok.txt";
+    c.copy_object()
+        .bucket(bucket)
+        .key(dst_key)
+        .copy_source(&copy_source)
+        .copy_source_if_none_match("\"different-etag\"")
+        .send()
+        .await?;
+
+    let ans = c.get_object().bucket(bucket).key(dst_key).send().await?;
+    let body = ans.body.collect().await?.into_bytes();
+    assert_eq!(body.as_ref(), content.as_bytes());
+
+    let dst_key2 = "dest-none-match-fail.txt";
+    let err = c
+        .copy_object()
+        .bucket(bucket)
+        .key(dst_key2)
+        .copy_source(&copy_source)
+        .copy_source_if_none_match(&e_tag)
+        .send()
+        .await
+        .expect_err("Expected copy with matching If-None-Match to fail");
+    let service_err = err.into_service_error();
+    assert_eq!(service_err.code(), Some("PreconditionFailed"));
+
+    let dst_key3 = "dest-none-match-wildcard.txt";
+    let err = c
+        .copy_object()
+        .bucket(bucket)
+        .key(dst_key3)
+        .copy_source(&copy_source)
+        .copy_source_if_none_match("*")
+        .send()
+        .await
+        .expect_err("Expected copy with wildcard If-None-Match to fail for existing source");
+    let service_err = err.into_service_error();
+    assert_eq!(service_err.code(), Some("PreconditionFailed"));
+
+    let dst_key4 = "dest-none-match-precedence.txt";
+    let future = DateTime::from_str("Thu, 01 Jan 2099 00:00:00 GMT", DateTimeFormat::HttpDate)?;
+    c.copy_object()
+        .bucket(bucket)
+        .key(dst_key4)
+        .copy_source(&copy_source)
+        .copy_source_if_none_match("\"different-etag\"")
+        .copy_source_if_modified_since(future)
+        .send()
+        .await?;
+
+    let ans = c.get_object().bucket(bucket).key(dst_key4).send().await?;
+    let body = ans.body.collect().await?.into_bytes();
+    assert_eq!(body.as_ref(), content.as_bytes());
+
+    delete_object(&c, bucket, src_key).await?;
+    delete_object(&c, bucket, dst_key).await?;
+    delete_object(&c, bucket, dst_key4).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+/// Test conditional copy with `x-amz-copy-source-if-modified-since` and
+/// `x-amz-copy-source-if-unmodified-since`.
+#[tokio::test]
+#[tracing::instrument]
+async fn test_copy_object_if_modified_since() -> Result<()> {
+    use aws_sdk_s3::primitives::DateTime;
+    use aws_sdk_s3::primitives::DateTimeFormat;
+
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-cond-copy-ts-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let src_key = "source.txt";
+    let content = "conditional copy timestamp";
+    c.put_object()
+        .bucket(bucket)
+        .key(src_key)
+        .body(ByteStream::from_static(content.as_bytes()))
+        .send()
+        .await?;
+
+    let copy_source = format!("{bucket}/{src_key}");
+
+    let dst_key = "dest-modified-ok.txt";
+    let past = DateTime::from_str("Thu, 01 Jan 2000 00:00:00 GMT", DateTimeFormat::HttpDate)?;
+    c.copy_object()
+        .bucket(bucket)
+        .key(dst_key)
+        .copy_source(&copy_source)
+        .copy_source_if_modified_since(past)
+        .send()
+        .await?;
+
+    let ans = c.get_object().bucket(bucket).key(dst_key).send().await?;
+    let body = ans.body.collect().await?.into_bytes();
+    assert_eq!(body.as_ref(), content.as_bytes());
+
+    let dst_key2 = "dest-modified-fail.txt";
+    let future = DateTime::from_str("Thu, 01 Jan 2099 00:00:00 GMT", DateTimeFormat::HttpDate)?;
+    let err = c
+        .copy_object()
+        .bucket(bucket)
+        .key(dst_key2)
+        .copy_source(&copy_source)
+        .copy_source_if_modified_since(future)
+        .send()
+        .await
+        .expect_err("Expected copy with future if-modified-since to fail");
+    let service_err = err.into_service_error();
+    assert_eq!(service_err.code(), Some("PreconditionFailed"));
+
+    let dst_key3 = "dest-unmodified-ok.txt";
+    let future = DateTime::from_str("Thu, 01 Jan 2099 00:00:00 GMT", DateTimeFormat::HttpDate)?;
+    c.copy_object()
+        .bucket(bucket)
+        .key(dst_key3)
+        .copy_source(&copy_source)
+        .copy_source_if_unmodified_since(future)
+        .send()
+        .await?;
+
+    let ans = c.get_object().bucket(bucket).key(dst_key3).send().await?;
+    let body = ans.body.collect().await?.into_bytes();
+    assert_eq!(body.as_ref(), content.as_bytes());
+
+    let dst_key4 = "dest-unmodified-fail.txt";
+    let past = DateTime::from_str("Thu, 01 Jan 2000 00:00:00 GMT", DateTimeFormat::HttpDate)?;
+    let err = c
+        .copy_object()
+        .bucket(bucket)
+        .key(dst_key4)
+        .copy_source(&copy_source)
+        .copy_source_if_unmodified_since(past)
+        .send()
+        .await
+        .expect_err("Expected copy with past if-unmodified-since to fail");
+    let service_err = err.into_service_error();
+    assert_eq!(service_err.code(), Some("PreconditionFailed"));
+
+    delete_object(&c, bucket, src_key).await?;
+    delete_object(&c, bucket, dst_key).await?;
+    delete_object(&c, bucket, dst_key3).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+/// Test conditional copy against a multipart source object's persisted `ETag`.
+#[tokio::test]
+#[tracing::instrument]
+async fn test_copy_object_conditional_with_multipart_source_etag() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-cond-copy-multipart-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let src_key = "source-multipart.txt";
+    let content = "multipart conditional copy content";
+
+    let upload_id = c
+        .create_multipart_upload()
+        .bucket(bucket)
+        .key(src_key)
+        .send()
+        .await?
+        .upload_id
+        .expect("create_multipart_upload should return upload_id");
+
+    let upload_result = c
+        .upload_part()
+        .bucket(bucket)
+        .key(src_key)
+        .upload_id(&upload_id)
+        .body(ByteStream::from_static(content.as_bytes()))
+        .part_number(1)
+        .send()
+        .await?;
+
+    let upload = CompletedMultipartUpload::builder()
+        .set_parts(Some(vec![
+            CompletedPart::builder()
+                .e_tag(upload_result.e_tag.expect("upload_part should return e_tag"))
+                .part_number(1)
+                .build(),
+        ]))
+        .build();
+
+    let complete_result = c
+        .complete_multipart_upload()
+        .bucket(bucket)
+        .key(src_key)
+        .multipart_upload(upload)
+        .upload_id(&upload_id)
+        .send()
+        .await?;
+    let multipart_e_tag = complete_result
+        .e_tag()
+        .expect("complete_multipart_upload should return e_tag")
+        .to_owned();
+
+    let copy_source = format!("{bucket}/{src_key}");
+
+    let dst_key = "dest-multipart-match.txt";
+    c.copy_object()
+        .bucket(bucket)
+        .key(dst_key)
+        .copy_source(&copy_source)
+        .copy_source_if_match(&multipart_e_tag)
+        .send()
+        .await?;
+
+    let ans = c.get_object().bucket(bucket).key(dst_key).send().await?;
+    let body = ans.body.collect().await?.into_bytes();
+    assert_eq!(body.as_ref(), content.as_bytes());
+
+    // The destination ETag should match the source multipart ETag (format preserved during copy).
+    let head = c.head_object().bucket(bucket).key(dst_key).send().await?;
+    let dst_etag = head.e_tag().expect("head_object should return e_tag");
+    assert_eq!(
+        dst_etag, multipart_e_tag,
+        "destination ETag should match source multipart ETag after copy"
+    );
+
+    let dst_key2 = "dest-multipart-none-match.txt";
+    let err = c
+        .copy_object()
+        .bucket(bucket)
+        .key(dst_key2)
+        .copy_source(&copy_source)
+        .copy_source_if_none_match(&multipart_e_tag)
+        .send()
+        .await
+        .expect_err("Expected matching multipart ETag to fail If-None-Match");
+    let service_err = err.into_service_error();
+    assert_eq!(service_err.code(), Some("PreconditionFailed"));
+
+    delete_object(&c, bucket, src_key).await?;
+    delete_object(&c, bucket, dst_key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
 /// Regression test for <https://github.com/s3s-project/s3s/issues/112>
 ///
 /// `list_objects_v2` prefix matching should use string-based matching (not `Path::starts_with`)
@@ -1163,6 +2578,66 @@ async fn test_list_objects_v2_start_after() -> Result<()> {
     assert_eq!(contents, vec!["ccc.txt", "ddd.txt"]);
 
     // Cleanup
+    for key in &keys {
+        delete_object(&c, bucket, key).await?;
+    }
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
+async fn test_list_objects_v2_continuation_token_with_delimiter() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-continuation-token-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let content = "test";
+    let keys = ["a.txt", "dir/1.txt", "z.txt"];
+    for key in &keys {
+        c.put_object()
+            .bucket(bucket)
+            .key(*key)
+            .body(ByteStream::from_static(content.as_bytes()))
+            .send()
+            .await?;
+    }
+
+    let page1 = c.list_objects_v2().bucket(bucket).delimiter("/").max_keys(2).send().await?;
+    assert_eq!(page1.is_truncated(), Some(true));
+    assert_eq!(page1.contents().iter().filter_map(|obj| obj.key()).collect::<Vec<_>>(), vec!["a.txt"]);
+    assert_eq!(
+        page1
+            .common_prefixes()
+            .iter()
+            .filter_map(|prefix| prefix.prefix())
+            .collect::<Vec<_>>(),
+        vec!["dir/"]
+    );
+    let next_token = page1
+        .next_continuation_token()
+        .expect("truncated v2 listing should include next_continuation_token");
+
+    let page2 = c
+        .list_objects_v2()
+        .bucket(bucket)
+        .delimiter("/")
+        .max_keys(2)
+        .continuation_token(next_token)
+        .send()
+        .await?;
+
+    assert_eq!(page2.is_truncated(), Some(false));
+    assert_eq!(page2.contents().iter().filter_map(|obj| obj.key()).collect::<Vec<_>>(), vec!["z.txt"]);
+    assert!(
+        page2.common_prefixes().is_empty(),
+        "continuation token should advance past the previous common prefix"
+    );
+
     for key in &keys {
         delete_object(&c, bucket, key).await?;
     }
@@ -1398,6 +2873,627 @@ async fn test_multipart_upload_id_auth() -> Result<()> {
     // Cleanup
     delete_object(&c1, bucket, key).await?;
     delete_bucket(&c1, bucket).await?;
+
+    Ok(())
+}
+
+/// Test that `CompleteMultipartUpload` with `If-None-Match: *` succeeds when object doesn't exist
+/// and fails with `PreconditionFailed` (412) when object already exists.
+#[tokio::test]
+#[tracing::instrument]
+async fn test_complete_multipart_if_none_match() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-cmu-ifnm-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    let key = "multipart-conditional.txt";
+    let content = "abcdefghijklmnopqrstuvwxyz/0123456789/!@#$%^&*();\n";
+
+    create_bucket(&c, bucket).await?;
+
+    // Test 1: CompleteMultipartUpload with If-None-Match: * should succeed when object doesn't exist
+    debug!("Test 1: CompleteMultipartUpload with If-None-Match: * on non-existent object");
+    {
+        let (upload_id, upload_parts) = do_multipart_upload(&c, bucket, key, content.as_bytes()).await?;
+        let upload = CompletedMultipartUpload::builder().set_parts(Some(upload_parts)).build();
+
+        let result = c
+            .complete_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(&upload_id)
+            .multipart_upload(upload)
+            .if_none_match("*")
+            .send()
+            .await;
+
+        match result {
+            Ok(_) => debug!("✓ Successfully completed multipart upload with If-None-Match: *"),
+            Err(e) => panic!(
+                "Expected CompleteMultipartUpload with If-None-Match: * to succeed when object doesn't exist, but got error: {e:?}"
+            ),
+        }
+    }
+
+    // Verify the object was created
+    {
+        let result = c.get_object().bucket(bucket).key(key).send().await?;
+        let body = result.body.collect().await?.into_bytes();
+        assert_eq!(body.as_ref(), content.as_bytes());
+        debug!("✓ Verified object was created via multipart upload");
+    }
+
+    // Test 2: CompleteMultipartUpload with If-None-Match: * should fail when object exists
+    debug!("Test 2: CompleteMultipartUpload with If-None-Match: * on existing object");
+    {
+        let (upload_id, upload_parts) = do_multipart_upload(&c, bucket, key, b"new content").await?;
+        let upload = CompletedMultipartUpload::builder().set_parts(Some(upload_parts)).build();
+
+        let result = c
+            .complete_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(&upload_id)
+            .multipart_upload(upload)
+            .if_none_match("*")
+            .send()
+            .await;
+
+        match result {
+            Ok(_) => {
+                panic!("Expected CompleteMultipartUpload with If-None-Match: * to fail when object exists, but it succeeded")
+            }
+            Err(e) => {
+                let service_err = e.into_service_error();
+                debug!("✓ Expected error when object exists: {service_err:?}");
+                assert_eq!(
+                    service_err.code(),
+                    Some("PreconditionFailed"),
+                    "Expected PreconditionFailed, got: {:?}",
+                    service_err.code()
+                );
+            }
+        }
+    }
+
+    // Verify the object wasn't overwritten
+    {
+        let result = c.get_object().bucket(bucket).key(key).send().await?;
+        let body = result.body.collect().await?.into_bytes();
+        assert_eq!(body.as_ref(), content.as_bytes());
+        debug!("✓ Verified object was not overwritten");
+    }
+
+    // Cleanup
+    delete_object(&c, bucket, key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+/// Test that `CompleteMultipartUpload` with `If-Match` succeeds when `ETag` matches
+/// and fails with `PreconditionFailed` (412) when `ETag` doesn't match or object is absent.
+#[tokio::test]
+#[tracing::instrument]
+#[allow(clippy::too_many_lines)]
+async fn test_complete_multipart_if_match() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-cmu-ifm-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    let key = "multipart-conditional-match.txt";
+    let content = "abcdefghijklmnopqrstuvwxyz/0123456789/!@#$%^&*();\n";
+
+    create_bucket(&c, bucket).await?;
+
+    // Test 1: CompleteMultipartUpload with If-Match on absent object should fail
+    debug!("Test 1: CompleteMultipartUpload with If-Match on absent object");
+    {
+        let (upload_id, upload_parts) = do_multipart_upload(&c, bucket, key, b"some content").await?;
+        let upload = CompletedMultipartUpload::builder()
+            .set_parts(Some(upload_parts.clone()))
+            .build();
+
+        let result = c
+            .complete_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(&upload_id)
+            .multipart_upload(upload)
+            .if_match("\"some-etag\"")
+            .send()
+            .await;
+
+        match result {
+            Ok(_) => panic!("Expected CompleteMultipartUpload with If-Match on absent object to fail, but it succeeded"),
+            Err(e) => {
+                let service_err = e.into_service_error();
+                debug!("✓ Expected error on absent object: {service_err:?}");
+                assert_eq!(
+                    service_err.code(),
+                    Some("PreconditionFailed"),
+                    "Expected PreconditionFailed, got: {:?}",
+                    service_err.code()
+                );
+            }
+        }
+
+        // Verify the upload was not consumed: retry the same upload_id should still fail with precondition
+        let upload2 = CompletedMultipartUpload::builder().set_parts(Some(upload_parts)).build();
+        let result2 = c
+            .complete_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(&upload_id)
+            .multipart_upload(upload2)
+            .if_match("\"some-etag\"")
+            .send()
+            .await;
+
+        let err2 = result2.expect_err("Expected retry to also fail");
+        let service_err2 = err2.into_service_error();
+        assert_eq!(
+            service_err2.code(),
+            Some("PreconditionFailed"),
+            "Expected retry to fail with PreconditionFailed, got: {:?}",
+            service_err2.code()
+        );
+        debug!("✓ Upload was not consumed by failed precondition check");
+    }
+
+    // Create the object with a known ETag via put_object
+    let initial_etag = {
+        let body = ByteStream::from_static(content.as_bytes());
+        let result = c.put_object().bucket(bucket).key(key).body(body).send().await?;
+        result.e_tag().unwrap().to_owned()
+    };
+    debug!("Initial ETag: {initial_etag}");
+
+    // Test 2: CompleteMultipartUpload with If-Match and wrong ETag should fail
+    debug!("Test 2: CompleteMultipartUpload with If-Match and wrong ETag");
+    {
+        let (upload_id, upload_parts) = do_multipart_upload(&c, bucket, key, b"new content").await?;
+        let upload = CompletedMultipartUpload::builder().set_parts(Some(upload_parts)).build();
+
+        let result = c
+            .complete_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(&upload_id)
+            .multipart_upload(upload)
+            .if_match("\"wrong-etag-value\"")
+            .send()
+            .await;
+
+        match result {
+            Ok(_) => panic!("Expected CompleteMultipartUpload with wrong If-Match to fail, but it succeeded"),
+            Err(e) => {
+                let service_err = e.into_service_error();
+                debug!("✓ Expected error with wrong ETag: {service_err:?}");
+                assert_eq!(
+                    service_err.code(),
+                    Some("PreconditionFailed"),
+                    "Expected PreconditionFailed, got: {:?}",
+                    service_err.code()
+                );
+            }
+        }
+    }
+
+    // Verify the object wasn't overwritten
+    {
+        let result = c.get_object().bucket(bucket).key(key).send().await?;
+        let body = result.body.collect().await?.into_bytes();
+        assert_eq!(body.as_ref(), content.as_bytes());
+        debug!("✓ Verified object was not overwritten");
+    }
+
+    // Test 3: CompleteMultipartUpload with If-Match and correct ETag should succeed
+    debug!("Test 3: CompleteMultipartUpload with If-Match and correct ETag");
+    {
+        let new_content = b"updated via conditional multipart";
+        let (upload_id, upload_parts) = do_multipart_upload(&c, bucket, key, new_content).await?;
+        let upload = CompletedMultipartUpload::builder().set_parts(Some(upload_parts)).build();
+
+        let result = c
+            .complete_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(&upload_id)
+            .multipart_upload(upload)
+            .if_match(&initial_etag)
+            .send()
+            .await;
+
+        match result {
+            Ok(_) => debug!("✓ Successfully completed multipart upload with matching If-Match"),
+            Err(e) => panic!("Expected CompleteMultipartUpload with matching If-Match to succeed, but got error: {e:?}"),
+        }
+    }
+
+    // Verify the object was updated (use head_object to avoid body checksum issues
+    // since complete_multipart_upload doesn't update internal checksum info)
+    {
+        let result = c.head_object().bucket(bucket).key(key).send().await?;
+        assert!(result.content_length().is_some());
+        debug!("✓ Verified object exists after conditional multipart upload");
+    }
+
+    // Cleanup
+    delete_object(&c, bucket, key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+/// Test that `CompleteMultipartUpload` with `If-Match: *` succeeds when object exists
+/// and fails with `PreconditionFailed` (412) when object is absent.
+#[tokio::test]
+#[tracing::instrument]
+async fn test_complete_multipart_if_match_wildcard() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-cmu-ifm-wc-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    let key = "multipart-conditional-match-wildcard.txt";
+
+    create_bucket(&c, bucket).await?;
+
+    // Test 1: If-Match: * on absent object should fail
+    debug!("Test 1: CompleteMultipartUpload with If-Match: * on absent object");
+    {
+        let (upload_id, upload_parts) = do_multipart_upload(&c, bucket, key, b"some content").await?;
+        let upload = CompletedMultipartUpload::builder().set_parts(Some(upload_parts)).build();
+
+        let err = c
+            .complete_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(&upload_id)
+            .multipart_upload(upload)
+            .if_match("*")
+            .send()
+            .await
+            .expect_err("Expected If-Match: * on absent object to fail");
+
+        let service_err = err.into_service_error();
+        assert_eq!(
+            service_err.code(),
+            Some("PreconditionFailed"),
+            "Expected PreconditionFailed, got: {:?}",
+            service_err.code()
+        );
+        debug!("✓ If-Match: * correctly rejected absent object");
+    }
+
+    // Create the object
+    c.put_object()
+        .bucket(bucket)
+        .key(key)
+        .body(ByteStream::from_static(b"existing object"))
+        .send()
+        .await?;
+
+    // Test 2: If-Match: * on existing object should succeed
+    debug!("Test 2: CompleteMultipartUpload with If-Match: * on existing object");
+    {
+        let (upload_id, upload_parts) = do_multipart_upload(&c, bucket, key, b"new content").await?;
+        let upload = CompletedMultipartUpload::builder().set_parts(Some(upload_parts)).build();
+
+        c.complete_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(&upload_id)
+            .multipart_upload(upload)
+            .if_match("*")
+            .send()
+            .await
+            .expect("Expected If-Match: * on existing object to succeed");
+
+        debug!("✓ If-Match: * correctly accepted existing object");
+    }
+
+    // Cleanup
+    delete_object(&c, bucket, key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
+async fn test_list_objects_v2_continuation_token_pagination() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-continuation-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let keys = ["a.txt", "b.txt", "c.txt", "d.txt", "e.txt"];
+    for key in &keys {
+        c.put_object()
+            .bucket(bucket)
+            .key(*key)
+            .body(ByteStream::from_static(b"x"))
+            .send()
+            .await?;
+    }
+
+    // Walk all pages with max_keys=2
+    let mut all_keys: Vec<String> = Vec::new();
+    let mut token: Option<String> = None;
+    loop {
+        let mut req = c.list_objects_v2().bucket(bucket).max_keys(2);
+        if let Some(t) = &token {
+            req = req.continuation_token(t.clone());
+        }
+        let page = req.send().await?;
+
+        all_keys.extend(page.contents().iter().filter_map(|o| o.key().map(String::from)));
+
+        if page.is_truncated() != Some(true) {
+            break;
+        }
+        token = page.next_continuation_token().map(String::from);
+        assert!(token.is_some(), "is_truncated is true but next_continuation_token is missing");
+    }
+
+    assert_eq!(all_keys, vec!["a.txt", "b.txt", "c.txt", "d.txt", "e.txt"]);
+
+    // Cleanup
+    for key in &keys {
+        delete_object(&c, bucket, key).await?;
+    }
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+/// When both `continuation_token` and `start_after` are present, the stricter
+/// (larger) bound wins so we never re-list keys the caller already skipped.
+#[tokio::test]
+#[tracing::instrument]
+async fn test_list_objects_v2_continuation_token_and_start_after_uses_max() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-ct-max-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let keys = ["a.txt", "b.txt", "c.txt", "d.txt", "e.txt"];
+    for key in &keys {
+        c.put_object()
+            .bucket(bucket)
+            .key(*key)
+            .body(ByteStream::from_static(b"x"))
+            .send()
+            .await?;
+    }
+
+    // start_after="d.txt" is larger than continuation_token="b.txt", so we resume after d.txt
+    let result = c
+        .list_objects_v2()
+        .bucket(bucket)
+        .continuation_token("b.txt")
+        .start_after("d.txt")
+        .send()
+        .await?;
+    let result_keys: Vec<_> = result.contents().iter().filter_map(|o| o.key()).collect();
+    assert_eq!(result_keys, vec!["e.txt"], "should resume after the larger value (d.txt)");
+
+    // continuation_token="c.txt" is larger than start_after="a.txt", so we resume after c.txt
+    let result = c
+        .list_objects_v2()
+        .bucket(bucket)
+        .continuation_token("c.txt")
+        .start_after("a.txt")
+        .send()
+        .await?;
+    let result_keys: Vec<_> = result.contents().iter().filter_map(|o| o.key()).collect();
+    assert_eq!(result_keys, vec!["d.txt", "e.txt"], "should resume after the larger value (c.txt)");
+
+    // Cleanup
+    for key in &keys {
+        delete_object(&c, bucket, key).await?;
+    }
+
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+/// `max_keys=0` return `is_truncated=false` with no continuation token
+#[tokio::test]
+#[tracing::instrument]
+async fn test_list_objects_v2_max_keys_zero() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-max-keys-zero-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let keys = ["a.txt", "b.txt", "c.txt"];
+    for key in &keys {
+        c.put_object()
+            .bucket(bucket)
+            .key(*key)
+            .body(ByteStream::from_static(b"x"))
+            .send()
+            .await?;
+    }
+
+    let result = c.list_objects_v2().bucket(bucket).max_keys(0).send().await?;
+
+    assert_eq!(result.is_truncated(), Some(false), "max_keys=0 should not be truncated");
+    assert!(
+        result.next_continuation_token().is_none(),
+        "max_keys=0 should not return a continuation token"
+    );
+    assert!(result.contents().is_empty(), "max_keys=0 should return no objects");
+
+    // Cleanup
+    for key in &keys {
+        delete_object(&c, bucket, key).await?;
+    }
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
+async fn test_head_object_no_such_key() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-head-no-such-key-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let result = c.head_object().bucket(bucket).key("nonexistent-object").send().await;
+    let err = result.expect_err("Expected NoSuchKey for missing object");
+    let service_err = err.into_service_error();
+    assert_eq!(service_err.code(), Some("NoSuchKey"), "Expected NoSuchKey, got: {:?}", service_err.code());
+
+    delete_bucket(&c, bucket).await?;
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
+async fn test_head_object_no_such_bucket() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-head-no-such-bucket-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+
+    let result = c.head_object().bucket(bucket).key("some-key").send().await;
+    let err = result.expect_err("Expected NoSuchBucket for missing bucket");
+    let service_err = err.into_service_error();
+    assert_eq!(
+        service_err.code(),
+        Some("NoSuchBucket"),
+        "Expected NoSuchBucket, got: {:?}",
+        service_err.code()
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
+async fn test_upload_part_copy_empty_source() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-upc-empty-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let src_key = "empty.txt";
+    c.put_object()
+        .bucket(bucket)
+        .key(src_key)
+        .body(ByteStream::from_static(b""))
+        .send()
+        .await?;
+
+    let dst_key = "dst.txt";
+    let upload_id = c
+        .create_multipart_upload()
+        .bucket(bucket)
+        .key(dst_key)
+        .send()
+        .await?
+        .upload_id
+        .unwrap();
+
+    let copy_source = format!("{bucket}/{src_key}");
+    c.upload_part_copy()
+        .bucket(bucket)
+        .key(dst_key)
+        .copy_source(copy_source)
+        .upload_id(&upload_id)
+        .part_number(1)
+        .send()
+        .await?;
+
+    c.abort_multipart_upload()
+        .bucket(bucket)
+        .key(dst_key)
+        .upload_id(&upload_id)
+        .send()
+        .await?;
+
+    delete_object(&c, bucket, src_key).await?;
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
+async fn test_head_object_etag_and_checksum() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-head-etag-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    let key = "sample.txt";
+    let content = "hello world\n";
+    let crc32c = base64_simd::STANDARD.encode_to_string(crc32c::crc32c(content.as_bytes()).to_be_bytes());
+
+    create_bucket(&c, bucket).await?;
+
+    // Put object with checksum
+    let put_result = c
+        .put_object()
+        .bucket(bucket)
+        .key(key)
+        .body(ByteStream::from_static(content.as_bytes()))
+        .checksum_crc32_c(crc32c.as_str())
+        .send()
+        .await?;
+    let put_e_tag = put_result.e_tag().unwrap().to_owned();
+
+    // Head object and verify e_tag is present and matches put_object
+    let head_result = c
+        .head_object()
+        .bucket(bucket)
+        .key(key)
+        .checksum_mode(ChecksumMode::Enabled)
+        .send()
+        .await?;
+    let head_e_tag = head_result.e_tag().expect("head_object should return e_tag").to_owned();
+    assert_eq!(head_e_tag, put_e_tag, "head_object e_tag should match put_object e_tag");
+
+    // Verify checksum is returned
+    let head_crc32c = head_result
+        .checksum_crc32_c()
+        .expect("head_object should return checksum_crc32c");
+    assert_eq!(head_crc32c, crc32c);
+
+    // Get object and verify e_tag matches
+    let get_result = c
+        .get_object()
+        .bucket(bucket)
+        .key(key)
+        .checksum_mode(ChecksumMode::Enabled)
+        .send()
+        .await?;
+    let get_e_tag = get_result.e_tag().expect("get_object should return e_tag").to_owned();
+    assert_eq!(head_e_tag, get_e_tag, "head_object e_tag should match get_object e_tag");
+
+    // Cleanup
+    delete_object(&c, bucket, key).await?;
+    delete_bucket(&c, bucket).await?;
 
     Ok(())
 }
