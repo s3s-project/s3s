@@ -323,7 +323,7 @@ mod tests {
 
     #[test]
     fn text_direct_start_event_inside_content() {
-        // When text() encounters a Start event, it errors without consuming it.
+        // When text() encounters a Start event, it errors after consuming it.
         let xml = b"before<Child>inside</Child>";
         let err = text_direct(xml).unwrap_err();
         assert!(matches!(err, DeError::UnexpectedStart), "expected UnexpectedStart, got {err:?}");
