@@ -129,13 +129,18 @@ impl<'xml> Deserializer<'xml> {
                     DeEvent::Start(x)
                 }
 
-                // expand predefined XML entities (e.g. &quot; → ")
-                // Note: resolve_xml_entity returns unescaped characters ("&", "<", etc.).
+                // expand XML entity / character references (e.g. &quot; → ", &#34; → ")
+                // Note: resolve_xml_entity only covers the five predefined XML entities.
+                // Numeric character references (&#NN; and &#xNN;) are handled by
+                // resolve_char_ref below.
                 // Using from_escaped() is the correct choice here because it allows
                 // BytesText::decode() to properly reconstruct the value in the text accumulation logic.
                 Event::GeneralRef(r) => {
                     let name = std::str::from_utf8(r.as_ref()).map_err(|_| DeError::InvalidContent)?;
-                    let value = resolve_xml_entity(name).ok_or(DeError::InvalidContent)?;
+                    let value: String = resolve_xml_entity(name)
+                        .map(|v| v.to_owned())
+                        .or_else(|| resolve_char_ref(name))
+                        .ok_or(DeError::InvalidContent)?;
                     DeEvent::Text(BytesText::from_escaped(value))
                 }
 
@@ -388,6 +393,31 @@ const fn unexpected_tag_name() -> DeError {
 /// helper
 const fn unexpected_start() -> DeError {
     DeError::UnexpectedStart
+}
+
+/// Resolves a numeric character reference such as `#34` (decimal) or `#x22` (hex).
+///
+/// Returns `None` if the input is not a valid character reference:
+/// - missing `#` prefix
+/// - empty number part
+/// - invalid decimal/hex digits
+/// - codepoint outside the valid Unicode range
+/// - surrogate codepoints (`0xD800`–`0xDFFF`)
+fn resolve_char_ref(name: &str) -> Option<String> {
+    let entity = name.strip_prefix('#')?;
+    if entity.is_empty() {
+        return None;
+    }
+    let codepoint = if let Some(hex) = entity.strip_prefix('x') {
+        u32::from_str_radix(hex, 16).ok()?
+    } else {
+        u32::from_str_radix(entity, 10).ok()?
+    };
+    // Reject surrogate codepoints
+    if (0xD800..=0xDFFF).contains(&codepoint) {
+        return None;
+    }
+    char::from_u32(codepoint).map(|c| c.to_string())
 }
 
 impl<'xml> DeserializeContent<'xml> for bool {

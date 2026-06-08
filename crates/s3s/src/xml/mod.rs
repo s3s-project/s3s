@@ -387,18 +387,15 @@ mod tests {
     }
 
     #[test]
-    fn deser_numeric_char_ref_rejected() {
-        // Numeric character references such as &#65; are NOT predefined XML entities.
-        // quick-xml emits them as GeneralRef events, and our resolver only handles
-        // the five standard XML entities (quot, amp, lt, gt, apos).
-        // These are correctly rejected with InvalidContent.
-        for input in [b"<Root>&#65;</Root>" as &[u8], b"<Root>&#x41;</Root>"] {
-            let err = deser_root_content(input).unwrap_err();
-            assert!(
-                matches!(err, DeError::InvalidContent),
-                "expected InvalidContent for numeric char ref, got {err:?}"
-            );
-        }
+    fn deser_numeric_char_ref_resolved() {
+        // Decimal and hexadecimal character references should be resolved.
+        assert_eq!(deser_root_content(b"<Root>&#65;</Root>").unwrap(), "A");
+        assert_eq!(deser_root_content(b"<Root>&#x41;</Root>").unwrap(), "A");
+        assert_eq!(deser_root_content(b"<Root>&#34;</Root>").unwrap(), "\"");
+        assert_eq!(deser_root_content(b"<Root>&#9;</Root>").unwrap(), "\t");
+        // Invalid numeric refs still rejected
+        assert!(deser_root_content(b"<Root>&#xDEADBEEF;</Root>").is_err());
+        assert!(deser_root_content(b"<Root>&#;</Root>").is_err());
     }
 
     #[test]
