@@ -490,3 +490,83 @@ fn test_xml_deserialization_with_various_enum_types() {
     let checksum_algo = ChecksumAlgorithm::deserialize_content(&mut deserializer2).unwrap();
     assert_eq!(checksum_algo.as_str(), ChecksumAlgorithm::CRC32);
 }
+
+#[test]
+fn select_object_content_with_char_refs() {
+    // Simulate a request with numeric character references, similar to
+    // what the Mint s3select test_csv_input_custom_quote_char sends
+    let input = r#"
+    <SelectObjectContentRequest xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+        <Expression>select * from s3object</Expression>
+        <ExpressionType>SQL</ExpressionType>
+        <InputSerialization>
+            <CSV>
+                <FieldDelimiter>,</FieldDelimiter>
+                <QuoteCharacter>&#34;</QuoteCharacter>
+                <QuoteEscapeCharacter>&#34;</QuoteEscapeCharacter>
+            </CSV>
+        </InputSerialization>
+        <OutputSerialization>
+            <CSV/>
+        </OutputSerialization>
+    </SelectObjectContentRequest>
+"#;
+
+    let ans = deserialize::<s3s::dto::SelectObjectContentRequest>(input.as_bytes()).unwrap();
+    let csv = ans.input_serialization.csv.as_ref().unwrap();
+    assert_eq!(csv.quote_character.as_deref(), Some("\""));
+    assert_eq!(csv.quote_escape_character.as_deref(), Some("\""));
+
+    test_serde(&ans);
+}
+
+#[test]
+fn select_object_content_with_tab_char() {
+    // Tab character as QuoteCharacter, represented as &#9; (decimal char ref)
+    let input = r#"
+    <SelectObjectContentRequest xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+        <Expression>select * from s3object</Expression>
+        <ExpressionType>SQL</ExpressionType>
+        <InputSerialization>
+            <CSV>
+                <FieldDelimiter>,</FieldDelimiter>
+                <QuoteCharacter>&#9;</QuoteCharacter>
+            </CSV>
+        </InputSerialization>
+        <OutputSerialization>
+            <CSV/>
+        </OutputSerialization>
+    </SelectObjectContentRequest>
+"#;
+
+    let ans = deserialize::<s3s::dto::SelectObjectContentRequest>(input.as_bytes()).unwrap();
+    let csv = ans.input_serialization.csv.as_ref().unwrap();
+    assert_eq!(csv.quote_character.as_deref(), Some("\t"));
+
+    test_serde(&ans);
+}
+
+#[test]
+fn select_object_content_with_hex_char_ref() {
+    // Hex character reference &#x22; = double quote (34 in hex is 0x22)
+    let input = r#"
+    <SelectObjectContentRequest xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+        <Expression>select * from s3object</Expression>
+        <ExpressionType>SQL</ExpressionType>
+        <InputSerialization>
+            <CSV>
+                <QuoteCharacter>&#x22;</QuoteCharacter>
+            </CSV>
+        </InputSerialization>
+        <OutputSerialization>
+            <CSV/>
+        </OutputSerialization>
+    </SelectObjectContentRequest>
+"#;
+
+    let ans = deserialize::<s3s::dto::SelectObjectContentRequest>(input.as_bytes()).unwrap();
+    let csv = ans.input_serialization.csv.as_ref().unwrap();
+    assert_eq!(csv.quote_character.as_deref(), Some("\""));
+
+    test_serde(&ans);
+}
