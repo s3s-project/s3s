@@ -227,7 +227,10 @@ pub fn parse_path_style_with_validation_and_normalization(
         return Err(ParseS3PathError::KeyTooLong);
     }
 
-    Ok(S3Path::object(bucket, &key))
+    Ok(S3Path::Object {
+        bucket: bucket.into(),
+        key: key.into(),
+    })
 }
 
 /// Parses a virtual-hosted-style request
@@ -258,7 +261,7 @@ pub fn parse_virtual_hosted_style_with_validation_and_normalization(
     normalize_path: bool,
 ) -> Result<S3Path, ParseS3PathError> {
     let Some(bucket) = vh_bucket else {
-        return parse_path_style_with_validation(uri_path, validation);
+        return parse_path_style_with_validation_and_normalization(uri_path, validation, normalize_path);
     };
 
     let Some(key) = uri_path.strip_prefix('/') else { return Err(ParseS3PathError::InvalidPath) };
