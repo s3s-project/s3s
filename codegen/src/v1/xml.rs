@@ -284,13 +284,12 @@ fn codegen_xml_serde_content(ops: &Operations, rust_types: &RustTypes, field_typ
                     g!("impl<'xml> DeserializeContent<'xml> for {} {{", ty.name);
                     g!("fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {{");
 
-                    g!("d.text(|t| {{");
-                    g!("    let b: &[u8] = &t;");
-                    g!("    match b {{");
+                    g!("d.text(|s| {{");
+                    g!("    match s {{");
                     for variant in &ty.variants {
-                        g!("b\"{}\" => Ok(Self::from_static({}::{})),", variant.value, ty.name, variant.name);
+                        g!("\"{}\" => Ok(Self::from_static({}::{})),", variant.value, ty.name, variant.name);
                     }
-                    g!("        _ => Ok(Self::from(t.unescape().map_err(DeError::InvalidXml)?.into_owned())),");
+                    g!("        _ => Ok(Self::from(s.to_owned())),");
                     g!("    }}");
                     g!("}})");
 
@@ -491,7 +490,7 @@ fn codegen_xml_serde_content_struct(_ops: &Operations, rust_types: &RustTypes, t
                         g!("  let Ok(attr) = attr else {{ return Err(DeError::InvalidAttribute) }};");
                         g!("  if attr.key.as_ref() == b\"{}\" {{", xml_attr_field.xml_name.as_deref().unwrap());
                         g!(
-                            "  {} = Some(attr.unescape_value().map_err(DeError::InvalidXml)?.into_owned().into());",
+                            "  {} = Some(attr.normalized_value(quick_xml::XmlVersion::Implicit1_0).map_err(DeError::InvalidXml)?.into_owned().into());",
                             xml_attr_name
                         );
                         g!("  }}");

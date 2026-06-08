@@ -5,6 +5,7 @@ use s3s_test::TestFixture;
 use s3s_test::TestSuite;
 use s3s_test::tcx::TestContext;
 
+use std::future::Future;
 use std::ops::Not;
 use std::sync::Arc;
 use std::time::Duration;

@@ -1,6 +1,7 @@
 use crate::case;
 use crate::utils::*;
 
+use std::future::Future;
 use std::sync::Arc;
 
 use s3s_test::Result;

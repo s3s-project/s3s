@@ -176,4 +176,264 @@ mod tests {
         assert!(xml.contains("<SessionToken>"), "must contain SessionToken: {xml}");
         assert!(xml.contains("<Expiration>"), "must contain Expiration: {xml}");
     }
+
+    // ---------------------------------------------------------------------------
+    // XML deserialization entity resolution tests
+    // ---------------------------------------------------------------------------
+
+    /// Helper: deserialize `<Root>{content}</Root>` as a `String`.
+    fn deser_root_content(xml: &[u8]) -> DeResult<String> {
+        let mut d = Deserializer::new(xml);
+        d.named_element("Root", Deserializer::content)
+    }
+
+    #[test]
+    fn deser_plain_text() {
+        let xml = b"<Root>hello</Root>";
+        assert_eq!(deser_root_content(xml).unwrap(), "hello");
+    }
+
+    #[test]
+    fn deser_empty_element() {
+        let xml = b"<Root></Root>";
+        assert_eq!(deser_root_content(xml).unwrap(), "");
+    }
+
+    #[test]
+    fn deser_quot_entity() {
+        let xml = b"<Root>a&quot;b</Root>";
+        assert_eq!(deser_root_content(xml).unwrap(), "a\"b");
+    }
+
+    #[test]
+    fn deser_amp_entity() {
+        let xml = b"<Root>a&amp;b</Root>";
+        assert_eq!(deser_root_content(xml).unwrap(), "a&b");
+    }
+
+    #[test]
+    fn deser_lt_entity() {
+        let xml = b"<Root>a&lt;b</Root>";
+        assert_eq!(deser_root_content(xml).unwrap(), "a<b");
+    }
+
+    #[test]
+    fn deser_gt_entity() {
+        let xml = b"<Root>a&gt;b</Root>";
+        assert_eq!(deser_root_content(xml).unwrap(), "a>b");
+    }
+
+    #[test]
+    fn deser_apos_entity() {
+        let xml = b"<Root>a&apos;b</Root>";
+        assert_eq!(deser_root_content(xml).unwrap(), "a'b");
+    }
+
+    #[test]
+    fn deser_all_entities_sequence() {
+        let xml = b"<Root>&quot;&amp;&lt;&gt;&apos;</Root>";
+        assert_eq!(deser_root_content(xml).unwrap(), "\"&<>'");
+    }
+
+    #[test]
+    fn deser_mixed_text_and_entities() {
+        let xml = b"<Root>foo&quot;bar&amp;baz&lt;qux&gt;end&apos;s</Root>";
+        assert_eq!(deser_root_content(xml).unwrap(), "foo\"bar&baz<qux>end's");
+    }
+
+    #[test]
+    fn deser_entity_at_start() {
+        let xml = b"<Root>&quot;hello</Root>";
+        assert_eq!(deser_root_content(xml).unwrap(), "\"hello");
+    }
+
+    #[test]
+    fn deser_entity_at_end() {
+        let xml = b"<Root>hello&quot;</Root>";
+        assert_eq!(deser_root_content(xml).unwrap(), "hello\"");
+    }
+
+    #[test]
+    fn deser_only_entity() {
+        let xml = b"<Root>&amp;</Root>";
+        assert_eq!(deser_root_content(xml).unwrap(), "&");
+    }
+
+    #[test]
+    fn deser_unknown_entity_returns_error() {
+        let xml = b"<Root>&unknown;</Root>";
+        let err = deser_root_content(xml).unwrap_err();
+        assert!(matches!(err, DeError::InvalidContent), "expected InvalidContent, got {err:?}");
+    }
+
+    #[test]
+    fn deser_consecutive_entities() {
+        let xml = b"<Root>&quot;&quot;&amp;&amp;</Root>";
+        assert_eq!(deser_root_content(xml).unwrap(), "\"\"&&");
+    }
+
+    #[test]
+    fn deser_entity_with_leading_trailing_text() {
+        let xml = b"<Root>before &lt;middle&gt; after</Root>";
+        assert_eq!(deser_root_content(xml).unwrap(), "before <middle> after");
+    }
+
+    // ---------------------------------------------------------------------------
+    // Direct `text()` method tests — exercising edge cases without the
+    // `named_element` wrapper.
+    // ---------------------------------------------------------------------------
+
+    /// Directly call `text()` on raw bytes and return the emitted `String`.
+    /// This bypasses `expect_start` / `expect_end` so we can isolate `text()`.
+    fn text_direct(xml: &[u8]) -> DeResult<String> {
+        let mut d = Deserializer::new(xml);
+        d.text(|s| Ok(s.to_owned()))
+    }
+
+    #[test]
+    fn text_direct_plain() {
+        let xml = b"hello world";
+        assert_eq!(text_direct(xml).unwrap(), "hello world");
+    }
+
+    #[test]
+    fn text_direct_eof_no_content() {
+        // Empty input → text() peeks and sees EOF immediately → UnexpectedEof
+        let xml = b"";
+        let err = text_direct(xml).unwrap_err();
+        assert!(matches!(err, DeError::UnexpectedEof), "expected UnexpectedEof, got {err:?}");
+    }
+
+    #[test]
+    fn text_direct_eof_after_text() {
+        // Text followed by EOF (no end tag) → returns accumulated text.
+        // This is the truncated-XML case.
+        let xml = b"partial content";
+        assert_eq!(text_direct(xml).unwrap(), "partial content");
+    }
+
+    #[test]
+    fn text_direct_start_event_immediate() {
+        // When text() encounters a Start event as the very first event,
+        // it errors with UnexpectedStart.
+        let xml = b"<Root>content</Root>";
+        let err = text_direct(xml).unwrap_err();
+        assert!(matches!(err, DeError::UnexpectedStart), "expected UnexpectedStart, got {err:?}");
+    }
+
+    #[test]
+    fn text_direct_start_event_inside_content() {
+        // When text() encounters a Start event, it errors after consuming it.
+        let xml = b"before<Child>inside</Child>";
+        let err = text_direct(xml).unwrap_err();
+        assert!(matches!(err, DeError::UnexpectedStart), "expected UnexpectedStart, got {err:?}");
+    }
+
+    #[test]
+    fn text_direct_only_entity() {
+        // Single entity without surrounding text
+        let xml = b"&amp;";
+        assert_eq!(text_direct(xml).unwrap(), "&");
+    }
+
+    #[test]
+    fn text_direct_multiple_entities() {
+        // Consecutive entities without plain text between them
+        let xml = b"&lt;&amp;&gt;";
+        assert_eq!(text_direct(xml).unwrap(), "<&>");
+    }
+
+    #[test]
+    fn text_direct_text_across_multiple_events() {
+        // Text → Entity → Text → Entity → Text
+        // This validates the accumulation loop correctly handles all patterns.
+        let xml = b"start&lt;middle&amp;end&gt;finish";
+        assert_eq!(text_direct(xml).unwrap(), "start<middle&end>finish");
+    }
+
+    #[test]
+    fn text_direct_leading_entity() {
+        let xml = b"&quot;trailing text";
+        assert_eq!(text_direct(xml).unwrap(), "\"trailing text");
+    }
+
+    #[test]
+    fn text_direct_trailing_entity() {
+        let xml = b"leading text&quot;";
+        assert_eq!(text_direct(xml).unwrap(), "leading text\"");
+    }
+
+    // ---------------------------------------------------------------------------
+    // Whitespace, newlines, and numeric character references (via named_element).
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn deser_preserves_whitespace() {
+        let xml = b"<Root>  leading  middle  trailing  </Root>";
+        assert_eq!(deser_root_content(xml).unwrap(), "  leading  middle  trailing  ");
+    }
+
+    #[test]
+    fn deser_preserves_newlines() {
+        let xml = b"<Root>line1\nline2\r\nline3</Root>";
+        let result = deser_root_content(xml).unwrap();
+        assert_eq!(result, "line1\nline2\r\nline3");
+    }
+
+    #[test]
+    fn deser_tab_characters() {
+        let xml = b"<Root>\tindented\t</Root>";
+        assert_eq!(deser_root_content(xml).unwrap(), "\tindented\t");
+    }
+
+    #[test]
+    fn deser_numeric_char_ref_resolved() {
+        // Decimal and hexadecimal character references should be resolved.
+        assert_eq!(deser_root_content(b"<Root>&#65;</Root>").unwrap(), "A");
+        assert_eq!(deser_root_content(b"<Root>&#x41;</Root>").unwrap(), "A");
+        assert_eq!(deser_root_content(b"<Root>&#34;</Root>").unwrap(), "\"");
+        assert_eq!(deser_root_content(b"<Root>&#9;</Root>").unwrap(), "\t");
+        // Invalid numeric refs still rejected
+        assert!(deser_root_content(b"<Root>&#xDEADBEEF;</Root>").is_err());
+        assert!(deser_root_content(b"<Root>&#;</Root>").is_err());
+    }
+
+    #[test]
+    fn deser_xml_declaration_is_ignored() {
+        // XML declaration should not interfere with content extraction
+        let xml = b"<?xml version=\"1.0\"?><Root>value</Root>";
+        let mut d = Deserializer::new(xml);
+        let result: String = d.named_element("Root", Deserializer::content).unwrap();
+        assert_eq!(result, "value");
+    }
+
+    #[test]
+    fn deser_empty_element_tag() {
+        // <Empty/> is translated to <Empty></Empty> by read_event()
+        let xml = b"<Root><Empty/></Root>";
+        let mut d = Deserializer::new(xml);
+        let result: String = d
+            .named_element("Root", |d| d.named_element("Empty", Deserializer::content))
+            .unwrap();
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn deser_s3_etag_roundtrip_like() {
+        // Round-trip like: ETag value that would be serialized with &quot; entities
+        let xml = b"<ETag>&quot;b264846671938cd88cd6121b3171589b&quot;</ETag>";
+        let mut d = Deserializer::new(xml);
+        let etag_str: String = d.named_element("ETag", Deserializer::content).unwrap();
+        assert_eq!(etag_str, "\"b264846671938cd88cd6121b3171589b\"");
+
+        // Re-serialize and verify it round-trips correctly
+        let etag = ETag::Strong(etag_str);
+        let mut buf = Vec::new();
+        let mut ser = Serializer::new(Cursor::new(&mut buf));
+        ser.element("ETag", |s| etag.serialize_content(s)).unwrap();
+        let xml_out = String::from_utf8(buf).unwrap();
+        // ETag serialization should use literal quotes, not entities
+        assert!(xml_out.contains("\"b264846671938cd88cd6121b3171589b\""));
+        assert!(!xml_out.contains("&quot;"));
+    }
 }
