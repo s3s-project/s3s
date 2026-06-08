@@ -5,6 +5,7 @@
 
 use crate::dto::{self, List, Timestamp, TimestampFormat};
 
+use std::borrow::ToOwned;
 use std::fmt;
 
 use quick_xml::Reader;
@@ -138,7 +139,7 @@ impl<'xml> Deserializer<'xml> {
                 Event::GeneralRef(r) => {
                     let name = std::str::from_utf8(r.as_ref()).map_err(|_| DeError::InvalidContent)?;
                     let value: String = resolve_xml_entity(name)
-                        .map(|v| v.to_owned())
+                        .map(ToOwned::to_owned)
                         .or_else(|| resolve_char_ref(name))
                         .ok_or(DeError::InvalidContent)?;
                     DeEvent::Text(BytesText::from_escaped(value))
@@ -411,7 +412,7 @@ fn resolve_char_ref(name: &str) -> Option<String> {
     let codepoint = if let Some(hex) = entity.strip_prefix('x') {
         u32::from_str_radix(hex, 16).ok()?
     } else {
-        u32::from_str_radix(entity, 10).ok()?
+        entity.parse::<u32>().ok()?
     };
     // Reject surrogate codepoints
     if (0xD800..=0xDFFF).contains(&codepoint) {
