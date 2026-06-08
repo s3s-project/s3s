@@ -17,8 +17,6 @@ use futures::StreamExt as _;
 use http_body_util::StreamBody;
 use md5::Digest as _;
 
-use std::future::Future;
-
 pub fn register(tcx: &mut TestContext) {
     case!(tcx, Basic, Essential, test_list_buckets);
     case!(tcx, Basic, Essential, test_list_objects);

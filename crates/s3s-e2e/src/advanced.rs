@@ -16,8 +16,6 @@ use aws_sdk_s3::types::ChecksumAlgorithm;
 
 use tracing::debug;
 
-use std::future::Future;
-
 pub fn register(tcx: &mut TestContext) {
     case!(tcx, Advanced, STS, test_assume_role);
     case!(tcx, Advanced, Multipart, test_multipart_upload);
