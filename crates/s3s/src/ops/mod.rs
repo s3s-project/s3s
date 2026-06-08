@@ -325,17 +325,22 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
 
                     vh_bucket = vh.bucket();
                     vh_region = vh.region().map(str::to_owned);
-                    break 'parse crate::path::parse_virtual_hosted_style_with_validation(
+                    break 'parse crate::path::parse_virtual_hosted_style_with_validation_and_normalization(
                         vh_bucket,
                         &decoded_uri_path,
                         validation,
+                        ccx.config.snapshot().normalize_forward_slash_path,
                     );
                 }
 
                 debug!(?decoded_uri_path, "parsing path-style request");
                 vh_bucket = None;
                 vh_region = None;
-                crate::path::parse_path_style_with_validation(&decoded_uri_path, validation)
+                crate::path::parse_path_style_with_validation_and_normalization(
+                    &decoded_uri_path,
+                    validation,
+                    ccx.config.snapshot().normalize_forward_slash_path,
+                )
             };
 
             req.s3ext.s3_path = Some(result.map_err(|err| convert_parse_s3_path_error(&err))?);
