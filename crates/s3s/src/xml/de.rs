@@ -130,6 +130,9 @@ impl<'xml> Deserializer<'xml> {
                 }
 
                 // expand predefined XML entities (e.g. &quot; → ")
+                // Note: resolve_xml_entity returns unescaped characters ("&", "<", etc.).
+                // Using from_escaped() works correctly because BytesText::decode() properly
+                // reconstructs the value regardless of the input representation.
                 Event::GeneralRef(r) => {
                     let name = std::str::from_utf8(r.as_ref()).map_err(|_| DeError::InvalidContent)?;
                     let value = resolve_xml_entity(name).ok_or(DeError::InvalidContent)?;
