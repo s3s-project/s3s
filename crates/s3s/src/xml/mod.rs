@@ -176,4 +176,114 @@ mod tests {
         assert!(xml.contains("<SessionToken>"), "must contain SessionToken: {xml}");
         assert!(xml.contains("<Expiration>"), "must contain Expiration: {xml}");
     }
+
+    // ---------------------------------------------------------------------------
+    // XML deserialization entity resolution tests
+    // ---------------------------------------------------------------------------
+
+    /// Helper: deserialize `<Root>{content}</Root>` as a `String`.
+    fn deser_root_content(xml: &[u8]) -> DeResult<String> {
+        let mut d = Deserializer::new(xml);
+        d.named_element("Root", Deserializer::content)
+    }
+
+    #[test]
+    fn deser_plain_text() {
+        let xml = b"<Root>hello</Root>";
+        assert_eq!(deser_root_content(xml).unwrap(), "hello");
+    }
+
+    #[test]
+    fn deser_empty_element() {
+        let xml = b"<Root></Root>";
+        assert_eq!(deser_root_content(xml).unwrap(), "");
+    }
+
+    #[test]
+    fn deser_quot_entity() {
+        let xml = b"<Root>a&quot;b</Root>";
+        assert_eq!(deser_root_content(xml).unwrap(), "a\"b");
+    }
+
+    #[test]
+    fn deser_amp_entity() {
+        let xml = b"<Root>a&amp;b</Root>";
+        assert_eq!(deser_root_content(xml).unwrap(), "a&b");
+    }
+
+    #[test]
+    fn deser_lt_entity() {
+        let xml = b"<Root>a&lt;b</Root>";
+        assert_eq!(deser_root_content(xml).unwrap(), "a<b");
+    }
+
+    #[test]
+    fn deser_gt_entity() {
+        let xml = b"<Root>a&gt;b</Root>";
+        assert_eq!(deser_root_content(xml).unwrap(), "a>b");
+    }
+
+    #[test]
+    fn deser_apos_entity() {
+        let xml = b"<Root>a&apos;b</Root>";
+        assert_eq!(deser_root_content(xml).unwrap(), "a'b");
+    }
+
+    #[test]
+    fn deser_all_entities_sequence() {
+        let xml = b"<Root>&quot;&amp;&lt;&gt;&apos;</Root>";
+        assert_eq!(deser_root_content(xml).unwrap(), "\"&<>'");
+    }
+
+    #[test]
+    fn deser_mixed_text_and_entities() {
+        let xml = b"<Root>foo&quot;bar&amp;baz&lt;qux&gt;end&apos;s</Root>";
+        assert_eq!(deser_root_content(xml).unwrap(), "foo\"bar&baz<qux>end's");
+    }
+
+    #[test]
+    fn deser_entity_at_start() {
+        let xml = b"<Root>&quot;hello</Root>";
+        assert_eq!(deser_root_content(xml).unwrap(), "\"hello");
+    }
+
+    #[test]
+    fn deser_entity_at_end() {
+        let xml = b"<Root>hello&quot;</Root>";
+        assert_eq!(deser_root_content(xml).unwrap(), "hello\"");
+    }
+
+    #[test]
+    fn deser_only_entity() {
+        let xml = b"<Root>&amp;</Root>";
+        assert_eq!(deser_root_content(xml).unwrap(), "&");
+    }
+
+    #[test]
+    fn deser_unknown_entity_returns_error() {
+        let xml = b"<Root>&unknown;</Root>";
+        let err = deser_root_content(xml).unwrap_err();
+        assert!(matches!(err, DeError::InvalidContent), "expected InvalidContent, got {err:?}");
+    }
+
+    #[test]
+    fn deser_consecutive_entities() {
+        let xml = b"<Root>&quot;&quot;&amp;&amp;</Root>";
+        assert_eq!(deser_root_content(xml).unwrap(), "\"\"&&");
+    }
+
+    #[test]
+    fn deser_entity_with_leading_trailing_text() {
+        let xml = b"<Root>before &lt;middle&gt; after</Root>";
+        assert_eq!(deser_root_content(xml).unwrap(), "before <middle> after");
+    }
+
+    #[test]
+    fn deser_xml_escaping_s3_like_etag() {
+        // Simulates the common S3 pattern: ETag wrapped in quotes that become entities
+        let xml = b"<ETag>&quot;abc123def456&quot;</ETag>";
+        let mut d = Deserializer::new(xml);
+        let result: String = d.named_element("ETag", Deserializer::content).unwrap();
+        assert_eq!(result, "\"abc123def456\"");
+    }
 }

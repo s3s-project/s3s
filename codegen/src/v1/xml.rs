@@ -490,7 +490,7 @@ fn codegen_xml_serde_content_struct(_ops: &Operations, rust_types: &RustTypes, t
                         g!("  let Ok(attr) = attr else {{ return Err(DeError::InvalidAttribute) }};");
                         g!("  if attr.key.as_ref() == b\"{}\" {{", xml_attr_field.xml_name.as_deref().unwrap());
                         g!(
-                            "  {} = Some(attr.unescape_value().map_err(DeError::InvalidXml)?.into_owned().into());",
+                            "  {} = Some(attr.normalized_value(quick_xml::XmlVersion::Implicit1_0).map_err(DeError::InvalidXml)?.into_owned().into());",
                             xml_attr_name
                         );
                         g!("  }}");

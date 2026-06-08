@@ -4468,7 +4468,12 @@ impl<'xml> DeserializeContent<'xml> for Grant {
                 for attr in start.attributes() {
                     let Ok(attr) = attr else { return Err(DeError::InvalidAttribute) };
                     if attr.key.as_ref() == b"xsi:type" {
-                        type_ = Some(attr.unescape_value().map_err(DeError::InvalidXml)?.into_owned().into());
+                        type_ = Some(
+                            attr.normalized_value(quick_xml::XmlVersion::Implicit1_0)
+                                .map_err(DeError::InvalidXml)?
+                                .into_owned()
+                                .into(),
+                        );
                     }
                 }
                 let mut display_name: Option<DisplayName> = None;
@@ -9749,7 +9754,12 @@ impl<'xml> DeserializeContent<'xml> for TargetGrant {
                 for attr in start.attributes() {
                     let Ok(attr) = attr else { return Err(DeError::InvalidAttribute) };
                     if attr.key.as_ref() == b"xsi:type" {
-                        type_ = Some(attr.unescape_value().map_err(DeError::InvalidXml)?.into_owned().into());
+                        type_ = Some(
+                            attr.normalized_value(quick_xml::XmlVersion::Implicit1_0)
+                                .map_err(DeError::InvalidXml)?
+                                .into_owned()
+                                .into(),
+                        );
                     }
                 }
                 let mut display_name: Option<DisplayName> = None;
