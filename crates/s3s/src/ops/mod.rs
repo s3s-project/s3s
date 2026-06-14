@@ -189,10 +189,10 @@ fn extract_content_length(req: &Request) -> Option<u64> {
 
 fn extract_decoded_content_length(hs: &'_ OrderedHeaders<'_>) -> S3Result<Option<usize>> {
     let Some(val) = hs.get_unique(crate::header::X_AMZ_DECODED_CONTENT_LENGTH) else { return Ok(None) };
-    match atoi::atoi::<usize>(val.as_bytes()) {
-        Some(x) => Ok(Some(x)),
-        None => Err(invalid_request!("invalid header: x-amz-decoded-content-length")),
-    }
+    let x = atoi::atoi::<u64>(val.as_bytes())
+        .and_then(|n| usize::try_from(n).ok())
+        .ok_or_else(|| invalid_request!("invalid header: x-amz-decoded-content-length"))?;
+    Ok(Some(x))
 }
 
 async fn extract_full_body(content_length: Option<u64>, body: &mut Body, max_body_size: usize) -> S3Result<Bytes> {
