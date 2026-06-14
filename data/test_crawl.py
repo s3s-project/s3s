@@ -7,7 +7,9 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 
-spec = importlib.util.spec_from_file_location("crawl", Path(__file__).with_name("crawl.py"))
+spec = importlib.util.spec_from_file_location(
+    "crawl", Path(__file__).with_name("crawl.py")
+)
 assert spec is not None
 assert spec.loader is not None
 crawl = importlib.util.module_from_spec(spec)
@@ -23,12 +25,22 @@ class CrawlErrorCodesTestCase(unittest.TestCase):
     def test_crawl_error_codes_keeps_existing_data_when_parsing_fails(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             error_codes_path = Path(tmpdir) / "s3_error_codes.json"
-            expected = {"S3": [{"code": "SlowDown", "description": "Slow Down", "http_status_code": 503}]}
+            expected = {
+                "S3": [
+                    {
+                        "code": "SlowDown",
+                        "description": "Slow Down",
+                        "http_status_code": 503,
+                    }
+                ]
+            }
             error_codes_path.write_text(json.dumps(expected))
 
             with (
                 patch.object(crawl, "error_codes_path", error_codes_path),
-                patch.object(crawl.requests, "get", return_value=SimpleNamespace(text="<html />")) as mock_get,
+                patch.object(
+                    crawl.requests, "get", return_value=SimpleNamespace(text="<html />")
+                ) as mock_get,
                 patch.object(crawl.typer, "echo") as mock_echo,
             ):
                 crawl.crawl_error_codes()

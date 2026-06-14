@@ -60,9 +60,13 @@ def crawl_error_codes():
 
     if data is None:
         if error_codes_path.exists():
-            typer.echo("warning: unable to parse S3 error code docs; keeping existing data")
+            typer.echo(
+                "warning: unable to parse S3 error code docs; keeping existing data"
+            )
             return
-        raise RuntimeError("unable to parse S3 error code docs and no existing data is available")
+        raise RuntimeError(
+            "unable to parse S3 error code docs and no existing data is available"
+        )
 
     save_json(error_codes_path, data)
 
