@@ -191,6 +191,28 @@ impl<'xml> Deserializer<'xml> {
         }
     }
 
+    /// Expects a start event with any of the given names.
+    /// Returns the matched name (borrowed from `names`).
+    fn expect_start_any<'s>(&mut self, names: &'s [&str]) -> DeResult<&'s str> {
+        loop {
+            match self.next_event()? {
+                DeEvent::Start(x) => {
+                    let name = x.name();
+                    let name = name.as_ref();
+                    for &n in names {
+                        if n.as_bytes() == name {
+                            return Ok(n);
+                        }
+                    }
+                    return Err(unexpected_tag_name());
+                }
+                DeEvent::End(_) => return Err(unexpected_end()),
+                DeEvent::Text(_) => continue,
+                DeEvent::Eof => return Err(unexpected_eof()),
+            }
+        }
+    }
+
     /// Expects an end event
     fn expect_end(&mut self, name: &[u8]) -> DeResult {
         loop {
@@ -226,6 +248,23 @@ impl<'xml> Deserializer<'xml> {
     /// Returns an error if the deserialization fails.
     pub fn named_element<T>(&mut self, name: &str, f: impl FnOnce(&mut Self) -> DeResult<T>) -> DeResult<T> {
         self.expect_start(name.as_bytes())?;
+        let ans = f(self)?;
+        self.expect_end(name.as_bytes())?;
+        Ok(ans)
+    }
+
+    /// Deserializes an element with any of the given names.
+    ///
+    /// Unlike [`named_element`](Self::named_element), this method accepts
+    /// multiple candidate root element names.  It consumes the start event
+    /// (matching any of `names`), runs the content deserializer, and expects
+    /// the corresponding end event.
+    ///
+    /// # Errors
+    /// Returns an error if the deserialization fails.
+    pub fn named_element_any<T>(&mut self, names: &[&str], f: impl FnOnce(&mut Self) -> DeResult<T>) -> DeResult<T> {
+        debug_assert!(!names.is_empty(), "named_element_any requires at least one candidate name");
+        let name = self.expect_start_any(names)?;
         let ans = f(self)?;
         self.expect_end(name.as_bytes())?;
         Ok(ans)
