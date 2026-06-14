@@ -293,7 +293,7 @@ impl BodyLiteral for crate::dto::VersioningConfiguration {
 
 /// `MinIO` compatibility: accept a bare body literal or full XML (optional field).
 #[cfg(feature = "minio")]
-pub fn take_opt_body_literal<T: BodyLiteral>(req: &mut Request, literal: &str) -> S3Result<Option<T>> {
+pub(crate) fn take_opt_body_literal<T: BodyLiteral>(req: &mut Request, literal: &str) -> S3Result<Option<T>> {
     debug_assert!(!literal.is_empty(), "bodyLiteral value must not be empty");
     let bytes = req.body.take_bytes().expect("full body not found");
     if bytes.is_empty() {
@@ -311,7 +311,7 @@ pub fn take_opt_body_literal<T: BodyLiteral>(req: &mut Request, literal: &str) -
 
 /// `MinIO` compatibility: accept a bare body literal or full XML (required field).
 #[cfg(feature = "minio")]
-pub fn take_body_literal<T: BodyLiteral>(req: &mut Request, literal: &str) -> S3Result<T> {
+pub(crate) fn take_body_literal<T: BodyLiteral>(req: &mut Request, literal: &str) -> S3Result<T> {
     debug_assert!(!literal.is_empty(), "bodyLiteral value must not be empty");
     let bytes = req.body.take_bytes().expect("full body not found");
     if bytes.is_empty() {

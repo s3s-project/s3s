@@ -283,6 +283,7 @@ fn minio_lifecycle_extension_fields() {
     let rule: s3s::dto::LifecycleRule = deserialize_content(xml.as_bytes()).unwrap();
     assert_eq!(rule.del_marker_expiration.as_ref().unwrap().days, Some(30));
 }
+
 #[test]
 fn get_bucket_location_output() {
     {

@@ -17,6 +17,11 @@ pub fn patch(model: &mut smithy::Model) {
                     for (field_name, member) in patch.members {
                         match shape.members.get_mut(&field_name) {
                             Some(existing) => {
+                                assert_eq!(
+                                    existing.target, member.target,
+                                    "member {field_name:?} target mismatch: existing {:?} != patch {:?}",
+                                    existing.target, member.target
+                                );
                                 for (key, value) in member.traits.iter() {
                                     assert!(
                                         existing.traits.get(key).is_none(),
