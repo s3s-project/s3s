@@ -5345,7 +5345,8 @@ impl PutBucketVersioning {
 
         let mfa: Option<MFA> = http::parse_opt_header(req, &X_AMZ_MFA)?;
 
-        let versioning_configuration: VersioningConfiguration = http::take_xml_body(req)?;
+        let versioning_configuration: VersioningConfiguration =
+            http::take_body_literal::<VersioningConfiguration>(req, "Enabled")?;
 
         Ok(PutBucketVersioningInput {
             bucket,
@@ -5943,7 +5944,8 @@ impl PutObjectLockConfiguration {
 
         let expected_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_EXPECTED_BUCKET_OWNER)?;
 
-        let object_lock_configuration: Option<ObjectLockConfiguration> = http::take_opt_xml_body(req)?;
+        let object_lock_configuration: Option<ObjectLockConfiguration> =
+            http::take_opt_body_literal::<ObjectLockConfiguration>(req, "Enabled")?;
 
         let request_payer: Option<RequestPayer> = http::parse_opt_header(req, &X_AMZ_REQUEST_PAYER)?;
 

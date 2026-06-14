@@ -258,6 +258,75 @@ where
     result
 }
 
+/// `MinIO` compatibility: types that can be constructed from a bare body literal.
+///
+/// `MinIO` reference:
+/// - <https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/object/lock/lock.go#L232-L319>
+/// - <https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/versioning/versioning.go#L49-L84>
+#[cfg(feature = "minio")]
+pub(crate) trait BodyLiteral: Sized + for<'xml> crate::xml::Deserialize<'xml> {
+    /// Construct this type from the matched body literal value.
+    fn from_body_literal(literal: &str) -> Self;
+}
+
+#[cfg(feature = "minio")]
+impl BodyLiteral for crate::dto::ObjectLockConfiguration {
+    fn from_body_literal(literal: &str) -> Self {
+        use crate::dto::ObjectLockEnabled;
+        crate::dto::ObjectLockConfiguration {
+            object_lock_enabled: Some(ObjectLockEnabled::from(literal.to_owned())),
+            rule: None,
+        }
+    }
+}
+
+#[cfg(feature = "minio")]
+impl BodyLiteral for crate::dto::VersioningConfiguration {
+    fn from_body_literal(literal: &str) -> Self {
+        use crate::dto::BucketVersioningStatus;
+        crate::dto::VersioningConfiguration {
+            status: Some(BucketVersioningStatus::from(literal.to_owned())),
+            ..Default::default()
+        }
+    }
+}
+
+/// `MinIO` compatibility: accept a bare body literal or full XML (optional field).
+#[cfg(feature = "minio")]
+pub fn take_opt_body_literal<T: BodyLiteral>(req: &mut Request, literal: &str) -> S3Result<Option<T>> {
+    debug_assert!(!literal.is_empty(), "bodyLiteral value must not be empty");
+    let bytes = req.body.take_bytes().expect("full body not found");
+    if bytes.is_empty() {
+        return Ok(None);
+    }
+    if bytes.trim_ascii() == literal.as_bytes() {
+        return Ok(Some(T::from_body_literal(literal)));
+    }
+    let result = deserialize_xml::<T>(&bytes).map(Some);
+    if result.is_err() {
+        error!(?bytes, "malformed xml body");
+    }
+    result
+}
+
+/// `MinIO` compatibility: accept a bare body literal or full XML (required field).
+#[cfg(feature = "minio")]
+pub fn take_body_literal<T: BodyLiteral>(req: &mut Request, literal: &str) -> S3Result<T> {
+    debug_assert!(!literal.is_empty(), "bodyLiteral value must not be empty");
+    let bytes = req.body.take_bytes().expect("full body not found");
+    if bytes.is_empty() {
+        return Err(S3ErrorCode::MissingRequestBodyError.into());
+    }
+    if bytes.trim_ascii() == literal.as_bytes() {
+        return Ok(T::from_body_literal(literal));
+    }
+    let result = deserialize_xml::<T>(&bytes);
+    if result.is_err() {
+        error!(?bytes, "malformed xml body");
+    }
+    result
+}
+
 pub fn take_string_body(req: &mut Request) -> S3Result<String> {
     let bytes = req.body.take_bytes().expect("full body not found");
     match String::from_utf8_simd(bytes.into()) {
@@ -900,5 +969,73 @@ mod tests {
         assert!(format!("{}", ParseHeaderError::Long).contains("long"));
         assert!(format!("{}", ParseHeaderError::Enum).contains("enum"));
         assert!(format!("{}", ParseHeaderError::String).contains("string"));
+    }
+
+    // --- BodyLiteral tests ---
+
+    #[cfg(feature = "minio")]
+    mod body_literal_tests {
+        use super::*;
+        use crate::dto::{BucketVersioningStatus, ObjectLockEnabled, VersioningConfiguration};
+        use crate::http::request::S3Extensions;
+
+        fn make_xml_body(xml: &str) -> Body {
+            Body::from(xml.as_bytes().to_vec())
+        }
+
+        fn make_request_with_body(body: Body) -> Request {
+            Request {
+                version: http::Version::HTTP_11,
+                method: hyper::Method::PUT,
+                uri: hyper::Uri::from_static("http://example.com"),
+                headers: hyper::HeaderMap::new(),
+                extensions: hyper::http::Extensions::default(),
+                body,
+                s3ext: S3Extensions::default(),
+            }
+        }
+
+        #[test]
+        fn take_body_literal_matches_enabled() {
+            let body = Body::from(b" Enabled ".to_vec());
+            let mut req = make_request_with_body(body);
+            let result: VersioningConfiguration = take_body_literal(&mut req, "Enabled").unwrap();
+            assert_eq!(result.status.as_ref().map(BucketVersioningStatus::as_str), Some("Enabled"));
+        }
+
+        #[test]
+        fn take_body_literal_falls_through_to_xml() {
+            let xml = "<VersioningConfiguration><Status>Enabled</Status></VersioningConfiguration>";
+            let body = make_xml_body(xml);
+            let mut req = make_request_with_body(body);
+            let result: VersioningConfiguration = take_body_literal(&mut req, "Enabled").unwrap();
+            assert_eq!(result.status.as_ref().map(BucketVersioningStatus::as_str), Some("Enabled"));
+        }
+
+        #[test]
+        fn take_body_literal_empty_body_returns_error() {
+            let body = Body::empty();
+            let mut req = make_request_with_body(body);
+            let result = take_body_literal::<VersioningConfiguration>(&mut req, "Enabled");
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn take_opt_body_literal_empty_body_returns_none() {
+            let body = Body::empty();
+            let mut req = make_request_with_body(body);
+            let result: Option<crate::dto::ObjectLockConfiguration> = take_opt_body_literal(&mut req, "Enabled").unwrap();
+            assert!(result.is_none());
+        }
+
+        #[test]
+        fn take_opt_body_literal_matches_enabled() {
+            let body = Body::from(b"Enabled".to_vec());
+            let mut req = make_request_with_body(body);
+            let result: Option<crate::dto::ObjectLockConfiguration> = take_opt_body_literal(&mut req, "Enabled").unwrap();
+            let config = result.unwrap();
+            assert_eq!(config.object_lock_enabled.as_ref().map(ObjectLockEnabled::as_str), Some("Enabled"));
+            assert!(config.rule.is_none());
+        }
     }
 }

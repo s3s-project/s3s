@@ -243,6 +243,12 @@ impl Traits {
             .unwrap_or_default()
     }
 
+    /// Returns the body literal value (`s3s#bodyLiteral` trait).
+    #[must_use]
+    pub fn body_literal(&self) -> Option<&str> {
+        self.get("s3s#bodyLiteral")?.as_str()
+    }
+
     #[must_use]
     pub fn xml_attr(&self) -> bool {
         self.get("smithy.api#xmlAttribute").is_some()

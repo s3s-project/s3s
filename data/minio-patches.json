@@ -189,6 +189,28 @@
                 "s3s#xmlAltName": ["BucketLifecycleConfiguration"]
             }
         },
+        "com.amazonaws.s3#PutObjectLockConfigurationRequest": {
+            "type": "structure",
+            "members": {
+                "ObjectLockConfiguration": {
+                    "target": "com.amazonaws.s3#ObjectLockConfiguration",
+                    "traits": {
+                        "s3s#bodyLiteral": "Enabled"
+                    }
+                }
+            }
+        },
+        "com.amazonaws.s3#PutBucketVersioningRequest": {
+            "type": "structure",
+            "members": {
+                "VersioningConfiguration": {
+                    "target": "com.amazonaws.s3#VersioningConfiguration",
+                    "traits": {
+                        "s3s#bodyLiteral": "Enabled"
+                    }
+                }
+            }
+        },
         "com.amazonaws.s3#DelMarkerExpiration": {
             "type": "structure",
             "members": {
