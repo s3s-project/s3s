@@ -875,7 +875,7 @@ impl Serialize for BucketLifecycleConfiguration {
 
 impl<'xml> Deserialize<'xml> for BucketLifecycleConfiguration {
     fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("LifecycleConfiguration", Deserializer::content)
+        d.named_element_any(&["LifecycleConfiguration", "BucketLifecycleConfiguration"], Deserializer::content)
     }
 }
 

@@ -184,6 +184,11 @@ impl Traits {
         map.get(key)
     }
 
+    /// Returns an iterator over the trait entries.
+    pub fn iter(&self) -> impl Iterator<Item = (&String, &Value)> {
+        self.0.as_ref().into_iter().flat_map(|m| m.iter())
+    }
+
     #[must_use]
     pub fn enum_value(&self) -> Option<&str> {
         self.get("smithy.api#enumValue")?.as_str()
@@ -227,6 +232,15 @@ impl Traits {
     #[must_use]
     pub fn xml_name(&self) -> Option<&str> {
         self.get("smithy.api#xmlName")?.as_str()
+    }
+
+    /// Returns the alternative XML root element names (`s3s#xmlAltName` trait).
+    #[must_use]
+    pub fn xml_alt_names(&self) -> Vec<&str> {
+        self.get("s3s#xmlAltName")
+            .and_then(|v| v.as_array())
+            .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
+            .unwrap_or_default()
     }
 
     #[must_use]

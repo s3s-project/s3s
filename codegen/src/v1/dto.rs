@@ -260,6 +260,7 @@ pub fn collect_rust_types(model: &smithy::Model, ops: &Operations) -> RustTypes 
                     doc: shape.traits.doc().map(ToOwned::to_owned),
 
                     xml_name: shape.traits.xml_name().map(o),
+                    xml_alt_names: shape.traits.xml_alt_names().into_iter().map(o).collect(),
                     is_error_type: shape.traits.error().is_some(),
                     is_custom_extension: shape.traits.minio(),
                 });
@@ -403,6 +404,7 @@ fn patch_types(space: &mut RustTypes) {
             fields: ty.fields.iter().filter(|x| x.position == "xml").cloned().collect(),
             doc: ty.doc.clone(),
             xml_name: None,
+            xml_alt_names: vec![],
             is_error_type: false,
             is_custom_extension: false,
         };
@@ -456,6 +458,7 @@ fn unify_operation_types(ops: &Operations, space: &mut RustTypes) {
                 fields: default(),
                 doc: None,
                 xml_name: None,
+                xml_alt_names: vec![],
                 is_error_type: false,
                 is_custom_extension: false,
             }
@@ -479,6 +482,7 @@ fn unify_operation_types(ops: &Operations, space: &mut RustTypes) {
                 fields: default(),
                 doc: None,
                 xml_name: None,
+                xml_alt_names: vec![],
                 is_error_type: false,
                 is_custom_extension: false,
             }
