@@ -660,6 +660,7 @@ pub type BucketKeyEnabled = bool;
 /// in the <i>Amazon S3 User Guide</i>.</p>
 #[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct BucketLifecycleConfiguration {
+    pub expiry_updated_at: Option<Date>,
     /// <p>A lifecycle rule for individual objects in an Amazon S3 bucket.</p>
     pub rules: LifecycleRules,
 }
@@ -667,6 +668,9 @@ pub struct BucketLifecycleConfiguration {
 impl fmt::Debug for BucketLifecycleConfiguration {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut d = f.debug_struct("BucketLifecycleConfiguration");
+        if let Some(ref val) = self.expiry_updated_at {
+            d.field("expiry_updated_at", val);
+        }
         d.field("rules", &self.rules);
         d.finish_non_exhaustive()
     }
@@ -3952,6 +3956,21 @@ impl fmt::Debug for DefaultRetention {
         }
         if let Some(ref val) = self.years {
             d.field("years", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct DelMarkerExpiration {
+    pub days: Option<Days>,
+}
+
+impl fmt::Debug for DelMarkerExpiration {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("DelMarkerExpiration");
+        if let Some(ref val) = self.days {
+            d.field("days", val);
         }
         d.finish_non_exhaustive()
     }
@@ -7538,6 +7557,8 @@ impl FromStr for ExpirationStatus {
         Ok(Self::from(s.to_owned()))
     }
 }
+
+pub type ExpiredObjectAllVersions = bool;
 
 pub type ExpiredObjectDeleteMarker = bool;
 
@@ -11653,6 +11674,7 @@ pub struct LifecycleExpiration {
     /// <p>Indicates the lifetime, in days, of the objects that are subject to the rule. The value
     /// must be a non-zero positive integer.</p>
     pub days: Option<Days>,
+    pub expired_object_all_versions: Option<ExpiredObjectAllVersions>,
     /// <p>Indicates whether Amazon S3 will remove a delete marker with no noncurrent versions. If set
     /// to true, the delete marker will be expired; if set to false the policy takes no action.
     /// This cannot be specified with Days or Date in a Lifecycle Expiration Policy.</p>
@@ -11672,6 +11694,9 @@ impl fmt::Debug for LifecycleExpiration {
         if let Some(ref val) = self.days {
             d.field("days", val);
         }
+        if let Some(ref val) = self.expired_object_all_versions {
+            d.field("expired_object_all_versions", val);
+        }
         if let Some(ref val) = self.expired_object_delete_marker {
             d.field("expired_object_delete_marker", val);
         }
@@ -11685,6 +11710,7 @@ impl fmt::Debug for LifecycleExpiration {
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct LifecycleRule {
     pub abort_incomplete_multipart_upload: Option<AbortIncompleteMultipartUpload>,
+    pub del_marker_expiration: Option<DelMarkerExpiration>,
     /// <p>Specifies the expiration for the lifecycle of the object in the form of date, days and,
     /// whether the object has a delete marker.</p>
     pub expiration: Option<LifecycleExpiration>,
@@ -11734,6 +11760,9 @@ impl fmt::Debug for LifecycleRule {
         let mut d = f.debug_struct("LifecycleRule");
         if let Some(ref val) = self.abort_incomplete_multipart_upload {
             d.field("abort_incomplete_multipart_upload", val);
+        }
+        if let Some(ref val) = self.del_marker_expiration {
+            d.field("del_marker_expiration", val);
         }
         if let Some(ref val) = self.expiration {
             d.field("expiration", val);
@@ -34677,6 +34706,9 @@ impl DtoExt for DefaultRetention {
         }
     }
 }
+impl DtoExt for DelMarkerExpiration {
+    fn ignore_empty_strings(&mut self) {}
+}
 impl DtoExt for Delete {
     fn ignore_empty_strings(&mut self) {}
 }
@@ -35970,6 +36002,9 @@ impl DtoExt for LifecycleExpiration {
 impl DtoExt for LifecycleRule {
     fn ignore_empty_strings(&mut self) {
         if let Some(ref mut val) = self.abort_incomplete_multipart_upload {
+            val.ignore_empty_strings();
+        }
+        if let Some(ref mut val) = self.del_marker_expiration {
             val.ignore_empty_strings();
         }
         if let Some(ref mut val) = self.expiration {

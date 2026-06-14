@@ -366,6 +366,7 @@ impl AwsConversion for s3s::dto::BucketLifecycleConfiguration {
 
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
         Ok(Self {
+            expiry_updated_at: None,
             rules: try_from_aws(x.rules)?,
         })
     }
@@ -4597,6 +4598,7 @@ impl AwsConversion for s3s::dto::LifecycleExpiration {
         Ok(Self {
             date: try_from_aws(x.date)?,
             days: try_from_aws(x.days)?,
+            expired_object_all_versions: None,
             expired_object_delete_marker: try_from_aws(x.expired_object_delete_marker)?,
         })
     }
@@ -4618,6 +4620,7 @@ impl AwsConversion for s3s::dto::LifecycleRule {
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
         Ok(Self {
             abort_incomplete_multipart_upload: try_from_aws(x.abort_incomplete_multipart_upload)?,
+            del_marker_expiration: None,
             expiration: try_from_aws(x.expiration)?,
             filter: try_from_aws(x.filter)?,
             id: try_from_aws(x.id)?,

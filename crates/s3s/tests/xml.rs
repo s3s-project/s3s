@@ -199,9 +199,8 @@ fn tagging() {
 #[test]
 fn lifecycle_expiration() {
     let val = s3s::dto::LifecycleExpiration {
-        date: None,
         days: Some(365),
-        expired_object_delete_marker: None,
+        ..Default::default()
     };
 
     let ans = serialize_content(&val).unwrap();
@@ -241,6 +240,48 @@ fn bucket_lifecycle_configuration_dual_root() {
     assert_eq!(val2.rules[0].id.as_deref(), Some("r1"));
 
     test_serde(&val);
+}
+
+/// `MinIO` compatibility: verify the new lifecycle extension fields round-trip
+/// through XML serialization and deserialization.
+///
+/// `MinIO` reference:
+/// - <https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/lifecycle/lifecycle.go#L102-L166>
+/// - <https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/lifecycle/delmarker-expiration.go#L27-L64>
+/// - <https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/lifecycle/expiration.go#L115-L124>
+#[cfg(feature = "minio")]
+#[test]
+fn minio_lifecycle_extension_fields() {
+    // DelMarkerExpiration
+    let dm = s3s::dto::DelMarkerExpiration { days: Some(7) };
+    let xml = serialize_content(&dm).unwrap();
+    assert_eq!(xml, "<Days>7</Days>");
+    test_serde_content(&dm);
+
+    // LifecycleExpiration with ExpiredObjectAllVersions
+    let exp = s3s::dto::LifecycleExpiration {
+        expired_object_all_versions: Some(true),
+        ..Default::default()
+    };
+    let xml = serialize_content(&exp).unwrap();
+    assert!(xml.contains("<ExpiredObjectAllVersions>true</ExpiredObjectAllVersions>"));
+    test_serde_content(&exp);
+
+    // BucketLifecycleConfiguration with ExpiryUpdatedAt — deserialize from XML
+    let xml = r"
+<LifecycleConfiguration>
+    <Rule><ID>r1</ID><Status>Enabled</Status><Expiration><Days>1</Days></Expiration></Rule>
+    <ExpiryUpdatedAt>2024-01-01T00:00:00.000Z</ExpiryUpdatedAt>
+</LifecycleConfiguration>";
+    let config: s3s::dto::BucketLifecycleConfiguration = deserialize(xml.as_bytes()).unwrap();
+    assert_eq!(config.rules.len(), 1);
+    assert!(config.expiry_updated_at.is_some());
+    test_serde(&config);
+
+    // LifecycleRule DelMarkerExpiration deserialization
+    let xml = "<ID>test</ID><Status>Enabled</Status><DelMarkerExpiration><Days>30</Days></DelMarkerExpiration>";
+    let rule: s3s::dto::LifecycleRule = deserialize_content(xml.as_bytes()).unwrap();
+    assert_eq!(rule.del_marker_expiration.as_ref().unwrap().days, Some(30));
 }
 
 #[test]
