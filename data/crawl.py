@@ -19,7 +19,7 @@ def save_json(path, data):
 
 
 def load_json(path):
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -101,9 +101,12 @@ def crawl_error_codes_from_html(html):
         th_list = table.css.select("th")  # type:ignore
         if len(th_list) < 3:
             return None
-        assert th_list[0].text in ("Error code", "Error Code")
-        assert th_list[1].text == "Description"
-        assert th_list[2].text in ("HTTP status code", "HTTP Status Code")
+        if th_list[0].text not in ("Error code", "Error Code"):
+            return None
+        if th_list[1].text != "Description":
+            return None
+        if th_list[2].text not in ("HTTP status code", "HTTP Status Code"):
+            return None
 
         tr_list = table.css.select("tr")[1:]  # type:ignore
         tr_list = [[e for e in tr.children if e.name == "td"] for tr in tr_list]
