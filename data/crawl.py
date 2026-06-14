@@ -14,7 +14,7 @@ error_codes_path = model_dir / "s3_error_codes.json"
 
 
 def save_json(path, data):
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=4)
 
 
