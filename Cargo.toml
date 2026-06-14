@@ -38,7 +38,7 @@ smallvec = "1.15.1"
 uuid = "1.23.2"
 
 # Text encoding
-atoi = { version = "2.0.0", default-features = false }
+atoi = { version = "3.0.0", default-features = false }
 base64-simd = "0.8.0"
 hex-simd = "0.8.0"
 itoa = "1.0.18"
@@ -111,7 +111,7 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter", "time"] }
 clap = { version = "4.6.1", features = ["derive"] }
 
 # Storage backends
-opendal = { version = "0.56.0", default-features = false }
+opendal = { version = "0.57.0", default-features = false }
 
 # AWS SDK
 aws-config = { version = "1.8.18", default-features = false }
