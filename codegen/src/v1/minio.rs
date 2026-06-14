@@ -15,7 +15,25 @@ pub fn patch(model: &mut smithy::Model) {
                 smithy::Shape::Structure(shape) => {
                     let smithy::Shape::Structure(patch) = patch else { panic!() };
                     for (field_name, member) in patch.members {
-                        assert!(shape.members.insert(field_name, member).is_none());
+                        match shape.members.get_mut(&field_name) {
+                            Some(existing) => {
+                                assert_eq!(
+                                    existing.target, member.target,
+                                    "member {field_name:?} target mismatch: existing {:?} != patch {:?}",
+                                    existing.target, member.target
+                                );
+                                for (key, value) in member.traits.iter() {
+                                    assert!(
+                                        existing.traits.get(key).is_none(),
+                                        "member trait {key:?} already exists, cannot overwrite"
+                                    );
+                                    existing.traits.set(key, value.clone());
+                                }
+                            }
+                            None => {
+                                shape.members.insert(field_name, member);
+                            }
+                        }
                     }
                     for (key, value) in patch.traits.iter() {
                         assert!(shape.traits.get(key).is_none(), "trait {key:?} already exists, cannot overwrite");

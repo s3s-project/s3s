@@ -707,6 +707,22 @@ fn codegen_op_http_de(op: &Operation, rust_types: &RustTypes) {
                                     g!("    }}");
                                     g!("    Err(e) => return Err(e),");
                                     g!("}};");
+                                } else if let Some(literal) = &field.body_literal {
+                                    if field.option_type {
+                                        g!(
+                                            "let {}: Option<{}> = http::take_opt_body_literal::<{}>(req, \"{literal}\")?;",
+                                            field.name,
+                                            field.type_,
+                                            field.type_
+                                        );
+                                    } else {
+                                        g!(
+                                            "let {}: {} = http::take_body_literal::<{}>(req, \"{literal}\")?;",
+                                            field.name,
+                                            field.type_,
+                                            field.type_
+                                        );
+                                    }
                                 } else if field.option_type {
                                     g!("let {}: Option<{}> = http::take_opt_xml_body(req)?;", field.name, field.type_);
                                 } else {

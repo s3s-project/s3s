@@ -249,6 +249,7 @@ pub fn collect_rust_types(model: &smithy::Model, ops: &Operations) -> RustTypes 
                         xml_namespace_prefix: field.traits.xml_namespace_prefix().map(o),
 
                         is_custom_extension: field.traits.minio(),
+                        body_literal: field.traits.body_literal().map(o),
 
                         custom_in_derive_debug: None,
                     };
@@ -425,6 +426,7 @@ fn patch_types(space: &mut RustTypes) {
             http_query: None,
             xml_name: Some(request.name.clone()),
             xml_flattened: false,
+            body_literal: None,
             is_xml_attr: false,
             xml_namespace_uri: None,
             xml_namespace_prefix: None,
