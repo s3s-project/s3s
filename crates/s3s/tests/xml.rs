@@ -212,6 +212,37 @@ fn lifecycle_expiration() {
     test_serde_content(&val);
 }
 
+/// MinIO compatibility: accept both `<LifecycleConfiguration>` and `<BucketLifecycleConfiguration>`.
+///
+/// MinIO reference:
+/// - <https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/lifecycle/lifecycle.go#L129-L166>
+/// - <https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/lifecycle/lifecycle_test.go#L441-L447>
+#[cfg(feature = "minio")]
+#[test]
+fn bucket_lifecycle_configuration_dual_root() {
+    let rule = r"
+        <Rule>
+            <ID>r1</ID>
+            <Status>Enabled</Status>
+            <Expiration><Days>30</Days></Expiration>
+        </Rule>
+    ";
+
+    // Standard name
+    let xml_std = format!("<LifecycleConfiguration>{rule}</LifecycleConfiguration>");
+    let val: s3s::dto::BucketLifecycleConfiguration = deserialize(xml_std.as_bytes()).unwrap();
+    assert_eq!(val.rules.len(), 1);
+    assert_eq!(val.rules[0].id.as_deref(), Some("r1"));
+
+    // MinIO alternative name
+    let xml_minio = format!("<BucketLifecycleConfiguration>{rule}</BucketLifecycleConfiguration>");
+    let val2: s3s::dto::BucketLifecycleConfiguration = deserialize(xml_minio.as_bytes()).unwrap();
+    assert_eq!(val2.rules.len(), 1);
+    assert_eq!(val2.rules[0].id.as_deref(), Some("r1"));
+
+    test_serde(&val);
+}
+
 #[test]
 fn get_bucket_location_output() {
     {
