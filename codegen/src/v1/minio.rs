@@ -18,6 +18,7 @@ pub fn patch(model: &mut smithy::Model) {
                         assert!(shape.members.insert(field_name, member).is_none());
                     }
                     for (key, value) in patch.traits.iter() {
+                        assert!(shape.traits.get(key).is_none(), "trait {key:?} already exists, cannot overwrite");
                         shape.traits.set(key, value.clone());
                     }
                 }
