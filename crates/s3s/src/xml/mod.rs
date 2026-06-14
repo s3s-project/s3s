@@ -436,4 +436,69 @@ mod tests {
         assert!(xml_out.contains("\"b264846671938cd88cd6121b3171589b\""));
         assert!(!xml_out.contains("&quot;"));
     }
+
+    // ---------------------------------------------------------------------------
+    // named_element_any tests
+    // ---------------------------------------------------------------------------
+
+    /// Helper: deserialize `<Root>{content}</Root>` accepting either `Root` or `RootAlt`.
+    fn deser_root_any(xml: &[u8]) -> DeResult<String> {
+        let mut d = Deserializer::new(xml);
+        d.named_element_any(&["Root", "RootAlt"], Deserializer::content)
+    }
+
+    #[test]
+    fn named_element_any_matches_first_candidate() {
+        let xml = b"<Root>hello</Root>";
+        assert_eq!(deser_root_any(xml).unwrap(), "hello");
+    }
+
+    #[test]
+    fn named_element_any_matches_second_candidate() {
+        let xml = b"<RootAlt>world</RootAlt>";
+        assert_eq!(deser_root_any(xml).unwrap(), "world");
+    }
+
+    #[test]
+    fn named_element_any_rejects_unexpected_name() {
+        let xml = b"<Unknown>content</Unknown>";
+        assert!(deser_root_any(xml).is_err());
+    }
+
+    #[test]
+    fn named_element_any_rejects_mismatched_end_tag() {
+        let xml = b"<Root>content</RootAlt>";
+        assert!(deser_root_any(xml).is_err());
+    }
+
+    #[test]
+    fn named_element_any_with_empty_content() {
+        let xml = b"<Root></Root>";
+        assert_eq!(deser_root_any(xml).unwrap(), "");
+    }
+
+    #[test]
+    fn named_element_any_single_candidate() {
+        let mut d = Deserializer::new(b"<Only>42</Only>");
+        let result: String = d.named_element_any(&["Only"], Deserializer::content).unwrap();
+        assert_eq!(result, "42");
+    }
+
+    #[test]
+    fn named_element_any_duplicate_candidates() {
+        let mut d = Deserializer::new(b"<Root>dup</Root>");
+        let result: String = d
+            .named_element_any(&["Root", "Root", "RootAlt"], Deserializer::content)
+            .unwrap();
+        assert_eq!(result, "dup");
+    }
+
+    #[test]
+    fn named_element_any_real_world_tag_names() {
+        let mut d = Deserializer::new(b"<LifecycleConfiguration>lc</LifecycleConfiguration>");
+        let result: String = d
+            .named_element_any(&["BucketLifecycleConfiguration", "LifecycleConfiguration"], Deserializer::content)
+            .unwrap();
+        assert_eq!(result, "lc");
+    }
 }
