@@ -10,11 +10,17 @@ import typer
 cli = typer.Typer(pretty_exceptions_show_locals=False)
 
 model_dir = Path(__file__).parent
+error_codes_path = model_dir / "s3_error_codes.json"
 
 
 def save_json(path, data):
     with open(path, "w") as f:
         json.dump(data, f, indent=4)
+
+
+def load_json(path):
+    with open(path) as f:
+        return json.load(f)
 
 
 def download_aws_sdk(service: str, *, commit: str):
@@ -40,10 +46,28 @@ def download_sts_model():
 
 @cli.command()
 def crawl_error_codes():
-    url = "https://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html"
+    urls = (
+        "https://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html",
+        "https://docs.aws.amazon.com/AmazonS3/latest/API/API_Error.html",
+    )
 
-    html = requests.get(url).text
+    data = None
+    for url in urls:
+        html = requests.get(url).text
+        data = crawl_error_codes_from_html(html)
+        if data is not None:
+            break
 
+    if data is None:
+        if error_codes_path.exists():
+            typer.echo("warning: unable to parse S3 error code docs; keeping existing data")
+            return
+        raise RuntimeError("unable to parse S3 error code docs and no existing data is available")
+
+    save_json(error_codes_path, data)
+
+
+def crawl_error_codes_from_html(html):
     soup = BeautifulSoup(html, "lxml")
 
     kinds = [
@@ -56,7 +80,10 @@ def crawl_error_codes():
     data = {}
 
     for kind, h2_id in kinds:
-        h2 = soup.css.select(f"#{h2_id}")[0]  # type:ignore
+        h2_list = soup.css.select(f"#{h2_id}")  # type:ignore
+        if not h2_list:
+            return None
+        h2 = h2_list[0]
 
         # find the next table
         table = None
@@ -64,9 +91,12 @@ def crawl_error_codes():
             if e.name == "table":  # type:ignore
                 table = e
                 break
-        assert table is not None
+        if table is None:
+            return None
 
         th_list = table.css.select("th")  # type:ignore
+        if len(th_list) < 3:
+            return None
         assert th_list[0].text in ("Error code", "Error Code")
         assert th_list[1].text == "Description"
         assert th_list[2].text in ("HTTP status code", "HTTP Status Code")
@@ -76,6 +106,8 @@ def crawl_error_codes():
 
         ans = []
         for td_list in tr_list:
+            if len(td_list) < 3:
+                continue
             td0_code = td_list[0].css.select("code")
             if td0_code:
                 t0 = td0_code[0].text.strip()
@@ -109,7 +141,7 @@ def crawl_error_codes():
         ans.sort(key=lambda x: x["code"])
         data[kind] = ans
 
-    save_json(model_dir / "s3_error_codes.json", data)
+    return data
 
 
 @cli.command()
