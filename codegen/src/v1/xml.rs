@@ -253,7 +253,14 @@ fn codegen_xml_serde(ops: &Operations, rust_types: &RustTypes, root_type_names: 
             g!("impl<'xml> Deserialize<'xml> for {} {{", ty.name);
             g!("fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {{");
 
-            g!("d.named_element(\"{xml_name}\", Deserializer::content)");
+            let alt_names = &ty.xml_alt_names;
+            if alt_names.is_empty() {
+                g!("d.named_element(\"{xml_name}\", Deserializer::content)");
+            } else {
+                let mut candidates = vec![xml_name.to_owned()];
+                candidates.extend(alt_names.iter().cloned());
+                g!("d.named_element_any(&{candidates:?}, Deserializer::content)");
+            }
 
             g!("}}");
             g!("}}");

@@ -72,6 +72,7 @@ pub struct Struct {
     pub doc: Option<String>,
 
     pub xml_name: Option<String>,
+    pub xml_alt_names: Vec<String>,
     pub is_error_type: bool,
 
     pub is_custom_extension: bool,

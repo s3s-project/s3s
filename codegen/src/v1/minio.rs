@@ -17,6 +17,9 @@ pub fn patch(model: &mut smithy::Model) {
                     for (field_name, member) in patch.members {
                         assert!(shape.members.insert(field_name, member).is_none());
                     }
+                    for (key, value) in patch.traits.iter() {
+                        shape.traits.set(key, value.clone());
+                    }
                 }
                 _ => unimplemented!(),
             },

@@ -173,6 +173,13 @@
                     }
                 }
             }
+        },
+        "com.amazonaws.s3#BucketLifecycleConfiguration": {
+            "type": "structure",
+            "members": {},
+            "traits": {
+                "s3s#xmlAltName": ["BucketLifecycleConfiguration"]
+            }
         }
     }
 }
