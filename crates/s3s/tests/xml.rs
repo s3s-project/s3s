@@ -212,9 +212,9 @@ fn lifecycle_expiration() {
     test_serde_content(&val);
 }
 
-/// MinIO compatibility: accept both `<LifecycleConfiguration>` and `<BucketLifecycleConfiguration>`.
+/// `MinIO` compatibility: accept both `<LifecycleConfiguration>` and `<BucketLifecycleConfiguration>`.
 ///
-/// MinIO reference:
+/// `MinIO` reference:
 /// - <https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/lifecycle/lifecycle.go#L129-L166>
 /// - <https://github.com/minio/minio/blob/7aac2a2c5b7c882e68c1ce017d8256be2feea27f/internal/bucket/lifecycle/lifecycle_test.go#L441-L447>
 #[cfg(feature = "minio")]
