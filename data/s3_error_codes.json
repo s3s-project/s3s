@@ -22,22 +22,22 @@
         },
         {
             "code": "AccountProblem",
-            "description": "There is a problem with your AWS account that prevents the operation from completing successfully. For further assistance, see Contact Us.",
+            "description": "There is a problem with your AWS account that prevents the action from completing successfully. Contact AWS Support for further assistance.",
             "http_status_code": 403
         },
         {
             "code": "AllAccessDisabled",
-            "description": "All access to this Amazon S3 resource has been disabled. For further assistance, see Contact Us.",
+            "description": "All access to this Amazon S3 resource has been disabled. Contact AWS Support for further assistance.",
             "http_status_code": 403
         },
         {
             "code": "AmbiguousGrantByEmailAddress",
-            "description": "The email address that you provided is associated with more than one account.",
+            "description": "The email address you provided is associated with more than one account.",
             "http_status_code": 400
         },
         {
             "code": "AuthorizationHeaderMalformed",
-            "description": "The authorization header that you provided is not valid.",
+            "description": "The authorization header you provided is invalid.",
             "http_status_code": 400
         },
         {
@@ -47,17 +47,17 @@
         },
         {
             "code": "BadDigest",
-            "description": "The Content-MD5 or checksum value that you specified did not match what the server received.",
+            "description": "The Content-MD5 you specified did not match what we received.",
             "http_status_code": 400
         },
         {
             "code": "BucketAlreadyExists",
-            "description": "The requested bucket name is not available. The bucket namespace is shared by all users of the system. Specify a different name and try again.",
+            "description": "The requested bucket name is not available. The bucket namespace is shared by all users of the system. Please select a different name and try again.",
             "http_status_code": 409
         },
         {
             "code": "BucketAlreadyOwnedByYou",
-            "description": "The bucket that you tried to create already exists, and you own it. Amazon S3 returns this error in all AWS Regions except in the US East (N. Virginia) Region (us-east-1). For legacy compatibility, if you re-create an existing bucket that you already own in us-east-1, Amazon S3 returns 200 OK and resets the bucket access control lists (ACLs). For Amazon S3 on Outposts, the bucket that you tried to create already exists in your Outpost and you own it.",
+            "description": "The bucket you tried to create already exists, and you own it. Amazon S3 returns this error in all AWS Regions except in the North Virginia Region. For legacy compatibility, if you re-create an existing bucket that you already own in the North Virginia Region, Amazon S3 returns 200 OK and resets the bucket access control lists (ACLs).",
             "http_status_code": 409
         },
         {
@@ -67,7 +67,7 @@
         },
         {
             "code": "BucketNotEmpty",
-            "description": "The bucket that you tried to delete is not empty.",
+            "description": "The bucket you tried to delete is not empty.",
             "http_status_code": 409
         },
         {
@@ -92,7 +92,7 @@
         },
         {
             "code": "CrossLocationLoggingProhibited",
-            "description": "Cross-Region logging is not allowed. Buckets in one AWS Region cannot log information to a bucket in another Region.",
+            "description": "Cross-location logging not allowed. Buckets in one geographic location cannot log information to a bucket in another location.",
             "http_status_code": 403
         },
         {
@@ -107,7 +107,7 @@
         },
         {
             "code": "EntityTooLarge",
-            "description": "Your proposed upload exceeds the maximum allowed object size. For more information, see Amazon Simple Storage Service endpoints and quotas in the AWS General Reference.",
+            "description": "Your proposed upload exceeds the maximum allowed object size.",
             "http_status_code": 400
         },
         {
@@ -127,12 +127,12 @@
         },
         {
             "code": "IllegalVersioningConfigurationException",
-            "description": "The versioning configuration specified in the request is not valid.",
+            "description": "Indicates that the versioning configuration specified in the request is invalid.",
             "http_status_code": 400
         },
         {
             "code": "IncompleteBody",
-            "description": "You did not provide the number of bytes specified by the Content-Length HTTP header.",
+            "description": "You did not provide the number of bytes specified by the Content-Length HTTP header",
             "http_status_code": 400
         },
         {
@@ -147,17 +147,17 @@
         },
         {
             "code": "InlineDataTooLarge",
-            "description": "The inline data exceeds the maximum allowed size.",
+            "description": "Inline data exceeds the maximum allowed size.",
             "http_status_code": 400
         },
         {
             "code": "InternalError",
-            "description": "An internal error occurred. Try again.",
+            "description": "We encountered an internal error. Please try again.",
             "http_status_code": 500
         },
         {
             "code": "InvalidAccessKeyId",
-            "description": "The AWS access key ID that you provided does not exist in our records.",
+            "description": "The AWS access key ID you provided does not exist in our records.",
             "http_status_code": 403
         },
         {
@@ -197,17 +197,17 @@
         },
         {
             "code": "InvalidBucketState",
-            "description": "The request is not valid for the current state of the bucket.",
+            "description": "The request is not valid with the current state of the bucket.",
             "http_status_code": 409
         },
         {
             "code": "InvalidDigest",
-            "description": "The Content-MD5 or checksum value that you specified is not valid.",
+            "description": "The Content-MD5 you specified is not valid.",
             "http_status_code": 400
         },
         {
             "code": "InvalidEncryptionAlgorithmError",
-            "description": "The encryption request that you specified is not valid. The valid value is AES256.",
+            "description": "The encryption request you specified is not valid. The valid value is AES256.",
             "http_status_code": 400
         },
         {
@@ -222,12 +222,12 @@
         },
         {
             "code": "InvalidLocationConstraint",
-            "description": "The specified location (Region) constraint is not valid. For more information about selecting a Region for your buckets, see Buckets overview.",
+            "description": "The specified location constraint is not valid. For more information about Regions, see How to Select a Region for Your Buckets.",
             "http_status_code": 400
         },
         {
             "code": "InvalidObjectState",
-            "description": "The operation is not valid for the current state of the object.",
+            "description": "The action is not valid for the current state of the object.",
             "http_status_code": 403
         },
         {
@@ -237,12 +237,12 @@
         },
         {
             "code": "InvalidPartOrder",
-            "description": "The list of parts was not in ascending order. The parts list must be specified in order by part number.",
+            "description": "The list of parts was not in ascending order. Parts list must be specified in order by part number.",
             "http_status_code": 400
         },
         {
             "code": "InvalidPayer",
-            "description": "All access to this object has been disabled. For further assistance, see Contact Us.",
+            "description": "All access to this object has been disabled. Please contact AWS Support for further assistance.",
             "http_status_code": 403
         },
         {
@@ -267,7 +267,7 @@
         },
         {
             "code": "InvalidSOAPRequest",
-            "description": "The SOAP request body is not valid.",
+            "description": "The SOAP request body is invalid.",
             "http_status_code": 400
         },
         {
@@ -287,7 +287,7 @@
         },
         {
             "code": "InvalidStorageClass",
-            "description": "The storage class that you specified is not valid.",
+            "description": "The storage class you specified is not valid.",
             "http_status_code": 400
         },
         {
@@ -297,17 +297,17 @@
         },
         {
             "code": "InvalidTargetBucketForLogging",
-            "description": "The target bucket for logging either does not exist, is not owned by you, or does not have the appropriate grants for the log-delivery group.",
+            "description": "The target bucket for logging does not exist, is not owned by you, or does not have the appropriate grants for the log-delivery group.",
             "http_status_code": 400
         },
         {
             "code": "InvalidToken",
-            "description": "The provided token is malformed or otherwise not valid.",
+            "description": "The provided token is malformed or otherwise invalid.",
             "http_status_code": 400
         },
         {
             "code": "InvalidURI",
-            "description": "The specified URI couldn't be parsed.",
+            "description": "Couldn't parse the specified URI.",
             "http_status_code": 400
         },
         {
@@ -337,7 +337,7 @@
         },
         {
             "code": "MalformedACLError",
-            "description": "The ACL that you provided was not well formed or did not validate against our published schema.",
+            "description": "The XML you provided was not well-formed or did not validate against our published schema.",
             "http_status_code": 400
         },
         {
@@ -352,12 +352,12 @@
         },
         {
             "code": "MalformedXML",
-            "description": "The XML that you provided was not well formed or did not validate against our published schema.",
+            "description": "This happens when the user sends malformed XML (XML that doesn't conform to the published XSD) for the configuration. The error message is, \"The XML you provided was not well-formed or did not validate against our published schema.\"",
             "http_status_code": 400
         },
         {
             "code": "MaxMessageLengthExceeded",
-            "description": "Your request was too large.",
+            "description": "Your request was too big.",
             "http_status_code": 400
         },
         {
@@ -377,8 +377,8 @@
         },
         {
             "code": "MissingAttachment",
-            "description": "A SOAP attachment was expected, but none was found.",
-            "http_status_code": 400
+            "description": "A SOAP attachment was expected, but none were found.",
+            "http_status_code": null
         },
         {
             "code": "MissingAuthenticationToken",
@@ -392,7 +392,7 @@
         },
         {
             "code": "MissingRequestBodyError",
-            "description": "You sent an empty XML document as a request.",
+            "description": "This happens when the user sends an empty XML document as a request. The error message is, \"Request body is empty.\"",
             "http_status_code": 400
         },
         {
@@ -442,7 +442,7 @@
         },
         {
             "code": "NoSuchLifecycleConfiguration",
-            "description": "The specified lifecycle configuration does not exist.",
+            "description": "The lifecycle configuration does not exist.",
             "http_status_code": 404
         },
         {
@@ -462,12 +462,12 @@
         },
         {
             "code": "NoSuchUpload",
-            "description": "The specified multipart upload does not exist. The upload ID might not be valid, or the multipart upload might have been aborted or completed.",
+            "description": "The specified multipart upload does not exist. The upload ID might be invalid, or the multipart upload might have been aborted or completed.",
             "http_status_code": 404
         },
         {
             "code": "NoSuchVersion",
-            "description": "The version ID specified in the request does not match an existing version.",
+            "description": "Indicates that the version ID specified in the request does not match an existing version.",
             "http_status_code": 404
         },
         {
@@ -487,7 +487,7 @@
         },
         {
             "code": "NotImplemented",
-            "description": "A header that you provided implies functionality that is not implemented.",
+            "description": "A header you provided implies functionality that is not implemented.",
             "http_status_code": 501
         },
         {
@@ -497,7 +497,7 @@
         },
         {
             "code": "NotSignedUp",
-            "description": "Your account is not signed up for the Amazon S3 service. You must sign up before you can use Amazon S3. You can sign up at the following URL: https://aws.amazon.com/s3",
+            "description": "Your account is not signed up for the Amazon S3 service. You must sign up before you can use Amazon S3. You can sign up at the following URL: Amazon S3",
             "http_status_code": 403
         },
         {
@@ -507,7 +507,7 @@
         },
         {
             "code": "OperationAborted",
-            "description": "A conflicting conditional operation is currently in progress against this resource. Try again.",
+            "description": "A conflicting conditional action is currently in progress against this resource. Try again.",
             "http_status_code": 409
         },
         {
@@ -517,7 +517,7 @@
         },
         {
             "code": "PermanentRedirect",
-            "description": "The bucket that you are attempting to access must be addressed using the specified endpoint. Send all future requests to this endpoint.",
+            "description": "The bucket you are attempting to access must be addressed using the specified endpoint. Send all future requests to this endpoint.",
             "http_status_code": 301
         },
         {
@@ -527,7 +527,7 @@
         },
         {
             "code": "PreconditionFailed",
-            "description": "At least one of the preconditions that you specified did not hold.",
+            "description": "At least one of the preconditions you specified did not hold.",
             "http_status_code": 412
         },
         {
@@ -542,8 +542,8 @@
         },
         {
             "code": "RequestIsNotMultiPartContent",
-            "description": "A bucket POST request must be of the enclosure-type multipart/form-data.",
-            "http_status_code": 412
+            "description": "Bucket POST must be of the enclosure-type multipart/form-data.",
+            "http_status_code": 400
         },
         {
             "code": "RequestTimeTooSkewed",
@@ -567,7 +567,7 @@
         },
         {
             "code": "RestoreAlreadyInProgress",
-            "description": "The object restore is already in progress.",
+            "description": "Object restore is already in progress.",
             "http_status_code": 409
         },
         {
@@ -582,12 +582,12 @@
         },
         {
             "code": "SignatureDoesNotMatch",
-            "description": "The request signature that the server calculated does not match the signature that you provided. Check your AWS secret access key and signing method. For more information, see REST Authentication and SOAP Authentication.",
+            "description": "The request signature we calculated does not match the signature you provided. Check your AWS secret access key and signing method. For more information, see REST Authentication and SOAP Authentication for details.",
             "http_status_code": 403
         },
         {
             "code": "SlowDown",
-            "description": "Please reduce your request rate.",
+            "description": "Reduce your request rate.",
             "http_status_code": 503
         },
         {
@@ -597,7 +597,7 @@
         },
         {
             "code": "TemporaryRedirect",
-            "description": "You are being redirected to the bucket while the Domain Name System (DNS) server is being updated.",
+            "description": "You are being redirected to the bucket while DNS updates.",
             "http_status_code": 307
         },
         {
@@ -637,7 +637,7 @@
         },
         {
             "code": "UnexpectedContent",
-            "description": "This request contains unsupported content.",
+            "description": "This request does not support content.",
             "http_status_code": 400
         },
         {
@@ -647,7 +647,7 @@
         },
         {
             "code": "UnresolvableGrantByEmailAddress",
-            "description": "The email address that you provided does not match any account on record.",
+            "description": "The email address you provided does not match any account on record.",
             "http_status_code": 400
         },
         {
@@ -662,7 +662,7 @@
         },
         {
             "code": "UserKeyMustBeSpecified",
-            "description": "The bucket POST request must contain the specified field name. If it is specified, check the order of the fields.",
+            "description": "The bucket POST must contain the specified field name. If it is specified, check the order of the fields.",
             "http_status_code": 400
         }
     ],
