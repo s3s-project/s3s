@@ -1,6 +1,6 @@
 [package]
 name = "s3s-test"
-version = "0.14.0-dev"
+version = "0.14.0-alpha.1"
 description = "s3s test suite"
 readme = "../../README.md"
 keywords = ["s3"]
