@@ -1,5 +1,17 @@
 use super::*;
 
+fn fmt_current_amz_date(dt: time::OffsetDateTime) -> String {
+    format!(
+        "{:04}{:02}{:02}T{:02}{:02}{:02}Z",
+        dt.year(),
+        u8::from(dt.month()),
+        dt.day(),
+        dt.hour(),
+        dt.minute(),
+        dt.second()
+    )
+}
+
 // use crate::service::S3Service;
 
 // use stdx::mem::output_size;
@@ -476,8 +488,9 @@ async fn post_multipart_bucket_routes_to_post_object() {
     let key = "mc-test-object-7658";
     let policy_b64 = "eyJleHBpcmF0aW9uIjoiMjAyMC0xMC0wM1QxMzoyNTo0Ny4yMThaIiwiY29uZGl0aW9ucyI6W1siZXEiLCIkYnVja2V0IiwibWMtdGVzdC1idWNrZXQtMzI1NjkiXSxbImVxIiwiJGtleSIsIm1jLXRlc3Qtb2JqZWN0LTc2NTgiXSxbImVxIiwiJHgtYW16LWRhdGUiLCIyMDIwMDkyNlQxMzI1NDdaIl0sWyJlcSIsIiR4LWFtei1hbGdvcml0aG0iLCJBV1M0LUhNQUMtU0hBMjU2Il0sWyJlcSIsIiR4LWFtei1jcmVkZW50aWFsIiwiQUtJQUlPU0ZPRE5ON0VYQU1QTEUvMjAyMDA5MjYvdXMtZWFzdC0xL3MzL2F3czRfcmVxdWVzdCJdXX0=";
     let algorithm = "AWS4-HMAC-SHA256";
-    let credential = "AKIAIOSFODNN7EXAMPLE/20200926/us-east-1/s3/aws4_request";
-    let amz_date = sig_v4::AmzDate::parse("20200926T132547Z").unwrap();
+    let amz_date_str = fmt_current_amz_date(time::OffsetDateTime::now_utc());
+    let amz_date = sig_v4::AmzDate::parse(&amz_date_str).unwrap();
+    let credential = format!("AKIAIOSFODNN7EXAMPLE/{}/us-east-1/s3/aws4_request", amz_date.fmt_date());
     let region = "us-east-1";
     let service = "s3";
     let signature = sig_v4::calculate_signature(policy_b64, &secret_key, &amz_date, region, service);
@@ -511,7 +524,7 @@ async fn post_multipart_bucket_routes_to_post_object() {
             "hello\r\n",
             "--{b}--\r\n"
         ),
-        amz_date = amz_date.fmt_iso8601(),
+        amz_date = amz_date_str,
         b = boundary,
         signature = signature,
         bucket = bucket,
@@ -668,14 +681,14 @@ mod post_policy_test_helpers {
         let boundary = "------------------------test12345678";
         let bucket = "test-bucket";
         let key = "test-key";
-        let amz_date = sig_v4::AmzDate::parse("20250101T000000Z").unwrap();
+        let amz_date_str = super::fmt_current_amz_date(time::OffsetDateTime::now_utc());
+        let amz_date = sig_v4::AmzDate::parse(&amz_date_str).unwrap();
         let region = "us-east-1";
         let service = "s3";
         let content_type = "text/plain";
         let algorithm = "AWS4-HMAC-SHA256";
-        let credential = "AKIAIOSFODNN7EXAMPLE/20250101/us-east-1/s3/aws4_request";
+        let credential = format!("AKIAIOSFODNN7EXAMPLE/{}/us-east-1/s3/aws4_request", amz_date.fmt_date());
         let signature = sig_v4::calculate_signature(&policy_b64, secret_key, &amz_date, region, service);
-        let amz_date_str = amz_date.fmt_iso8601();
 
         let fields = {
             let mut f = vec![
@@ -683,7 +696,7 @@ mod post_policy_test_helpers {
                 ("bucket", bucket),
                 ("policy", policy_b64.as_str()),
                 ("x-amz-algorithm", algorithm),
-                ("x-amz-credential", credential),
+                ("x-amz-credential", credential.as_str()),
                 ("x-amz-date", amz_date_str.as_str()),
                 ("key", key),
             ];
@@ -726,12 +739,13 @@ mod post_policy_test_helpers {
         let boundary = "------------------------test12345678";
         let bucket = "test-bucket";
         let key = "test-key";
-        let amz_date = sig_v4::AmzDate::parse("20250101T000000Z").unwrap();
+        let amz_date_str = super::fmt_current_amz_date(time::OffsetDateTime::now_utc());
+        let amz_date = sig_v4::AmzDate::parse(&amz_date_str).unwrap();
         let region = "us-east-1";
         let service = "s3";
         let content_type = "text/plain";
         let algorithm = "AWS4-HMAC-SHA256";
-        let credential = "AKIAIOSFODNN7EXAMPLE/20250101/us-east-1/s3/aws4_request";
+        let credential = format!("AKIAIOSFODNN7EXAMPLE/{}/us-east-1/s3/aws4_request", amz_date.fmt_date());
         let signature = sig_v4::calculate_signature(&policy_b64, secret_key, &amz_date, region, service);
 
         let body = build_multipart_fields(
@@ -740,8 +754,8 @@ mod post_policy_test_helpers {
                 ("bucket", bucket),
                 ("policy", &policy_b64),
                 ("x-amz-algorithm", algorithm),
-                ("x-amz-credential", credential),
-                ("x-amz-date", &amz_date.fmt_iso8601()),
+                ("x-amz-credential", credential.as_str()),
+                ("x-amz-date", amz_date_str.as_str()),
                 ("key", key),
             ],
             boundary,

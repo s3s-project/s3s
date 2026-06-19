@@ -24,6 +24,7 @@ use std::sync::Arc;
 use hyper::Method;
 use hyper::Uri;
 use mime::Mime;
+use subtle::ConstantTimeEq;
 use tracing::debug;
 
 /// Maximum allowed size for STS request body (8KB should be enough for operations like `AssumeRole`)
@@ -116,6 +117,23 @@ struct SignatureVerificationContext<'a> {
     service: &'a str,
 }
 
+fn sig_v4_signatures_match(actual_signature: &str, expected_signature: &str) -> bool {
+    actual_signature.as_bytes().ct_eq(expected_signature.as_bytes()).into()
+}
+
+fn validate_sig_v4_clock_skew(amz_date: &AmzDate, config: &Arc<dyn S3ConfigProvider>) -> S3Result<()> {
+    let request_time = amz_date.to_time().ok_or_else(|| invalid_request!("invalid amz date"))?;
+    let now = time::OffsetDateTime::now_utc();
+    let duration = now - request_time;
+    let max_skew_time = time::Duration::seconds(i64::from(config.snapshot().presigned_url_max_skew_time_secs));
+
+    if duration.abs() > max_skew_time {
+        return Err(s3_error!(RequestTimeTooSkewed, "request time is too far from server time"));
+    }
+
+    Ok(())
+}
+
 impl SignatureVerificationContext<'_> {
     fn verify_with_raw_path_fallback(
         &self,
@@ -125,7 +143,7 @@ impl SignatureVerificationContext<'_> {
         let string_to_sign = sig_v4::create_string_to_sign(canonical_request, self.amz_date, self.region, self.service);
         let signature = sig_v4::calculate_signature(&string_to_sign, self.secret_key, self.amz_date, self.region, self.service);
 
-        if signature == self.expected_signature {
+        if sig_v4_signatures_match(&signature, self.expected_signature) {
             return Ok(signature);
         }
 
@@ -139,7 +157,7 @@ impl SignatureVerificationContext<'_> {
         let raw_signature =
             sig_v4::calculate_signature(&string_to_sign, self.secret_key, self.amz_date, self.region, self.service);
 
-        if raw_signature != self.expected_signature {
+        if !sig_v4_signatures_match(&raw_signature, self.expected_signature) {
             debug!(?signature, ?raw_signature, expected=?self.expected_signature, "signature mismatch");
             return Err(s3_error!(SignatureDoesNotMatch));
         }
@@ -249,6 +267,7 @@ impl SignatureContext<'_> {
             CredentialV4::parse(info.x_amz_credential).map_err(|_| invalid_request!("invalid field: x-amz-credential"))?;
 
         let amz_date = AmzDate::parse(info.x_amz_date).map_err(|_| invalid_request!("invalid field: x-amz-date"))?;
+        validate_sig_v4_clock_skew(&amz_date, self.config)?;
 
         let access_key = credential.access_key_id.to_owned();
         let secret_key = auth.get_secret_key(&access_key).await?;
@@ -268,7 +287,7 @@ impl SignatureContext<'_> {
         let signature = sig_v4::calculate_signature(string_to_sign, &secret_key, &amz_date, region, service);
 
         let expected_signature = info.x_amz_signature;
-        if signature != expected_signature {
+        if !sig_v4_signatures_match(&signature, expected_signature) {
             debug!(?signature, expected=?expected_signature, "signature mismatch");
             return Err(s3_error!(SignatureDoesNotMatch));
         }
@@ -410,6 +429,7 @@ impl SignatureContext<'_> {
         let secret_key = auth.get_secret_key(access_key).await?;
 
         let amz_date = extract_amz_date(&self.hs)?.ok_or_else(|| invalid_request!("missing header: x-amz-date"))?;
+        validate_sig_v4_clock_skew(&amz_date, self.config)?;
 
         let is_stream = amz_content_sha256.is_some_and(|v| v.is_streaming());
 
@@ -672,6 +692,18 @@ impl SignatureContext<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn fmt_current_amz_date(dt: time::OffsetDateTime) -> String {
+        format!(
+            "{:04}{:02}{:02}T{:02}{:02}{:02}Z",
+            dt.year(),
+            u8::from(dt.month()),
+            dt.day(),
+            dt.hour(),
+            dt.minute(),
+            dt.second()
+        )
+    }
 
     #[test]
     fn test_extract_amz_content_sha256_missing() {
@@ -1117,11 +1149,12 @@ file content\r\n\
         let uri = Uri::from_static("https://s3.amazonaws.com/test-bucket/path/sitemap.xmlage=");
         let decoded_uri_path = "/test-bucket/path/sitemap.xmlage=";
         let raw_uri_path = "/test-bucket/path/sitemap.xmlage=";
-        let amz_date = AmzDate::parse("20130524T000000Z").unwrap();
+        let amz_date_str = fmt_current_amz_date(time::OffsetDateTime::now_utc());
+        let amz_date = AmzDate::parse(&amz_date_str).unwrap();
         let headers_for_signing = OrderedHeaders::from_slice_unchecked(&[
             ("host", "s3.amazonaws.com"),
             ("x-amz-content-sha256", "UNSIGNED-PAYLOAD"),
-            ("x-amz-date", "20130524T000000Z"),
+            ("x-amz-date", amz_date_str.as_str()),
         ]);
 
         let canonical_requests = [
@@ -1145,13 +1178,14 @@ file content\r\n\
             let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
             let signature = sig_v4::calculate_signature(&string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
             let authorization = format!(
-                "AWS4-HMAC-SHA256 Credential={access_key}/20130524/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature={signature}"
+                "AWS4-HMAC-SHA256 Credential={access_key}/{}/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature={signature}",
+                amz_date.fmt_date()
             );
             let headers = OrderedHeaders::from_slice_unchecked(&[
                 ("authorization", authorization.as_str()),
                 ("host", "s3.amazonaws.com"),
                 ("x-amz-content-sha256", "UNSIGNED-PAYLOAD"),
-                ("x-amz-date", "20130524T000000Z"),
+                ("x-amz-date", amz_date_str.as_str()),
             ]);
 
             let mut body = Body::empty();
@@ -1199,11 +1233,12 @@ file content\r\n\
         let uri = Uri::from_static("https://s3.amazonaws.com/test-bucket/path/sitemap.xmlage=");
         let decoded_uri_path = "/test-bucket/path/sitemap.xmlage=";
         let raw_uri_path = "/test-bucket/path/sitemap.xmlage=";
-        let amz_date = AmzDate::parse("20130524T000000Z").unwrap();
+        let amz_date_str = fmt_current_amz_date(time::OffsetDateTime::now_utc());
+        let amz_date = AmzDate::parse(&amz_date_str).unwrap();
         let headers_for_signing = OrderedHeaders::from_slice_unchecked(&[
             ("host", "s3.amazonaws.com"),
             ("x-amz-content-sha256", "UNSIGNED-PAYLOAD"),
-            ("x-amz-date", "20130524T000000Z"),
+            ("x-amz-date", amz_date_str.as_str()),
         ]);
         let canonical_request = sig_v4::create_canonical_request(
             &method,
@@ -1215,12 +1250,13 @@ file content\r\n\
         let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
         let signature = sig_v4::calculate_signature(&string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
         let authorization = format!(
-            "AWS4-HMAC-SHA256 Credential={access_key}/20130524/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature={signature}"
+            "AWS4-HMAC-SHA256 Credential={access_key}/{}/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature={signature}",
+            amz_date.fmt_date()
         );
         let headers = OrderedHeaders::from_slice_unchecked(&[
             ("authorization", authorization.as_str()),
             ("x-amz-content-sha256", "UNSIGNED-PAYLOAD"),
-            ("x-amz-date", "20130524T000000Z"),
+            ("x-amz-date", amz_date_str.as_str()),
         ]);
 
         let mut body = Body::empty();
@@ -1268,13 +1304,14 @@ file content\r\n\
         let uri = Uri::from_static("https://s3.amazonaws.com/test-bucket/path/sitemap.xmlage=");
         let decoded_uri_path = "/test-bucket/path/sitemap.xmlage=";
         let raw_uri_path = "/test-bucket/path/sitemap.xmlage=";
-        let amz_date = AmzDate::parse("20130524T000000Z").unwrap();
+        let amz_date_str = fmt_current_amz_date(time::OffsetDateTime::now_utc());
+        let amz_date = AmzDate::parse(&amz_date_str).unwrap();
         let chunk_data = Bytes::from_static(b"hello");
         let decoded_content_length = chunk_data.len();
         let headers_for_signing = OrderedHeaders::from_slice_unchecked(&[
             ("host", "s3.amazonaws.com"),
             ("x-amz-content-sha256", "STREAMING-AWS4-HMAC-SHA256-PAYLOAD"),
-            ("x-amz-date", "20130524T000000Z"),
+            ("x-amz-date", amz_date_str.as_str()),
             ("x-amz-decoded-content-length", "5"),
         ]);
 
@@ -1311,13 +1348,14 @@ file content\r\n\
         let content_length = u64::try_from(streaming_body.len()).unwrap();
 
         let authorization = format!(
-            "AWS4-HMAC-SHA256 Credential={access_key}/20130524/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date;x-amz-decoded-content-length, Signature={seed_signature}"
+            "AWS4-HMAC-SHA256 Credential={access_key}/{}/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date;x-amz-decoded-content-length, Signature={seed_signature}",
+            amz_date.fmt_date()
         );
         let headers = OrderedHeaders::from_slice_unchecked(&[
             ("authorization", authorization.as_str()),
             ("host", "s3.amazonaws.com"),
             ("x-amz-content-sha256", "STREAMING-AWS4-HMAC-SHA256-PAYLOAD"),
-            ("x-amz-date", "20130524T000000Z"),
+            ("x-amz-date", amz_date_str.as_str()),
             ("x-amz-decoded-content-length", "5"),
         ]);
 
@@ -1420,5 +1458,166 @@ file content\r\n\
             .expect("valid SigV2 auth should succeed");
         assert_eq!(cred.region, None, "SigV2 carries no region");
         assert_eq!(cred.service.as_deref(), Some("s3"), "SigV2 service is always 's3'");
+    }
+
+    #[test]
+    fn sig_v4_signatures_match_reports_match_and_mismatch() {
+        assert!(sig_v4_signatures_match("abcd", "abcd"));
+        assert!(!sig_v4_signatures_match("abcd", "abce"));
+        assert!(!sig_v4_signatures_match("abcd", "abc"));
+    }
+
+    #[tokio::test]
+    async fn v4_header_auth_rejects_stale_request_time() {
+        use crate::S3ErrorCode;
+        use crate::auth::SecretKey;
+        use crate::auth::SimpleAuth;
+        use crate::config::{S3ConfigProvider, StaticConfigProvider};
+        use std::sync::Arc;
+
+        let access_key = "AKIAIOSFODNN7EXAMPLE";
+        let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+        let auth = SimpleAuth::from_single(access_key, secret_key.clone());
+        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+
+        let request_time = time::OffsetDateTime::now_utc() - time::Duration::minutes(16);
+        let amz_date_str = fmt_current_amz_date(request_time);
+        let amz_date = AmzDate::parse(&amz_date_str).unwrap();
+
+        let method = Method::GET;
+        let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+        let headers_for_signing = OrderedHeaders::from_slice_unchecked(&[
+            ("host", "s3.amazonaws.com"),
+            ("x-amz-content-sha256", "UNSIGNED-PAYLOAD"),
+            ("x-amz-date", amz_date_str.as_str()),
+        ]);
+        let canonical_request = sig_v4::create_canonical_request(
+            &method,
+            "/test.txt",
+            &[] as &[(&str, &str)],
+            &headers_for_signing,
+            sig_v4::Payload::Unsigned,
+        );
+        let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
+        let signature = sig_v4::calculate_signature(&string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
+        let authorization = format!(
+            "AWS4-HMAC-SHA256 Credential={access_key}/{}/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature={signature}",
+            amz_date.fmt_date()
+        );
+
+        let headers = OrderedHeaders::from_slice_unchecked(&[
+            ("authorization", authorization.as_str()),
+            ("host", "s3.amazonaws.com"),
+            ("x-amz-content-sha256", "UNSIGNED-PAYLOAD"),
+            ("x-amz-date", amz_date_str.as_str()),
+        ]);
+
+        let mut body = Body::empty();
+        let mut cx = SignatureContext {
+            auth: Some(&auth),
+            config: &config,
+            req_version: ::http::Version::HTTP_11,
+            req_method: &method,
+            req_uri: &uri,
+            req_body: &mut body,
+            qs: None,
+            hs: headers,
+            decoded_uri_path: "/test.txt",
+            raw_uri_path: "/test.txt",
+            vh_bucket: None,
+            content_length: Some(0),
+            mime: None,
+            decoded_content_length: None,
+            transformed_body: None,
+            multipart: None,
+            trailing_headers: None,
+        };
+
+        let err = cx
+            .v4_check_header_auth()
+            .await
+            .expect_err("stale signed header request should be rejected");
+        assert_eq!(err.code(), &S3ErrorCode::RequestTimeTooSkewed);
+    }
+
+    #[tokio::test]
+    async fn v4_post_signature_rejects_stale_request_time() {
+        use crate::S3ErrorCode;
+        use crate::auth::SecretKey;
+        use crate::auth::SimpleAuth;
+        use crate::config::{S3ConfigProvider, StaticConfigProvider};
+        use std::sync::Arc;
+
+        let access_key = "AKIAIOSFODNN7EXAMPLE";
+        let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+        let auth = SimpleAuth::from_single(access_key, secret_key.clone());
+        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+
+        let request_time = time::OffsetDateTime::now_utc() - time::Duration::minutes(16);
+        let amz_date_str = fmt_current_amz_date(request_time);
+        let amz_date = AmzDate::parse(&amz_date_str).unwrap();
+        let policy_b64 = base64_simd::STANDARD.encode_to_string("{}");
+        let signature = sig_v4::calculate_signature(&policy_b64, &secret_key, &amz_date, "us-east-1", "s3");
+        let boundary = "boundary123";
+        let body = format!(
+            concat!(
+                "\r\n--{boundary}\r\n",
+                "Content-Disposition: form-data; name=\"x-amz-signature\"\r\n\r\n",
+                "{signature}\r\n",
+                "--{boundary}\r\n",
+                "Content-Disposition: form-data; name=\"policy\"\r\n\r\n",
+                "{policy_b64}\r\n",
+                "--{boundary}\r\n",
+                "Content-Disposition: form-data; name=\"x-amz-algorithm\"\r\n\r\n",
+                "AWS4-HMAC-SHA256\r\n",
+                "--{boundary}\r\n",
+                "Content-Disposition: form-data; name=\"x-amz-credential\"\r\n\r\n",
+                "{access_key}/{date}/us-east-1/s3/aws4_request\r\n",
+                "--{boundary}\r\n",
+                "Content-Disposition: form-data; name=\"x-amz-date\"\r\n\r\n",
+                "{amz_date}\r\n",
+                "--{boundary}\r\n",
+                "Content-Disposition: form-data; name=\"file\"; filename=\"a.txt\"\r\n",
+                "Content-Type: text/plain\r\n\r\n",
+                "hello\r\n",
+                "--{boundary}--\r\n"
+            ),
+            access_key = access_key,
+            amz_date = amz_date_str,
+            boundary = boundary,
+            date = amz_date.fmt_date(),
+            policy_b64 = policy_b64,
+            signature = signature,
+        );
+
+        let mime: Mime = format!("multipart/form-data; boundary={boundary}").parse().unwrap();
+        let method = Method::POST;
+        let uri = Uri::from_static("http://localhost/test-bucket");
+        let mut body = Body::from(body);
+        let mut cx = SignatureContext {
+            auth: Some(&auth),
+            config: &config,
+            req_version: ::http::Version::HTTP_11,
+            req_method: &method,
+            req_uri: &uri,
+            req_body: &mut body,
+            qs: None,
+            hs: OrderedHeaders::from_slice_unchecked(&[]),
+            decoded_uri_path: "/test-bucket",
+            raw_uri_path: "/test-bucket",
+            vh_bucket: None,
+            content_length: None,
+            mime: Some(mime),
+            decoded_content_length: None,
+            transformed_body: None,
+            multipart: None,
+            trailing_headers: None,
+        };
+
+        let err = cx
+            .check_post_signature()
+            .await
+            .expect_err("stale signed POST policy should be rejected");
+        assert_eq!(err.code(), &S3ErrorCode::RequestTimeTooSkewed);
     }
 }
