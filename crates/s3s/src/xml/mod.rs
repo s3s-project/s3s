@@ -51,7 +51,10 @@ mod manually {
                     }
                     Ok(())
                 }
-                _ => Err(DeError::UnexpectedTagName),
+                _ => {
+                    d.skip_element_content()?;
+                    Ok(())
+                }
             })?;
             Ok(Self { location_constraint })
         }
@@ -115,6 +118,7 @@ mod manually {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dto::BucketVersioningStatus;
     use crate::dto::ETag;
     use std::io::Cursor;
 
@@ -500,5 +504,112 @@ mod tests {
             .named_element_any(&["BucketLifecycleConfiguration", "LifecycleConfiguration"], Deserializer::content)
             .unwrap();
         assert_eq!(result, "lc");
+    }
+
+    // ---------------------------------------------------------------------------
+    // Unknown XML element skipping — forward-compatibility tests
+    // ---------------------------------------------------------------------------
+
+    /// Deserialize `VersioningConfiguration` with an extra unknown element.
+    /// The unknown element should be silently ignored (forward compatibility).
+    #[test]
+    fn deser_struct_ignores_unknown_element() {
+        use crate::dto::VersioningConfiguration;
+
+        let xml = br#"<VersioningConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+            <Status>Enabled</Status>
+            <NewFeatureFromFuture>some-value</NewFeatureFromFuture>
+        </VersioningConfiguration>"#;
+
+        let mut d = Deserializer::new(xml);
+        let result = VersioningConfiguration::deserialize(&mut d).unwrap();
+        assert_eq!(result.status.as_ref().map(BucketVersioningStatus::as_str), Some("Enabled"));
+    }
+
+    /// Unknown element appearing *before* known fields must also be ignored.
+    #[test]
+    fn deser_struct_ignores_unknown_element_before_known() {
+        use crate::dto::VersioningConfiguration;
+
+        let xml = br"<VersioningConfiguration>
+            <FutureExtension>ignored</FutureExtension>
+            <Status>Suspended</Status>
+        </VersioningConfiguration>";
+
+        let mut d = Deserializer::new(xml);
+        let result = VersioningConfiguration::deserialize(&mut d).unwrap();
+        assert_eq!(result.status.as_ref().map(BucketVersioningStatus::as_str), Some("Suspended"));
+    }
+
+    /// Unknown element with nested children must be skipped entirely.
+    #[test]
+    fn deser_struct_ignores_deeply_nested_unknown_element() {
+        use crate::dto::VersioningConfiguration;
+
+        let xml = br"<VersioningConfiguration>
+            <Status>Enabled</Status>
+            <NewComplex>
+                <Child1>a</Child1>
+                <Child2><GrandChild>b</GrandChild></Child2>
+            </NewComplex>
+        </VersioningConfiguration>";
+
+        let mut d = Deserializer::new(xml);
+        let result = VersioningConfiguration::deserialize(&mut d).unwrap();
+        assert_eq!(result.status.as_ref().map(BucketVersioningStatus::as_str), Some("Enabled"));
+    }
+
+    /// An empty unknown element (`<Tag/>`) must be handled without error.
+    #[test]
+    fn deser_struct_ignores_empty_unknown_element() {
+        use crate::dto::VersioningConfiguration;
+
+        let xml = br"<VersioningConfiguration>
+            <Status>Enabled</Status>
+            <EmptyFutureTag/>
+        </VersioningConfiguration>";
+
+        let mut d = Deserializer::new(xml);
+        let result = VersioningConfiguration::deserialize(&mut d).unwrap();
+        assert_eq!(result.status.as_ref().map(BucketVersioningStatus::as_str), Some("Enabled"));
+    }
+
+    /// Unknown elements in a list wrapper must be skipped.
+    #[test]
+    fn deser_list_ignores_unknown_element() {
+        use crate::dto::Tagging;
+
+        // TagSet contains Tag members; an extra unknown element should be ignored.
+        let xml = br"<Tagging>
+            <TagSet>
+                <Tag><Key>k1</Key><Value>v1</Value></Tag>
+                <UnknownTag><Data>x</Data></UnknownTag>
+                <Tag><Key>k2</Key><Value>v2</Value></Tag>
+            </TagSet>
+        </Tagging>";
+
+        let mut d = Deserializer::new(xml);
+        let result = Tagging::deserialize(&mut d).unwrap();
+        let tags = &result.tag_set;
+        assert_eq!(tags.len(), 2);
+        assert_eq!(tags[0].key.as_deref(), Some("k1"));
+        assert_eq!(tags[1].key.as_deref(), Some("k2"));
+    }
+
+    /// Multiple unknown elements scattered throughout a struct body.
+    #[test]
+    fn deser_struct_ignores_multiple_unknown_elements() {
+        use crate::dto::VersioningConfiguration;
+
+        let xml = br"<VersioningConfiguration>
+            <Alpha>1</Alpha>
+            <Status>Enabled</Status>
+            <Beta><X>2</X></Beta>
+            <Gamma/>
+        </VersioningConfiguration>";
+
+        let mut d = Deserializer::new(xml);
+        let result = VersioningConfiguration::deserialize(&mut d).unwrap();
+        assert_eq!(result.status.as_ref().map(BucketVersioningStatus::as_str), Some("Enabled"));
     }
 }

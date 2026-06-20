@@ -523,7 +523,7 @@ fn codegen_xml_serde_content_struct(_ops: &Operations, rust_types: &RustTypes, t
                             g!("    Ok(())");
                             g!("}}");
                         }
-                        g!("_ => Err(DeError::UnexpectedTagName),");
+                        g!("_ => {{ d.skip_element_content()?; Ok(()) }},");
                         g!("}})?;");
 
                         g!("{field_name} = Some({} {{", field.type_);
@@ -543,7 +543,7 @@ fn codegen_xml_serde_content_struct(_ops: &Operations, rust_types: &RustTypes, t
                 g!("Ok(())");
                 g!("}}");
             }
-            g!("_ => Err(DeError::UnexpectedTagName)");
+            g!("_ => {{ d.skip_element_content()?; Ok(()) }}");
             g!("}})?;");
         }
 
