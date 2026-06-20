@@ -409,6 +409,11 @@ impl<'xml> Deserializer<'xml> {
     /// that belong to the current element, but does **not** consume the
     /// matching end tag — leaving it for the caller's [`expect_end`] to handle.
     ///
+    /// The depth counter tracks nested child elements. When an `End` event is
+    /// seen at `depth == 0` it belongs to the current (unrecognised) element
+    /// and must not be consumed here; the surrounding [`for_each_element`] loop
+    /// is responsible for consuming it via `expect_end`.
+    ///
     /// # Errors
     /// Returns an error if an unexpected EOF is encountered before the end tag.
     pub fn skip_element_content(&mut self) -> DeResult {

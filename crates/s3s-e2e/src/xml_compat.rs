@@ -103,6 +103,8 @@ impl XmlCompatFixture {
             </TagSet>\
         </Tagging>";
 
+        // The SDK builder requires a non-empty tagging value to pass validation,
+        // but the actual HTTP body is replaced by mutate_request below.
         self.s3
             .put_bucket_tagging()
             .bucket(&self.bucket)
