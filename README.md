@@ -2,6 +2,7 @@
 
 [![Apache 2.0 licensed][license-badge]][license-url]
 [![Unsafe Forbidden][unsafe-forbidden-badge]][unsafe-forbidden-url]
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fs3s-project%2Fs3s.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Fs3s-project%2Fs3s?ref=badge_shield)
 
 [license-badge]: https://img.shields.io/badge/license-Apache--2.0-blue.svg
 [license-url]: ./LICENSE
@@ -62,3 +63,7 @@ We have a reward funds pool for contributors: <https://github.com/Nugine/s3s/iss
 If my open-source work has been helpful to you, please [sponsor me](https://github.com/Nugine#sponsor).
 
 Every little bit helps. Thank you!
+
+
+## License
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fs3s-project%2Fs3s.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Fs3s-project%2Fs3s?ref=badge_large)
