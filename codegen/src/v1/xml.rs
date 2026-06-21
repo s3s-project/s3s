@@ -27,7 +27,7 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
         "", //
     ]);
 
-    let (root_type_names, field_type_names) = collect_xml_types(ops, rust_types);
+    let (root_type_names, field_type_names, input_root_types) = collect_xml_types(ops, rust_types);
 
     for (&ty_name, &xml_name) in &root_type_names {
         match xml_name {
@@ -64,7 +64,7 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
     g!();
 
     codegen_xml_serde(ops, rust_types, &root_type_names);
-    codegen_xml_serde_content(ops, rust_types, &field_type_names);
+    codegen_xml_serde_content(ops, rust_types, &field_type_names, &input_root_types);
 }
 
 pub fn is_xml_payload(field: &rust::StructField) -> bool {
@@ -79,9 +79,10 @@ pub fn is_xml_output(ty: &rust::Struct) -> bool {
 fn collect_xml_types<'a>(
     ops: &'a Operations,
     rust_types: &'a RustTypes,
-) -> (BTreeMap<&'a str, Option<&'a str>>, BTreeSet<&'a str>) {
+) -> (BTreeMap<&'a str, Option<&'a str>>, BTreeSet<&'a str>, BTreeSet<&'a str>) {
     let mut root_type_names: BTreeMap<&str, Option<&str>> = default();
     let mut field_type_names: BTreeSet<&str> = default();
+    let mut input_root_types: BTreeSet<&str> = default();
 
     let mut q: VecDeque<&str> = default();
 
@@ -108,6 +109,16 @@ fn collect_xml_types<'a>(
                 }
             }
             assert!(payload_count <= 1);
+        }
+    }
+
+    // Collect input-side root types from operation inputs.
+    for op in ops.values() {
+        let rust::Type::Struct(ty) = &rust_types[op.input.as_str()] else { panic!() };
+        for field in &ty.fields {
+            if is_xml_payload(field) {
+                input_root_types.insert(&field.type_);
+            }
         }
     }
 
@@ -168,7 +179,7 @@ fn collect_xml_types<'a>(
         }
     }
 
-    (root_type_names, field_type_names)
+    (root_type_names, field_type_names, input_root_types)
 }
 
 const SPECIAL_TYPES: &[&str] = &["AssumeRoleOutput"];
@@ -269,7 +280,12 @@ fn codegen_xml_serde(ops: &Operations, rust_types: &RustTypes, root_type_names: 
     }
 }
 
-fn codegen_xml_serde_content(ops: &Operations, rust_types: &RustTypes, field_type_names: &BTreeSet<&str>) {
+fn codegen_xml_serde_content(
+    ops: &Operations,
+    rust_types: &RustTypes,
+    field_type_names: &BTreeSet<&str>,
+    input_root_types: &BTreeSet<&str>,
+) {
     for rust_type in field_type_names.iter().map(|&name| &rust_types[name]) {
         match rust_type {
             rust::Type::Alias(_) => {}
@@ -335,13 +351,18 @@ fn codegen_xml_serde_content(ops: &Operations, rust_types: &RustTypes, field_typ
                     g!("}}");
                 }
             }
-            rust::Type::Struct(ty) => codegen_xml_serde_content_struct(ops, rust_types, ty),
+            rust::Type::Struct(ty) => codegen_xml_serde_content_struct(ops, rust_types, ty, input_root_types),
         }
     }
 }
 
 #[allow(clippy::too_many_lines)]
-fn codegen_xml_serde_content_struct(_ops: &Operations, rust_types: &RustTypes, ty: &rust::Struct) {
+fn codegen_xml_serde_content_struct(
+    _ops: &Operations,
+    rust_types: &RustTypes,
+    ty: &rust::Struct,
+    input_root_types: &BTreeSet<&str>,
+) {
     if can_impl_serialize_content(rust_types, &ty.name) {
         g!("impl SerializeContent for {} {{", ty.name);
         g!(
@@ -523,7 +544,11 @@ fn codegen_xml_serde_content_struct(_ops: &Operations, rust_types: &RustTypes, t
                             g!("    Ok(())");
                             g!("}}");
                         }
-                        g!("_ => {{ d.skip_element_content()?; Ok(()) }},");
+                        if input_root_types.contains(ty.name.as_str()) {
+                            g!("_ => {{ d.skip_element_content()?; Ok(()) }},");
+                        } else {
+                            g!("_ => Err(DeError::UnexpectedTagName),");
+                        }
                         g!("}})?;");
 
                         g!("{field_name} = Some({} {{", field.type_);
@@ -543,7 +568,11 @@ fn codegen_xml_serde_content_struct(_ops: &Operations, rust_types: &RustTypes, t
                 g!("Ok(())");
                 g!("}}");
             }
-            g!("_ => {{ d.skip_element_content()?; Ok(()) }}");
+            if input_root_types.contains(ty.name.as_str()) {
+                g!("_ => {{ d.skip_element_content()?; Ok(()) }}");
+            } else {
+                g!("_ => Err(DeError::UnexpectedTagName)");
+            }
             g!("}})?;");
         }
 

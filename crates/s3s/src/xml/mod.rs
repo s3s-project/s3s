@@ -51,10 +51,7 @@ mod manually {
                     }
                     Ok(())
                 }
-                _ => {
-                    d.skip_element_content()?;
-                    Ok(())
-                }
+                _ => Err(DeError::UnexpectedTagName),
             })?;
             Ok(Self { location_constraint })
         }
@@ -507,13 +504,12 @@ mod tests {
     }
 
     // ---------------------------------------------------------------------------
-    // Unknown XML element skipping — forward-compatibility tests
+    // Unknown XML element — top-level request type forward-compatibility tests
     // ---------------------------------------------------------------------------
 
-    /// Deserialize `VersioningConfiguration` with an extra unknown element.
-    /// The unknown element should be silently ignored (forward compatibility).
+    /// Top-level struct `VersioningConfiguration` ignores unknown elements.
     #[test]
-    fn deser_struct_ignores_unknown_element() {
+    fn deser_top_level_ignores_unknown_element() {
         use crate::dto::VersioningConfiguration;
 
         let xml = br#"<VersioningConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
@@ -526,9 +522,9 @@ mod tests {
         assert_eq!(result.status.as_ref().map(BucketVersioningStatus::as_str), Some("Enabled"));
     }
 
-    /// Unknown element appearing *before* known fields must also be ignored.
+    /// Top-level struct ignores unknown element before known fields.
     #[test]
-    fn deser_struct_ignores_unknown_element_before_known() {
+    fn deser_top_level_ignores_unknown_element_before_known() {
         use crate::dto::VersioningConfiguration;
 
         let xml = br"<VersioningConfiguration>
@@ -541,9 +537,9 @@ mod tests {
         assert_eq!(result.status.as_ref().map(BucketVersioningStatus::as_str), Some("Suspended"));
     }
 
-    /// Unknown element with nested children must be skipped entirely.
+    /// Top-level struct ignores deeply nested unknown elements.
     #[test]
-    fn deser_struct_ignores_deeply_nested_unknown_element() {
+    fn deser_top_level_ignores_nested_unknown_element() {
         use crate::dto::VersioningConfiguration;
 
         let xml = br"<VersioningConfiguration>
@@ -559,9 +555,9 @@ mod tests {
         assert_eq!(result.status.as_ref().map(BucketVersioningStatus::as_str), Some("Enabled"));
     }
 
-    /// An empty unknown element (`<Tag/>`) must be handled without error.
+    /// Top-level struct ignores empty self-closing unknown element.
     #[test]
-    fn deser_struct_ignores_empty_unknown_element() {
+    fn deser_top_level_ignores_empty_unknown_element() {
         use crate::dto::VersioningConfiguration;
 
         let xml = br"<VersioningConfiguration>
@@ -574,7 +570,7 @@ mod tests {
         assert_eq!(result.status.as_ref().map(BucketVersioningStatus::as_str), Some("Enabled"));
     }
 
-    /// Unknown elements in a list wrapper must be skipped.
+    /// Unknown elements in a list wrapper are still skipped (`list_content` leniency).
     #[test]
     fn deser_list_ignores_unknown_element() {
         use crate::dto::Tagging;
@@ -596,9 +592,9 @@ mod tests {
         assert_eq!(tags[1].key.as_deref(), Some("k2"));
     }
 
-    /// Multiple unknown elements scattered throughout a struct body.
+    /// Top-level struct ignores multiple scattered unknown elements.
     #[test]
-    fn deser_struct_ignores_multiple_unknown_elements() {
+    fn deser_top_level_ignores_multiple_unknown_elements() {
         use crate::dto::VersioningConfiguration;
 
         let xml = br"<VersioningConfiguration>
@@ -613,10 +609,10 @@ mod tests {
         assert_eq!(result.status.as_ref().map(BucketVersioningStatus::as_str), Some("Enabled"));
     }
 
-    /// Known-field name appearing inside an unknown parent must not confuse
-    /// the parser — the inner element is skipped as part of the unknown block.
+    /// Known-field name inside an unknown parent: the top-level skip swallows
+    /// the entire unknown block including nested known-named elements.
     #[test]
-    fn deser_struct_ignores_known_name_nested_in_unknown_parent() {
+    fn deser_top_level_ignores_known_name_nested_in_unknown_parent() {
         use crate::dto::VersioningConfiguration;
 
         let xml = br"<VersioningConfiguration>
