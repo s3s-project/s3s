@@ -391,12 +391,53 @@ impl<'xml> Deserializer<'xml> {
         let mut list = List::new();
         self.for_each_element(|d, x| {
             if x != name.as_bytes() {
-                return Err(unexpected_tag_name());
+                // skip unknown elements for forward compatibility
+                d.skip_element_content()?;
+                return Ok(());
             }
             list.push(d.content()?);
             Ok(())
         })?;
         Ok(list)
+    }
+
+    /// Skips all remaining content inside the current element.
+    ///
+    /// This method should be called from within a [`for_each_element`] or
+    /// [`for_each_element_with_start`] callback when an unrecognised element
+    /// tag is encountered. It consumes all tokens (including nested elements)
+    /// that belong to the current element, but does **not** consume the
+    /// matching end tag — leaving it for the caller's [`expect_end`] to handle.
+    ///
+    /// The depth counter tracks nested child elements. When an `End` event is
+    /// seen at `depth == 0` it belongs to the current (unrecognised) element
+    /// and must not be consumed here; the surrounding [`for_each_element`] loop
+    /// is responsible for consuming it via `expect_end`.
+    ///
+    /// # Errors
+    /// Returns an error if an unexpected EOF is encountered before the end tag.
+    pub(crate) fn skip_element_content(&mut self) -> DeResult {
+        let mut depth: u32 = 0;
+        loop {
+            match self.peek_event()? {
+                DeEvent::Start(_) => {
+                    self.consume_peeked();
+                    depth += 1;
+                }
+                DeEvent::End(_) => {
+                    if depth == 0 {
+                        // Do not consume: leave for the surrounding expect_end call.
+                        return Ok(());
+                    }
+                    self.consume_peeked();
+                    depth -= 1;
+                }
+                DeEvent::Text(_) => {
+                    self.consume_peeked();
+                }
+                DeEvent::Eof => return Err(unexpected_eof()),
+            }
+        }
     }
 
     pub fn timestamp(&mut self, fmt: TimestampFormat) -> DeResult<Timestamp> {

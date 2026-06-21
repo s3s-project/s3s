@@ -115,6 +115,7 @@ mod manually {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dto::BucketVersioningStatus;
     use crate::dto::ETag;
     use std::io::Cursor;
 
@@ -500,5 +501,152 @@ mod tests {
             .named_element_any(&["BucketLifecycleConfiguration", "LifecycleConfiguration"], Deserializer::content)
             .unwrap();
         assert_eq!(result, "lc");
+    }
+
+    // ---------------------------------------------------------------------------
+    // Unknown XML element — top-level request type forward-compatibility tests
+    // ---------------------------------------------------------------------------
+
+    /// Top-level struct `VersioningConfiguration` ignores unknown elements.
+    #[test]
+    fn deser_top_level_ignores_unknown_element() {
+        use crate::dto::VersioningConfiguration;
+
+        let xml = br#"<VersioningConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+            <Status>Enabled</Status>
+            <NewFeatureFromFuture>some-value</NewFeatureFromFuture>
+        </VersioningConfiguration>"#;
+
+        let mut d = Deserializer::new(xml);
+        let result = VersioningConfiguration::deserialize(&mut d).unwrap();
+        assert_eq!(result.status.as_ref().map(BucketVersioningStatus::as_str), Some("Enabled"));
+    }
+
+    /// Top-level struct ignores unknown element before known fields.
+    #[test]
+    fn deser_top_level_ignores_unknown_element_before_known() {
+        use crate::dto::VersioningConfiguration;
+
+        let xml = br"<VersioningConfiguration>
+            <FutureExtension>ignored</FutureExtension>
+            <Status>Suspended</Status>
+        </VersioningConfiguration>";
+
+        let mut d = Deserializer::new(xml);
+        let result = VersioningConfiguration::deserialize(&mut d).unwrap();
+        assert_eq!(result.status.as_ref().map(BucketVersioningStatus::as_str), Some("Suspended"));
+    }
+
+    /// Top-level struct ignores deeply nested unknown elements.
+    #[test]
+    fn deser_top_level_ignores_nested_unknown_element() {
+        use crate::dto::VersioningConfiguration;
+
+        let xml = br"<VersioningConfiguration>
+            <Status>Enabled</Status>
+            <NewComplex>
+                <Child1>a</Child1>
+                <Child2><GrandChild>b</GrandChild></Child2>
+            </NewComplex>
+        </VersioningConfiguration>";
+
+        let mut d = Deserializer::new(xml);
+        let result = VersioningConfiguration::deserialize(&mut d).unwrap();
+        assert_eq!(result.status.as_ref().map(BucketVersioningStatus::as_str), Some("Enabled"));
+    }
+
+    /// Top-level struct ignores empty self-closing unknown element.
+    #[test]
+    fn deser_top_level_ignores_empty_unknown_element() {
+        use crate::dto::VersioningConfiguration;
+
+        let xml = br"<VersioningConfiguration>
+            <Status>Enabled</Status>
+            <EmptyFutureTag/>
+        </VersioningConfiguration>";
+
+        let mut d = Deserializer::new(xml);
+        let result = VersioningConfiguration::deserialize(&mut d).unwrap();
+        assert_eq!(result.status.as_ref().map(BucketVersioningStatus::as_str), Some("Enabled"));
+    }
+
+    /// Unknown elements in a list wrapper are still skipped (`list_content` leniency).
+    #[test]
+    fn deser_list_ignores_unknown_element() {
+        use crate::dto::Tagging;
+
+        // TagSet contains Tag members; an extra unknown element should be ignored.
+        let xml = br"<Tagging>
+            <TagSet>
+                <Tag><Key>k1</Key><Value>v1</Value></Tag>
+                <UnknownTag><Data>x</Data></UnknownTag>
+                <Tag><Key>k2</Key><Value>v2</Value></Tag>
+            </TagSet>
+        </Tagging>";
+
+        let mut d = Deserializer::new(xml);
+        let result = Tagging::deserialize(&mut d).unwrap();
+        let tags = &result.tag_set;
+        assert_eq!(tags.len(), 2);
+        assert_eq!(tags[0].key.as_deref(), Some("k1"));
+        assert_eq!(tags[1].key.as_deref(), Some("k2"));
+    }
+
+    /// Top-level struct ignores multiple scattered unknown elements.
+    #[test]
+    fn deser_top_level_ignores_multiple_unknown_elements() {
+        use crate::dto::VersioningConfiguration;
+
+        let xml = br"<VersioningConfiguration>
+            <Alpha>1</Alpha>
+            <Status>Enabled</Status>
+            <Beta><X>2</X></Beta>
+            <Gamma/>
+        </VersioningConfiguration>";
+
+        let mut d = Deserializer::new(xml);
+        let result = VersioningConfiguration::deserialize(&mut d).unwrap();
+        assert_eq!(result.status.as_ref().map(BucketVersioningStatus::as_str), Some("Enabled"));
+    }
+
+    /// Known-field name inside an unknown parent: the top-level skip swallows
+    /// the entire unknown block including nested known-named elements.
+    #[test]
+    fn deser_top_level_ignores_known_name_nested_in_unknown_parent() {
+        use crate::dto::VersioningConfiguration;
+
+        let xml = br"<VersioningConfiguration>
+            <Status>Enabled</Status>
+            <Unknown>
+                <Status>Skipped</Status>
+                <MFADelete>Skipped</MFADelete>
+            </Unknown>
+        </VersioningConfiguration>";
+
+        let mut d = Deserializer::new(xml);
+        let result = VersioningConfiguration::deserialize(&mut d).unwrap();
+        assert_eq!(result.status.as_ref().map(BucketVersioningStatus::as_str), Some("Enabled"));
+        // The inner <Status> and <MFADelete> must be swallowed, not parsed.
+        assert!(result.mfa_delete.is_none(), "MFADelete inside <Unknown> should be skipped: {result:#?}");
+    }
+
+    /// Nested structs (`Tag`) must reject unknown elements — only top-level
+    /// request types get the lenient treatment.
+    #[test]
+    fn deser_nested_rejects_unknown_element() {
+        use crate::dto::Tagging;
+
+        let xml = br"<Tagging>
+            <TagSet>
+                <Tag><Key>k1</Key><Value>v1</Value><UnknownField>x</UnknownField></Tag>
+            </TagSet>
+        </Tagging>";
+
+        let mut d = Deserializer::new(xml);
+        let err = Tagging::deserialize(&mut d).unwrap_err();
+        assert!(
+            matches!(err, DeError::UnexpectedTagName),
+            "nested Tag should reject unknown element, got {err:?}"
+        );
     }
 }

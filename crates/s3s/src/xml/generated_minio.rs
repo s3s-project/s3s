@@ -1528,7 +1528,10 @@ impl<'xml> DeserializeContent<'xml> for AccelerateConfiguration {
                 status = Some(d.content()?);
                 Ok(())
             }
-            _ => Err(DeError::UnexpectedTagName),
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
         })?;
         Ok(Self { status })
     }
@@ -1564,7 +1567,10 @@ impl<'xml> DeserializeContent<'xml> for AccessControlPolicy {
                 owner = Some(d.content()?);
                 Ok(())
             }
-            _ => Err(DeError::UnexpectedTagName),
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
         })?;
         Ok(Self { grants, owner })
     }
@@ -1666,7 +1672,10 @@ impl<'xml> DeserializeContent<'xml> for AnalyticsConfiguration {
                 storage_class_analysis = Some(d.content()?);
                 Ok(())
             }
-            _ => Err(DeError::UnexpectedTagName),
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
         })?;
         Ok(Self {
             filter,
@@ -2020,7 +2029,10 @@ impl<'xml> DeserializeContent<'xml> for BucketLifecycleConfiguration {
                 rules.get_or_insert_with(List::new).push(ans);
                 Ok(())
             }
-            _ => Err(DeError::UnexpectedTagName),
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
         })?;
         Ok(Self {
             expiry_updated_at,
@@ -2093,7 +2105,10 @@ impl<'xml> DeserializeContent<'xml> for BucketLoggingStatus {
                 logging_enabled = Some(d.content()?);
                 Ok(())
             }
-            _ => Err(DeError::UnexpectedTagName),
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
         })?;
         Ok(Self { logging_enabled })
     }
@@ -2159,7 +2174,10 @@ impl<'xml> DeserializeContent<'xml> for CORSConfiguration {
                 cors_rules.get_or_insert_with(List::new).push(ans);
                 Ok(())
             }
-            _ => Err(DeError::UnexpectedTagName),
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
         })?;
         Ok(Self {
             cors_rules: cors_rules.ok_or(DeError::MissingField)?,
@@ -2618,7 +2636,10 @@ impl<'xml> DeserializeContent<'xml> for CompletedMultipartUpload {
                 parts.get_or_insert_with(List::new).push(ans);
                 Ok(())
             }
-            _ => Err(DeError::UnexpectedTagName),
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
         })?;
         Ok(Self { parts })
     }
@@ -3028,7 +3049,10 @@ impl<'xml> DeserializeContent<'xml> for CreateBucketConfiguration {
                 location_constraint = Some(d.content()?);
                 Ok(())
             }
-            _ => Err(DeError::UnexpectedTagName),
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
         })?;
         Ok(Self {
             bucket,
@@ -3230,7 +3254,10 @@ impl<'xml> DeserializeContent<'xml> for Delete {
                 quiet = Some(d.content()?);
                 Ok(())
             }
-            _ => Err(DeError::UnexpectedTagName),
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
         })?;
         Ok(Self {
             objects: objects.ok_or(DeError::MissingField)?,
@@ -4811,7 +4838,10 @@ impl<'xml> DeserializeContent<'xml> for IntelligentTieringConfiguration {
                 tierings.get_or_insert_with(List::new).push(ans);
                 Ok(())
             }
-            _ => Err(DeError::UnexpectedTagName),
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
         })?;
         Ok(Self {
             filter,
@@ -4958,7 +4988,10 @@ impl<'xml> DeserializeContent<'xml> for InventoryConfiguration {
                 schedule = Some(d.content()?);
                 Ok(())
             }
-            _ => Err(DeError::UnexpectedTagName),
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
         })?;
         Ok(Self {
             destination: destination.ok_or(DeError::MissingField)?,
@@ -6423,7 +6456,10 @@ impl<'xml> DeserializeContent<'xml> for MetadataTableConfiguration {
                 s3_tables_destination = Some(d.content()?);
                 Ok(())
             }
-            _ => Err(DeError::UnexpectedTagName),
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
         })?;
         Ok(Self {
             s3_tables_destination: s3_tables_destination.ok_or(DeError::MissingField)?,
@@ -6570,7 +6606,10 @@ impl<'xml> DeserializeContent<'xml> for MetricsConfiguration {
                 id = Some(d.content()?);
                 Ok(())
             }
-            _ => Err(DeError::UnexpectedTagName),
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
         })?;
         Ok(Self {
             filter,
@@ -6861,7 +6900,10 @@ impl<'xml> DeserializeContent<'xml> for NotificationConfiguration {
                 topic_configurations.get_or_insert_with(List::new).push(ans);
                 Ok(())
             }
-            _ => Err(DeError::UnexpectedTagName),
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
         })?;
         Ok(Self {
             event_bridge_configuration,
@@ -7140,7 +7182,10 @@ impl<'xml> DeserializeContent<'xml> for ObjectLockConfiguration {
                 rule = Some(d.content()?);
                 Ok(())
             }
-            _ => Err(DeError::UnexpectedTagName),
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
         })?;
         Ok(Self {
             object_lock_enabled,
@@ -7181,7 +7226,10 @@ impl<'xml> DeserializeContent<'xml> for ObjectLockLegalHold {
                 status = Some(d.content()?);
                 Ok(())
             }
-            _ => Err(DeError::UnexpectedTagName),
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
         })?;
         Ok(Self { status })
     }
@@ -7231,7 +7279,10 @@ impl<'xml> DeserializeContent<'xml> for ObjectLockRetention {
                 retain_until_date = Some(d.timestamp(TimestampFormat::DateTime)?);
                 Ok(())
             }
-            _ => Err(DeError::UnexpectedTagName),
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
         })?;
         Ok(Self { mode, retain_until_date })
     }
@@ -7699,7 +7750,10 @@ impl<'xml> DeserializeContent<'xml> for OwnershipControls {
                 rules.get_or_insert_with(List::new).push(ans);
                 Ok(())
             }
-            _ => Err(DeError::UnexpectedTagName),
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
         })?;
         Ok(Self {
             rules: rules.ok_or(DeError::MissingField)?,
@@ -8078,7 +8132,10 @@ impl<'xml> DeserializeContent<'xml> for PublicAccessBlockConfiguration {
                 restrict_public_buckets = Some(d.content()?);
                 Ok(())
             }
-            _ => Err(DeError::UnexpectedTagName),
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
         })?;
         Ok(Self {
             block_public_acls,
@@ -8341,7 +8398,10 @@ impl<'xml> DeserializeContent<'xml> for ReplicationConfiguration {
                 rules.get_or_insert_with(List::new).push(ans);
                 Ok(())
             }
-            _ => Err(DeError::UnexpectedTagName),
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
         })?;
         Ok(Self {
             role: role.ok_or(DeError::MissingField)?,
@@ -8672,7 +8732,10 @@ impl<'xml> DeserializeContent<'xml> for RequestPaymentConfiguration {
                 payer = Some(d.content()?);
                 Ok(())
             }
-            _ => Err(DeError::UnexpectedTagName),
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
         })?;
         Ok(Self {
             payer: payer.ok_or(DeError::MissingField)?,
@@ -8790,7 +8853,10 @@ impl<'xml> DeserializeContent<'xml> for RestoreRequest {
                 type_ = Some(d.content()?);
                 Ok(())
             }
-            _ => Err(DeError::UnexpectedTagName),
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
         })?;
         Ok(Self {
             days,
@@ -9251,7 +9317,10 @@ impl<'xml> DeserializeContent<'xml> for SelectObjectContentRequest {
                 scan_range = Some(d.content()?);
                 Ok(())
             }
-            _ => Err(DeError::UnexpectedTagName),
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
         })?;
         Ok(Self {
             expression: expression.ok_or(DeError::MissingField)?,
@@ -9389,7 +9458,10 @@ impl<'xml> DeserializeContent<'xml> for ServerSideEncryptionConfiguration {
                 rules.get_or_insert_with(List::new).push(ans);
                 Ok(())
             }
-            _ => Err(DeError::UnexpectedTagName),
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
         })?;
         Ok(Self {
             rules: rules.ok_or(DeError::MissingField)?,
@@ -9783,7 +9855,10 @@ impl<'xml> DeserializeContent<'xml> for Tagging {
                 tag_set = Some(d.list_content("Tag")?);
                 Ok(())
             }
-            _ => Err(DeError::UnexpectedTagName),
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
         })?;
         Ok(Self {
             tag_set: tag_set.ok_or(DeError::MissingField)?,
@@ -10167,7 +10242,10 @@ impl<'xml> DeserializeContent<'xml> for VersioningConfiguration {
                 status = Some(d.content()?);
                 Ok(())
             }
-            _ => Err(DeError::UnexpectedTagName),
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
         })?;
         Ok(Self {
             exclude_folders,
@@ -10230,7 +10308,10 @@ impl<'xml> DeserializeContent<'xml> for WebsiteConfiguration {
                 routing_rules = Some(d.list_content("RoutingRule")?);
                 Ok(())
             }
-            _ => Err(DeError::UnexpectedTagName),
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
         })?;
         Ok(Self {
             error_document,
