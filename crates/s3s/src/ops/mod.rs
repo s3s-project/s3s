@@ -52,7 +52,7 @@ use hyper::Method;
 use hyper::StatusCode;
 use hyper::Uri;
 use mime::Mime;
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 
 #[async_trait::async_trait]
 pub trait Operation: Send + Sync + 'static {
@@ -109,6 +109,12 @@ pub(crate) fn serialize_error(mut e: S3Error, no_decl: bool) -> S3Result<Respons
     Ok(res)
 }
 
+const VIRTUAL_HOSTED_STYLE_HINT: &str = "\
+The request appears to use virtual-hosted-style addressing \
+(e.g., Host: bucket.domain) which may not be supported by this endpoint. \
+If so, try path-style requests instead \
+(e.g., /<bucket> rather than / with host bucket.domain).";
+
 fn unknown_operation() -> S3Error {
     S3Error::with_message(S3ErrorCode::NotImplemented, "Unknown operation")
 }
@@ -141,6 +147,29 @@ fn extract_host(req: &Request) -> S3Result<Option<String>> {
 
 fn is_socket_addr_or_ip_addr(host: &str) -> bool {
     host.parse::<SocketAddr>().is_ok() || host.parse::<IpAddr>().is_ok()
+}
+
+fn looks_like_virtual_hosted_style(host: &str) -> bool {
+    // Strip trailing port (e.g. ":9000").
+    let host_part = match host.rsplit_once(':') {
+        Some((h, port)) if port.bytes().all(|b| b.is_ascii_digit()) => h,
+        _ => host,
+    };
+    // Strip brackets from IPv6 literals (e.g. "[::1]" → "::1").
+    // This also covers IPv4-mapped IPv6 like "[::ffff:127.0.0.1]"
+    // whose embedded dots could otherwise look like labels.
+    let host_no_bracket = host_part
+        .strip_prefix('[')
+        .and_then(|s| s.strip_suffix(']'))
+        .unwrap_or(host_part);
+    if host_no_bracket.parse::<std::net::IpAddr>().is_ok() {
+        return false;
+    }
+    // Virtual-hosted-style addresses bucket as a subdomain, so there are
+    // at least three dot-separated labels: bucket.base.domain.
+    // Two-label hosts (base.domain) and bare hostnames are excluded.
+    // Empty segments are filtered to handle trailing-dot FQDN forms.
+    host_no_bracket.split('.').filter(|s| !s.is_empty()).count() >= 3
 }
 
 fn convert_parse_s3_path_error(err: &ParseS3PathError) -> S3Error {
@@ -286,6 +315,7 @@ enum Prepare {
 async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> {
     let s3_path;
     let mut content_length;
+    let host_header: Option<String>;
     {
         // HTTP/2 and HTTP/3 replace the Host header with the :authority pseudo-header.
         // hyper exposes :authority via uri.authority() but does not insert a Host entry
@@ -306,7 +336,7 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
             .map_err(|_| S3ErrorCode::InvalidURI)?
             .into_owned();
 
-        let host_header = extract_host(req)?;
+        host_header = extract_host(req)?;
         let vh;
         let vh_bucket;
         let vh_region;
@@ -537,7 +567,32 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                 S3Path::Object { .. } => return Err(s3_error!(MethodNotAllowed)),
             }
         }
-        resolve_route(req, s3_path, req.s3ext.qs.as_ref())?
+        match resolve_route(req, s3_path, req.s3ext.qs.as_ref()) {
+            Ok(result) => result,
+            Err(err) => {
+                // When S3Host is absent and the host looks virtual-hosted-style,
+                // bucket names in the Host header are lost — any routing failure
+                // is likely caused by this mismatch.  Give an actionable error.
+                if err.code() == &S3ErrorCode::NotImplemented
+                    && ccx.host.is_none()
+                    && let Some(host_header) = host_header.as_deref()
+                    && looks_like_virtual_hosted_style(host_header)
+                {
+                    warn!(
+                        ?host_header,
+                        ?s3_path,
+                        "request may be using virtual-hosted-style addressing; \
+                         no S3 host parser is configured. \
+                         Consider enabling an S3Host implementation if virtual-hosted-style \
+                         requests need to be handled by this endpoint."
+                    );
+
+                    return Err(s3_error!(err, NotImplemented, "{}", VIRTUAL_HOSTED_STYLE_HINT));
+                }
+                // Not a virtual-hosted-style issue — propagate original error.
+                return Err(err);
+            }
+        }
     };
 
     // FIXME: hack for E2E tests (minio/mint)
