@@ -414,7 +414,7 @@ async fn presigned_url_expires_0_should_be_expired() {
 async fn post_multipart_bucket_routes_to_post_object() {
     use crate::S3Request;
     use crate::auth::{SecretKey, SimpleAuth};
-    use crate::config::{S3ConfigProvider, StaticConfigProvider};
+    use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
     use crate::http::{Body, Request};
     use crate::ops::CallContext;
     use crate::sig_v4;
@@ -453,7 +453,11 @@ async fn post_multipart_bucket_routes_to_post_object() {
         post_calls: AtomicUsize::new(0),
     });
     let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
-    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+    let s3_config = S3Config {
+        presigned_url_max_skew_time_secs: u32::MAX,
+        ..Default::default()
+    };
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(s3_config)));
 
     let access_key = "AKIAIOSFODNN7EXAMPLE";
     let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
@@ -476,8 +480,9 @@ async fn post_multipart_bucket_routes_to_post_object() {
     let key = "mc-test-object-7658";
     let policy_b64 = "eyJleHBpcmF0aW9uIjoiMjAyMC0xMC0wM1QxMzoyNTo0Ny4yMThaIiwiY29uZGl0aW9ucyI6W1siZXEiLCIkYnVja2V0IiwibWMtdGVzdC1idWNrZXQtMzI1NjkiXSxbImVxIiwiJGtleSIsIm1jLXRlc3Qtb2JqZWN0LTc2NTgiXSxbImVxIiwiJHgtYW16LWRhdGUiLCIyMDIwMDkyNlQxMzI1NDdaIl0sWyJlcSIsIiR4LWFtei1hbGdvcml0aG0iLCJBV1M0LUhNQUMtU0hBMjU2Il0sWyJlcSIsIiR4LWFtei1jcmVkZW50aWFsIiwiQUtJQUlPU0ZPRE5ON0VYQU1QTEUvMjAyMDA5MjYvdXMtZWFzdC0xL3MzL2F3czRfcmVxdWVzdCJdXX0=";
     let algorithm = "AWS4-HMAC-SHA256";
-    let credential = "AKIAIOSFODNN7EXAMPLE/20200926/us-east-1/s3/aws4_request";
     let amz_date = sig_v4::AmzDate::parse("20200926T132547Z").unwrap();
+    let amz_date_str = amz_date.fmt_iso8601();
+    let credential = "AKIAIOSFODNN7EXAMPLE/20200926/us-east-1/s3/aws4_request";
     let region = "us-east-1";
     let service = "s3";
     let signature = sig_v4::calculate_signature(policy_b64, &secret_key, &amz_date, region, service);
@@ -511,7 +516,7 @@ async fn post_multipart_bucket_routes_to_post_object() {
             "hello\r\n",
             "--{b}--\r\n"
         ),
-        amz_date = amz_date.fmt_iso8601(),
+        amz_date = amz_date_str,
         b = boundary,
         signature = signature,
         bucket = bucket,
@@ -584,6 +589,7 @@ mod post_policy_test_helpers {
     /// Create a test config with custom `post_object_max_file_size`
     pub fn create_test_config(post_object_max_file_size: u64) -> Arc<dyn S3ConfigProvider> {
         let config = S3Config {
+            presigned_url_max_skew_time_secs: u32::MAX,
             post_object_max_file_size,
             ..Default::default()
         };
@@ -656,26 +662,45 @@ mod post_policy_test_helpers {
         )
     }
 
-    /// Build a POST object request with a policy
+    /// Augment a test POST policy JSON with the required `SigV4` eq conditions
+    /// (`x-amz-date`, `x-amz-credential`, `x-amz-algorithm`) so the request
+    /// passes the verifier's policy-field-matching checks.
+    fn augment_post_policy_for_test(policy_json: &str, amz_date: &str, credential: &str, algorithm: &str) -> String {
+        let mut policy: serde_json::Value = serde_json::from_str(policy_json).expect("invalid test policy JSON");
+        let conditions = policy["conditions"]
+            .as_array_mut()
+            .expect("policy must have a conditions array");
+        conditions.push(serde_json::json!({"x-amz-date": amz_date}));
+        conditions.push(serde_json::json!({"x-amz-credential": credential}));
+        conditions.push(serde_json::json!({"x-amz-algorithm": algorithm}));
+        policy.to_string()
+    }
+
+    /// Build a POST object request with a policy.
+    ///
+    /// The provided `policy_json` is augmented with the required `SigV4` POST
+    /// policy eq conditions (`x-amz-date`, `x-amz-credential`, `x-amz-algorithm`)
+    /// so the request passes the verifier's policy-field-matching checks.
     pub fn build_post_object_request(
         policy_json: &str,
         file_content: &str,
         secret_key: &SecretKey,
         with_content_type: bool,
     ) -> Request {
-        let policy_b64 = base64_simd::STANDARD.encode_to_string(policy_json);
-
         let boundary = "------------------------test12345678";
         let bucket = "test-bucket";
         let key = "test-key";
         let amz_date = sig_v4::AmzDate::parse("20250101T000000Z").unwrap();
+        let amz_date_str = amz_date.fmt_iso8601();
         let region = "us-east-1";
         let service = "s3";
         let content_type = "text/plain";
         let algorithm = "AWS4-HMAC-SHA256";
         let credential = "AKIAIOSFODNN7EXAMPLE/20250101/us-east-1/s3/aws4_request";
+
+        let policy_json = augment_post_policy_for_test(policy_json, amz_date_str.as_str(), credential, algorithm);
+        let policy_b64 = base64_simd::STANDARD.encode_to_string(&policy_json);
         let signature = sig_v4::calculate_signature(&policy_b64, secret_key, &amz_date, region, service);
-        let amz_date_str = amz_date.fmt_iso8601();
 
         let fields = {
             let mut f = vec![
@@ -715,23 +740,28 @@ mod post_policy_test_helpers {
     /// This ensures that `aggregate_file_stream_limited` returns a `Vec<Bytes>`
     /// with multiple entries, so tests can distinguish between
     /// `vec_bytes.len()` (chunk count) and the total byte count.
+    ///
+    /// The provided `policy_json` is augmented with the required `SigV4` POST
+    /// policy eq conditions so the request passes the verifier's checks.
     pub fn build_post_object_request_chunked(
         policy_json: &str,
         file_content: &str,
         secret_key: &SecretKey,
         chunk_size: usize,
     ) -> Request {
-        let policy_b64 = base64_simd::STANDARD.encode_to_string(policy_json);
-
         let boundary = "------------------------test12345678";
         let bucket = "test-bucket";
         let key = "test-key";
         let amz_date = sig_v4::AmzDate::parse("20250101T000000Z").unwrap();
+        let amz_date_str = amz_date.fmt_iso8601();
         let region = "us-east-1";
         let service = "s3";
         let content_type = "text/plain";
         let algorithm = "AWS4-HMAC-SHA256";
         let credential = "AKIAIOSFODNN7EXAMPLE/20250101/us-east-1/s3/aws4_request";
+
+        let policy_json = augment_post_policy_for_test(policy_json, amz_date_str.as_str(), credential, algorithm);
+        let policy_b64 = base64_simd::STANDARD.encode_to_string(&policy_json);
         let signature = sig_v4::calculate_signature(&policy_b64, secret_key, &amz_date, region, service);
 
         let body = build_multipart_fields(
@@ -741,7 +771,7 @@ mod post_policy_test_helpers {
                 ("policy", &policy_b64),
                 ("x-amz-algorithm", algorithm),
                 ("x-amz-credential", credential),
-                ("x-amz-date", &amz_date.fmt_iso8601()),
+                ("x-amz-date", amz_date_str.as_str()),
                 ("key", key),
             ],
             boundary,
