@@ -1963,7 +1963,6 @@ mod virtual_hosted_style_hint_tests {
     #[derive(Default)]
     struct RecordS3 {
         create_bucket: std::sync::atomic::AtomicBool,
-        delete_bucket: std::sync::atomic::AtomicBool,
         list_buckets: std::sync::atomic::AtomicBool,
     }
 
@@ -1977,27 +1976,12 @@ mod virtual_hosted_style_hint_tests {
             Ok(crate::S3Response::new(CreateBucketOutput::default()))
         }
 
-        async fn delete_bucket(
-            &self,
-            _req: crate::S3Request<DeleteBucketInput>,
-        ) -> crate::S3Result<crate::S3Response<DeleteBucketOutput>> {
-            self.delete_bucket.store(true, std::sync::atomic::Ordering::SeqCst);
-            Ok(crate::S3Response::new(DeleteBucketOutput {}))
-        }
-
         async fn list_buckets(
             &self,
             _req: crate::S3Request<ListBucketsInput>,
         ) -> crate::S3Result<crate::S3Response<ListBucketsOutput>> {
             self.list_buckets.store(true, std::sync::atomic::Ordering::SeqCst);
             Ok(crate::S3Response::new(ListBucketsOutput::default()))
-        }
-
-        async fn head_bucket(
-            &self,
-            _req: crate::S3Request<HeadBucketInput>,
-        ) -> crate::S3Result<crate::S3Response<HeadBucketOutput>> {
-            Ok(crate::S3Response::new(HeadBucketOutput::default()))
         }
     }
 
@@ -2020,7 +2004,7 @@ mod virtual_hosted_style_hint_tests {
     }
 
     #[tokio::test]
-    async fn put_virtual_hosted_style_without_s3_host_returns_actionable_501() {
+    async fn actionable_501_for_virtual_hosted_style_without_s3_host() {
         let record = Arc::new(RecordS3::default());
         let s3: Arc<dyn S3> = record.clone();
         let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
@@ -2033,68 +2017,26 @@ mod virtual_hosted_style_hint_tests {
             route: None,
             validation: None,
         };
-        let mut req = make_request(Method::PUT, "my-bucket.example.com");
 
-        let result = super::call(&mut req, &ccx).await;
+        // All methods that resolve_route rejects for S3Path::Root
+        // should get the actionable hint.
+        for method in [Method::PUT, Method::HEAD, Method::DELETE, Method::POST] {
+            let mut req = make_request(method.clone(), "my-bucket.example.com");
+            let result = super::call(&mut req, &ccx).await;
 
-        assert!(result.is_ok());
-        let resp = result.unwrap();
-        assert_eq!(resp.status, http::StatusCode::NOT_IMPLEMENTED);
-        let text = body_str(&resp);
-        assert!(text.contains("virtual-hosted-style"), "body should mention virtual-hosted-style: {text}");
-        assert!(!text.contains("Unknown operation"), "body should not be the old generic error: {text}");
-        assert!(!record.create_bucket.load(std::sync::atomic::Ordering::SeqCst));
-    }
-
-    #[tokio::test]
-    async fn head_virtual_hosted_style_without_s3_host_returns_actionable_501() {
-        let record = Arc::new(RecordS3::default());
-        let s3: Arc<dyn S3> = record.clone();
-        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
-        let ccx = super::CallContext {
-            s3: &s3,
-            config: &config,
-            host: None,
-            auth: None,
-            access: None,
-            route: None,
-            validation: None,
-        };
-        let mut req = make_request(Method::HEAD, "my-bucket.example.com");
-
-        let result = super::call(&mut req, &ccx).await;
-
-        assert!(result.is_ok());
-        let resp = result.unwrap();
-        assert_eq!(resp.status, http::StatusCode::NOT_IMPLEMENTED);
-        let text = body_str(&resp);
-        assert!(text.contains("virtual-hosted-style"), "body should mention virtual-hosted-style: {text}");
-    }
-
-    #[tokio::test]
-    async fn delete_virtual_hosted_style_without_s3_host_returns_actionable_501() {
-        let record = Arc::new(RecordS3::default());
-        let s3: Arc<dyn S3> = record.clone();
-        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
-        let ccx = super::CallContext {
-            s3: &s3,
-            config: &config,
-            host: None,
-            auth: None,
-            access: None,
-            route: None,
-            validation: None,
-        };
-        let mut req = make_request(Method::DELETE, "my-bucket.example.com");
-
-        let result = super::call(&mut req, &ccx).await;
-
-        assert!(result.is_ok());
-        let resp = result.unwrap();
-        assert_eq!(resp.status, http::StatusCode::NOT_IMPLEMENTED);
-        let text = body_str(&resp);
-        assert!(text.contains("virtual-hosted-style"), "body should mention virtual-hosted-style: {text}");
-        assert!(!record.delete_bucket.load(std::sync::atomic::Ordering::SeqCst));
+            assert!(result.is_ok(), "call failed for {method}");
+            let resp = result.unwrap();
+            assert_eq!(resp.status, http::StatusCode::NOT_IMPLEMENTED, "wrong status for {method}");
+            let text = body_str(&resp);
+            assert!(
+                text.contains("virtual-hosted-style"),
+                "body should mention virtual-hosted-style for {method}: {text}"
+            );
+            assert!(
+                !text.contains("Unknown operation"),
+                "body should not be the old generic error for {method}: {text}"
+            );
+        }
     }
 
     #[tokio::test]
@@ -2121,7 +2063,7 @@ mod virtual_hosted_style_hint_tests {
     }
 
     #[tokio::test]
-    async fn put_with_ip_host_does_not_trigger_virtual_hosted_style_hint() {
+    async fn no_hint_for_non_virtual_hosted_style_hosts() {
         let record = Arc::new(RecordS3::default());
         let s3: Arc<dyn S3> = record.clone();
         let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
@@ -2134,61 +2076,18 @@ mod virtual_hosted_style_hint_tests {
             route: None,
             validation: None,
         };
-        let mut req = make_request(Method::PUT, "127.0.0.1:9000");
 
-        let result = super::call(&mut req, &ccx).await;
+        // IP, localhost, and two-label domains should not trigger the VH hint.
+        for host in ["127.0.0.1:9000", "localhost:9000", "example.com:9000"] {
+            let mut req = make_request(Method::PUT, host);
+            let result = super::call(&mut req, &ccx).await;
 
-        // Should get the old "Unknown operation" error, not the VH hint
-        assert!(result.is_ok());
-        let resp = result.unwrap();
-        assert_eq!(resp.status, http::StatusCode::NOT_IMPLEMENTED);
-    }
-
-    #[tokio::test]
-    async fn put_with_localhost_does_not_trigger_virtual_hosted_style_hint() {
-        let record = Arc::new(RecordS3::default());
-        let s3: Arc<dyn S3> = record.clone();
-        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
-        let ccx = super::CallContext {
-            s3: &s3,
-            config: &config,
-            host: None,
-            auth: None,
-            access: None,
-            route: None,
-            validation: None,
-        };
-        let mut req = make_request(Method::PUT, "localhost:9000");
-
-        let result = super::call(&mut req, &ccx).await;
-
-        assert!(result.is_ok());
-        let resp = result.unwrap();
-        assert_eq!(resp.status, http::StatusCode::NOT_IMPLEMENTED);
-    }
-
-    #[tokio::test]
-    async fn put_with_two_label_domain_does_not_trigger_virtual_hosted_style_hint() {
-        let record = Arc::new(RecordS3::default());
-        let s3: Arc<dyn S3> = record.clone();
-        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
-        let ccx = super::CallContext {
-            s3: &s3,
-            config: &config,
-            host: None,
-            auth: None,
-            access: None,
-            route: None,
-            validation: None,
-        };
-        let mut req = make_request(Method::PUT, "example.com:9000");
-
-        let result = super::call(&mut req, &ccx).await;
-
-        assert!(result.is_ok());
-        let resp = result.unwrap();
-        // Falls through to original `unknown_operation`, not our hint
-        assert_eq!(resp.status, http::StatusCode::NOT_IMPLEMENTED);
+            assert!(result.is_ok(), "call failed for {host}");
+            let resp = result.unwrap();
+            assert_eq!(resp.status, http::StatusCode::NOT_IMPLEMENTED, "wrong status for {host}");
+            let text = body_str(&resp);
+            assert!(!text.contains("virtual-hosted-style"), "hint should not be triggered for {host}: {text}");
+        }
     }
 
     #[tokio::test]
@@ -2215,33 +2114,6 @@ mod virtual_hosted_style_hint_tests {
         assert!(result.is_ok());
         // CreateBucket should have been called
         assert!(record.create_bucket.load(std::sync::atomic::Ordering::SeqCst));
-    }
-
-    #[tokio::test]
-    async fn post_root_virtual_hosted_style_without_s3_host_returns_actionable_501() {
-        let record = Arc::new(RecordS3::default());
-        let s3: Arc<dyn S3> = record.clone();
-        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
-        let ccx = super::CallContext {
-            s3: &s3,
-            config: &config,
-            host: None,
-            auth: None,
-            access: None,
-            route: None,
-            validation: None,
-        };
-        // POST / with no multipart body → falls through to resolve_route
-        // which returns Err for POST Root → intercepted
-        let mut req = make_request(Method::POST, "my-bucket.example.com");
-
-        let result = super::call(&mut req, &ccx).await;
-
-        assert!(result.is_ok());
-        let resp = result.unwrap();
-        assert_eq!(resp.status, http::StatusCode::NOT_IMPLEMENTED);
-        let text = body_str(&resp);
-        assert!(text.contains("virtual-hosted-style"), "body should mention virtual-hosted-style: {text}");
     }
 
     #[tokio::test]
