@@ -563,7 +563,8 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                 // When S3Host is absent and the host looks virtual-hosted-style,
                 // bucket names in the Host header are lost — any routing failure
                 // is likely caused by this mismatch.  Give an actionable error.
-                if ccx.host.is_none()
+                if err.code() == &S3ErrorCode::NotImplemented
+                    && ccx.host.is_none()
                     && let Some(host_header) = host_header.as_deref()
                     && looks_like_virtual_hosted_style(host_header)
                 {
@@ -576,7 +577,7 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                          requests need to be handled by this endpoint."
                     );
 
-                    return Err(S3Error::with_message(S3ErrorCode::NotImplemented, VIRTUAL_HOSTED_STYLE_HINT));
+                    return Err(s3_error!(err, NotImplemented, "{}", VIRTUAL_HOSTED_STYLE_HINT));
                 }
                 // Not a virtual-hosted-style issue — propagate original error.
                 return Err(err);
