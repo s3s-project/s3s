@@ -1,0 +1,49 @@
+# cargo-deny configuration
+# See: https://embarkstudios.github.io/cargo-deny/
+#
+# Run with: cargo deny check
+
+[licenses]
+
+# Allowed permissive licenses.
+# All licenses listed here are OSI-approved and non-copyleft (or file-level
+# copyleft only, in the case of MPL-2.0).
+allow = [
+    "0BSD",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "ISC",
+    "MIT",
+    "MIT-0",
+    # MPL-2.0 is file-level copyleft: only modifications to MPL-licensed files
+    # must remain MPL-licensed.  Since we do not modify these files, this does
+    # not impose copyleft obligations on our own code.
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+
+# Per-crate exceptions for licenses not in the general allow list above.
+exceptions = [
+    # r-efi is only compiled for UEFI platform targets (transitively via
+    # getrandom).  It is never included in standard server/WASM builds.
+    { allow = ["LGPL-2.1-or-later"], crate = "r-efi" },
+]
+
+[bans]
+# Warn (not deny) on duplicate crate versions: the AWS SDK pulls in many
+# old/new version pairs that we cannot easily collapse.
+multiple-versions = "warn"
+# No dependency should use a wildcard version requirement.
+wildcards = "deny"
+
+[sources]
+# Deny any crate that does not come from crates.io.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
