@@ -266,6 +266,14 @@ impl SignatureContext<'_> {
             CredentialV4::parse(info.x_amz_credential).map_err(|_| invalid_request!("invalid field: x-amz-credential"))?;
 
         let amz_date = AmzDate::parse(info.x_amz_date).map_err(|_| invalid_request!("invalid field: x-amz-date"))?;
+
+        // Per AWS SigV4 spec, the credential scope date must match the x-amz-date date.
+        if credential.date != amz_date.fmt_date().as_str() {
+            let mut err = S3Error::new(S3ErrorCode::SignatureDoesNotMatch);
+            err.set_message("credential scope date does not match x-amz-date");
+            return Err(err);
+        }
+
         validate_sig_v4_clock_skew(&amz_date, time::OffsetDateTime::now_utc(), &self.config.snapshot())?;
 
         let access_key = credential.access_key_id.to_owned();
@@ -313,6 +321,13 @@ impl SignatureContext<'_> {
                 NotImplemented,
                 "X-Amz-Algorithm other than AWS4-HMAC-SHA256 is not implemented"
             ));
+        }
+
+        // Per AWS SigV4 spec, the credential scope date must match the x-amz-date date.
+        if presigned_url.credential.date != presigned_url.amz_date.fmt_date().as_str() {
+            let mut err = S3Error::new(S3ErrorCode::SignatureDoesNotMatch);
+            err.set_message("credential scope date does not match x-amz-date");
+            return Err(err);
         }
 
         // ASK: how to use it?
@@ -428,6 +443,14 @@ impl SignatureContext<'_> {
         let secret_key = auth.get_secret_key(access_key).await?;
 
         let amz_date = extract_amz_date(&self.hs)?.ok_or_else(|| invalid_request!("missing header: x-amz-date"))?;
+
+        // Per AWS SigV4 spec, the credential scope date must match the x-amz-date date.
+        if authorization.credential.date != amz_date.fmt_date().as_str() {
+            let mut err = S3Error::new(S3ErrorCode::SignatureDoesNotMatch);
+            err.set_message("credential scope date does not match x-amz-date");
+            return Err(err);
+        }
+
         validate_sig_v4_clock_skew(&amz_date, time::OffsetDateTime::now_utc(), &self.config.snapshot())?;
 
         let is_stream = amz_content_sha256.is_some_and(|v| v.is_streaming());
