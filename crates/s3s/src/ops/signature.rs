@@ -1137,24 +1137,27 @@ file content\r\n\
     async fn v4_header_auth_accepts_standard_and_raw_uri_path_signatures() {
         use crate::auth::SecretKey;
         use crate::auth::SimpleAuth;
-        use crate::config::{S3ConfigProvider, StaticConfigProvider};
+        use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
         use std::sync::Arc;
 
         let access_key = "AKIAIOSFODNN7EXAMPLE";
         let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
         let auth = SimpleAuth::from_single(access_key, secret_key.clone());
-        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+        let s3_config = S3Config {
+            presigned_url_max_skew_time_secs: u32::MAX,
+            ..Default::default()
+        };
+        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(s3_config)));
 
         let method = Method::GET;
         let uri = Uri::from_static("https://s3.amazonaws.com/test-bucket/path/sitemap.xmlage=");
         let decoded_uri_path = "/test-bucket/path/sitemap.xmlage=";
         let raw_uri_path = "/test-bucket/path/sitemap.xmlage=";
-        let amz_date_str = fmt_current_amz_date(time::OffsetDateTime::now_utc());
-        let amz_date = AmzDate::parse(&amz_date_str).unwrap();
+        let amz_date = AmzDate::parse("20130524T000000Z").unwrap();
         let headers_for_signing = OrderedHeaders::from_slice_unchecked(&[
             ("host", "s3.amazonaws.com"),
             ("x-amz-content-sha256", "UNSIGNED-PAYLOAD"),
-            ("x-amz-date", amz_date_str.as_str()),
+            ("x-amz-date", "20130524T000000Z"),
         ]);
 
         let canonical_requests = [
@@ -1178,14 +1181,13 @@ file content\r\n\
             let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
             let signature = sig_v4::calculate_signature(&string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
             let authorization = format!(
-                "AWS4-HMAC-SHA256 Credential={access_key}/{}/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature={signature}",
-                amz_date.fmt_date()
+                "AWS4-HMAC-SHA256 Credential={access_key}/20130524/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature={signature}"
             );
             let headers = OrderedHeaders::from_slice_unchecked(&[
                 ("authorization", authorization.as_str()),
                 ("host", "s3.amazonaws.com"),
                 ("x-amz-content-sha256", "UNSIGNED-PAYLOAD"),
-                ("x-amz-date", amz_date_str.as_str()),
+                ("x-amz-date", "20130524T000000Z"),
             ]);
 
             let mut body = Body::empty();
@@ -1221,24 +1223,27 @@ file content\r\n\
     async fn v4_header_auth_uses_http2_authority_for_signed_host() {
         use crate::auth::SecretKey;
         use crate::auth::SimpleAuth;
-        use crate::config::{S3ConfigProvider, StaticConfigProvider};
+        use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
         use std::sync::Arc;
 
         let access_key = "AKIAIOSFODNN7EXAMPLE";
         let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
         let auth = SimpleAuth::from_single(access_key, secret_key.clone());
-        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+        let s3_config = S3Config {
+            presigned_url_max_skew_time_secs: u32::MAX,
+            ..Default::default()
+        };
+        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(s3_config)));
 
         let method = Method::GET;
         let uri = Uri::from_static("https://s3.amazonaws.com/test-bucket/path/sitemap.xmlage=");
         let decoded_uri_path = "/test-bucket/path/sitemap.xmlage=";
         let raw_uri_path = "/test-bucket/path/sitemap.xmlage=";
-        let amz_date_str = fmt_current_amz_date(time::OffsetDateTime::now_utc());
-        let amz_date = AmzDate::parse(&amz_date_str).unwrap();
+        let amz_date = AmzDate::parse("20130524T000000Z").unwrap();
         let headers_for_signing = OrderedHeaders::from_slice_unchecked(&[
             ("host", "s3.amazonaws.com"),
             ("x-amz-content-sha256", "UNSIGNED-PAYLOAD"),
-            ("x-amz-date", amz_date_str.as_str()),
+            ("x-amz-date", "20130524T000000Z"),
         ]);
         let canonical_request = sig_v4::create_canonical_request(
             &method,
@@ -1250,13 +1255,12 @@ file content\r\n\
         let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
         let signature = sig_v4::calculate_signature(&string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
         let authorization = format!(
-            "AWS4-HMAC-SHA256 Credential={access_key}/{}/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature={signature}",
-            amz_date.fmt_date()
+            "AWS4-HMAC-SHA256 Credential={access_key}/20130524/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature={signature}"
         );
         let headers = OrderedHeaders::from_slice_unchecked(&[
             ("authorization", authorization.as_str()),
             ("x-amz-content-sha256", "UNSIGNED-PAYLOAD"),
-            ("x-amz-date", amz_date_str.as_str()),
+            ("x-amz-date", "20130524T000000Z"),
         ]);
 
         let mut body = Body::empty();
@@ -1291,27 +1295,30 @@ file content\r\n\
     async fn v4_header_auth_raw_uri_path_signature_seeds_streaming_body() {
         use crate::auth::SecretKey;
         use crate::auth::SimpleAuth;
-        use crate::config::{S3ConfigProvider, StaticConfigProvider};
+        use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
         use bytes::Bytes;
         use std::sync::Arc;
 
         let access_key = "AKIAIOSFODNN7EXAMPLE";
         let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
         let auth = SimpleAuth::from_single(access_key, secret_key.clone());
-        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+        let s3_config = S3Config {
+            presigned_url_max_skew_time_secs: u32::MAX,
+            ..Default::default()
+        };
+        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(s3_config)));
 
         let method = Method::PUT;
         let uri = Uri::from_static("https://s3.amazonaws.com/test-bucket/path/sitemap.xmlage=");
         let decoded_uri_path = "/test-bucket/path/sitemap.xmlage=";
         let raw_uri_path = "/test-bucket/path/sitemap.xmlage=";
-        let amz_date_str = fmt_current_amz_date(time::OffsetDateTime::now_utc());
-        let amz_date = AmzDate::parse(&amz_date_str).unwrap();
+        let amz_date = AmzDate::parse("20130524T000000Z").unwrap();
         let chunk_data = Bytes::from_static(b"hello");
         let decoded_content_length = chunk_data.len();
         let headers_for_signing = OrderedHeaders::from_slice_unchecked(&[
             ("host", "s3.amazonaws.com"),
             ("x-amz-content-sha256", "STREAMING-AWS4-HMAC-SHA256-PAYLOAD"),
-            ("x-amz-date", amz_date_str.as_str()),
+            ("x-amz-date", "20130524T000000Z"),
             ("x-amz-decoded-content-length", "5"),
         ]);
 
@@ -1348,14 +1355,13 @@ file content\r\n\
         let content_length = u64::try_from(streaming_body.len()).unwrap();
 
         let authorization = format!(
-            "AWS4-HMAC-SHA256 Credential={access_key}/{}/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date;x-amz-decoded-content-length, Signature={seed_signature}",
-            amz_date.fmt_date()
+            "AWS4-HMAC-SHA256 Credential={access_key}/20130524/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date;x-amz-decoded-content-length, Signature={seed_signature}"
         );
         let headers = OrderedHeaders::from_slice_unchecked(&[
             ("authorization", authorization.as_str()),
             ("host", "s3.amazonaws.com"),
             ("x-amz-content-sha256", "STREAMING-AWS4-HMAC-SHA256-PAYLOAD"),
-            ("x-amz-date", amz_date_str.as_str()),
+            ("x-amz-date", "20130524T000000Z"),
             ("x-amz-decoded-content-length", "5"),
         ]);
 
@@ -1480,7 +1486,8 @@ file content\r\n\
         let auth = SimpleAuth::from_single(access_key, secret_key.clone());
         let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
 
-        let request_time = time::OffsetDateTime::now_utc() - time::Duration::minutes(16);
+        let skew = time::Duration::seconds(i64::from(config.snapshot().presigned_url_max_skew_time_secs));
+        let request_time = time::OffsetDateTime::now_utc() - skew - time::Duration::minutes(1);
         let amz_date_str = fmt_current_amz_date(request_time);
         let amz_date = AmzDate::parse(&amz_date_str).unwrap();
 
@@ -1553,7 +1560,8 @@ file content\r\n\
         let auth = SimpleAuth::from_single(access_key, secret_key.clone());
         let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
 
-        let request_time = time::OffsetDateTime::now_utc() - time::Duration::minutes(16);
+        let skew = time::Duration::seconds(i64::from(config.snapshot().presigned_url_max_skew_time_secs));
+        let request_time = time::OffsetDateTime::now_utc() - skew - time::Duration::minutes(1);
         let amz_date_str = fmt_current_amz_date(request_time);
         let amz_date = AmzDate::parse(&amz_date_str).unwrap();
         let policy_b64 = base64_simd::STANDARD.encode_to_string("{}");

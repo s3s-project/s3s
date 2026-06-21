@@ -1,17 +1,5 @@
 use super::*;
 
-fn fmt_current_amz_date(dt: time::OffsetDateTime) -> String {
-    format!(
-        "{:04}{:02}{:02}T{:02}{:02}{:02}Z",
-        dt.year(),
-        u8::from(dt.month()),
-        dt.day(),
-        dt.hour(),
-        dt.minute(),
-        dt.second()
-    )
-}
-
 // use crate::service::S3Service;
 
 // use stdx::mem::output_size;
@@ -426,7 +414,7 @@ async fn presigned_url_expires_0_should_be_expired() {
 async fn post_multipart_bucket_routes_to_post_object() {
     use crate::S3Request;
     use crate::auth::{SecretKey, SimpleAuth};
-    use crate::config::{S3ConfigProvider, StaticConfigProvider};
+    use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
     use crate::http::{Body, Request};
     use crate::ops::CallContext;
     use crate::sig_v4;
@@ -465,7 +453,11 @@ async fn post_multipart_bucket_routes_to_post_object() {
         post_calls: AtomicUsize::new(0),
     });
     let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
-    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+    let s3_config = S3Config {
+        presigned_url_max_skew_time_secs: u32::MAX,
+        ..Default::default()
+    };
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(s3_config)));
 
     let access_key = "AKIAIOSFODNN7EXAMPLE";
     let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
@@ -488,9 +480,9 @@ async fn post_multipart_bucket_routes_to_post_object() {
     let key = "mc-test-object-7658";
     let policy_b64 = "eyJleHBpcmF0aW9uIjoiMjAyMC0xMC0wM1QxMzoyNTo0Ny4yMThaIiwiY29uZGl0aW9ucyI6W1siZXEiLCIkYnVja2V0IiwibWMtdGVzdC1idWNrZXQtMzI1NjkiXSxbImVxIiwiJGtleSIsIm1jLXRlc3Qtb2JqZWN0LTc2NTgiXSxbImVxIiwiJHgtYW16LWRhdGUiLCIyMDIwMDkyNlQxMzI1NDdaIl0sWyJlcSIsIiR4LWFtei1hbGdvcml0aG0iLCJBV1M0LUhNQUMtU0hBMjU2Il0sWyJlcSIsIiR4LWFtei1jcmVkZW50aWFsIiwiQUtJQUlPU0ZPRE5ON0VYQU1QTEUvMjAyMDA5MjYvdXMtZWFzdC0xL3MzL2F3czRfcmVxdWVzdCJdXX0=";
     let algorithm = "AWS4-HMAC-SHA256";
-    let amz_date_str = fmt_current_amz_date(time::OffsetDateTime::now_utc());
-    let amz_date = sig_v4::AmzDate::parse(&amz_date_str).unwrap();
-    let credential = format!("AKIAIOSFODNN7EXAMPLE/{}/us-east-1/s3/aws4_request", amz_date.fmt_date());
+    let amz_date = sig_v4::AmzDate::parse("20200926T132547Z").unwrap();
+    let amz_date_str = amz_date.fmt_iso8601();
+    let credential = "AKIAIOSFODNN7EXAMPLE/20200926/us-east-1/s3/aws4_request";
     let region = "us-east-1";
     let service = "s3";
     let signature = sig_v4::calculate_signature(policy_b64, &secret_key, &amz_date, region, service);
@@ -597,6 +589,7 @@ mod post_policy_test_helpers {
     /// Create a test config with custom `post_object_max_file_size`
     pub fn create_test_config(post_object_max_file_size: u64) -> Arc<dyn S3ConfigProvider> {
         let config = S3Config {
+            presigned_url_max_skew_time_secs: u32::MAX,
             post_object_max_file_size,
             ..Default::default()
         };
@@ -681,14 +674,14 @@ mod post_policy_test_helpers {
         let boundary = "------------------------test12345678";
         let bucket = "test-bucket";
         let key = "test-key";
-        let amz_date_str = super::fmt_current_amz_date(time::OffsetDateTime::now_utc());
-        let amz_date = sig_v4::AmzDate::parse(&amz_date_str).unwrap();
+        let amz_date = sig_v4::AmzDate::parse("20250101T000000Z").unwrap();
         let region = "us-east-1";
         let service = "s3";
         let content_type = "text/plain";
         let algorithm = "AWS4-HMAC-SHA256";
-        let credential = format!("AKIAIOSFODNN7EXAMPLE/{}/us-east-1/s3/aws4_request", amz_date.fmt_date());
+        let credential = "AKIAIOSFODNN7EXAMPLE/20250101/us-east-1/s3/aws4_request";
         let signature = sig_v4::calculate_signature(&policy_b64, secret_key, &amz_date, region, service);
+        let amz_date_str = amz_date.fmt_iso8601();
 
         let fields = {
             let mut f = vec![
@@ -696,7 +689,7 @@ mod post_policy_test_helpers {
                 ("bucket", bucket),
                 ("policy", policy_b64.as_str()),
                 ("x-amz-algorithm", algorithm),
-                ("x-amz-credential", credential.as_str()),
+                ("x-amz-credential", credential),
                 ("x-amz-date", amz_date_str.as_str()),
                 ("key", key),
             ];
@@ -739,14 +732,14 @@ mod post_policy_test_helpers {
         let boundary = "------------------------test12345678";
         let bucket = "test-bucket";
         let key = "test-key";
-        let amz_date_str = super::fmt_current_amz_date(time::OffsetDateTime::now_utc());
-        let amz_date = sig_v4::AmzDate::parse(&amz_date_str).unwrap();
+        let amz_date = sig_v4::AmzDate::parse("20250101T000000Z").unwrap();
         let region = "us-east-1";
         let service = "s3";
         let content_type = "text/plain";
         let algorithm = "AWS4-HMAC-SHA256";
-        let credential = format!("AKIAIOSFODNN7EXAMPLE/{}/us-east-1/s3/aws4_request", amz_date.fmt_date());
+        let credential = "AKIAIOSFODNN7EXAMPLE/20250101/us-east-1/s3/aws4_request";
         let signature = sig_v4::calculate_signature(&policy_b64, secret_key, &amz_date, region, service);
+        let amz_date_str = amz_date.fmt_iso8601();
 
         let body = build_multipart_fields(
             &[
@@ -754,7 +747,7 @@ mod post_policy_test_helpers {
                 ("bucket", bucket),
                 ("policy", &policy_b64),
                 ("x-amz-algorithm", algorithm),
-                ("x-amz-credential", credential.as_str()),
+                ("x-amz-credential", credential),
                 ("x-amz-date", amz_date_str.as_str()),
                 ("key", key),
             ],
