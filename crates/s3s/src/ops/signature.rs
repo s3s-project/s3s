@@ -37,10 +37,7 @@ fn extract_amz_content_sha256<'a>(hs: &'_ OrderedHeaders<'a>) -> S3Result<Option
         Ok(x) => Ok(Some(x)),
         Err(e) => {
             // https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-troubleshooting.html
-            let mut err = S3Error::new(S3ErrorCode::SignatureDoesNotMatch);
-            err.set_message("invalid header: x-amz-content-sha256");
-            err.set_source(Box::new(e));
-            Err(err)
+            Err(s3_error!(e, SignatureDoesNotMatch, "invalid header: x-amz-content-sha256"))
         }
     }
 }
@@ -271,6 +268,11 @@ impl SignatureContext<'_> {
         // Per AWS SigV4 spec, the signed POST policy must contain eq conditions
         // for x-amz-date, x-amz-credential, and x-amz-algorithm that match the
         // submitted form fields exactly.
+        //
+        // TODO: the policy is parsed again later in `prepare` via
+        // `PostPolicy::from_base64` + `validate_conditions_only`. Consider
+        // caching the parsed `PostPolicy` here and reusing it downstream to
+        // avoid the double base64-decode + JSON-parse.
         {
             let policy = PostPolicy::from_base64(info.policy).map_err(|e| s3_error!(e, InvalidPolicyDocument))?;
 
@@ -292,9 +294,7 @@ impl SignatureContext<'_> {
 
         // Per AWS SigV4 spec, the credential scope date must match the x-amz-date date.
         if credential.date != amz_date.fmt_date().as_str() {
-            let mut err = S3Error::new(S3ErrorCode::SignatureDoesNotMatch);
-            err.set_message("credential scope date does not match x-amz-date");
-            return Err(err);
+            return Err(s3_error!(SignatureDoesNotMatch, "credential scope date does not match x-amz-date"));
         }
 
         validate_sig_v4_clock_skew(&amz_date, time::OffsetDateTime::now_utc(), &self.config.snapshot())?;
@@ -348,9 +348,7 @@ impl SignatureContext<'_> {
 
         // Per AWS SigV4 spec, the credential scope date must match the x-amz-date date.
         if presigned_url.credential.date != presigned_url.amz_date.fmt_date().as_str() {
-            let mut err = S3Error::new(S3ErrorCode::SignatureDoesNotMatch);
-            err.set_message("credential scope date does not match x-amz-date");
-            return Err(err);
+            return Err(s3_error!(SignatureDoesNotMatch, "credential scope date does not match x-amz-date"));
         }
 
         // ASK: how to use it?
@@ -456,6 +454,16 @@ impl SignatureContext<'_> {
 
         let auth = require_auth(self.auth)?;
 
+        // Reject stale requests before doing I/O work (secret key lookup).
+        let amz_date = extract_amz_date(&self.hs)?.ok_or_else(|| invalid_request!("missing header: x-amz-date"))?;
+
+        // Per AWS SigV4 spec, the credential scope date must match the x-amz-date date.
+        if authorization.credential.date != amz_date.fmt_date().as_str() {
+            return Err(s3_error!(SignatureDoesNotMatch, "credential scope date does not match x-amz-date"));
+        }
+
+        validate_sig_v4_clock_skew(&amz_date, time::OffsetDateTime::now_utc(), &self.config.snapshot())?;
+
         let amz_content_sha256 = extract_amz_content_sha256(&self.hs)?;
 
         if service == "s3" && amz_content_sha256.is_none() {
@@ -464,17 +472,6 @@ impl SignatureContext<'_> {
 
         let access_key = authorization.credential.access_key_id;
         let secret_key = auth.get_secret_key(access_key).await?;
-
-        let amz_date = extract_amz_date(&self.hs)?.ok_or_else(|| invalid_request!("missing header: x-amz-date"))?;
-
-        // Per AWS SigV4 spec, the credential scope date must match the x-amz-date date.
-        if authorization.credential.date != amz_date.fmt_date().as_str() {
-            let mut err = S3Error::new(S3ErrorCode::SignatureDoesNotMatch);
-            err.set_message("credential scope date does not match x-amz-date");
-            return Err(err);
-        }
-
-        validate_sig_v4_clock_skew(&amz_date, time::OffsetDateTime::now_utc(), &self.config.snapshot())?;
 
         let is_stream = amz_content_sha256.is_some_and(|v| v.is_streaming());
 
