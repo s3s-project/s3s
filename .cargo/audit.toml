@@ -7,4 +7,6 @@
 # Only used for S3 signature verification, not decryption. Low risk. No fix available.
 ignore = [
     "RUSTSEC-2023-0071",
+    # proc-macro-error2: unmaintained, transitive via jiff → defmt → defmt-macros
+    "RUSTSEC-2026-0173",
 ]

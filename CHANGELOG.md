@@ -7,7 +7,106 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-[Unreleased]: https://github.com/s3s-project/s3s/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/s3s-project/s3s/compare/v0.14.0...HEAD
+
+## [v0.14.0] - 2026-06-21
+
+[v0.14.0]: https://github.com/s3s-project/s3s/compare/v0.13.0...v0.14.0
+
+Tracking in milestone [v0.14.0](https://github.com/s3s-project/s3s/milestone/5).
+
+MSRV of this minor version: 1.92.0
+
+### s3s
+
+**Signature verification:**
++ Reject PutObject with `UNSIGNED-PAYLOAD` and no `Content-Length`, aligning with MinIO behavior ([#526](https://github.com/s3s-project/s3s/pull/526))
++ Allow raw URI path in SigV4 fallback for presigned URLs ([#589](https://github.com/s3s-project/s3s/pull/589))
++ Verify body hash for presigned URL PUT requests ([#622](https://github.com/s3s-project/s3s/pull/622))
+
+**Host & HTTP:**
++ Inject Host header from `:authority` for HTTP/2 requests ([#540](https://github.com/s3s-project/s3s/pull/540))
++ Ignore non-UTF8 headers during request preparation ([#597](https://github.com/s3s-project/s3s/pull/597))
++ Return actionable `501 Not Implemented` for virtual-hosted-style requests without a configured `S3Host` ([#618](https://github.com/s3s-project/s3s/pull/618)) (fixes [#534](https://github.com/s3s-project/s3s/issues/534))
+
+**ARN support:**
++ Implement access point and S3 on Outposts ARN support in `CopySource` ([#527](https://github.com/s3s-project/s3s/pull/527))
+
+**Path normalization:**
++ Add option to normalize forward slash of object name ([#596](https://github.com/s3s-project/s3s/pull/596)) (fixes [#569](https://github.com/s3s-project/s3s/issues/569))
+
+**XML & codegen:**
++ Add `named_element_any` for multi-name root element deserialization ([#609](https://github.com/s3s-project/s3s/pull/609))
++ Add `s3s#bodyLiteral` trait for declarative bare body literal handling ([#612](https://github.com/s3s-project/s3s/pull/612))
++ Skip unknown XML elements in top-level request types ([#617](https://github.com/s3s-project/s3s/pull/617)) (fixes [#613](https://github.com/s3s-project/s3s/issues/613))
++ Add `s3s#xmlAltName` trait for declarative multi-name root elements in codegen ([#610](https://github.com/s3s-project/s3s/pull/610))
+
+**POST Object:**
++ Exempt SSE helper fields from POST policy validation ([#608](https://github.com/s3s-project/s3s/pull/608))
+
+**MinIO compatibility:**
++ Add lifecycle extension fields for MinIO compatibility ([#611](https://github.com/s3s-project/s3s/pull/611))
+
+### s3s-fs
+
+**Conditional operations:**
++ Support conditional multipart upload with `If-Match` / `If-None-Match` ([#560](https://github.com/s3s-project/s3s/pull/560)) (fixes [#554](https://github.com/s3s-project/s3s/issues/554))
++ Support conditional copy in `copy_object` ([#577](https://github.com/s3s-project/s3s/pull/577)) (fixes [#553](https://github.com/s3s-project/s3s/issues/553))
++ Support `If-Match` conditional on `PutObject` ([#588](https://github.com/s3s-project/s3s/pull/588))
+
+**Copy object fixes:**
++ Preserve content on `CopyObject` self-replace ([#585](https://github.com/s3s-project/s3s/pull/585)) (fixes [#583](https://github.com/s3s-project/s3s/issues/583))
++ Honor `MetadataDirective::Replace` in `copy_object` ([#586](https://github.com/s3s-project/s3s/pull/586)) (fixes [#584](https://github.com/s3s-project/s3s/issues/584))
++ Fix upload copy from an empty object ([#548](https://github.com/s3s-project/s3s/pull/548)) (fixes [#547](https://github.com/s3s-project/s3s/issues/547))
+
+**List objects fixes:**
++ Handle continuation token for ListObjectsV2 ([#543](https://github.com/s3s-project/s3s/pull/543)) (fixes [#542](https://github.com/s3s-project/s3s/issues/542))
++ Emit `next_marker` in ListObjects V1 when `is_truncated` is true ([#561](https://github.com/s3s-project/s3s/pull/561)) (fixes [#544](https://github.com/s3s-project/s3s/issues/544))
+
+**Object operation fixes:**
++ Include ETag and checksums in `head_object` response ([#555](https://github.com/s3s-project/s3s/pull/555)) (fixes [#549](https://github.com/s3s-project/s3s/issues/549))
++ Correct ETag computation for multipart uploaded objects ([#556](https://github.com/s3s-project/s3s/pull/556)) (fixes [#550](https://github.com/s3s-project/s3s/issues/550))
++ Return 204 for `delete_object` on non-existent objects ([#557](https://github.com/s3s-project/s3s/pull/557)) (fixes [#552](https://github.com/s3s-project/s3s/issues/552))
++ Report non-existent objects as deleted in `delete_objects` ([#558](https://github.com/s3s-project/s3s/pull/558)) (fixes [#551](https://github.com/s3s-project/s3s/issues/551))
++ Fix incorrect error status code ([#546](https://github.com/s3s-project/s3s/pull/546)) (fixes [#545](https://github.com/s3s-project/s3s/issues/545))
+
+### s3s-aws
+
++ Make `s3s-aws` opt out of `aws-sdk-s3` default features, avoiding vulnerable legacy rustls ([#580](https://github.com/s3s-project/s3s/pull/580)) (fixes [#571](https://github.com/s3s-project/s3s/issues/571))
+
+### CI
+
++ Refine audit workflow triggers ([#524](https://github.com/s3s-project/s3s/pull/524))
++ Add semver checks ([#525](https://github.com/s3s-project/s3s/pull/525)) (fixes [#218](https://github.com/s3s-project/s3s/issues/218))
++ Pin s3-tests revision for deterministic e2e CI ([#581](https://github.com/s3s-project/s3s/pull/581))
++ Harden s3tests venv cache key ([#563](https://github.com/s3s-project/s3s/pull/563))
++ Switch to crates.io trusted publishing via OIDC ([#615](https://github.com/s3s-project/s3s/pull/615)) (fixes [#606](https://github.com/s3s-project/s3s/issues/606))
++ Add cargo-deny for dependency vetting and license checking ([#621](https://github.com/s3s-project/s3s/pull/621)) (fixes [#620](https://github.com/s3s-project/s3s/issues/620))
+
+### Security
+
++ Upgrade aws-lc-sys to 0.38.0 to resolve 3 security advisories ([#530](https://github.com/s3s-project/s3s/pull/530))
++ Upgrade openssl across multiple bumps (0.10.76 → 0.10.80) ([#574](https://github.com/s3s-project/s3s/pull/574), [#582](https://github.com/s3s-project/s3s/pull/582), [#592](https://github.com/s3s-project/s3s/pull/592))
++ Update to full release of RustCrypto dependencies ([#562](https://github.com/s3s-project/s3s/pull/562))
+
+### Testing
+
++ Improve unit test coverage for core HTTP and DTO modules ([#528](https://github.com/s3s-project/s3s/pull/528))
++ Remove unused async from TestFixture::setup impls ([#598](https://github.com/s3s-project/s3s/pull/598))
+
+### Data
+
++ Fix Python CI failure when AWS S3 error docs no longer expose legacy tables ([#605](https://github.com/s3s-project/s3s/pull/605))
+
+### Dependencies
+
++ Upgrade quick-xml to 0.40.1 ([#602](https://github.com/s3s-project/s3s/pull/602)) (fixes [#600](https://github.com/s3s-project/s3s/issues/600))
++ Unlock and update opendal to 0.56.0 ([#590](https://github.com/s3s-project/s3s/pull/590))
++ Pin opendal to work around audit failure ([#572](https://github.com/s3s-project/s3s/pull/572))
++ Update AWS SDK ([#538](https://github.com/s3s-project/s3s/pull/538))
++ Bump workspace dependencies ([#594](https://github.com/s3s-project/s3s/pull/594))
++ Multiple dependabot dependency group updates ([#607](https://github.com/s3s-project/s3s/pull/607), [#578](https://github.com/s3s-project/s3s/pull/578), [#568](https://github.com/s3s-project/s3s/pull/568), [#566](https://github.com/s3s-project/s3s/pull/566), [#565](https://github.com/s3s-project/s3s/pull/565), [#603](https://github.com/s3s-project/s3s/pull/603))
++ Bump individual Python/Rust dependencies ([#541](https://github.com/s3s-project/s3s/pull/541), [#564](https://github.com/s3s-project/s3s/pull/564), [#573](https://github.com/s3s-project/s3s/pull/573), [#587](https://github.com/s3s-project/s3s/pull/587), [#591](https://github.com/s3s-project/s3s/pull/591), [#537](https://github.com/s3s-project/s3s/pull/537), [#576](https://github.com/s3s-project/s3s/pull/576), [#579](https://github.com/s3s-project/s3s/pull/579))
 
 ## [v0.13.0] - 2026-03-01
 
