@@ -662,26 +662,45 @@ mod post_policy_test_helpers {
         )
     }
 
-    /// Build a POST object request with a policy
+    /// Augment a test POST policy JSON with the required `SigV4` eq conditions
+    /// (`x-amz-date`, `x-amz-credential`, `x-amz-algorithm`) so the request
+    /// passes the verifier's policy-field-matching checks.
+    fn augment_post_policy_for_test(policy_json: &str, amz_date: &str, credential: &str, algorithm: &str) -> String {
+        let mut policy: serde_json::Value = serde_json::from_str(policy_json).expect("invalid test policy JSON");
+        let conditions = policy["conditions"]
+            .as_array_mut()
+            .expect("policy must have a conditions array");
+        conditions.push(serde_json::json!({"x-amz-date": amz_date}));
+        conditions.push(serde_json::json!({"x-amz-credential": credential}));
+        conditions.push(serde_json::json!({"x-amz-algorithm": algorithm}));
+        policy.to_string()
+    }
+
+    /// Build a POST object request with a policy.
+    ///
+    /// The provided `policy_json` is augmented with the required `SigV4` POST
+    /// policy eq conditions (`x-amz-date`, `x-amz-credential`, `x-amz-algorithm`)
+    /// so the request passes the verifier's policy-field-matching checks.
     pub fn build_post_object_request(
         policy_json: &str,
         file_content: &str,
         secret_key: &SecretKey,
         with_content_type: bool,
     ) -> Request {
-        let policy_b64 = base64_simd::STANDARD.encode_to_string(policy_json);
-
         let boundary = "------------------------test12345678";
         let bucket = "test-bucket";
         let key = "test-key";
         let amz_date = sig_v4::AmzDate::parse("20250101T000000Z").unwrap();
+        let amz_date_str = amz_date.fmt_iso8601();
         let region = "us-east-1";
         let service = "s3";
         let content_type = "text/plain";
         let algorithm = "AWS4-HMAC-SHA256";
         let credential = "AKIAIOSFODNN7EXAMPLE/20250101/us-east-1/s3/aws4_request";
+
+        let policy_json = augment_post_policy_for_test(policy_json, amz_date_str.as_str(), credential, algorithm);
+        let policy_b64 = base64_simd::STANDARD.encode_to_string(&policy_json);
         let signature = sig_v4::calculate_signature(&policy_b64, secret_key, &amz_date, region, service);
-        let amz_date_str = amz_date.fmt_iso8601();
 
         let fields = {
             let mut f = vec![
@@ -721,25 +740,29 @@ mod post_policy_test_helpers {
     /// This ensures that `aggregate_file_stream_limited` returns a `Vec<Bytes>`
     /// with multiple entries, so tests can distinguish between
     /// `vec_bytes.len()` (chunk count) and the total byte count.
+    ///
+    /// The provided `policy_json` is augmented with the required `SigV4` POST
+    /// policy eq conditions so the request passes the verifier's checks.
     pub fn build_post_object_request_chunked(
         policy_json: &str,
         file_content: &str,
         secret_key: &SecretKey,
         chunk_size: usize,
     ) -> Request {
-        let policy_b64 = base64_simd::STANDARD.encode_to_string(policy_json);
-
         let boundary = "------------------------test12345678";
         let bucket = "test-bucket";
         let key = "test-key";
         let amz_date = sig_v4::AmzDate::parse("20250101T000000Z").unwrap();
+        let amz_date_str = amz_date.fmt_iso8601();
         let region = "us-east-1";
         let service = "s3";
         let content_type = "text/plain";
         let algorithm = "AWS4-HMAC-SHA256";
         let credential = "AKIAIOSFODNN7EXAMPLE/20250101/us-east-1/s3/aws4_request";
+
+        let policy_json = augment_post_policy_for_test(policy_json, amz_date_str.as_str(), credential, algorithm);
+        let policy_b64 = base64_simd::STANDARD.encode_to_string(&policy_json);
         let signature = sig_v4::calculate_signature(&policy_b64, secret_key, &amz_date, region, service);
-        let amz_date_str = amz_date.fmt_iso8601();
 
         let body = build_multipart_fields(
             &[

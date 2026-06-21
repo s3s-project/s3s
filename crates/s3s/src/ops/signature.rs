@@ -5,6 +5,7 @@ use crate::error::*;
 use crate::http;
 use crate::http::{AwsChunkedStream, Body, Multipart, MultipartLimits};
 use crate::http::{OrderedHeaders, OrderedQs};
+use crate::post_policy::PostPolicy;
 use crate::protocol::TrailingHeaders;
 use crate::sig_v2;
 use crate::sig_v2::{AuthorizationV2, PostSignatureV2, PresignedUrlV2};
@@ -266,6 +267,28 @@ impl SignatureContext<'_> {
             CredentialV4::parse(info.x_amz_credential).map_err(|_| invalid_request!("invalid field: x-amz-credential"))?;
 
         let amz_date = AmzDate::parse(info.x_amz_date).map_err(|_| invalid_request!("invalid field: x-amz-date"))?;
+
+        // Per AWS SigV4 spec, the signed POST policy must contain eq conditions
+        // for x-amz-date, x-amz-credential, and x-amz-algorithm that match the
+        // submitted form fields exactly.
+        {
+            let policy = PostPolicy::from_base64(info.policy).map_err(|e| s3_error!(e, InvalidPolicyDocument))?;
+
+            let policy_date = policy.eq_condition_value("x-amz-date");
+            if policy_date != Some(info.x_amz_date) {
+                return Err(s3_error!(InvalidPolicyDocument, "x-amz-date does not match policy"));
+            }
+
+            let policy_credential = policy.eq_condition_value("x-amz-credential");
+            if policy_credential != Some(info.x_amz_credential) {
+                return Err(s3_error!(InvalidPolicyDocument, "x-amz-credential does not match policy"));
+            }
+
+            let policy_algo = policy.eq_condition_value("x-amz-algorithm");
+            if policy_algo != Some(info.x_amz_algorithm) {
+                return Err(s3_error!(InvalidPolicyDocument, "x-amz-algorithm does not match policy"));
+            }
+        }
 
         // Per AWS SigV4 spec, the credential scope date must match the x-amz-date date.
         if credential.date != amz_date.fmt_date().as_str() {
@@ -1586,7 +1609,15 @@ file content\r\n\
         let request_time = time::OffsetDateTime::now_utc() - skew - time::Duration::minutes(1);
         let amz_date_str = fmt_current_amz_date(request_time);
         let amz_date = AmzDate::parse(&amz_date_str).unwrap();
-        let policy_b64 = base64_simd::STANDARD.encode_to_string("{}");
+
+        // Construct a proper POST policy JSON with the required eq conditions
+        let policy_json = format!(
+            r#"{{"expiration":"2099-01-01T00:00:00Z","conditions":[{{"x-amz-date":"{amz_date}"}},{{"x-amz-credential":"{access_key}/{date}/us-east-1/s3/aws4_request"}},{{"x-amz-algorithm":"AWS4-HMAC-SHA256"}}]}}"#,
+            amz_date = amz_date_str,
+            access_key = access_key,
+            date = amz_date.fmt_date(),
+        );
+        let policy_b64 = base64_simd::STANDARD.encode_to_string(&policy_json);
         let signature = sig_v4::calculate_signature(&policy_b64, &secret_key, &amz_date, "us-east-1", "s3");
         let boundary = "boundary123";
         let body = format!(

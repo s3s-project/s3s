@@ -257,6 +257,15 @@ impl PostPolicy {
         }
         None
     }
+
+    /// Returns the value of an `eq` condition for the given field, if present.
+    #[must_use]
+    pub(crate) fn eq_condition_value(&self, field: &str) -> Option<&str> {
+        self.conditions.iter().find_map(|c| match c {
+            PostPolicyCondition::Eq { field: f, value } if f == field => Some(value.as_str()),
+            _ => None,
+        })
+    }
 }
 
 /// Raw POST policy for deserialization
