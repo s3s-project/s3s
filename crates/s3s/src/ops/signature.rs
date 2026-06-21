@@ -353,9 +353,8 @@ impl SignatureContext<'_> {
 
         let amz_content_sha256 = extract_amz_content_sha256(&self.hs)?;
 
-        // Presigned URLs do not support streaming (chunked) payload signing.
-        // Mirrors MinIO behavior: streaming magic strings are not valid hex
-        // and would return ErrContentSHA256Mismatch.
+        // Presigned URLs do not support streaming (chunked) payload signing,
+        // so reject them here before reaching the SingleChunk handler below.
         if amz_content_sha256.is_some_and(|v| v.is_streaming()) {
             return Err(s3_error!(NotImplemented, "streaming payload for presigned URLs is not implemented"));
         }
@@ -430,7 +429,7 @@ impl SignatureContext<'_> {
             sig_v4::create_presigned_canonical_request_with_raw_uri_path(method, self.raw_uri_path, qs.as_ref(), &headers)
         })?;
 
-        // Verify body hash for PUT presigned URLs.
+        // Verify body hash for presigned URL requests.
         // For presigned URLs the canonical request uses UNSIGNED-PAYLOAD (the
         // body is unknown at signing time), but the actual request MUST carry
         // the real SHA256 hash in x-amz-content-sha256, and the server must
