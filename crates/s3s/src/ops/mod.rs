@@ -112,7 +112,8 @@ pub(crate) fn serialize_error(mut e: S3Error, no_decl: bool) -> S3Result<Respons
 const VIRTUAL_HOSTED_STYLE_HINT: &str = "\
 The request appears to use virtual-hosted-style addressing \
 (e.g., Host: bucket.domain) which may not be supported by this endpoint. \
-If so, try path-style requests instead (e.g., PUT /<bucket>).";
+If so, try path-style requests instead \
+(e.g., /<bucket> rather than / with host bucket.domain).";
 
 fn unknown_operation() -> S3Error {
     S3Error::with_message(S3ErrorCode::NotImplemented, "Unknown operation")

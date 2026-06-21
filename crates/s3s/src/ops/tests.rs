@@ -2013,6 +2013,12 @@ mod virtual_hosted_style_hint_tests {
         )
     }
 
+    /// Read the response body as a string for assertion.
+    fn body_str(resp: &super::Response) -> String {
+        let bytes = resp.body.bytes().expect("response body should be available");
+        String::from_utf8(bytes.to_vec()).unwrap()
+    }
+
     #[tokio::test]
     async fn put_virtual_hosted_style_without_s3_host_returns_actionable_501() {
         let record = Arc::new(RecordS3::default());
@@ -2034,6 +2040,9 @@ mod virtual_hosted_style_hint_tests {
         assert!(result.is_ok());
         let resp = result.unwrap();
         assert_eq!(resp.status, http::StatusCode::NOT_IMPLEMENTED);
+        let text = body_str(&resp);
+        assert!(text.contains("virtual-hosted-style"), "body should mention virtual-hosted-style: {text}");
+        assert!(!text.contains("Unknown operation"), "body should not be the old generic error: {text}");
         assert!(!record.create_bucket.load(std::sync::atomic::Ordering::SeqCst));
     }
 
@@ -2058,6 +2067,8 @@ mod virtual_hosted_style_hint_tests {
         assert!(result.is_ok());
         let resp = result.unwrap();
         assert_eq!(resp.status, http::StatusCode::NOT_IMPLEMENTED);
+        let text = body_str(&resp);
+        assert!(text.contains("virtual-hosted-style"), "body should mention virtual-hosted-style: {text}");
     }
 
     #[tokio::test]
@@ -2081,6 +2092,8 @@ mod virtual_hosted_style_hint_tests {
         assert!(result.is_ok());
         let resp = result.unwrap();
         assert_eq!(resp.status, http::StatusCode::NOT_IMPLEMENTED);
+        let text = body_str(&resp);
+        assert!(text.contains("virtual-hosted-style"), "body should mention virtual-hosted-style: {text}");
         assert!(!record.delete_bucket.load(std::sync::atomic::Ordering::SeqCst));
     }
 
@@ -2227,6 +2240,8 @@ mod virtual_hosted_style_hint_tests {
         assert!(result.is_ok());
         let resp = result.unwrap();
         assert_eq!(resp.status, http::StatusCode::NOT_IMPLEMENTED);
+        let text = body_str(&resp);
+        assert!(text.contains("virtual-hosted-style"), "body should mention virtual-hosted-style: {text}");
     }
 
     #[tokio::test]
