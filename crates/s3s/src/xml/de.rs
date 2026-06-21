@@ -416,7 +416,7 @@ impl<'xml> Deserializer<'xml> {
     ///
     /// # Errors
     /// Returns an error if an unexpected EOF is encountered before the end tag.
-    pub fn skip_element_content(&mut self) -> DeResult {
+    pub(crate) fn skip_element_content(&mut self) -> DeResult {
         let mut depth: u32 = 0;
         loop {
             match self.peek_event()? {

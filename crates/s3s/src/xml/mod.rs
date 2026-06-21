@@ -629,4 +629,24 @@ mod tests {
         // The inner <Status> and <MFADelete> must be swallowed, not parsed.
         assert!(result.mfa_delete.is_none(), "MFADelete inside <Unknown> should be skipped: {result:#?}");
     }
+
+    /// Nested structs (`Tag`) must reject unknown elements — only top-level
+    /// request types get the lenient treatment.
+    #[test]
+    fn deser_nested_rejects_unknown_element() {
+        use crate::dto::Tagging;
+
+        let xml = br"<Tagging>
+            <TagSet>
+                <Tag><Key>k1</Key><Value>v1</Value><UnknownField>x</UnknownField></Tag>
+            </TagSet>
+        </Tagging>";
+
+        let mut d = Deserializer::new(xml);
+        let err = Tagging::deserialize(&mut d).unwrap_err();
+        assert!(
+            matches!(err, DeError::UnexpectedTagName),
+            "nested Tag should reject unknown element, got {err:?}"
+        );
+    }
 }
