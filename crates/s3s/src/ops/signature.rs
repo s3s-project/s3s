@@ -1,6 +1,6 @@
 use crate::auth::S3Auth;
 use crate::auth::SecretKey;
-use crate::config::S3ConfigProvider;
+use crate::config::{S3Config, S3ConfigProvider};
 use crate::error::*;
 use crate::http;
 use crate::http::{AwsChunkedStream, Body, Multipart, MultipartLimits};
@@ -121,11 +121,10 @@ fn sig_v4_signatures_match(actual_signature: &str, expected_signature: &str) -> 
     actual_signature.as_bytes().ct_eq(expected_signature.as_bytes()).into()
 }
 
-fn validate_sig_v4_clock_skew(amz_date: &AmzDate, config: &Arc<dyn S3ConfigProvider>) -> S3Result<()> {
+fn validate_sig_v4_clock_skew(amz_date: &AmzDate, now: time::OffsetDateTime, config: &S3Config) -> S3Result<()> {
     let request_time = amz_date.to_time().ok_or_else(|| invalid_request!("invalid amz date"))?;
-    let now = time::OffsetDateTime::now_utc();
     let duration = now - request_time;
-    let max_skew_time = time::Duration::seconds(i64::from(config.snapshot().presigned_url_max_skew_time_secs));
+    let max_skew_time = time::Duration::seconds(i64::from(config.presigned_url_max_skew_time_secs));
 
     if duration.abs() > max_skew_time {
         return Err(s3_error!(RequestTimeTooSkewed, "request time is too far from server time"));
@@ -267,7 +266,7 @@ impl SignatureContext<'_> {
             CredentialV4::parse(info.x_amz_credential).map_err(|_| invalid_request!("invalid field: x-amz-credential"))?;
 
         let amz_date = AmzDate::parse(info.x_amz_date).map_err(|_| invalid_request!("invalid field: x-amz-date"))?;
-        validate_sig_v4_clock_skew(&amz_date, self.config)?;
+        validate_sig_v4_clock_skew(&amz_date, time::OffsetDateTime::now_utc(), &self.config.snapshot())?;
 
         let access_key = credential.access_key_id.to_owned();
         let secret_key = auth.get_secret_key(&access_key).await?;
@@ -429,7 +428,7 @@ impl SignatureContext<'_> {
         let secret_key = auth.get_secret_key(access_key).await?;
 
         let amz_date = extract_amz_date(&self.hs)?.ok_or_else(|| invalid_request!("missing header: x-amz-date"))?;
-        validate_sig_v4_clock_skew(&amz_date, self.config)?;
+        validate_sig_v4_clock_skew(&amz_date, time::OffsetDateTime::now_utc(), &self.config.snapshot())?;
 
         let is_stream = amz_content_sha256.is_some_and(|v| v.is_streaming());
 
