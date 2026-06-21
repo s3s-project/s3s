@@ -52,7 +52,7 @@ use hyper::Method;
 use hyper::StatusCode;
 use hyper::Uri;
 use mime::Mime;
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 
 #[async_trait::async_trait]
 pub trait Operation: Send + Sync + 'static {
@@ -109,6 +109,11 @@ pub(crate) fn serialize_error(mut e: S3Error, no_decl: bool) -> S3Result<Respons
     Ok(res)
 }
 
+const VIRTUAL_HOSTED_STYLE_HINT: &str = "\
+Virtual-hosted-style S3 request is not supported by this endpoint. \
+Use path-style requests instead (e.g., PUT /<bucket> rather than \
+virtual-hosted-style PUT / with host bucket.domain).";
+
 fn unknown_operation() -> S3Error {
     S3Error::with_message(S3ErrorCode::NotImplemented, "Unknown operation")
 }
@@ -141,6 +146,19 @@ fn extract_host(req: &Request) -> S3Result<Option<String>> {
 
 fn is_socket_addr_or_ip_addr(host: &str) -> bool {
     host.parse::<SocketAddr>().is_ok() || host.parse::<IpAddr>().is_ok()
+}
+
+fn looks_like_virtual_hosted_style(host: &str) -> bool {
+    // Strip port to examine host part only.
+    let host_part = match host.rsplit_once(':') {
+        Some((h, port)) if port.bytes().all(|b| b.is_ascii_digit()) => h,
+        _ => host,
+    };
+    // Virtual-hosted-style addresses bucket as a subdomain, so there are
+    // at least three dot-separated labels: bucket.base.domain.
+    // Two-label hosts (base.domain) and bare hostnames are excluded.
+    // Empty segments are filtered to handle trailing-dot FQDN forms.
+    !is_socket_addr_or_ip_addr(host) && host_part.split('.').filter(|s| !s.is_empty()).count() >= 3
 }
 
 fn convert_parse_s3_path_error(err: &ParseS3PathError) -> S3Error {
@@ -286,6 +304,7 @@ enum Prepare {
 async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> {
     let s3_path;
     let mut content_length;
+    let host_header: Option<String>;
     {
         // HTTP/2 and HTTP/3 replace the Host header with the :authority pseudo-header.
         // hyper exposes :authority via uri.authority() but does not insert a Host entry
@@ -306,7 +325,7 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
             .map_err(|_| S3ErrorCode::InvalidURI)?
             .into_owned();
 
-        let host_header = extract_host(req)?;
+        host_header = extract_host(req)?;
         let vh;
         let vh_bucket;
         let vh_region;
@@ -537,7 +556,29 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                 S3Path::Object { .. } => return Err(s3_error!(MethodNotAllowed)),
             }
         }
-        resolve_route(req, s3_path, req.s3ext.qs.as_ref())?
+        match resolve_route(req, s3_path, req.s3ext.qs.as_ref()) {
+            Ok(result) => result,
+            Err(err) => {
+                // When S3Host is absent and the host looks virtual-hosted-style,
+                // bucket names in the Host header are lost — any routing failure
+                // is likely caused by this mismatch.  Give an actionable error.
+                if ccx.host.is_none()
+                    && let Some(host_header) = host_header.as_deref()
+                    && looks_like_virtual_hosted_style(host_header)
+                {
+                    warn!(
+                        ?host_header,
+                        ?s3_path,
+                        "virtual-hosted-style request received but no S3 host parser is enabled. \
+                         Configure an S3Host implementation to enable virtual-hosted-style parsing."
+                    );
+
+                    return Err(S3Error::with_message(S3ErrorCode::NotImplemented, VIRTUAL_HOSTED_STYLE_HINT));
+                }
+                // Not a virtual-hosted-style issue — propagate original error.
+                return Err(err);
+            }
+        }
     };
 
     // FIXME: hack for E2E tests (minio/mint)
