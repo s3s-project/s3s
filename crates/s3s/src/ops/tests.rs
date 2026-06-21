@@ -2077,8 +2077,13 @@ mod virtual_hosted_style_hint_tests {
             validation: None,
         };
 
-        // IP, localhost, and two-label domains should not trigger the VH hint.
-        for host in ["127.0.0.1:9000", "localhost:9000", "example.com:9000"] {
+        // IP, localhost, two-label domains, and bracketed IPv6 should not trigger the VH hint.
+        for host in [
+            "127.0.0.1:9000",
+            "localhost:9000",
+            "example.com:9000",
+            "[::ffff:127.0.0.1]:9000", // IPv4-mapped IPv6 with embedded dots
+        ] {
             let mut req = make_request(Method::PUT, host);
             let result = super::call(&mut req, &ccx).await;
 

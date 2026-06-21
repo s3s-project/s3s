@@ -150,16 +150,26 @@ fn is_socket_addr_or_ip_addr(host: &str) -> bool {
 }
 
 fn looks_like_virtual_hosted_style(host: &str) -> bool {
-    // Strip port to examine host part only.
+    // Strip trailing port (e.g. ":9000").
     let host_part = match host.rsplit_once(':') {
         Some((h, port)) if port.bytes().all(|b| b.is_ascii_digit()) => h,
         _ => host,
     };
+    // Strip brackets from IPv6 literals (e.g. "[::1]" → "::1").
+    // This also covers IPv4-mapped IPv6 like "[::ffff:127.0.0.1]"
+    // whose embedded dots could otherwise look like labels.
+    let host_no_bracket = host_part
+        .strip_prefix('[')
+        .and_then(|s| s.strip_suffix(']'))
+        .unwrap_or(host_part);
+    if host_no_bracket.parse::<std::net::IpAddr>().is_ok() {
+        return false;
+    }
     // Virtual-hosted-style addresses bucket as a subdomain, so there are
     // at least three dot-separated labels: bucket.base.domain.
     // Two-label hosts (base.domain) and bare hostnames are excluded.
     // Empty segments are filtered to handle trailing-dot FQDN forms.
-    !is_socket_addr_or_ip_addr(host) && host_part.split('.').filter(|s| !s.is_empty()).count() >= 3
+    host_no_bracket.split('.').filter(|s| !s.is_empty()).count() >= 3
 }
 
 fn convert_parse_s3_path_error(err: &ParseS3PathError) -> S3Error {
