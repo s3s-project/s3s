@@ -110,9 +110,9 @@ pub(crate) fn serialize_error(mut e: S3Error, no_decl: bool) -> S3Result<Respons
 }
 
 const VIRTUAL_HOSTED_STYLE_HINT: &str = "\
-Virtual-hosted-style S3 request is not supported by this endpoint. \
-Use path-style requests instead (e.g., PUT /<bucket> rather than \
-virtual-hosted-style PUT / with host bucket.domain).";
+The request appears to use virtual-hosted-style addressing \
+(e.g., Host: bucket.domain) which may not be supported by this endpoint. \
+If so, try path-style requests instead (e.g., PUT /<bucket>).";
 
 fn unknown_operation() -> S3Error {
     S3Error::with_message(S3ErrorCode::NotImplemented, "Unknown operation")
@@ -569,8 +569,10 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                     warn!(
                         ?host_header,
                         ?s3_path,
-                        "virtual-hosted-style request received but no S3 host parser is enabled. \
-                         Configure an S3Host implementation to enable virtual-hosted-style parsing."
+                        "request may be using virtual-hosted-style addressing; \
+                         no S3 host parser is configured. \
+                         Consider enabling an S3Host implementation if virtual-hosted-style \
+                         requests need to be handled by this endpoint."
                     );
 
                     return Err(S3Error::with_message(S3ErrorCode::NotImplemented, VIRTUAL_HOSTED_STYLE_HINT));
