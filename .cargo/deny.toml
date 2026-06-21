@@ -1,11 +1,9 @@
-# cargo-deny license check configuration
-# See: https://embarkstudios.github.io/cargo-deny/checks/licenses/cfg.html
+# cargo-deny configuration
+# See: https://embarkstudios.github.io/cargo-deny/
 #
-# Run with: cargo deny check licenses
+# Run with: cargo deny check
 
 [licenses]
-# Only the checks listed in this file are used.
-# This configuration intentionally covers licenses only.
 
 # Allowed permissive licenses.
 # All licenses listed here are OSI-approved and non-copyleft (or file-level
@@ -36,3 +34,16 @@ exceptions = [
     # getrandom).  It is never included in standard server/WASM builds.
     { allow = ["LGPL-2.1-or-later"], crate = "r-efi" },
 ]
+
+[bans]
+# Warn (not deny) on duplicate crate versions: the AWS SDK pulls in many
+# old/new version pairs that we cannot easily collapse.
+multiple-versions = "warn"
+# No dependency should use a wildcard version requirement.
+wildcards = "deny"
+
+[sources]
+# Deny any crate that does not come from crates.io.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
