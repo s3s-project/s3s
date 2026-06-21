@@ -612,4 +612,25 @@ mod tests {
         let result = VersioningConfiguration::deserialize(&mut d).unwrap();
         assert_eq!(result.status.as_ref().map(BucketVersioningStatus::as_str), Some("Enabled"));
     }
+
+    /// Known-field name appearing inside an unknown parent must not confuse
+    /// the parser — the inner element is skipped as part of the unknown block.
+    #[test]
+    fn deser_struct_ignores_known_name_nested_in_unknown_parent() {
+        use crate::dto::VersioningConfiguration;
+
+        let xml = br"<VersioningConfiguration>
+            <Status>Enabled</Status>
+            <Unknown>
+                <Status>Skipped</Status>
+                <MFADelete>Skipped</MFADelete>
+            </Unknown>
+        </VersioningConfiguration>";
+
+        let mut d = Deserializer::new(xml);
+        let result = VersioningConfiguration::deserialize(&mut d).unwrap();
+        assert_eq!(result.status.as_ref().map(BucketVersioningStatus::as_str), Some("Enabled"));
+        // The inner <Status> and <MFADelete> must be swallowed, not parsed.
+        assert!(result.mfa_delete.is_none(), "MFADelete inside <Unknown> should be skipped: {result:#?}");
+    }
 }
