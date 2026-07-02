@@ -62,7 +62,6 @@ aws-sdk-sts = { workspace = true, features = ["behavior-version-latest"] }
 futures-util.workspace = true
 hyper = { workspace = true, features = ["http1", "http2"] }
 hyper-util = { workspace = true, features = ["server-auto", "server-graceful", "http1", "http2", "tokio"] }
-opendal = { workspace = true, default-features = false, features = ["services-s3", "executors-tokio", "reqwest-rustls-tls"] }
 s3s-aws = { version = "0.14.0", path = "../s3s-aws" }
 tokio = { workspace = true, features = ["full"] }
 tracing-subscriber.workspace = true
