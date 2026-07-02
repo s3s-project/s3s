@@ -9,4 +9,12 @@ ignore = [
     "RUSTSEC-2023-0071",
     # proc-macro-error2: unmaintained, transitive via jiff → defmt → defmt-macros
     "RUSTSEC-2026-0173",
+    # quick-xml 0.39.4 and 0.40.1: Quadratic run time when checking a start tag
+    # for duplicate attribute names. These are transitive dependencies via:
+    # - opendal-core (0.39.4)
+    # - opendal-service-s3 (0.39.4, 0.40.1)
+    # - reqsign-aws-v4 (0.40.1)
+    # Waiting for opendal to release a new version using quick-xml 0.41.0+.
+    # Upstream issue: https://github.com/apache/opendal
+    "RUSTSEC-2026-0194",
 ]
