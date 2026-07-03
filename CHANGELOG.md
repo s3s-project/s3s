@@ -7,7 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-[Unreleased]: https://github.com/s3s-project/s3s/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/s3s-project/s3s/compare/v0.14.1...HEAD
+
+## [v0.14.1] - 2026-07-03
+
+[v0.14.1]: https://github.com/s3s-project/s3s/compare/v0.14.0...v0.14.1
+
+### Security
+
++ Update `quick-xml` to 0.41.0, fixing [RUSTSEC-2026-0194] (quadratic run time for duplicate attribute names) and [RUSTSEC-2026-0195] (unbounded namespace-declaration allocation DoS) in [#624](https://github.com/s3s-project/s3s/pull/624)
++ Update `quinn-proto` to 0.11.15, fixing [RUSTSEC-2026-0185] (remote memory exhaustion from unbounded out-of-order stream reassembly) in [#624](https://github.com/s3s-project/s3s/pull/624)
++ Update `anyhow` to 1.0.103, fixing [RUSTSEC-2026-0190] (unsoundness in `Error::downcast_mut()`) in [#624](https://github.com/s3s-project/s3s/pull/624)
+
+### Dependencies
+
++ Upgrade Rust dependencies: `arc-swap` (1.9.2), `uuid` (1.23.4), `atoi` (3.1.0), `time` (0.3.52) in [#624](https://github.com/s3s-project/s3s/pull/624)
++ Upgrade CI actions: `actions/checkout` (v7), `codecov/codecov-action` (v7), `actions/cache` (v6) in [#625](https://github.com/s3s-project/s3s/pull/625)
+
+### Changed
+
++ (s3s-fs) Remove `opendal` dev-dependency and integration tests to eliminate vulnerable transitive dependency chain in [#624](https://github.com/s3s-project/s3s/pull/624) (see [#627](https://github.com/s3s-project/s3s/issues/627))
 
 ## [v0.14.0] - 2026-06-21
 
