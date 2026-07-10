@@ -61,13 +61,17 @@ impl<S> UploadStream<S> {
     /// Creates a new [`UploadStream`] with the provided expected checksum.
     pub fn new(inner: S, length: usize, hex_sha256: &str) -> Result<Self, UploadStreamError> {
         let expected_sha256 = decode_sha256_hex(hex_sha256)?;
-        Ok(Self {
+        Ok(Self::new_with_expected_sha256(inner, length, expected_sha256))
+    }
+
+    pub(crate) fn new_with_expected_sha256(inner: S, length: usize, expected_sha256: [u8; 32]) -> Self {
+        Self {
             inner,
             hasher: Some(Sha256::new()),
             expected_sha256,
             remaining_length: length,
             state: State::Reading,
-        })
+        }
     }
 
     /// Converts this stream into a dynamic byte stream.
@@ -260,6 +264,18 @@ mod tests {
         let stream = futures::stream::iter(vec![ok_bytes(data)]);
 
         let mut upload = UploadStream::new(stream, data.len(), &checksum).unwrap();
+
+        let err = upload.next().await.unwrap().unwrap_err();
+        assert!(matches!(err, UploadStreamError::Sha256Mismatch));
+    }
+
+    #[tokio::test]
+    async fn sha256_bytes_mismatch() {
+        let data = b"hello";
+        let expected_sha256 = [0_u8; 32];
+        let stream = futures::stream::iter(vec![ok_bytes(data)]);
+
+        let mut upload = UploadStream::new_with_expected_sha256(stream, data.len(), expected_sha256);
 
         let err = upload.next().await.unwrap().unwrap_err();
         assert!(matches!(err, UploadStreamError::Sha256Mismatch));

@@ -5,7 +5,7 @@ use crate::utils::crypto::is_sha256_checksum;
 /// See also [Common Request Headers](https://docs.aws.amazon.com/AmazonS3/latest/API/RESTCommonRequestHeaders.html)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AmzContentSha256<'a> {
-    /// Actual payload checksum value
+    /// Actual payload checksum value, encoded as hexadecimal or standard Base64.
     SingleChunk(&'a str),
 
     /// `UNSIGNED-PAYLOAD`
@@ -42,6 +42,10 @@ impl<'a> AmzContentSha256<'a> {
     /// Returns an `Err` if the header is invalid
     pub fn parse(header: &'a str) -> Result<Self, ParseAmzContentSha256Error> {
         if is_sha256_checksum(header) {
+            return Ok(Self::SingleChunk(header));
+        }
+
+        if decode_sha256_base64(header).is_some() {
             return Ok(Self::SingleChunk(header));
         }
 
@@ -90,6 +94,24 @@ impl<'a> AmzContentSha256<'a> {
             | AmzContentSha256::StreamingAws4EcdsaP256Sha256PayloadTrailer => true,
         }
     }
+
+    pub(crate) fn decoded_base64_checksum(self) -> Option<[u8; 32]> {
+        match self {
+            Self::SingleChunk(value) => decode_sha256_base64(value),
+            _ => None,
+        }
+    }
+}
+
+fn decode_sha256_base64(value: &str) -> Option<[u8; 32]> {
+    if base64_simd::STANDARD.decoded_length(value.as_bytes()).ok()? != 32 {
+        return None;
+    }
+    let mut checksum = [0_u8; 32];
+    let decoded = base64_simd::STANDARD
+        .decode(value.as_bytes(), base64_simd::Out::from_slice(&mut checksum))
+        .ok()?;
+    (decoded.len() == checksum.len()).then_some(checksum)
 }
 
 #[cfg(test)]
@@ -104,6 +126,27 @@ mod tests {
         assert_eq!(v, AmzContentSha256::SingleChunk(hash));
         assert!(!v.is_streaming());
         assert!(!v.has_trailer());
+    }
+
+    #[test]
+    fn parse_single_chunk_base64() {
+        let hash = "CD/lALXcA07augfdOdp72AwIg85a9zWDJ5zoXrZub80=";
+        let v = AmzContentSha256::parse(hash).unwrap();
+        assert_eq!(v, AmzContentSha256::SingleChunk(hash));
+        assert_eq!(
+            v.decoded_base64_checksum(),
+            Some([
+                0x08, 0x3f, 0xe5, 0x00, 0xb5, 0xdc, 0x03, 0x4e, 0xda, 0xba, 0x07, 0xdd, 0x39, 0xda, 0x7b, 0xd8, 0x0c, 0x08, 0x83,
+                0xce, 0x5a, 0xf7, 0x35, 0x83, 0x27, 0x9c, 0xe8, 0x5e, 0xb6, 0x6e, 0x6f, 0xcd,
+            ])
+        );
+        assert!(!v.is_streaming());
+        assert!(!v.has_trailer());
+    }
+
+    #[test]
+    fn reject_base64_with_wrong_decoded_length() {
+        assert!(AmzContentSha256::parse("aGVsbG8=").is_err());
     }
 
     #[test]
