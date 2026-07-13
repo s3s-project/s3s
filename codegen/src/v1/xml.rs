@@ -408,6 +408,13 @@ fn codegen_xml_serde_content_struct(
                     g!("];");
                     g!("s.content_with_attrs(\"{}\", &attrs, val)?;", xml_name);
                     g!("}}");
+                } else if ty.name == "GetObjectAttributesOutput" && field.type_ == "ETag" {
+                    // GetObjectAttributes returns the ETag without surrounding double-quotes in its XML body,
+                    // unlike most other S3 responses which use the quoted form.
+                    // See https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObjectAttributes.html
+                    g!("if let Some(ref val) = self.{} {{", field.name);
+                    g!("s.content(\"{xml_name}\", val.value())?;");
+                    g!("}}");
                 } else {
                     g!("if let Some(ref val) = self.{} {{", field.name);
                     g!("s.content(\"{xml_name}\", val)?;");
