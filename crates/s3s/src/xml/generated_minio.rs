@@ -4372,7 +4372,7 @@ impl SerializeContent for GetObjectAttributesOutput {
             s.content("Checksum", val)?;
         }
         if let Some(ref val) = self.e_tag {
-            s.content("ETag", val)?;
+            s.content("ETag", val.value())?;
         }
         if let Some(ref val) = self.object_parts {
             s.content("ObjectParts", val)?;
