@@ -56,7 +56,7 @@ where
             return Poll::Ready(Some(Ok(Frame::data(initial_body))));
         }
         loop {
-            if let Some(response) = &mut this.response {
+            if let Some(response) = &mut *this.response {
                 let frame = std::task::ready!(Pin::new(&mut response.body).poll_frame(cx)?);
                 if let Some(frame) = frame {
                     return Poll::Ready(Some(Ok(frame)));
