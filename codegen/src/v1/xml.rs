@@ -409,9 +409,18 @@ fn codegen_xml_serde_content_struct(
                     g!("s.content_with_attrs(\"{}\", &attrs, val)?;", xml_name);
                     g!("}}");
                 } else if ty.name == "GetObjectAttributesOutput" && field.type_ == "ETag" {
-                    // GetObjectAttributes returns the ETag without surrounding double-quotes in its XML body,
-                    // unlike most other S3 responses which use the quoted form.
+                    // GetObjectAttributes response body requires ETag without surrounding double-quotes.
+                    // Most S3 responses use the HTTP-quoted form (e.g., ListParts, CopyObject, CompleteMultipartUpload),
+                    // but GetObjectAttributes is unique in returning the unquoted form.
+                    //
+                    // AWS API spec: <ETag>string</ETag> (no quotes)
                     // See https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObjectAttributes.html
+                    //
+                    // Without this special-case, the default SerializeContent for ETag impl adds quotes,
+                    // producing <ETag>"abc123"</ETag>, which causes SDK clients (boto3, etc.) to reject
+                    // the response due to the embedded quotes. This was confirmed by Ceph s3-tests failures:
+                    // test_get_object_attributes, test_get_checksum_object_attributes,
+                    // test_get_multipart_object_attributes, etc.
                     g!("if let Some(ref val) = self.{} {{", field.name);
                     g!("s.content(\"{xml_name}\", val.value())?;");
                     g!("}}");
