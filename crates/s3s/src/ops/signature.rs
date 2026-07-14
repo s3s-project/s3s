@@ -1,6 +1,7 @@
 use crate::auth::S3Auth;
 use crate::auth::SecretKey;
 use crate::config::{S3Config, S3ConfigProvider};
+use crate::crypto::{Checksum as _, Sha256};
 use crate::error::*;
 use crate::http;
 use crate::http::{AwsChunkedStream, Body, Multipart, MultipartLimits};
@@ -15,7 +16,7 @@ use crate::sig_v4::AmzDate;
 use crate::sig_v4::UploadStream;
 use crate::sig_v4::{AuthorizationV4, CredentialV4, PostSignatureV4, PresignedUrlV4};
 use crate::stream::ByteStream as _;
-use crate::utils::crypto::{hex, hex_sha256};
+use crate::utils::crypto::Sha256Sum;
 use crate::utils::is_base64_encoded;
 
 use std::mem;
@@ -31,7 +32,7 @@ use tracing::debug;
 /// Maximum allowed size for STS request body (8KB should be enough for operations like `AssumeRole`)
 const MAX_STS_BODY_SIZE: usize = 8192;
 
-fn extract_amz_content_sha256<'a>(hs: &'_ OrderedHeaders<'a>) -> S3Result<Option<AmzContentSha256<'a>>> {
+fn extract_amz_content_sha256(hs: &OrderedHeaders<'_>) -> S3Result<Option<AmzContentSha256>> {
     let Some(val) = hs.get_unique(crate::header::X_AMZ_CONTENT_SHA256) else { return Ok(None) };
     match AmzContentSha256::parse(val) {
         Ok(x) => Ok(Some(x)),
@@ -351,12 +352,14 @@ impl SignatureContext<'_> {
             return Err(s3_error!(SignatureDoesNotMatch, "credential scope date does not match x-amz-date"));
         }
 
-        let amz_content_sha256 = extract_amz_content_sha256(&self.hs)?;
-
         // Presigned URLs do not support streaming (chunked) payload signing,
-        // so reject them here before reaching the SingleChunk handler below.
-        if amz_content_sha256.is_some_and(|v| v.is_streaming()) {
-            return Err(s3_error!(NotImplemented, "streaming payload for presigned URLs is not implemented"));
+        // so reject them before credential I/O without retaining the normalized
+        // digest across the async secret-key lookup.
+        {
+            let amz_content_sha256 = extract_amz_content_sha256(&self.hs)?;
+            if amz_content_sha256.is_some_and(|value| value.is_streaming()) {
+                return Err(s3_error!(NotImplemented, "streaming payload for presigned URLs is not implemented"));
+            }
         }
 
         {
@@ -388,6 +391,7 @@ impl SignatureContext<'_> {
         let auth = require_auth(self.auth)?;
         let access_key = presigned_url.credential.access_key_id;
         let secret_key = auth.get_secret_key(access_key).await?;
+        let amz_content_sha256 = extract_amz_content_sha256(&self.hs)?;
 
         let region = presigned_url.credential.aws_region;
         let service = presigned_url.credential.aws_service;
@@ -435,7 +439,7 @@ impl SignatureContext<'_> {
         // the real SHA256 hash in x-amz-content-sha256, and the server must
         // verify it.  This mirrors MinIO's behavior: the body is wrapped in a
         // hash-validating reader that compares the hash as it is consumed.
-        if let Some(checksum @ AmzContentSha256::SingleChunk(expected_checksum)) = amz_content_sha256 {
+        if let Some(AmzContentSha256::SingleChunk(expected_checksum)) = amz_content_sha256 {
             let length = if let Some(content_length) = self.content_length {
                 usize::try_from(content_length).map_err(|_| invalid_request!("content-length exceeds platform limits"))?
             } else {
@@ -446,12 +450,7 @@ impl SignatureContext<'_> {
             };
 
             let body = mem::take(self.req_body);
-            let stream = if let Some(expected_sha256) = checksum.decoded_base64_checksum() {
-                UploadStream::new_with_expected_sha256(body, length, expected_sha256)
-            } else {
-                UploadStream::new(body, length, expected_checksum)
-                    .map_err(|_| invalid_request!("invalid header: x-amz-content-sha256"))?
-            };
+            let stream = UploadStream::new(body, length, expected_checksum);
             *self.req_body = Body::from(stream.into_byte_stream());
         }
 
@@ -495,16 +494,17 @@ impl SignatureContext<'_> {
 
         validate_sig_v4_clock_skew(&amz_date, time::OffsetDateTime::now_utc(), &self.config.snapshot())?;
 
-        let amz_content_sha256 = extract_amz_content_sha256(&self.hs)?;
-
-        if service == "s3" && amz_content_sha256.is_none() {
-            return Err(invalid_request!("missing header: x-amz-content-sha256"));
+        // Reject malformed headers before credential I/O without retaining the
+        // normalized digest across the async secret-key lookup.
+        {
+            let amz_content_sha256 = extract_amz_content_sha256(&self.hs)?;
+            if service == "s3" && amz_content_sha256.is_none() {
+                return Err(invalid_request!("missing header: x-amz-content-sha256"));
+            }
         }
 
         let access_key = authorization.credential.access_key_id;
         let secret_key = auth.get_secret_key(access_key).await?;
-
-        let is_stream = amz_content_sha256.is_some_and(|v| v.is_streaming());
 
         let expected_signature = authorization.signature;
         let method = &self.req_method;
@@ -527,27 +527,29 @@ impl SignatureContext<'_> {
             None
         });
 
-        let sts_payload_hash = if amz_content_sha256.is_none() && service == "sts" {
+        let sts_payload_hash = if service == "sts" && self.hs.get_unique(crate::header::X_AMZ_CONTENT_SHA256).is_none() {
             let body_bytes = self
                 .req_body
                 .store_all_limited(MAX_STS_BODY_SIZE)
                 .await
                 .map_err(|e| invalid_request!("failed to read STS request body: {}", e))?;
-            Some(hex_sha256(&body_bytes, str::to_owned))
+            Sha256Sum::from_bytes(Sha256::checksum(&body_bytes)).to_hex_string()
         } else {
-            None
+            String::new()
         };
-        let base64_payload_hash = amz_content_sha256
-            .and_then(AmzContentSha256::decoded_base64_checksum)
-            .map(hex);
+        let amz_content_sha256 = extract_amz_content_sha256(&self.hs)?;
+        let is_stream = amz_content_sha256.is_some_and(|value| value.is_streaming());
+        let payload_hash = match amz_content_sha256 {
+            Some(AmzContentSha256::SingleChunk(checksum)) => checksum.to_hex_string(),
+            None if service == "sts" => sts_payload_hash,
+            _ => String::new(),
+        };
         let payload = match amz_content_sha256 {
             Some(AmzContentSha256::StreamingAws4HmacSha256Payload) => sig_v4::Payload::MultipleChunks,
             Some(AmzContentSha256::StreamingAws4HmacSha256PayloadTrailer) => sig_v4::Payload::MultipleChunksWithTrailer,
             Some(AmzContentSha256::UnsignedPayload) => sig_v4::Payload::Unsigned,
             Some(AmzContentSha256::StreamingUnsignedPayloadTrailer) => sig_v4::Payload::UnsignedMultipleChunksWithTrailer,
-            Some(AmzContentSha256::SingleChunk(payload_checksum)) => {
-                sig_v4::Payload::SingleChunk(base64_payload_hash.as_deref().unwrap_or(payload_checksum))
-            }
+            Some(AmzContentSha256::SingleChunk(_)) => sig_v4::Payload::SingleChunk(&payload_hash),
             Some(
                 AmzContentSha256::StreamingAws4EcdsaP256Sha256Payload
                 | AmzContentSha256::StreamingAws4EcdsaP256Sha256PayloadTrailer,
@@ -556,7 +558,7 @@ impl SignatureContext<'_> {
             }
             None => {
                 if service == "sts" {
-                    sig_v4::Payload::SingleChunk(sts_payload_hash.as_deref().expect("STS payload hash was initialized"))
+                    sig_v4::Payload::SingleChunk(&payload_hash)
                 } else {
                     // According to AWS S3 protocol, x-amz-content-sha256 header is required for
                     // all S3 requests authenticated with Signature V4. Reject if missing.
@@ -607,7 +609,7 @@ impl SignatureContext<'_> {
             let trailers = stream.trailing_headers_handle();
             self.transformed_body = Some(Body::from(stream.into_byte_stream()));
             self.trailing_headers = Some(trailers);
-        } else if let Some(checksum @ AmzContentSha256::SingleChunk(expected_checksum)) = amz_content_sha256 {
+        } else if let Some(AmzContentSha256::SingleChunk(expected_checksum)) = amz_content_sha256 {
             let length = if let Some(content_length) = self.content_length {
                 usize::try_from(content_length).map_err(|_| invalid_request!("content-length exceeds platform limits"))?
             } else {
@@ -618,12 +620,7 @@ impl SignatureContext<'_> {
             };
 
             let body = mem::take(self.req_body);
-            let stream = if let Some(expected_sha256) = checksum.decoded_base64_checksum() {
-                UploadStream::new_with_expected_sha256(body, length, expected_sha256)
-            } else {
-                UploadStream::new(body, length, expected_checksum)
-                    .map_err(|_| invalid_request!("invalid header: x-amz-content-sha256"))?
-            };
+            let stream = UploadStream::new(body, length, expected_checksum);
             *self.req_body = Body::from(stream.into_byte_stream());
         } else if matches!(amz_content_sha256, Some(AmzContentSha256::UnsignedPayload)) {
             // For non-streaming unsigned payloads, require Content-Length.
@@ -772,6 +769,7 @@ impl SignatureContext<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::crypto::hex_sha256;
 
     fn fmt_current_amz_date(dt: time::OffsetDateTime) -> String {
         format!(
@@ -935,8 +933,6 @@ file content\r\n\
     #[tokio::test]
     async fn test_sts_body_hash_computation() {
         // Test that STS request body hash is computed correctly
-        use crate::utils::crypto::hex_sha256;
-
         // Typical STS AssumeRole request body
         let body_content = b"Action=AssumeRole&RoleArn=arn:aws:iam::123456789012:role/test-role&RoleSessionName=test-session";
 

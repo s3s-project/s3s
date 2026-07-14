@@ -3,11 +3,45 @@ use std::mem::MaybeUninit;
 use hex_simd::{AsOut, AsciiCase};
 use hyper::body::Bytes;
 
-/// verify sha256 checksum string
-pub fn is_sha256_checksum(s: &str) -> bool {
-    // TODO: optimize
-    let is_lowercase_hex = |c: u8| matches!(c, b'0'..=b'9' | b'a'..=b'f');
-    s.len() == 64 && s.as_bytes().iter().copied().all(is_lowercase_hex)
+/// A normalized SHA-256 digest.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Sha256Sum([u8; 32]);
+
+impl Sha256Sum {
+    /// Parses a lowercase hexadecimal SHA-256 digest.
+    pub fn from_hex(value: &str) -> Option<Self> {
+        let is_lowercase_hex = |byte: u8| matches!(byte, b'0'..=b'9' | b'a'..=b'f');
+        if value.len() != 64 || !value.as_bytes().iter().copied().all(is_lowercase_hex) {
+            return None;
+        }
+
+        let mut digest = [0_u8; 32];
+        let decoded = hex_simd::decode(value.as_bytes(), hex_simd::Out::from_slice(&mut digest)).ok()?;
+        (decoded.len() == digest.len()).then_some(Self(digest))
+    }
+
+    /// Parses a standard Base64-encoded SHA-256 digest.
+    pub fn from_base64(value: &str) -> Option<Self> {
+        if base64_simd::STANDARD.decoded_length(value.as_bytes()).ok()? != 32 {
+            return None;
+        }
+
+        let mut digest = [0_u8; 32];
+        let decoded = base64_simd::STANDARD
+            .decode(value.as_bytes(), base64_simd::Out::from_slice(&mut digest))
+            .ok()?;
+        (decoded.len() == digest.len()).then_some(Self(digest))
+    }
+
+    /// Creates a digest from its raw bytes.
+    pub const fn from_bytes(value: [u8; 32]) -> Self {
+        Self(value)
+    }
+
+    /// Encodes the digest as lowercase hexadecimal.
+    pub fn to_hex_string(self) -> String {
+        hex(self.0)
+    }
 }
 
 /// `hmac_sha1(key, data)`
@@ -88,4 +122,29 @@ pub fn hex_sha256_chunk<R>(chunk: &[Bytes], f: impl FnOnce(&str) -> R) -> R {
 #[cfg(test)]
 pub fn hex_sha256_string(data: &[u8]) -> String {
     hex_sha256(data, str::to_owned)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sha256_sum_normalizes_hex_and_base64() {
+        let hex = "083fe500b5dc034edaba07dd39da7bd80c0883ce5af73583279ce85eb66e6fcd";
+        let base64 = "CD/lALXcA07augfdOdp72AwIg85a9zWDJ5zoXrZub80=";
+
+        let from_hex = Sha256Sum::from_hex(hex).expect("valid lowercase SHA-256 hex");
+        let from_base64 = Sha256Sum::from_base64(base64).expect("valid standard Base64 SHA-256");
+
+        assert_eq!(from_hex, from_base64);
+        assert_eq!(from_base64.to_hex_string(), hex);
+    }
+
+    #[test]
+    fn sha256_sum_rejects_noncanonical_or_wrong_length_encodings() {
+        assert!(Sha256Sum::from_hex("083FE500B5DC034EDABA07DD39DA7BD80C0883CE5AF73583279CE85EB66E6FCD").is_none());
+        assert!(Sha256Sum::from_hex("00").is_none());
+        assert!(Sha256Sum::from_base64("aGVsbG8=").is_none());
+        assert!(Sha256Sum::from_base64("CD_lALXcA07augfdOdp72AwIg85a9zWDJ5zoXrZub80=").is_none());
+    }
 }

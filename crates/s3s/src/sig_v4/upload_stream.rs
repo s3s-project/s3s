@@ -2,6 +2,7 @@ use crate::crypto::Checksum as _;
 use crate::crypto::Sha256;
 use crate::error::StdError;
 use crate::stream::{ByteStream, DynByteStream, RemainingLength};
+use crate::utils::crypto::Sha256Sum;
 
 use bytes::Bytes;
 use futures::Stream;
@@ -15,7 +16,7 @@ use thiserror::Error;
 pub struct UploadStream<S> {
     inner: S,
     hasher: Option<Sha256>,
-    expected_sha256: [u8; 32],
+    expected_sha256: Sha256Sum,
     remaining_length: usize,
     state: State,
 }
@@ -52,19 +53,11 @@ pub enum UploadStreamError {
     /// Stream ended before reading declared length.
     #[error("UploadStreamError: Incomplete")]
     Incomplete,
-    /// Invalid expected checksum string.
-    #[error("UploadStreamError: InvalidChecksum")]
-    InvalidChecksum,
 }
 
 impl<S> UploadStream<S> {
     /// Creates a new [`UploadStream`] with the provided expected checksum.
-    pub fn new(inner: S, length: usize, hex_sha256: &str) -> Result<Self, UploadStreamError> {
-        let expected_sha256 = decode_sha256_hex(hex_sha256)?;
-        Ok(Self::new_with_expected_sha256(inner, length, expected_sha256))
-    }
-
-    pub(crate) fn new_with_expected_sha256(inner: S, length: usize, expected_sha256: [u8; 32]) -> Self {
+    pub fn new(inner: S, length: usize, expected_sha256: Sha256Sum) -> Self {
         Self {
             inner,
             hasher: Some(Sha256::new()),
@@ -108,7 +101,7 @@ impl<S> UploadStream<S> {
             return Ok(());
         }
 
-        let digest = self.hasher.take().unwrap().finalize();
+        let digest = Sha256Sum::from_bytes(self.hasher.take().unwrap().finalize());
         if digest == self.expected_sha256 {
             Ok(())
         } else {
@@ -217,24 +210,9 @@ where
     }
 }
 
-/// Decodes a lowercase hex SHA-256 string into raw bytes.
-fn decode_sha256_hex(expected_sha256: &str) -> Result<[u8; 32], UploadStreamError> {
-    if expected_sha256.len() != 64 {
-        return Err(UploadStreamError::InvalidChecksum);
-    }
-
-    let mut out = [0_u8; 32];
-    match hex_simd::decode(expected_sha256.as_bytes(), hex_simd::Out::from_slice(&mut out)) {
-        Ok(_) => Ok(out),
-        Err(_) => Err(UploadStreamError::InvalidChecksum),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    use crate::utils::crypto::hex_sha256_string;
 
     use futures::StreamExt as _;
     use std::io;
@@ -247,10 +225,10 @@ mod tests {
     #[tokio::test]
     async fn single_chunk_success() {
         let data = b"hello world";
-        let checksum = hex_sha256_string(data);
+        let checksum = Sha256Sum::from_bytes(Sha256::checksum(data));
         let stream = futures::stream::iter(vec![ok_bytes(data)]);
 
-        let mut upload = UploadStream::new(stream, data.len(), &checksum).unwrap();
+        let mut upload = UploadStream::new(stream, data.len(), checksum);
 
         let chunk = upload.next().await.unwrap().unwrap();
         assert_eq!(chunk.as_ref(), data);
@@ -260,22 +238,10 @@ mod tests {
     #[tokio::test]
     async fn sha256_mismatch() {
         let data = b"hello";
-        let checksum = hex_sha256_string(b"world");
+        let checksum = Sha256Sum::from_bytes(Sha256::checksum(b"world"));
         let stream = futures::stream::iter(vec![ok_bytes(data)]);
 
-        let mut upload = UploadStream::new(stream, data.len(), &checksum).unwrap();
-
-        let err = upload.next().await.unwrap().unwrap_err();
-        assert!(matches!(err, UploadStreamError::Sha256Mismatch));
-    }
-
-    #[tokio::test]
-    async fn sha256_bytes_mismatch() {
-        let data = b"hello";
-        let expected_sha256 = [0_u8; 32];
-        let stream = futures::stream::iter(vec![ok_bytes(data)]);
-
-        let mut upload = UploadStream::new_with_expected_sha256(stream, data.len(), expected_sha256);
+        let mut upload = UploadStream::new(stream, data.len(), checksum);
 
         let err = upload.next().await.unwrap().unwrap_err();
         assert!(matches!(err, UploadStreamError::Sha256Mismatch));
@@ -284,11 +250,11 @@ mod tests {
     #[tokio::test]
     async fn length_mismatch_extra_bytes() {
         let data = b"abcdef";
-        let checksum = hex_sha256_string(data);
+        let checksum = Sha256Sum::from_bytes(Sha256::checksum(data));
         let chunks = vec![ok_bytes(b"abc"), ok_bytes(b"def")];
         let stream = futures::stream::iter(chunks);
 
-        let mut upload = UploadStream::new(stream, 5, &checksum).unwrap();
+        let mut upload = UploadStream::new(stream, 5, checksum);
 
         let first = upload.next().await.unwrap().unwrap();
         assert_eq!(first.as_ref(), b"abc");
@@ -300,11 +266,11 @@ mod tests {
     #[tokio::test]
     async fn incomplete_stream() {
         let data = b"abcdef";
-        let checksum = hex_sha256_string(data);
+        let checksum = Sha256Sum::from_bytes(Sha256::checksum(data));
         let chunks = vec![ok_bytes(b"abc")];
         let stream = futures::stream::iter(chunks);
 
-        let mut upload = UploadStream::new(stream, data.len(), &checksum).unwrap();
+        let mut upload = UploadStream::new(stream, data.len(), checksum);
 
         let first = upload.next().await.unwrap().unwrap();
         assert_eq!(first.as_ref(), b"abc");
@@ -315,29 +281,22 @@ mod tests {
 
     #[tokio::test]
     async fn zero_length_success() {
-        let checksum = hex_sha256_string(b"");
+        let checksum = Sha256Sum::from_bytes(Sha256::checksum(b""));
         let stream = futures::stream::iter(Vec::<Result<Bytes, StdError>>::new());
 
-        let mut upload = UploadStream::new(stream, 0, &checksum).unwrap();
+        let mut upload = UploadStream::new(stream, 0, checksum);
 
         assert!(upload.next().await.is_none());
     }
 
     #[tokio::test]
-    async fn invalid_checksum_hex() {
-        let stream = futures::stream::iter(Vec::<Result<Bytes, StdError>>::new());
-        let err = UploadStream::new(stream, 0, "zz").unwrap_err();
-        assert!(matches!(err, UploadStreamError::InvalidChecksum));
-    }
-
-    #[tokio::test]
     async fn extra_payload_after_completion() {
         let data = b"abc";
-        let checksum = hex_sha256_string(data);
+        let checksum = Sha256Sum::from_bytes(Sha256::checksum(data));
         let chunks = vec![ok_bytes(data), ok_bytes(b"extra")];
         let stream = futures::stream::iter(chunks);
 
-        let mut upload = UploadStream::new(stream, data.len(), &checksum).unwrap();
+        let mut upload = UploadStream::new(stream, data.len(), checksum);
 
         let first = upload.next().await.unwrap().unwrap();
         assert_eq!(first.as_ref(), data);
@@ -348,11 +307,11 @@ mod tests {
 
     #[tokio::test]
     async fn propagate_underlying_error() {
-        let checksum = hex_sha256_string(b"");
+        let checksum = Sha256Sum::from_bytes(Sha256::checksum(b""));
         let err: Result<Bytes, StdError> = Err(Box::new(io::Error::other("boom")));
         let stream = futures::stream::iter(vec![err]);
 
-        let mut upload = UploadStream::new(stream, 0, &checksum).unwrap();
+        let mut upload = UploadStream::new(stream, 0, checksum);
 
         let err = upload.next().await.unwrap().unwrap_err();
         assert!(matches!(err, UploadStreamError::Underlying(_)));

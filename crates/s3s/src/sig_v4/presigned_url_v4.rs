@@ -4,7 +4,7 @@ use super::AmzDate;
 use super::CredentialV4;
 
 use crate::http::OrderedQs;
-use crate::utils::crypto::is_sha256_checksum;
+use crate::utils::crypto::Sha256Sum;
 
 use smallvec::SmallVec;
 
@@ -86,7 +86,7 @@ impl<'a> PresignedUrlV4<'a> {
         }
         let signed_headers = info.signed_headers.split(';').collect();
 
-        if !is_sha256_checksum(info.signature) {
+        if Sha256Sum::from_hex(info.signature).is_none() {
             return Err(err());
         }
         let signature = info.signature;
