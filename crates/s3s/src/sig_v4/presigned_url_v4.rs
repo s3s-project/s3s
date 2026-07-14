@@ -4,7 +4,6 @@ use super::AmzDate;
 use super::CredentialV4;
 
 use crate::http::OrderedQs;
-use crate::utils::crypto::Sha256Sum;
 
 use smallvec::SmallVec;
 
@@ -86,7 +85,8 @@ impl<'a> PresignedUrlV4<'a> {
         }
         let signed_headers = info.signed_headers.split(';').collect();
 
-        if Sha256Sum::from_hex(info.signature).is_none() {
+        let is_lowercase_hex = |byte: u8| matches!(byte, b'0'..=b'9' | b'a'..=b'f');
+        if info.signature.len() != 64 || !info.signature.as_bytes().iter().copied().all(is_lowercase_hex) {
             return Err(err());
         }
         let signature = info.signature;
