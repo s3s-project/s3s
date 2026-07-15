@@ -26,6 +26,7 @@ pub fn modify_internal_info(info: &mut serde_json::Map<String, serde_json::Value
     if let Some(checksum_crc64nvme) = &checksum.checksum_crc64nvme {
         info.insert("checksum_crc64nvme".to_owned(), serde_json::Value::String(checksum_crc64nvme.clone()));
     }
+
     if let Some(checksum_sha512) = &checksum.checksum_sha512 {
         info.insert("checksum_sha512".to_owned(), serde_json::Value::String(checksum_sha512.clone()));
     }
@@ -60,6 +61,7 @@ pub fn from_internal_info(info: &InternalInfo) -> s3s::dto::Checksum {
     if let Some(checksum_crc64nvme) = info.get("checksum_crc64nvme") {
         ans.checksum_crc64nvme = Some(checksum_crc64nvme.as_str().unwrap().to_owned());
     }
+
     if let Some(checksum_sha512) = info.get("checksum_sha512") {
         ans.checksum_sha512 = Some(checksum_sha512.as_str().unwrap().to_owned());
     }

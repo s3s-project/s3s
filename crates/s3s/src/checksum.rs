@@ -13,9 +13,9 @@ use crate::crypto::Md5;
 use crate::crypto::Sha1;
 use crate::crypto::Sha256;
 use crate::crypto::Sha512;
-use crate::crypto::XxHash128;
 use crate::crypto::XxHash3;
 use crate::crypto::XxHash64;
+use crate::crypto::XxHash128;
 use crate::dto::Checksum;
 
 use stdx::default::default;
