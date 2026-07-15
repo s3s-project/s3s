@@ -392,6 +392,11 @@ impl S3 for FileSystem {
             checksum_sha1: checksum.checksum_sha1,
             checksum_sha256: checksum.checksum_sha256,
             checksum_crc64nvme: checksum.checksum_crc64nvme,
+            checksum_sha512: checksum.checksum_sha512,
+            checksum_md5: checksum.checksum_md5,
+            checksum_xxhash64: checksum.checksum_xxhash64,
+            checksum_xxhash3: checksum.checksum_xxhash3,
+            checksum_xxhash128: checksum.checksum_xxhash128,
             ..Default::default()
         };
         Ok(S3Response::new(output))
@@ -457,6 +462,11 @@ impl S3 for FileSystem {
             checksum_sha1: checksum.checksum_sha1,
             checksum_sha256: checksum.checksum_sha256,
             checksum_crc64nvme: checksum.checksum_crc64nvme,
+            checksum_sha512: checksum.checksum_sha512,
+            checksum_md5: checksum.checksum_md5,
+            checksum_xxhash64: checksum.checksum_xxhash64,
+            checksum_xxhash3: checksum.checksum_xxhash3,
+            checksum_xxhash128: checksum.checksum_xxhash128,
             ..Default::default()
         };
         Ok(S3Response::new(output))
@@ -724,6 +734,21 @@ impl S3 for FileSystem {
         if input.checksum_crc64nvme.is_some() {
             checksum.crc64nvme = Some(default());
         }
+        if input.checksum_sha512.is_some() {
+            checksum.sha512 = Some(default());
+        }
+        if input.checksum_md5.is_some() {
+            checksum.md5 = Some(default());
+        }
+        if input.checksum_xxhash64.is_some() {
+            checksum.xxhash64 = Some(default());
+        }
+        if input.checksum_xxhash3.is_some() {
+            checksum.xxhash3 = Some(default());
+        }
+        if input.checksum_xxhash128.is_some() {
+            checksum.xxhash128 = Some(default());
+        }
         if let Some(alg) = input.checksum_algorithm {
             match alg.as_str() {
                 ChecksumAlgorithm::CRC32 => checksum.crc32 = Some(default()),
@@ -731,6 +756,11 @@ impl S3 for FileSystem {
                 ChecksumAlgorithm::SHA1 => checksum.sha1 = Some(default()),
                 ChecksumAlgorithm::SHA256 => checksum.sha256 = Some(default()),
                 ChecksumAlgorithm::CRC64NVME => checksum.crc64nvme = Some(default()),
+                ChecksumAlgorithm::SHA512 => checksum.sha512 = Some(default()),
+                ChecksumAlgorithm::MD5 => checksum.md5 = Some(default()),
+                ChecksumAlgorithm::XXHASH64 => checksum.xxhash64 = Some(default()),
+                ChecksumAlgorithm::XXHASH3 => checksum.xxhash3 = Some(default()),
+                ChecksumAlgorithm::XXHASH128 => checksum.xxhash128 = Some(default()),
                 _ => return Err(s3_error!(NotImplemented, "Unsupported checksum algorithm")),
             }
         }
@@ -789,6 +819,21 @@ impl S3 for FileSystem {
             if let Some(crc64nvme) = trailers.get("x-amz-checksum-crc64nvme") {
                 input.checksum_crc64nvme = Some(crc64nvme.to_str().map_err(|_| s3_error!(InvalidArgument))?.to_owned());
             }
+            if let Some(sha512) = trailers.get("x-amz-checksum-sha512") {
+                input.checksum_sha512 = Some(sha512.to_str().map_err(|_| s3_error!(InvalidArgument))?.to_owned());
+            }
+            if let Some(md5) = trailers.get("x-amz-checksum-md5") {
+                input.checksum_md5 = Some(md5.to_str().map_err(|_| s3_error!(InvalidArgument))?.to_owned());
+            }
+            if let Some(xxhash64) = trailers.get("x-amz-checksum-xxhash64") {
+                input.checksum_xxhash64 = Some(xxhash64.to_str().map_err(|_| s3_error!(InvalidArgument))?.to_owned());
+            }
+            if let Some(xxhash3) = trailers.get("x-amz-checksum-xxhash3") {
+                input.checksum_xxhash3 = Some(xxhash3.to_str().map_err(|_| s3_error!(InvalidArgument))?.to_owned());
+            }
+            if let Some(xxhash128) = trailers.get("x-amz-checksum-xxhash128") {
+                input.checksum_xxhash128 = Some(xxhash128.to_str().map_err(|_| s3_error!(InvalidArgument))?.to_owned());
+            }
         }
 
         if checksum.checksum_crc32 != input.checksum_crc32 {
@@ -810,6 +855,21 @@ impl S3 for FileSystem {
         }
         if checksum.checksum_crc64nvme != input.checksum_crc64nvme {
             return Err(s3_error!(BadDigest, "checksum_crc64nvme mismatch"));
+        }
+        if checksum.checksum_sha512 != input.checksum_sha512 {
+            return Err(s3_error!(BadDigest, "checksum_sha512 mismatch"));
+        }
+        if checksum.checksum_md5 != input.checksum_md5 {
+            return Err(s3_error!(BadDigest, "checksum_md5 mismatch"));
+        }
+        if checksum.checksum_xxhash64 != input.checksum_xxhash64 {
+            return Err(s3_error!(BadDigest, "checksum_xxhash64 mismatch"));
+        }
+        if checksum.checksum_xxhash3 != input.checksum_xxhash3 {
+            return Err(s3_error!(BadDigest, "checksum_xxhash3 mismatch"));
+        }
+        if checksum.checksum_xxhash128 != input.checksum_xxhash128 {
+            return Err(s3_error!(BadDigest, "checksum_xxhash128 mismatch"));
         }
 
         debug!(path = %object_path.display(), ?size, %md5_sum, ?checksum, "write file");
@@ -840,6 +900,11 @@ impl S3 for FileSystem {
             checksum_sha1: checksum.checksum_sha1,
             checksum_sha256: checksum.checksum_sha256,
             checksum_crc64nvme: checksum.checksum_crc64nvme,
+            checksum_sha512: checksum.checksum_sha512,
+            checksum_md5: checksum.checksum_md5,
+            checksum_xxhash64: checksum.checksum_xxhash64,
+            checksum_xxhash3: checksum.checksum_xxhash3,
+            checksum_xxhash128: checksum.checksum_xxhash128,
             ..Default::default()
         };
         Ok(S3Response::new(output))

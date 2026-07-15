@@ -65,6 +65,7 @@ openssl = "0.10.80"
 sha1 = "0.11.0"
 sha2 = "0.11.0"
 subtle = "2.6.1"
+xxhash-rust = { version = "0.8.17", features = ["xxh3", "xxh64"] }
 zeroize = "1.8.2"
 
 # Error handling

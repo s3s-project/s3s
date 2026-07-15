@@ -601,9 +601,14 @@ impl AwsConversion for s3s::dto::Checksum {
             checksum_crc32: try_from_aws(x.checksum_crc32)?,
             checksum_crc32c: try_from_aws(x.checksum_crc32_c)?,
             checksum_crc64nvme: try_from_aws(x.checksum_crc64_nvme)?,
+            checksum_md5: try_from_aws(x.checksum_md5)?,
             checksum_sha1: try_from_aws(x.checksum_sha1)?,
             checksum_sha256: try_from_aws(x.checksum_sha256)?,
+            checksum_sha512: try_from_aws(x.checksum_sha512)?,
             checksum_type: try_from_aws(x.checksum_type)?,
+            checksum_xxhash128: try_from_aws(x.checksum_xxhash128)?,
+            checksum_xxhash3: try_from_aws(x.checksum_xxhash3)?,
+            checksum_xxhash64: try_from_aws(x.checksum_xxhash64)?,
         })
     }
 
@@ -612,9 +617,14 @@ impl AwsConversion for s3s::dto::Checksum {
         y = y.set_checksum_crc32(try_into_aws(x.checksum_crc32)?);
         y = y.set_checksum_crc32_c(try_into_aws(x.checksum_crc32c)?);
         y = y.set_checksum_crc64_nvme(try_into_aws(x.checksum_crc64nvme)?);
+        y = y.set_checksum_md5(try_into_aws(x.checksum_md5)?);
         y = y.set_checksum_sha1(try_into_aws(x.checksum_sha1)?);
         y = y.set_checksum_sha256(try_into_aws(x.checksum_sha256)?);
+        y = y.set_checksum_sha512(try_into_aws(x.checksum_sha512)?);
         y = y.set_checksum_type(try_into_aws(x.checksum_type)?);
+        y = y.set_checksum_xxhash128(try_into_aws(x.checksum_xxhash128)?);
+        y = y.set_checksum_xxhash3(try_into_aws(x.checksum_xxhash3)?);
+        y = y.set_checksum_xxhash64(try_into_aws(x.checksum_xxhash64)?);
         Ok(y.build())
     }
 }
@@ -628,8 +638,13 @@ impl AwsConversion for s3s::dto::ChecksumAlgorithm {
             aws_sdk_s3::types::ChecksumAlgorithm::Crc32 => Self::from_static(Self::CRC32),
             aws_sdk_s3::types::ChecksumAlgorithm::Crc32C => Self::from_static(Self::CRC32C),
             aws_sdk_s3::types::ChecksumAlgorithm::Crc64Nvme => Self::from_static(Self::CRC64NVME),
+            aws_sdk_s3::types::ChecksumAlgorithm::Md5 => Self::from_static(Self::MD5),
             aws_sdk_s3::types::ChecksumAlgorithm::Sha1 => Self::from_static(Self::SHA1),
             aws_sdk_s3::types::ChecksumAlgorithm::Sha256 => Self::from_static(Self::SHA256),
+            aws_sdk_s3::types::ChecksumAlgorithm::Sha512 => Self::from_static(Self::SHA512),
+            aws_sdk_s3::types::ChecksumAlgorithm::Xxhash128 => Self::from_static(Self::XXHASH128),
+            aws_sdk_s3::types::ChecksumAlgorithm::Xxhash3 => Self::from_static(Self::XXHASH3),
+            aws_sdk_s3::types::ChecksumAlgorithm::Xxhash64 => Self::from_static(Self::XXHASH64),
             _ => Self::from(x.as_str().to_owned()),
         })
     }
@@ -699,9 +714,14 @@ impl AwsConversion for s3s::dto::CompleteMultipartUploadInput {
             checksum_crc32: try_from_aws(x.checksum_crc32)?,
             checksum_crc32c: try_from_aws(x.checksum_crc32_c)?,
             checksum_crc64nvme: try_from_aws(x.checksum_crc64_nvme)?,
+            checksum_md5: try_from_aws(x.checksum_md5)?,
             checksum_sha1: try_from_aws(x.checksum_sha1)?,
             checksum_sha256: try_from_aws(x.checksum_sha256)?,
+            checksum_sha512: try_from_aws(x.checksum_sha512)?,
             checksum_type: try_from_aws(x.checksum_type)?,
+            checksum_xxhash128: try_from_aws(x.checksum_xxhash128)?,
+            checksum_xxhash3: try_from_aws(x.checksum_xxhash3)?,
+            checksum_xxhash64: try_from_aws(x.checksum_xxhash64)?,
             expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
             if_match: try_from_aws(x.if_match)?,
             if_none_match: try_from_aws(x.if_none_match)?,
@@ -722,9 +742,14 @@ impl AwsConversion for s3s::dto::CompleteMultipartUploadInput {
         y = y.set_checksum_crc32(try_into_aws(x.checksum_crc32)?);
         y = y.set_checksum_crc32_c(try_into_aws(x.checksum_crc32c)?);
         y = y.set_checksum_crc64_nvme(try_into_aws(x.checksum_crc64nvme)?);
+        y = y.set_checksum_md5(try_into_aws(x.checksum_md5)?);
         y = y.set_checksum_sha1(try_into_aws(x.checksum_sha1)?);
         y = y.set_checksum_sha256(try_into_aws(x.checksum_sha256)?);
+        y = y.set_checksum_sha512(try_into_aws(x.checksum_sha512)?);
         y = y.set_checksum_type(try_into_aws(x.checksum_type)?);
+        y = y.set_checksum_xxhash128(try_into_aws(x.checksum_xxhash128)?);
+        y = y.set_checksum_xxhash3(try_into_aws(x.checksum_xxhash3)?);
+        y = y.set_checksum_xxhash64(try_into_aws(x.checksum_xxhash64)?);
         y = y.set_expected_bucket_owner(try_into_aws(x.expected_bucket_owner)?);
         y = y.set_if_match(try_into_aws(x.if_match)?);
         y = y.set_if_none_match(try_into_aws(x.if_none_match)?);
@@ -751,9 +776,14 @@ impl AwsConversion for s3s::dto::CompleteMultipartUploadOutput {
             checksum_crc32: try_from_aws(x.checksum_crc32)?,
             checksum_crc32c: try_from_aws(x.checksum_crc32_c)?,
             checksum_crc64nvme: try_from_aws(x.checksum_crc64_nvme)?,
+            checksum_md5: try_from_aws(x.checksum_md5)?,
             checksum_sha1: try_from_aws(x.checksum_sha1)?,
             checksum_sha256: try_from_aws(x.checksum_sha256)?,
+            checksum_sha512: try_from_aws(x.checksum_sha512)?,
             checksum_type: try_from_aws(x.checksum_type)?,
+            checksum_xxhash128: try_from_aws(x.checksum_xxhash128)?,
+            checksum_xxhash3: try_from_aws(x.checksum_xxhash3)?,
+            checksum_xxhash64: try_from_aws(x.checksum_xxhash64)?,
             e_tag: try_from_aws(x.e_tag)?,
             expiration: try_from_aws(x.expiration)?,
             key: try_from_aws(x.key)?,
@@ -773,9 +803,14 @@ impl AwsConversion for s3s::dto::CompleteMultipartUploadOutput {
         y = y.set_checksum_crc32(try_into_aws(x.checksum_crc32)?);
         y = y.set_checksum_crc32_c(try_into_aws(x.checksum_crc32c)?);
         y = y.set_checksum_crc64_nvme(try_into_aws(x.checksum_crc64nvme)?);
+        y = y.set_checksum_md5(try_into_aws(x.checksum_md5)?);
         y = y.set_checksum_sha1(try_into_aws(x.checksum_sha1)?);
         y = y.set_checksum_sha256(try_into_aws(x.checksum_sha256)?);
+        y = y.set_checksum_sha512(try_into_aws(x.checksum_sha512)?);
         y = y.set_checksum_type(try_into_aws(x.checksum_type)?);
+        y = y.set_checksum_xxhash128(try_into_aws(x.checksum_xxhash128)?);
+        y = y.set_checksum_xxhash3(try_into_aws(x.checksum_xxhash3)?);
+        y = y.set_checksum_xxhash64(try_into_aws(x.checksum_xxhash64)?);
         y = y.set_e_tag(try_into_aws(x.e_tag)?);
         y = y.set_expiration(try_into_aws(x.expiration)?);
         y = y.set_key(try_into_aws(x.key)?);
@@ -814,8 +849,13 @@ impl AwsConversion for s3s::dto::CompletedPart {
             checksum_crc32: try_from_aws(x.checksum_crc32)?,
             checksum_crc32c: try_from_aws(x.checksum_crc32_c)?,
             checksum_crc64nvme: try_from_aws(x.checksum_crc64_nvme)?,
+            checksum_md5: try_from_aws(x.checksum_md5)?,
             checksum_sha1: try_from_aws(x.checksum_sha1)?,
             checksum_sha256: try_from_aws(x.checksum_sha256)?,
+            checksum_sha512: try_from_aws(x.checksum_sha512)?,
+            checksum_xxhash128: try_from_aws(x.checksum_xxhash128)?,
+            checksum_xxhash3: try_from_aws(x.checksum_xxhash3)?,
+            checksum_xxhash64: try_from_aws(x.checksum_xxhash64)?,
             e_tag: try_from_aws(x.e_tag)?,
             part_number: try_from_aws(x.part_number)?,
         })
@@ -826,8 +866,13 @@ impl AwsConversion for s3s::dto::CompletedPart {
         y = y.set_checksum_crc32(try_into_aws(x.checksum_crc32)?);
         y = y.set_checksum_crc32_c(try_into_aws(x.checksum_crc32c)?);
         y = y.set_checksum_crc64_nvme(try_into_aws(x.checksum_crc64nvme)?);
+        y = y.set_checksum_md5(try_into_aws(x.checksum_md5)?);
         y = y.set_checksum_sha1(try_into_aws(x.checksum_sha1)?);
         y = y.set_checksum_sha256(try_into_aws(x.checksum_sha256)?);
+        y = y.set_checksum_sha512(try_into_aws(x.checksum_sha512)?);
+        y = y.set_checksum_xxhash128(try_into_aws(x.checksum_xxhash128)?);
+        y = y.set_checksum_xxhash3(try_into_aws(x.checksum_xxhash3)?);
+        y = y.set_checksum_xxhash64(try_into_aws(x.checksum_xxhash64)?);
         y = y.set_e_tag(try_into_aws(x.e_tag)?);
         y = y.set_part_number(try_into_aws(x.part_number)?);
         Ok(y.build())
@@ -1031,9 +1076,14 @@ impl AwsConversion for s3s::dto::CopyObjectResult {
             checksum_crc32: try_from_aws(x.checksum_crc32)?,
             checksum_crc32c: try_from_aws(x.checksum_crc32_c)?,
             checksum_crc64nvme: try_from_aws(x.checksum_crc64_nvme)?,
+            checksum_md5: try_from_aws(x.checksum_md5)?,
             checksum_sha1: try_from_aws(x.checksum_sha1)?,
             checksum_sha256: try_from_aws(x.checksum_sha256)?,
+            checksum_sha512: try_from_aws(x.checksum_sha512)?,
             checksum_type: try_from_aws(x.checksum_type)?,
+            checksum_xxhash128: try_from_aws(x.checksum_xxhash128)?,
+            checksum_xxhash3: try_from_aws(x.checksum_xxhash3)?,
+            checksum_xxhash64: try_from_aws(x.checksum_xxhash64)?,
             e_tag: try_from_aws(x.e_tag)?,
             last_modified: try_from_aws(x.last_modified)?,
         })
@@ -1044,9 +1094,14 @@ impl AwsConversion for s3s::dto::CopyObjectResult {
         y = y.set_checksum_crc32(try_into_aws(x.checksum_crc32)?);
         y = y.set_checksum_crc32_c(try_into_aws(x.checksum_crc32c)?);
         y = y.set_checksum_crc64_nvme(try_into_aws(x.checksum_crc64nvme)?);
+        y = y.set_checksum_md5(try_into_aws(x.checksum_md5)?);
         y = y.set_checksum_sha1(try_into_aws(x.checksum_sha1)?);
         y = y.set_checksum_sha256(try_into_aws(x.checksum_sha256)?);
+        y = y.set_checksum_sha512(try_into_aws(x.checksum_sha512)?);
         y = y.set_checksum_type(try_into_aws(x.checksum_type)?);
+        y = y.set_checksum_xxhash128(try_into_aws(x.checksum_xxhash128)?);
+        y = y.set_checksum_xxhash3(try_into_aws(x.checksum_xxhash3)?);
+        y = y.set_checksum_xxhash64(try_into_aws(x.checksum_xxhash64)?);
         y = y.set_e_tag(try_into_aws(x.e_tag)?);
         y = y.set_last_modified(try_into_aws(x.last_modified)?);
         Ok(y.build())
@@ -1062,8 +1117,13 @@ impl AwsConversion for s3s::dto::CopyPartResult {
             checksum_crc32: try_from_aws(x.checksum_crc32)?,
             checksum_crc32c: try_from_aws(x.checksum_crc32_c)?,
             checksum_crc64nvme: try_from_aws(x.checksum_crc64_nvme)?,
+            checksum_md5: try_from_aws(x.checksum_md5)?,
             checksum_sha1: try_from_aws(x.checksum_sha1)?,
             checksum_sha256: try_from_aws(x.checksum_sha256)?,
+            checksum_sha512: try_from_aws(x.checksum_sha512)?,
+            checksum_xxhash128: try_from_aws(x.checksum_xxhash128)?,
+            checksum_xxhash3: try_from_aws(x.checksum_xxhash3)?,
+            checksum_xxhash64: try_from_aws(x.checksum_xxhash64)?,
             e_tag: try_from_aws(x.e_tag)?,
             last_modified: try_from_aws(x.last_modified)?,
         })
@@ -1074,8 +1134,13 @@ impl AwsConversion for s3s::dto::CopyPartResult {
         y = y.set_checksum_crc32(try_into_aws(x.checksum_crc32)?);
         y = y.set_checksum_crc32_c(try_into_aws(x.checksum_crc32c)?);
         y = y.set_checksum_crc64_nvme(try_into_aws(x.checksum_crc64nvme)?);
+        y = y.set_checksum_md5(try_into_aws(x.checksum_md5)?);
         y = y.set_checksum_sha1(try_into_aws(x.checksum_sha1)?);
         y = y.set_checksum_sha256(try_into_aws(x.checksum_sha256)?);
+        y = y.set_checksum_sha512(try_into_aws(x.checksum_sha512)?);
+        y = y.set_checksum_xxhash128(try_into_aws(x.checksum_xxhash128)?);
+        y = y.set_checksum_xxhash3(try_into_aws(x.checksum_xxhash3)?);
+        y = y.set_checksum_xxhash64(try_into_aws(x.checksum_xxhash64)?);
         y = y.set_e_tag(try_into_aws(x.e_tag)?);
         y = y.set_last_modified(try_into_aws(x.last_modified)?);
         Ok(y.build())
@@ -3601,9 +3666,14 @@ impl AwsConversion for s3s::dto::GetObjectOutput {
             checksum_crc32: try_from_aws(x.checksum_crc32)?,
             checksum_crc32c: try_from_aws(x.checksum_crc32_c)?,
             checksum_crc64nvme: try_from_aws(x.checksum_crc64_nvme)?,
+            checksum_md5: try_from_aws(x.checksum_md5)?,
             checksum_sha1: try_from_aws(x.checksum_sha1)?,
             checksum_sha256: try_from_aws(x.checksum_sha256)?,
+            checksum_sha512: try_from_aws(x.checksum_sha512)?,
             checksum_type: try_from_aws(x.checksum_type)?,
+            checksum_xxhash128: try_from_aws(x.checksum_xxhash128)?,
+            checksum_xxhash3: try_from_aws(x.checksum_xxhash3)?,
+            checksum_xxhash64: try_from_aws(x.checksum_xxhash64)?,
             content_disposition: try_from_aws(x.content_disposition)?,
             content_encoding: try_from_aws(x.content_encoding)?,
             content_language: try_from_aws(x.content_language)?,
@@ -3645,9 +3715,14 @@ impl AwsConversion for s3s::dto::GetObjectOutput {
         y = y.set_checksum_crc32(try_into_aws(x.checksum_crc32)?);
         y = y.set_checksum_crc32_c(try_into_aws(x.checksum_crc32c)?);
         y = y.set_checksum_crc64_nvme(try_into_aws(x.checksum_crc64nvme)?);
+        y = y.set_checksum_md5(try_into_aws(x.checksum_md5)?);
         y = y.set_checksum_sha1(try_into_aws(x.checksum_sha1)?);
         y = y.set_checksum_sha256(try_into_aws(x.checksum_sha256)?);
+        y = y.set_checksum_sha512(try_into_aws(x.checksum_sha512)?);
         y = y.set_checksum_type(try_into_aws(x.checksum_type)?);
+        y = y.set_checksum_xxhash128(try_into_aws(x.checksum_xxhash128)?);
+        y = y.set_checksum_xxhash3(try_into_aws(x.checksum_xxhash3)?);
+        y = y.set_checksum_xxhash64(try_into_aws(x.checksum_xxhash64)?);
         y = y.set_content_disposition(try_into_aws(x.content_disposition)?);
         y = y.set_content_encoding(try_into_aws(x.content_encoding)?);
         y = y.set_content_language(try_into_aws(x.content_language)?);
@@ -4018,9 +4093,14 @@ impl AwsConversion for s3s::dto::HeadObjectOutput {
             checksum_crc32: try_from_aws(x.checksum_crc32)?,
             checksum_crc32c: try_from_aws(x.checksum_crc32_c)?,
             checksum_crc64nvme: try_from_aws(x.checksum_crc64_nvme)?,
+            checksum_md5: try_from_aws(x.checksum_md5)?,
             checksum_sha1: try_from_aws(x.checksum_sha1)?,
             checksum_sha256: try_from_aws(x.checksum_sha256)?,
+            checksum_sha512: try_from_aws(x.checksum_sha512)?,
             checksum_type: try_from_aws(x.checksum_type)?,
+            checksum_xxhash128: try_from_aws(x.checksum_xxhash128)?,
+            checksum_xxhash3: try_from_aws(x.checksum_xxhash3)?,
+            checksum_xxhash64: try_from_aws(x.checksum_xxhash64)?,
             content_disposition: try_from_aws(x.content_disposition)?,
             content_encoding: try_from_aws(x.content_encoding)?,
             content_language: try_from_aws(x.content_language)?,
@@ -4061,9 +4141,14 @@ impl AwsConversion for s3s::dto::HeadObjectOutput {
         y = y.set_checksum_crc32(try_into_aws(x.checksum_crc32)?);
         y = y.set_checksum_crc32_c(try_into_aws(x.checksum_crc32c)?);
         y = y.set_checksum_crc64_nvme(try_into_aws(x.checksum_crc64nvme)?);
+        y = y.set_checksum_md5(try_into_aws(x.checksum_md5)?);
         y = y.set_checksum_sha1(try_into_aws(x.checksum_sha1)?);
         y = y.set_checksum_sha256(try_into_aws(x.checksum_sha256)?);
+        y = y.set_checksum_sha512(try_into_aws(x.checksum_sha512)?);
         y = y.set_checksum_type(try_into_aws(x.checksum_type)?);
+        y = y.set_checksum_xxhash128(try_into_aws(x.checksum_xxhash128)?);
+        y = y.set_checksum_xxhash3(try_into_aws(x.checksum_xxhash3)?);
+        y = y.set_checksum_xxhash64(try_into_aws(x.checksum_xxhash64)?);
         y = y.set_content_disposition(try_into_aws(x.content_disposition)?);
         y = y.set_content_encoding(try_into_aws(x.content_encoding)?);
         y = y.set_content_language(try_into_aws(x.content_language)?);
@@ -6076,8 +6161,13 @@ impl AwsConversion for s3s::dto::ObjectPart {
             checksum_crc32: try_from_aws(x.checksum_crc32)?,
             checksum_crc32c: try_from_aws(x.checksum_crc32_c)?,
             checksum_crc64nvme: try_from_aws(x.checksum_crc64_nvme)?,
+            checksum_md5: try_from_aws(x.checksum_md5)?,
             checksum_sha1: try_from_aws(x.checksum_sha1)?,
             checksum_sha256: try_from_aws(x.checksum_sha256)?,
+            checksum_sha512: try_from_aws(x.checksum_sha512)?,
+            checksum_xxhash128: try_from_aws(x.checksum_xxhash128)?,
+            checksum_xxhash3: try_from_aws(x.checksum_xxhash3)?,
+            checksum_xxhash64: try_from_aws(x.checksum_xxhash64)?,
             part_number: try_from_aws(x.part_number)?,
             size: try_from_aws(x.size)?,
         })
@@ -6088,8 +6178,13 @@ impl AwsConversion for s3s::dto::ObjectPart {
         y = y.set_checksum_crc32(try_into_aws(x.checksum_crc32)?);
         y = y.set_checksum_crc32_c(try_into_aws(x.checksum_crc32c)?);
         y = y.set_checksum_crc64_nvme(try_into_aws(x.checksum_crc64nvme)?);
+        y = y.set_checksum_md5(try_into_aws(x.checksum_md5)?);
         y = y.set_checksum_sha1(try_into_aws(x.checksum_sha1)?);
         y = y.set_checksum_sha256(try_into_aws(x.checksum_sha256)?);
+        y = y.set_checksum_sha512(try_into_aws(x.checksum_sha512)?);
+        y = y.set_checksum_xxhash128(try_into_aws(x.checksum_xxhash128)?);
+        y = y.set_checksum_xxhash3(try_into_aws(x.checksum_xxhash3)?);
+        y = y.set_checksum_xxhash64(try_into_aws(x.checksum_xxhash64)?);
         y = y.set_part_number(try_into_aws(x.part_number)?);
         y = y.set_size(try_into_aws(x.size)?);
         Ok(y.build())
@@ -6319,8 +6414,13 @@ impl AwsConversion for s3s::dto::Part {
             checksum_crc32: try_from_aws(x.checksum_crc32)?,
             checksum_crc32c: try_from_aws(x.checksum_crc32_c)?,
             checksum_crc64nvme: try_from_aws(x.checksum_crc64_nvme)?,
+            checksum_md5: try_from_aws(x.checksum_md5)?,
             checksum_sha1: try_from_aws(x.checksum_sha1)?,
             checksum_sha256: try_from_aws(x.checksum_sha256)?,
+            checksum_sha512: try_from_aws(x.checksum_sha512)?,
+            checksum_xxhash128: try_from_aws(x.checksum_xxhash128)?,
+            checksum_xxhash3: try_from_aws(x.checksum_xxhash3)?,
+            checksum_xxhash64: try_from_aws(x.checksum_xxhash64)?,
             e_tag: try_from_aws(x.e_tag)?,
             last_modified: try_from_aws(x.last_modified)?,
             part_number: try_from_aws(x.part_number)?,
@@ -6333,8 +6433,13 @@ impl AwsConversion for s3s::dto::Part {
         y = y.set_checksum_crc32(try_into_aws(x.checksum_crc32)?);
         y = y.set_checksum_crc32_c(try_into_aws(x.checksum_crc32c)?);
         y = y.set_checksum_crc64_nvme(try_into_aws(x.checksum_crc64nvme)?);
+        y = y.set_checksum_md5(try_into_aws(x.checksum_md5)?);
         y = y.set_checksum_sha1(try_into_aws(x.checksum_sha1)?);
         y = y.set_checksum_sha256(try_into_aws(x.checksum_sha256)?);
+        y = y.set_checksum_sha512(try_into_aws(x.checksum_sha512)?);
+        y = y.set_checksum_xxhash128(try_into_aws(x.checksum_xxhash128)?);
+        y = y.set_checksum_xxhash3(try_into_aws(x.checksum_xxhash3)?);
+        y = y.set_checksum_xxhash64(try_into_aws(x.checksum_xxhash64)?);
         y = y.set_e_tag(try_into_aws(x.e_tag)?);
         y = y.set_last_modified(try_into_aws(x.last_modified)?);
         y = y.set_part_number(try_into_aws(x.part_number)?);
@@ -7333,8 +7438,13 @@ impl AwsConversion for s3s::dto::PutObjectInput {
             checksum_crc32: try_from_aws(x.checksum_crc32)?,
             checksum_crc32c: try_from_aws(x.checksum_crc32_c)?,
             checksum_crc64nvme: try_from_aws(x.checksum_crc64_nvme)?,
+            checksum_md5: try_from_aws(x.checksum_md5)?,
             checksum_sha1: try_from_aws(x.checksum_sha1)?,
             checksum_sha256: try_from_aws(x.checksum_sha256)?,
+            checksum_sha512: try_from_aws(x.checksum_sha512)?,
+            checksum_xxhash128: try_from_aws(x.checksum_xxhash128)?,
+            checksum_xxhash3: try_from_aws(x.checksum_xxhash3)?,
+            checksum_xxhash64: try_from_aws(x.checksum_xxhash64)?,
             content_disposition: try_from_aws(x.content_disposition)?,
             content_encoding: try_from_aws(x.content_encoding)?,
             content_language: try_from_aws(x.content_language)?,
@@ -7380,8 +7490,13 @@ impl AwsConversion for s3s::dto::PutObjectInput {
         y = y.set_checksum_crc32(try_into_aws(x.checksum_crc32)?);
         y = y.set_checksum_crc32_c(try_into_aws(x.checksum_crc32c)?);
         y = y.set_checksum_crc64_nvme(try_into_aws(x.checksum_crc64nvme)?);
+        y = y.set_checksum_md5(try_into_aws(x.checksum_md5)?);
         y = y.set_checksum_sha1(try_into_aws(x.checksum_sha1)?);
         y = y.set_checksum_sha256(try_into_aws(x.checksum_sha256)?);
+        y = y.set_checksum_sha512(try_into_aws(x.checksum_sha512)?);
+        y = y.set_checksum_xxhash128(try_into_aws(x.checksum_xxhash128)?);
+        y = y.set_checksum_xxhash3(try_into_aws(x.checksum_xxhash3)?);
+        y = y.set_checksum_xxhash64(try_into_aws(x.checksum_xxhash64)?);
         y = y.set_content_disposition(try_into_aws(x.content_disposition)?);
         y = y.set_content_encoding(try_into_aws(x.content_encoding)?);
         y = y.set_content_language(try_into_aws(x.content_language)?);
@@ -7520,9 +7635,14 @@ impl AwsConversion for s3s::dto::PutObjectOutput {
             checksum_crc32: try_from_aws(x.checksum_crc32)?,
             checksum_crc32c: try_from_aws(x.checksum_crc32_c)?,
             checksum_crc64nvme: try_from_aws(x.checksum_crc64_nvme)?,
+            checksum_md5: try_from_aws(x.checksum_md5)?,
             checksum_sha1: try_from_aws(x.checksum_sha1)?,
             checksum_sha256: try_from_aws(x.checksum_sha256)?,
+            checksum_sha512: try_from_aws(x.checksum_sha512)?,
             checksum_type: try_from_aws(x.checksum_type)?,
+            checksum_xxhash128: try_from_aws(x.checksum_xxhash128)?,
+            checksum_xxhash3: try_from_aws(x.checksum_xxhash3)?,
+            checksum_xxhash64: try_from_aws(x.checksum_xxhash64)?,
             e_tag: try_from_aws(x.e_tag)?,
             expiration: try_from_aws(x.expiration)?,
             request_charged: try_from_aws(x.request_charged)?,
@@ -7542,9 +7662,14 @@ impl AwsConversion for s3s::dto::PutObjectOutput {
         y = y.set_checksum_crc32(try_into_aws(x.checksum_crc32)?);
         y = y.set_checksum_crc32_c(try_into_aws(x.checksum_crc32c)?);
         y = y.set_checksum_crc64_nvme(try_into_aws(x.checksum_crc64nvme)?);
+        y = y.set_checksum_md5(try_into_aws(x.checksum_md5)?);
         y = y.set_checksum_sha1(try_into_aws(x.checksum_sha1)?);
         y = y.set_checksum_sha256(try_into_aws(x.checksum_sha256)?);
+        y = y.set_checksum_sha512(try_into_aws(x.checksum_sha512)?);
         y = y.set_checksum_type(try_into_aws(x.checksum_type)?);
+        y = y.set_checksum_xxhash128(try_into_aws(x.checksum_xxhash128)?);
+        y = y.set_checksum_xxhash3(try_into_aws(x.checksum_xxhash3)?);
+        y = y.set_checksum_xxhash64(try_into_aws(x.checksum_xxhash64)?);
         y = y.set_e_tag(try_into_aws(x.e_tag)?);
         y = y.set_expiration(try_into_aws(x.expiration)?);
         y = y.set_request_charged(try_into_aws(x.request_charged)?);
@@ -9050,8 +9175,13 @@ impl AwsConversion for s3s::dto::UploadPartInput {
             checksum_crc32: try_from_aws(x.checksum_crc32)?,
             checksum_crc32c: try_from_aws(x.checksum_crc32_c)?,
             checksum_crc64nvme: try_from_aws(x.checksum_crc64_nvme)?,
+            checksum_md5: try_from_aws(x.checksum_md5)?,
             checksum_sha1: try_from_aws(x.checksum_sha1)?,
             checksum_sha256: try_from_aws(x.checksum_sha256)?,
+            checksum_sha512: try_from_aws(x.checksum_sha512)?,
+            checksum_xxhash128: try_from_aws(x.checksum_xxhash128)?,
+            checksum_xxhash3: try_from_aws(x.checksum_xxhash3)?,
+            checksum_xxhash64: try_from_aws(x.checksum_xxhash64)?,
             content_length: try_from_aws(x.content_length)?,
             content_md5: try_from_aws(x.content_md5)?,
             expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
@@ -9073,8 +9203,13 @@ impl AwsConversion for s3s::dto::UploadPartInput {
         y = y.set_checksum_crc32(try_into_aws(x.checksum_crc32)?);
         y = y.set_checksum_crc32_c(try_into_aws(x.checksum_crc32c)?);
         y = y.set_checksum_crc64_nvme(try_into_aws(x.checksum_crc64nvme)?);
+        y = y.set_checksum_md5(try_into_aws(x.checksum_md5)?);
         y = y.set_checksum_sha1(try_into_aws(x.checksum_sha1)?);
         y = y.set_checksum_sha256(try_into_aws(x.checksum_sha256)?);
+        y = y.set_checksum_sha512(try_into_aws(x.checksum_sha512)?);
+        y = y.set_checksum_xxhash128(try_into_aws(x.checksum_xxhash128)?);
+        y = y.set_checksum_xxhash3(try_into_aws(x.checksum_xxhash3)?);
+        y = y.set_checksum_xxhash64(try_into_aws(x.checksum_xxhash64)?);
         y = y.set_content_length(try_into_aws(x.content_length)?);
         y = y.set_content_md5(try_into_aws(x.content_md5)?);
         y = y.set_expected_bucket_owner(try_into_aws(x.expected_bucket_owner)?);
@@ -9099,8 +9234,13 @@ impl AwsConversion for s3s::dto::UploadPartOutput {
             checksum_crc32: try_from_aws(x.checksum_crc32)?,
             checksum_crc32c: try_from_aws(x.checksum_crc32_c)?,
             checksum_crc64nvme: try_from_aws(x.checksum_crc64_nvme)?,
+            checksum_md5: try_from_aws(x.checksum_md5)?,
             checksum_sha1: try_from_aws(x.checksum_sha1)?,
             checksum_sha256: try_from_aws(x.checksum_sha256)?,
+            checksum_sha512: try_from_aws(x.checksum_sha512)?,
+            checksum_xxhash128: try_from_aws(x.checksum_xxhash128)?,
+            checksum_xxhash3: try_from_aws(x.checksum_xxhash3)?,
+            checksum_xxhash64: try_from_aws(x.checksum_xxhash64)?,
             e_tag: try_from_aws(x.e_tag)?,
             request_charged: try_from_aws(x.request_charged)?,
             sse_customer_algorithm: try_from_aws(x.sse_customer_algorithm)?,
@@ -9116,8 +9256,13 @@ impl AwsConversion for s3s::dto::UploadPartOutput {
         y = y.set_checksum_crc32(try_into_aws(x.checksum_crc32)?);
         y = y.set_checksum_crc32_c(try_into_aws(x.checksum_crc32c)?);
         y = y.set_checksum_crc64_nvme(try_into_aws(x.checksum_crc64nvme)?);
+        y = y.set_checksum_md5(try_into_aws(x.checksum_md5)?);
         y = y.set_checksum_sha1(try_into_aws(x.checksum_sha1)?);
         y = y.set_checksum_sha256(try_into_aws(x.checksum_sha256)?);
+        y = y.set_checksum_sha512(try_into_aws(x.checksum_sha512)?);
+        y = y.set_checksum_xxhash128(try_into_aws(x.checksum_xxhash128)?);
+        y = y.set_checksum_xxhash3(try_into_aws(x.checksum_xxhash3)?);
+        y = y.set_checksum_xxhash64(try_into_aws(x.checksum_xxhash64)?);
         y = y.set_e_tag(try_into_aws(x.e_tag)?);
         y = y.set_request_charged(try_into_aws(x.request_charged)?);
         y = y.set_sse_customer_algorithm(try_into_aws(x.sse_customer_algorithm)?);
@@ -9185,8 +9330,13 @@ impl AwsConversion for s3s::dto::WriteGetObjectResponseInput {
             checksum_crc32: try_from_aws(x.checksum_crc32)?,
             checksum_crc32c: try_from_aws(x.checksum_crc32_c)?,
             checksum_crc64nvme: try_from_aws(x.checksum_crc64_nvme)?,
+            checksum_md5: try_from_aws(x.checksum_md5)?,
             checksum_sha1: try_from_aws(x.checksum_sha1)?,
             checksum_sha256: try_from_aws(x.checksum_sha256)?,
+            checksum_sha512: try_from_aws(x.checksum_sha512)?,
+            checksum_xxhash128: try_from_aws(x.checksum_xxhash128)?,
+            checksum_xxhash3: try_from_aws(x.checksum_xxhash3)?,
+            checksum_xxhash64: try_from_aws(x.checksum_xxhash64)?,
             content_disposition: try_from_aws(x.content_disposition)?,
             content_encoding: try_from_aws(x.content_encoding)?,
             content_language: try_from_aws(x.content_language)?,
@@ -9231,8 +9381,13 @@ impl AwsConversion for s3s::dto::WriteGetObjectResponseInput {
         y = y.set_checksum_crc32(try_into_aws(x.checksum_crc32)?);
         y = y.set_checksum_crc32_c(try_into_aws(x.checksum_crc32c)?);
         y = y.set_checksum_crc64_nvme(try_into_aws(x.checksum_crc64nvme)?);
+        y = y.set_checksum_md5(try_into_aws(x.checksum_md5)?);
         y = y.set_checksum_sha1(try_into_aws(x.checksum_sha1)?);
         y = y.set_checksum_sha256(try_into_aws(x.checksum_sha256)?);
+        y = y.set_checksum_sha512(try_into_aws(x.checksum_sha512)?);
+        y = y.set_checksum_xxhash128(try_into_aws(x.checksum_xxhash128)?);
+        y = y.set_checksum_xxhash3(try_into_aws(x.checksum_xxhash3)?);
+        y = y.set_checksum_xxhash64(try_into_aws(x.checksum_xxhash64)?);
         y = y.set_content_disposition(try_into_aws(x.content_disposition)?);
         y = y.set_content_encoding(try_into_aws(x.content_encoding)?);
         y = y.set_content_language(try_into_aws(x.content_language)?);
