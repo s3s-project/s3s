@@ -6,7 +6,7 @@ on:
       - main
       - 'feat/**'
   merge_group:
-    types: [checks_requested]
+    types: [ checks_requested ]
   schedule:
     - cron: '0 0 * * 0' # at midnight of each sunday
   workflow_dispatch:
@@ -43,8 +43,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        toolchain: 
-          - 1.92.0 # MSRV
+        toolchain:
+          - 1.96.0 # MSRV
           - stable
           - nightly
     steps:
