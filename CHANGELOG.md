@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+MSRV of this minor version: 1.96.0
+
 ### Dependencies
 
 + Upgrade workspace Rust dependencies and refresh `Cargo.lock` in [#637](https://github.com/s3s-project/s3s/pull/637)
