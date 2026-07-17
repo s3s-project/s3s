@@ -120,4 +120,4 @@ aws-sdk-s3 = { version = "1.138.0", default-features = false, features = ["defau
 aws-sdk-sts = { version = "1.108.0", default-features = false, features = ["default-https-client", "rt-tokio"] }
 aws-smithy-runtime-api = "1.13.0"
 aws-smithy-types = "1.6.1"
-aws-smithy-types-convert = "0.60.14"
+aws-smithy-types-convert = "0.61.1"
