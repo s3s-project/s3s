@@ -31,7 +31,7 @@ use tracing::debug;
 /// Maximum allowed size for STS request body (8KB should be enough for operations like `AssumeRole`)
 const MAX_STS_BODY_SIZE: usize = 8192;
 
-fn extract_amz_content_sha256<'a>(hs: &'_ OrderedHeaders<'a>) -> S3Result<Option<AmzContentSha256<'a>>> {
+fn extract_amz_content_sha256(hs: &OrderedHeaders<'_>) -> S3Result<Option<AmzContentSha256>> {
     let Some(val) = hs.get_unique(crate::header::X_AMZ_CONTENT_SHA256) else { return Ok(None) };
     match AmzContentSha256::parse(val) {
         Ok(x) => Ok(Some(x)),
@@ -446,8 +446,7 @@ impl SignatureContext<'_> {
             };
 
             let body = mem::take(self.req_body);
-            let stream = UploadStream::new(body, length, expected_checksum)
-                .map_err(|_| invalid_request!("invalid header: x-amz-content-sha256"))?;
+            let stream = UploadStream::new(body, length, expected_checksum);
             *self.req_body = Body::from(stream.into_byte_stream());
         }
 
@@ -523,13 +522,16 @@ impl SignatureContext<'_> {
             None
         });
 
-        let sts_payload_hash;
+        let payload_hash;
         let payload = match amz_content_sha256 {
             Some(AmzContentSha256::StreamingAws4HmacSha256Payload) => sig_v4::Payload::MultipleChunks,
             Some(AmzContentSha256::StreamingAws4HmacSha256PayloadTrailer) => sig_v4::Payload::MultipleChunksWithTrailer,
             Some(AmzContentSha256::UnsignedPayload) => sig_v4::Payload::Unsigned,
             Some(AmzContentSha256::StreamingUnsignedPayloadTrailer) => sig_v4::Payload::UnsignedMultipleChunksWithTrailer,
-            Some(AmzContentSha256::SingleChunk(payload_checksum)) => sig_v4::Payload::SingleChunk(payload_checksum),
+            Some(AmzContentSha256::SingleChunk(checksum)) => {
+                payload_hash = checksum.to_hex_string();
+                sig_v4::Payload::SingleChunk(&payload_hash)
+            }
             Some(
                 AmzContentSha256::StreamingAws4EcdsaP256Sha256Payload
                 | AmzContentSha256::StreamingAws4EcdsaP256Sha256PayloadTrailer,
@@ -548,8 +550,8 @@ impl SignatureContext<'_> {
                         .await
                         .map_err(|e| invalid_request!("failed to read STS request body: {}", e))?;
 
-                    sts_payload_hash = hex_sha256(&body_bytes, str::to_owned);
-                    sig_v4::Payload::SingleChunk(&sts_payload_hash)
+                    payload_hash = hex_sha256(&body_bytes, str::to_owned);
+                    sig_v4::Payload::SingleChunk(&payload_hash)
                 } else {
                     // According to AWS S3 protocol, x-amz-content-sha256 header is required for
                     // all S3 requests authenticated with Signature V4. Reject if missing.
@@ -611,8 +613,7 @@ impl SignatureContext<'_> {
             };
 
             let body = mem::take(self.req_body);
-            let stream = UploadStream::new(body, length, expected_checksum)
-                .map_err(|_| invalid_request!("invalid header: x-amz-content-sha256"))?;
+            let stream = UploadStream::new(body, length, expected_checksum);
             *self.req_body = Body::from(stream.into_byte_stream());
         } else if matches!(amz_content_sha256, Some(AmzContentSha256::UnsignedPayload)) {
             // For non-streaming unsigned payloads, require Content-Length.
@@ -924,8 +925,6 @@ file content\r\n\
     #[tokio::test]
     async fn test_sts_body_hash_computation() {
         // Test that STS request body hash is computed correctly
-        use crate::utils::crypto::hex_sha256;
-
         // Typical STS AssumeRole request body
         let body_content = b"Action=AssumeRole&RoleArn=arn:aws:iam::123456789012:role/test-role&RoleSessionName=test-session";
 
@@ -1459,6 +1458,87 @@ file content\r\n\
                 .expect("valid SigV4 auth with a raw '=' URI path should succeed");
             assert_eq!(cred.access_key, access_key);
         }
+    }
+
+    #[tokio::test]
+    async fn v4_header_auth_accepts_rest_base64_content_sha256() {
+        use crate::auth::SecretKey;
+        use crate::auth::SimpleAuth;
+        use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
+        use bytes::Bytes;
+        use std::sync::Arc;
+
+        let access_key = "AKIAIOSFODNN7EXAMPLE";
+        let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+        let auth = SimpleAuth::from_single(access_key, secret_key.clone());
+        let s3_config = S3Config {
+            presigned_url_max_skew_time_secs: u32::MAX,
+            ..Default::default()
+        };
+        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(s3_config)));
+
+        let method = Method::POST;
+        let uri = Uri::from_static("https://s3.amazonaws.com/iceberg/v1/catalog/commit");
+        let path = "/iceberg/v1/catalog/commit";
+        let body_data = b"hello world";
+        let payload_hash = "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9";
+        let content_sha256 = "uU0nuZNNPgilLlLX2n2r+sSE7+N6U4DukIj3rOLvzek=";
+        let amz_date = AmzDate::parse("20130524T000000Z").unwrap();
+        let headers_for_signing = OrderedHeaders::from_slice_unchecked(&[
+            ("host", "s3.amazonaws.com"),
+            ("x-amz-content-sha256", content_sha256),
+            ("x-amz-date", "20130524T000000Z"),
+        ]);
+        let canonical_request = sig_v4::create_canonical_request(
+            &method,
+            path,
+            &[] as &[(&str, &str)],
+            &headers_for_signing,
+            sig_v4::Payload::SingleChunk(payload_hash),
+        );
+        let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
+        let signature = sig_v4::calculate_signature(&string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
+        let authorization = format!(
+            "AWS4-HMAC-SHA256 Credential={access_key}/20130524/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature={signature}"
+        );
+
+        let headers = OrderedHeaders::from_slice_unchecked(&[
+            ("authorization", authorization.as_str()),
+            ("host", "s3.amazonaws.com"),
+            ("x-amz-content-sha256", content_sha256),
+            ("x-amz-date", "20130524T000000Z"),
+        ]);
+        let mut body = Body::from(Bytes::from_static(body_data));
+        let mut cx = SignatureContext {
+            auth: Some(&auth),
+            config: &config,
+            req_version: ::http::Version::HTTP_11,
+            req_method: &method,
+            req_uri: &uri,
+            req_body: &mut body,
+            qs: None,
+            hs: headers,
+            decoded_uri_path: path,
+            raw_uri_path: path,
+            vh_bucket: None,
+            content_length: Some(body_data.len() as u64),
+            mime: None,
+            decoded_content_length: None,
+            transformed_body: None,
+            multipart: None,
+            trailing_headers: None,
+        };
+        let cred = cx
+            .v4_check_header_auth()
+            .await
+            .expect("valid REST SigV4 base64 content checksum should succeed");
+        assert_eq!(cred.access_key, access_key);
+        let stored = cx
+            .req_body
+            .store_all_limited(100)
+            .await
+            .expect("valid REST payload checksum should remain readable");
+        assert_eq!(stored, &body_data[..]);
     }
 
     #[tokio::test]
