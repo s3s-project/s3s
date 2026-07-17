@@ -10,8 +10,7 @@ pub struct Sha256Sum([u8; 32]);
 impl Sha256Sum {
     /// Parses a lowercase hexadecimal SHA-256 digest.
     pub fn from_hex(value: &str) -> Option<Self> {
-        let is_lowercase_hex = |byte: u8| matches!(byte, b'0'..=b'9' | b'a'..=b'f');
-        if value.len() != 64 || !value.as_bytes().iter().copied().all(is_lowercase_hex) {
+        if !is_sha256_checksum(value) {
             return None;
         }
 
@@ -42,6 +41,13 @@ impl Sha256Sum {
     pub fn to_hex_string(self) -> String {
         hex(self.0)
     }
+}
+
+/// verify sha256 checksum string
+pub fn is_sha256_checksum(s: &str) -> bool {
+    // TODO: optimize
+    let is_lowercase_hex = |c: u8| matches!(c, b'0'..=b'9' | b'a'..=b'f');
+    s.len() == 64 && s.as_bytes().iter().copied().all(is_lowercase_hex)
 }
 
 /// `hmac_sha1(key, data)`

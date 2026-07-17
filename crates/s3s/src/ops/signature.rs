@@ -1,7 +1,6 @@
 use crate::auth::S3Auth;
 use crate::auth::SecretKey;
 use crate::config::{S3Config, S3ConfigProvider};
-use crate::crypto::{Checksum as _, Sha256};
 use crate::error::*;
 use crate::http;
 use crate::http::{AwsChunkedStream, Body, Multipart, MultipartLimits};
@@ -16,7 +15,7 @@ use crate::sig_v4::AmzDate;
 use crate::sig_v4::UploadStream;
 use crate::sig_v4::{AuthorizationV4, CredentialV4, PostSignatureV4, PresignedUrlV4};
 use crate::stream::ByteStream as _;
-use crate::utils::crypto::Sha256Sum;
+use crate::utils::crypto::hex_sha256;
 use crate::utils::is_base64_encoded;
 
 use std::mem;
@@ -352,14 +351,12 @@ impl SignatureContext<'_> {
             return Err(s3_error!(SignatureDoesNotMatch, "credential scope date does not match x-amz-date"));
         }
 
+        let amz_content_sha256 = extract_amz_content_sha256(&self.hs)?;
+
         // Presigned URLs do not support streaming (chunked) payload signing,
-        // so reject them before credential I/O without retaining the normalized
-        // digest across the async secret-key lookup.
-        {
-            let amz_content_sha256 = extract_amz_content_sha256(&self.hs)?;
-            if amz_content_sha256.is_some_and(|value| value.is_streaming()) {
-                return Err(s3_error!(NotImplemented, "streaming payload for presigned URLs is not implemented"));
-            }
+        // so reject them here before reaching the SingleChunk handler below.
+        if amz_content_sha256.is_some_and(|v| v.is_streaming()) {
+            return Err(s3_error!(NotImplemented, "streaming payload for presigned URLs is not implemented"));
         }
 
         {
@@ -391,7 +388,6 @@ impl SignatureContext<'_> {
         let auth = require_auth(self.auth)?;
         let access_key = presigned_url.credential.access_key_id;
         let secret_key = auth.get_secret_key(access_key).await?;
-        let amz_content_sha256 = extract_amz_content_sha256(&self.hs)?;
 
         let region = presigned_url.credential.aws_region;
         let service = presigned_url.credential.aws_service;
@@ -494,17 +490,16 @@ impl SignatureContext<'_> {
 
         validate_sig_v4_clock_skew(&amz_date, time::OffsetDateTime::now_utc(), &self.config.snapshot())?;
 
-        // Reject malformed headers before credential I/O without retaining the
-        // normalized digest across the async secret-key lookup.
-        {
-            let amz_content_sha256 = extract_amz_content_sha256(&self.hs)?;
-            if service == "s3" && amz_content_sha256.is_none() {
-                return Err(invalid_request!("missing header: x-amz-content-sha256"));
-            }
+        let amz_content_sha256 = extract_amz_content_sha256(&self.hs)?;
+
+        if service == "s3" && amz_content_sha256.is_none() {
+            return Err(invalid_request!("missing header: x-amz-content-sha256"));
         }
 
         let access_key = authorization.credential.access_key_id;
         let secret_key = auth.get_secret_key(access_key).await?;
+
+        let is_stream = amz_content_sha256.is_some_and(|v| v.is_streaming());
 
         let expected_signature = authorization.signature;
         let method = &self.req_method;
@@ -527,29 +522,16 @@ impl SignatureContext<'_> {
             None
         });
 
-        let sts_payload_hash = if service == "sts" && self.hs.get_unique(crate::header::X_AMZ_CONTENT_SHA256).is_none() {
-            let body_bytes = self
-                .req_body
-                .store_all_limited(MAX_STS_BODY_SIZE)
-                .await
-                .map_err(|e| invalid_request!("failed to read STS request body: {}", e))?;
-            Sha256Sum::from_bytes(Sha256::checksum(&body_bytes)).to_hex_string()
-        } else {
-            String::new()
-        };
-        let amz_content_sha256 = extract_amz_content_sha256(&self.hs)?;
-        let is_stream = amz_content_sha256.is_some_and(|value| value.is_streaming());
-        let payload_hash = match amz_content_sha256 {
-            Some(AmzContentSha256::SingleChunk(checksum)) => checksum.to_hex_string(),
-            None if service == "sts" => sts_payload_hash,
-            _ => String::new(),
-        };
+        let payload_hash;
         let payload = match amz_content_sha256 {
             Some(AmzContentSha256::StreamingAws4HmacSha256Payload) => sig_v4::Payload::MultipleChunks,
             Some(AmzContentSha256::StreamingAws4HmacSha256PayloadTrailer) => sig_v4::Payload::MultipleChunksWithTrailer,
             Some(AmzContentSha256::UnsignedPayload) => sig_v4::Payload::Unsigned,
             Some(AmzContentSha256::StreamingUnsignedPayloadTrailer) => sig_v4::Payload::UnsignedMultipleChunksWithTrailer,
-            Some(AmzContentSha256::SingleChunk(_)) => sig_v4::Payload::SingleChunk(&payload_hash),
+            Some(AmzContentSha256::SingleChunk(checksum)) => {
+                payload_hash = checksum.to_hex_string();
+                sig_v4::Payload::SingleChunk(&payload_hash)
+            }
             Some(
                 AmzContentSha256::StreamingAws4EcdsaP256Sha256Payload
                 | AmzContentSha256::StreamingAws4EcdsaP256Sha256PayloadTrailer,
@@ -557,7 +539,18 @@ impl SignatureContext<'_> {
                 return Err(s3_error!(NotImplemented, "AWS4-ECDSA-P256-SHA256 signing method is not implemented yet"));
             }
             None => {
+                // For STS requests, x-amz-content-sha256 header is not required
+                // For S3 requests, this case should have been caught earlier.
                 if service == "sts" {
+                    // STS requests require computing the payload hash from the body
+                    // Read the body (it's small for STS requests like AssumeRole)
+                    let body_bytes = self
+                        .req_body
+                        .store_all_limited(MAX_STS_BODY_SIZE)
+                        .await
+                        .map_err(|e| invalid_request!("failed to read STS request body: {}", e))?;
+
+                    payload_hash = hex_sha256(&body_bytes, str::to_owned);
                     sig_v4::Payload::SingleChunk(&payload_hash)
                 } else {
                     // According to AWS S3 protocol, x-amz-content-sha256 header is required for
@@ -769,7 +762,6 @@ impl SignatureContext<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::utils::crypto::hex_sha256;
 
     fn fmt_current_amz_date(dt: time::OffsetDateTime) -> String {
         format!(
