@@ -31,7 +31,7 @@ impl CompleteMultipartUpload {
                         add_complete_multipart_headers(&mut res, &val)?;
                         Ok(res)
                     }
-                    Err(err) => super::serialize_error(err, false).map_err(Into::into),
+                    Err(err) => super::serialize_error(err, true).map_err(Into::into),
                 }
             });
             let duration = std::time::Duration::from_millis(100);
@@ -133,6 +133,7 @@ mod tests {
         let aggregated = resp.body.collect().await.unwrap();
         let body = String::from_utf8(aggregated.to_bytes().to_vec()).unwrap();
         assert!(body.starts_with("<?xml"));
+        assert_eq!(body.matches("<?xml").count(), 1);
         assert!(body.contains("<Error>"));
         assert!(body.contains("<Code>NoSuchBucket</Code>"));
         assert!(body.contains("<Message>missing bucket</Message>"));
