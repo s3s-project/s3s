@@ -197,6 +197,10 @@ impl Checksum for Sha512 {
 
 pub struct XxHash64(xxhash_rust::xxh64::Xxh64);
 
+// Amazon S3 checksum names map to upstream xxHash variants as follows:
+// - XXHASH64  -> XXH64
+// - XXHASH3   -> XXH3 64-bit
+// - XXHASH128 -> XXH3 128-bit, called XXH128 by upstream xxHash
 // S3 documents XXHASH* headers as Base64-encoded 64/128-bit checksum values.
 // Use big-endian bytes for integer digests, matching the CRC implementations above.
 // See: https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObject.html
