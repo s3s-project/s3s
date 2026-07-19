@@ -427,17 +427,15 @@ impl Put {
         let bucket = self.bucket.as_str();
         let key = "with-checksum-trailer";
 
+        // aws-smithy-checksums v0.65.0 only computes streaming request trailers
+        // for this subset of checksum_algorithm values. Newer checksum variants are
+        // covered by lower-level tests until the SDK can drive PutObject with them.
         let checksum_algorithms = [
             ChecksumAlgorithm::Crc32,
             ChecksumAlgorithm::Crc32C,
             ChecksumAlgorithm::Sha1,
             ChecksumAlgorithm::Sha256,
             ChecksumAlgorithm::Crc64Nvme,
-            ChecksumAlgorithm::Sha512,
-            ChecksumAlgorithm::Md5,
-            ChecksumAlgorithm::Xxhash64,
-            ChecksumAlgorithm::Xxhash3,
-            ChecksumAlgorithm::Xxhash128,
         ];
 
         for checksum_algorithm in checksum_algorithms {
@@ -478,21 +476,6 @@ impl Put {
                 ChecksumAlgorithm::Crc64Nvme => put_resp
                     .checksum_crc64_nvme()
                     .expect("PUT should return checksum when checksum_algorithm is used"),
-                ChecksumAlgorithm::Sha512 => put_resp
-                    .checksum_sha512()
-                    .expect("PUT should return checksum when checksum_algorithm is used"),
-                ChecksumAlgorithm::Md5 => put_resp
-                    .checksum_md5()
-                    .expect("PUT should return checksum when checksum_algorithm is used"),
-                ChecksumAlgorithm::Xxhash64 => put_resp
-                    .checksum_xxhash64()
-                    .expect("PUT should return checksum when checksum_algorithm is used"),
-                ChecksumAlgorithm::Xxhash3 => put_resp
-                    .checksum_xxhash3()
-                    .expect("PUT should return checksum when checksum_algorithm is used"),
-                ChecksumAlgorithm::Xxhash128 => put_resp
-                    .checksum_xxhash128()
-                    .expect("PUT should return checksum when checksum_algorithm is used"),
                 _ => panic!("Unsupported checksum algorithm"),
             };
 
@@ -516,11 +499,6 @@ impl Put {
                 ChecksumAlgorithm::Sha1 => resp.checksum_sha1(),
                 ChecksumAlgorithm::Sha256 => resp.checksum_sha256(),
                 ChecksumAlgorithm::Crc64Nvme => resp.checksum_crc64_nvme(),
-                ChecksumAlgorithm::Sha512 => resp.checksum_sha512(),
-                ChecksumAlgorithm::Md5 => resp.checksum_md5(),
-                ChecksumAlgorithm::Xxhash64 => resp.checksum_xxhash64(),
-                ChecksumAlgorithm::Xxhash3 => resp.checksum_xxhash3(),
-                ChecksumAlgorithm::Xxhash128 => resp.checksum_xxhash128(),
                 _ => panic!("Unsupported checksum algorithm"),
             };
 
