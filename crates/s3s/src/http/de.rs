@@ -93,6 +93,11 @@ pub fn parse_checksum_algorithm_header(req: &Request) -> S3Result<Option<crate::
             (crate::header::X_AMZ_CHECKSUM_SHA1, crate::dto::ChecksumAlgorithm::SHA1),
             (crate::header::X_AMZ_CHECKSUM_SHA256, crate::dto::ChecksumAlgorithm::SHA256),
             (crate::header::X_AMZ_CHECKSUM_CRC64NVME, crate::dto::ChecksumAlgorithm::CRC64NVME),
+            (crate::header::X_AMZ_CHECKSUM_SHA512, crate::dto::ChecksumAlgorithm::SHA512),
+            (crate::header::X_AMZ_CHECKSUM_MD5, crate::dto::ChecksumAlgorithm::MD5),
+            (crate::header::X_AMZ_CHECKSUM_XXHASH64, crate::dto::ChecksumAlgorithm::XXHASH64),
+            (crate::header::X_AMZ_CHECKSUM_XXHASH3, crate::dto::ChecksumAlgorithm::XXHASH3),
+            (crate::header::X_AMZ_CHECKSUM_XXHASH128, crate::dto::ChecksumAlgorithm::XXHASH128),
         ]
     };
 

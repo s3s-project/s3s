@@ -215,12 +215,22 @@ use std::io::Write;
 // DeserializeContent: ChecksumCRC32C
 //   SerializeContent: ChecksumCRC64NVME
 // DeserializeContent: ChecksumCRC64NVME
+//   SerializeContent: ChecksumMD5
+// DeserializeContent: ChecksumMD5
 //   SerializeContent: ChecksumSHA1
 // DeserializeContent: ChecksumSHA1
 //   SerializeContent: ChecksumSHA256
 // DeserializeContent: ChecksumSHA256
+//   SerializeContent: ChecksumSHA512
+// DeserializeContent: ChecksumSHA512
 //   SerializeContent: ChecksumType
 // DeserializeContent: ChecksumType
+//   SerializeContent: ChecksumXXHASH128
+// DeserializeContent: ChecksumXXHASH128
+//   SerializeContent: ChecksumXXHASH3
+// DeserializeContent: ChecksumXXHASH3
+//   SerializeContent: ChecksumXXHASH64
+// DeserializeContent: ChecksumXXHASH64
 //   SerializeContent: Code
 // DeserializeContent: Code
 //   SerializeContent: Comments
@@ -2426,14 +2436,29 @@ impl SerializeContent for Checksum {
         if let Some(ref val) = self.checksum_crc64nvme {
             s.content("ChecksumCRC64NVME", val)?;
         }
+        if let Some(ref val) = self.checksum_md5 {
+            s.content("ChecksumMD5", val)?;
+        }
         if let Some(ref val) = self.checksum_sha1 {
             s.content("ChecksumSHA1", val)?;
         }
         if let Some(ref val) = self.checksum_sha256 {
             s.content("ChecksumSHA256", val)?;
         }
+        if let Some(ref val) = self.checksum_sha512 {
+            s.content("ChecksumSHA512", val)?;
+        }
         if let Some(ref val) = self.checksum_type {
             s.content("ChecksumType", val)?;
+        }
+        if let Some(ref val) = self.checksum_xxhash128 {
+            s.content("ChecksumXXHASH128", val)?;
+        }
+        if let Some(ref val) = self.checksum_xxhash3 {
+            s.content("ChecksumXXHASH3", val)?;
+        }
+        if let Some(ref val) = self.checksum_xxhash64 {
+            s.content("ChecksumXXHASH64", val)?;
         }
         Ok(())
     }
@@ -2444,9 +2469,14 @@ impl<'xml> DeserializeContent<'xml> for Checksum {
         let mut checksum_crc32: Option<ChecksumCRC32> = None;
         let mut checksum_crc32c: Option<ChecksumCRC32C> = None;
         let mut checksum_crc64nvme: Option<ChecksumCRC64NVME> = None;
+        let mut checksum_md5: Option<ChecksumMD5> = None;
         let mut checksum_sha1: Option<ChecksumSHA1> = None;
         let mut checksum_sha256: Option<ChecksumSHA256> = None;
+        let mut checksum_sha512: Option<ChecksumSHA512> = None;
         let mut checksum_type: Option<ChecksumType> = None;
+        let mut checksum_xxhash128: Option<ChecksumXXHASH128> = None;
+        let mut checksum_xxhash3: Option<ChecksumXXHASH3> = None;
+        let mut checksum_xxhash64: Option<ChecksumXXHASH64> = None;
         d.for_each_element(|d, x| match x {
             b"ChecksumCRC32" => {
                 if checksum_crc32.is_some() {
@@ -2469,6 +2499,13 @@ impl<'xml> DeserializeContent<'xml> for Checksum {
                 checksum_crc64nvme = Some(d.content()?);
                 Ok(())
             }
+            b"ChecksumMD5" => {
+                if checksum_md5.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_md5 = Some(d.content()?);
+                Ok(())
+            }
             b"ChecksumSHA1" => {
                 if checksum_sha1.is_some() {
                     return Err(DeError::DuplicateField);
@@ -2483,11 +2520,39 @@ impl<'xml> DeserializeContent<'xml> for Checksum {
                 checksum_sha256 = Some(d.content()?);
                 Ok(())
             }
+            b"ChecksumSHA512" => {
+                if checksum_sha512.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_sha512 = Some(d.content()?);
+                Ok(())
+            }
             b"ChecksumType" => {
                 if checksum_type.is_some() {
                     return Err(DeError::DuplicateField);
                 }
                 checksum_type = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumXXHASH128" => {
+                if checksum_xxhash128.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_xxhash128 = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumXXHASH3" => {
+                if checksum_xxhash3.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_xxhash3 = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumXXHASH64" => {
+                if checksum_xxhash64.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_xxhash64 = Some(d.content()?);
                 Ok(())
             }
             _ => Err(DeError::UnexpectedTagName),
@@ -2496,9 +2561,14 @@ impl<'xml> DeserializeContent<'xml> for Checksum {
             checksum_crc32,
             checksum_crc32c,
             checksum_crc64nvme,
+            checksum_md5,
             checksum_sha1,
             checksum_sha256,
+            checksum_sha512,
             checksum_type,
+            checksum_xxhash128,
+            checksum_xxhash3,
+            checksum_xxhash64,
         })
     }
 }
@@ -2513,8 +2583,13 @@ impl<'xml> DeserializeContent<'xml> for ChecksumAlgorithm {
             "CRC32" => Ok(Self::from_static(ChecksumAlgorithm::CRC32)),
             "CRC32C" => Ok(Self::from_static(ChecksumAlgorithm::CRC32C)),
             "CRC64NVME" => Ok(Self::from_static(ChecksumAlgorithm::CRC64NVME)),
+            "MD5" => Ok(Self::from_static(ChecksumAlgorithm::MD5)),
             "SHA1" => Ok(Self::from_static(ChecksumAlgorithm::SHA1)),
             "SHA256" => Ok(Self::from_static(ChecksumAlgorithm::SHA256)),
+            "SHA512" => Ok(Self::from_static(ChecksumAlgorithm::SHA512)),
+            "XXHASH128" => Ok(Self::from_static(ChecksumAlgorithm::XXHASH128)),
+            "XXHASH3" => Ok(Self::from_static(ChecksumAlgorithm::XXHASH3)),
+            "XXHASH64" => Ok(Self::from_static(ChecksumAlgorithm::XXHASH64)),
             _ => Ok(Self::from(s.to_owned())),
         })
     }
@@ -2572,14 +2647,29 @@ impl SerializeContent for CompleteMultipartUploadOutput {
         if let Some(ref val) = self.checksum_crc64nvme {
             s.content("ChecksumCRC64NVME", val)?;
         }
+        if let Some(ref val) = self.checksum_md5 {
+            s.content("ChecksumMD5", val)?;
+        }
         if let Some(ref val) = self.checksum_sha1 {
             s.content("ChecksumSHA1", val)?;
         }
         if let Some(ref val) = self.checksum_sha256 {
             s.content("ChecksumSHA256", val)?;
         }
+        if let Some(ref val) = self.checksum_sha512 {
+            s.content("ChecksumSHA512", val)?;
+        }
         if let Some(ref val) = self.checksum_type {
             s.content("ChecksumType", val)?;
+        }
+        if let Some(ref val) = self.checksum_xxhash128 {
+            s.content("ChecksumXXHASH128", val)?;
+        }
+        if let Some(ref val) = self.checksum_xxhash3 {
+            s.content("ChecksumXXHASH3", val)?;
+        }
+        if let Some(ref val) = self.checksum_xxhash64 {
+            s.content("ChecksumXXHASH64", val)?;
         }
         if let Some(ref val) = self.e_tag {
             s.content("ETag", val)?;
@@ -2631,11 +2721,26 @@ impl SerializeContent for CompletedPart {
         if let Some(ref val) = self.checksum_crc64nvme {
             s.content("ChecksumCRC64NVME", val)?;
         }
+        if let Some(ref val) = self.checksum_md5 {
+            s.content("ChecksumMD5", val)?;
+        }
         if let Some(ref val) = self.checksum_sha1 {
             s.content("ChecksumSHA1", val)?;
         }
         if let Some(ref val) = self.checksum_sha256 {
             s.content("ChecksumSHA256", val)?;
+        }
+        if let Some(ref val) = self.checksum_sha512 {
+            s.content("ChecksumSHA512", val)?;
+        }
+        if let Some(ref val) = self.checksum_xxhash128 {
+            s.content("ChecksumXXHASH128", val)?;
+        }
+        if let Some(ref val) = self.checksum_xxhash3 {
+            s.content("ChecksumXXHASH3", val)?;
+        }
+        if let Some(ref val) = self.checksum_xxhash64 {
+            s.content("ChecksumXXHASH64", val)?;
         }
         if let Some(ref val) = self.e_tag {
             s.content("ETag", val)?;
@@ -2652,8 +2757,13 @@ impl<'xml> DeserializeContent<'xml> for CompletedPart {
         let mut checksum_crc32: Option<ChecksumCRC32> = None;
         let mut checksum_crc32c: Option<ChecksumCRC32C> = None;
         let mut checksum_crc64nvme: Option<ChecksumCRC64NVME> = None;
+        let mut checksum_md5: Option<ChecksumMD5> = None;
         let mut checksum_sha1: Option<ChecksumSHA1> = None;
         let mut checksum_sha256: Option<ChecksumSHA256> = None;
+        let mut checksum_sha512: Option<ChecksumSHA512> = None;
+        let mut checksum_xxhash128: Option<ChecksumXXHASH128> = None;
+        let mut checksum_xxhash3: Option<ChecksumXXHASH3> = None;
+        let mut checksum_xxhash64: Option<ChecksumXXHASH64> = None;
         let mut e_tag: Option<ETag> = None;
         let mut part_number: Option<PartNumber> = None;
         d.for_each_element(|d, x| match x {
@@ -2678,6 +2788,13 @@ impl<'xml> DeserializeContent<'xml> for CompletedPart {
                 checksum_crc64nvme = Some(d.content()?);
                 Ok(())
             }
+            b"ChecksumMD5" => {
+                if checksum_md5.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_md5 = Some(d.content()?);
+                Ok(())
+            }
             b"ChecksumSHA1" => {
                 if checksum_sha1.is_some() {
                     return Err(DeError::DuplicateField);
@@ -2690,6 +2807,34 @@ impl<'xml> DeserializeContent<'xml> for CompletedPart {
                     return Err(DeError::DuplicateField);
                 }
                 checksum_sha256 = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumSHA512" => {
+                if checksum_sha512.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_sha512 = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumXXHASH128" => {
+                if checksum_xxhash128.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_xxhash128 = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumXXHASH3" => {
+                if checksum_xxhash3.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_xxhash3 = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumXXHASH64" => {
+                if checksum_xxhash64.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_xxhash64 = Some(d.content()?);
                 Ok(())
             }
             b"ETag" => {
@@ -2712,8 +2857,13 @@ impl<'xml> DeserializeContent<'xml> for CompletedPart {
             checksum_crc32,
             checksum_crc32c,
             checksum_crc64nvme,
+            checksum_md5,
             checksum_sha1,
             checksum_sha256,
+            checksum_sha512,
+            checksum_xxhash128,
+            checksum_xxhash3,
+            checksum_xxhash64,
             e_tag,
             part_number,
         })
@@ -2784,14 +2934,29 @@ impl SerializeContent for CopyObjectResult {
         if let Some(ref val) = self.checksum_crc64nvme {
             s.content("ChecksumCRC64NVME", val)?;
         }
+        if let Some(ref val) = self.checksum_md5 {
+            s.content("ChecksumMD5", val)?;
+        }
         if let Some(ref val) = self.checksum_sha1 {
             s.content("ChecksumSHA1", val)?;
         }
         if let Some(ref val) = self.checksum_sha256 {
             s.content("ChecksumSHA256", val)?;
         }
+        if let Some(ref val) = self.checksum_sha512 {
+            s.content("ChecksumSHA512", val)?;
+        }
         if let Some(ref val) = self.checksum_type {
             s.content("ChecksumType", val)?;
+        }
+        if let Some(ref val) = self.checksum_xxhash128 {
+            s.content("ChecksumXXHASH128", val)?;
+        }
+        if let Some(ref val) = self.checksum_xxhash3 {
+            s.content("ChecksumXXHASH3", val)?;
+        }
+        if let Some(ref val) = self.checksum_xxhash64 {
+            s.content("ChecksumXXHASH64", val)?;
         }
         if let Some(ref val) = self.e_tag {
             s.content("ETag", val)?;
@@ -2808,9 +2973,14 @@ impl<'xml> DeserializeContent<'xml> for CopyObjectResult {
         let mut checksum_crc32: Option<ChecksumCRC32> = None;
         let mut checksum_crc32c: Option<ChecksumCRC32C> = None;
         let mut checksum_crc64nvme: Option<ChecksumCRC64NVME> = None;
+        let mut checksum_md5: Option<ChecksumMD5> = None;
         let mut checksum_sha1: Option<ChecksumSHA1> = None;
         let mut checksum_sha256: Option<ChecksumSHA256> = None;
+        let mut checksum_sha512: Option<ChecksumSHA512> = None;
         let mut checksum_type: Option<ChecksumType> = None;
+        let mut checksum_xxhash128: Option<ChecksumXXHASH128> = None;
+        let mut checksum_xxhash3: Option<ChecksumXXHASH3> = None;
+        let mut checksum_xxhash64: Option<ChecksumXXHASH64> = None;
         let mut e_tag: Option<ETag> = None;
         let mut last_modified: Option<LastModified> = None;
         d.for_each_element(|d, x| match x {
@@ -2835,6 +3005,13 @@ impl<'xml> DeserializeContent<'xml> for CopyObjectResult {
                 checksum_crc64nvme = Some(d.content()?);
                 Ok(())
             }
+            b"ChecksumMD5" => {
+                if checksum_md5.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_md5 = Some(d.content()?);
+                Ok(())
+            }
             b"ChecksumSHA1" => {
                 if checksum_sha1.is_some() {
                     return Err(DeError::DuplicateField);
@@ -2849,11 +3026,39 @@ impl<'xml> DeserializeContent<'xml> for CopyObjectResult {
                 checksum_sha256 = Some(d.content()?);
                 Ok(())
             }
+            b"ChecksumSHA512" => {
+                if checksum_sha512.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_sha512 = Some(d.content()?);
+                Ok(())
+            }
             b"ChecksumType" => {
                 if checksum_type.is_some() {
                     return Err(DeError::DuplicateField);
                 }
                 checksum_type = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumXXHASH128" => {
+                if checksum_xxhash128.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_xxhash128 = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumXXHASH3" => {
+                if checksum_xxhash3.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_xxhash3 = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumXXHASH64" => {
+                if checksum_xxhash64.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_xxhash64 = Some(d.content()?);
                 Ok(())
             }
             b"ETag" => {
@@ -2876,9 +3081,14 @@ impl<'xml> DeserializeContent<'xml> for CopyObjectResult {
             checksum_crc32,
             checksum_crc32c,
             checksum_crc64nvme,
+            checksum_md5,
             checksum_sha1,
             checksum_sha256,
+            checksum_sha512,
             checksum_type,
+            checksum_xxhash128,
+            checksum_xxhash3,
+            checksum_xxhash64,
             e_tag,
             last_modified,
         })
@@ -2895,11 +3105,26 @@ impl SerializeContent for CopyPartResult {
         if let Some(ref val) = self.checksum_crc64nvme {
             s.content("ChecksumCRC64NVME", val)?;
         }
+        if let Some(ref val) = self.checksum_md5 {
+            s.content("ChecksumMD5", val)?;
+        }
         if let Some(ref val) = self.checksum_sha1 {
             s.content("ChecksumSHA1", val)?;
         }
         if let Some(ref val) = self.checksum_sha256 {
             s.content("ChecksumSHA256", val)?;
+        }
+        if let Some(ref val) = self.checksum_sha512 {
+            s.content("ChecksumSHA512", val)?;
+        }
+        if let Some(ref val) = self.checksum_xxhash128 {
+            s.content("ChecksumXXHASH128", val)?;
+        }
+        if let Some(ref val) = self.checksum_xxhash3 {
+            s.content("ChecksumXXHASH3", val)?;
+        }
+        if let Some(ref val) = self.checksum_xxhash64 {
+            s.content("ChecksumXXHASH64", val)?;
         }
         if let Some(ref val) = self.e_tag {
             s.content("ETag", val)?;
@@ -2916,8 +3141,13 @@ impl<'xml> DeserializeContent<'xml> for CopyPartResult {
         let mut checksum_crc32: Option<ChecksumCRC32> = None;
         let mut checksum_crc32c: Option<ChecksumCRC32C> = None;
         let mut checksum_crc64nvme: Option<ChecksumCRC64NVME> = None;
+        let mut checksum_md5: Option<ChecksumMD5> = None;
         let mut checksum_sha1: Option<ChecksumSHA1> = None;
         let mut checksum_sha256: Option<ChecksumSHA256> = None;
+        let mut checksum_sha512: Option<ChecksumSHA512> = None;
+        let mut checksum_xxhash128: Option<ChecksumXXHASH128> = None;
+        let mut checksum_xxhash3: Option<ChecksumXXHASH3> = None;
+        let mut checksum_xxhash64: Option<ChecksumXXHASH64> = None;
         let mut e_tag: Option<ETag> = None;
         let mut last_modified: Option<LastModified> = None;
         d.for_each_element(|d, x| match x {
@@ -2942,6 +3172,13 @@ impl<'xml> DeserializeContent<'xml> for CopyPartResult {
                 checksum_crc64nvme = Some(d.content()?);
                 Ok(())
             }
+            b"ChecksumMD5" => {
+                if checksum_md5.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_md5 = Some(d.content()?);
+                Ok(())
+            }
             b"ChecksumSHA1" => {
                 if checksum_sha1.is_some() {
                     return Err(DeError::DuplicateField);
@@ -2954,6 +3191,34 @@ impl<'xml> DeserializeContent<'xml> for CopyPartResult {
                     return Err(DeError::DuplicateField);
                 }
                 checksum_sha256 = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumSHA512" => {
+                if checksum_sha512.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_sha512 = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumXXHASH128" => {
+                if checksum_xxhash128.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_xxhash128 = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumXXHASH3" => {
+                if checksum_xxhash3.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_xxhash3 = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumXXHASH64" => {
+                if checksum_xxhash64.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_xxhash64 = Some(d.content()?);
                 Ok(())
             }
             b"ETag" => {
@@ -2976,8 +3241,13 @@ impl<'xml> DeserializeContent<'xml> for CopyPartResult {
             checksum_crc32,
             checksum_crc32c,
             checksum_crc64nvme,
+            checksum_md5,
             checksum_sha1,
             checksum_sha256,
+            checksum_sha512,
+            checksum_xxhash128,
+            checksum_xxhash3,
+            checksum_xxhash64,
             e_tag,
             last_modified,
         })
@@ -7214,11 +7484,26 @@ impl SerializeContent for ObjectPart {
         if let Some(ref val) = self.checksum_crc64nvme {
             s.content("ChecksumCRC64NVME", val)?;
         }
+        if let Some(ref val) = self.checksum_md5 {
+            s.content("ChecksumMD5", val)?;
+        }
         if let Some(ref val) = self.checksum_sha1 {
             s.content("ChecksumSHA1", val)?;
         }
         if let Some(ref val) = self.checksum_sha256 {
             s.content("ChecksumSHA256", val)?;
+        }
+        if let Some(ref val) = self.checksum_sha512 {
+            s.content("ChecksumSHA512", val)?;
+        }
+        if let Some(ref val) = self.checksum_xxhash128 {
+            s.content("ChecksumXXHASH128", val)?;
+        }
+        if let Some(ref val) = self.checksum_xxhash3 {
+            s.content("ChecksumXXHASH3", val)?;
+        }
+        if let Some(ref val) = self.checksum_xxhash64 {
+            s.content("ChecksumXXHASH64", val)?;
         }
         if let Some(ref val) = self.part_number {
             s.content("PartNumber", val)?;
@@ -7235,8 +7520,13 @@ impl<'xml> DeserializeContent<'xml> for ObjectPart {
         let mut checksum_crc32: Option<ChecksumCRC32> = None;
         let mut checksum_crc32c: Option<ChecksumCRC32C> = None;
         let mut checksum_crc64nvme: Option<ChecksumCRC64NVME> = None;
+        let mut checksum_md5: Option<ChecksumMD5> = None;
         let mut checksum_sha1: Option<ChecksumSHA1> = None;
         let mut checksum_sha256: Option<ChecksumSHA256> = None;
+        let mut checksum_sha512: Option<ChecksumSHA512> = None;
+        let mut checksum_xxhash128: Option<ChecksumXXHASH128> = None;
+        let mut checksum_xxhash3: Option<ChecksumXXHASH3> = None;
+        let mut checksum_xxhash64: Option<ChecksumXXHASH64> = None;
         let mut part_number: Option<PartNumber> = None;
         let mut size: Option<Size> = None;
         d.for_each_element(|d, x| match x {
@@ -7261,6 +7551,13 @@ impl<'xml> DeserializeContent<'xml> for ObjectPart {
                 checksum_crc64nvme = Some(d.content()?);
                 Ok(())
             }
+            b"ChecksumMD5" => {
+                if checksum_md5.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_md5 = Some(d.content()?);
+                Ok(())
+            }
             b"ChecksumSHA1" => {
                 if checksum_sha1.is_some() {
                     return Err(DeError::DuplicateField);
@@ -7273,6 +7570,34 @@ impl<'xml> DeserializeContent<'xml> for ObjectPart {
                     return Err(DeError::DuplicateField);
                 }
                 checksum_sha256 = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumSHA512" => {
+                if checksum_sha512.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_sha512 = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumXXHASH128" => {
+                if checksum_xxhash128.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_xxhash128 = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumXXHASH3" => {
+                if checksum_xxhash3.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_xxhash3 = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumXXHASH64" => {
+                if checksum_xxhash64.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_xxhash64 = Some(d.content()?);
                 Ok(())
             }
             b"PartNumber" => {
@@ -7295,8 +7620,13 @@ impl<'xml> DeserializeContent<'xml> for ObjectPart {
             checksum_crc32,
             checksum_crc32c,
             checksum_crc64nvme,
+            checksum_md5,
             checksum_sha1,
             checksum_sha256,
+            checksum_sha512,
+            checksum_xxhash128,
+            checksum_xxhash3,
+            checksum_xxhash64,
             part_number,
             size,
         })
@@ -7669,11 +7999,26 @@ impl SerializeContent for Part {
         if let Some(ref val) = self.checksum_crc64nvme {
             s.content("ChecksumCRC64NVME", val)?;
         }
+        if let Some(ref val) = self.checksum_md5 {
+            s.content("ChecksumMD5", val)?;
+        }
         if let Some(ref val) = self.checksum_sha1 {
             s.content("ChecksumSHA1", val)?;
         }
         if let Some(ref val) = self.checksum_sha256 {
             s.content("ChecksumSHA256", val)?;
+        }
+        if let Some(ref val) = self.checksum_sha512 {
+            s.content("ChecksumSHA512", val)?;
+        }
+        if let Some(ref val) = self.checksum_xxhash128 {
+            s.content("ChecksumXXHASH128", val)?;
+        }
+        if let Some(ref val) = self.checksum_xxhash3 {
+            s.content("ChecksumXXHASH3", val)?;
+        }
+        if let Some(ref val) = self.checksum_xxhash64 {
+            s.content("ChecksumXXHASH64", val)?;
         }
         if let Some(ref val) = self.e_tag {
             s.content("ETag", val)?;
@@ -7696,8 +8041,13 @@ impl<'xml> DeserializeContent<'xml> for Part {
         let mut checksum_crc32: Option<ChecksumCRC32> = None;
         let mut checksum_crc32c: Option<ChecksumCRC32C> = None;
         let mut checksum_crc64nvme: Option<ChecksumCRC64NVME> = None;
+        let mut checksum_md5: Option<ChecksumMD5> = None;
         let mut checksum_sha1: Option<ChecksumSHA1> = None;
         let mut checksum_sha256: Option<ChecksumSHA256> = None;
+        let mut checksum_sha512: Option<ChecksumSHA512> = None;
+        let mut checksum_xxhash128: Option<ChecksumXXHASH128> = None;
+        let mut checksum_xxhash3: Option<ChecksumXXHASH3> = None;
+        let mut checksum_xxhash64: Option<ChecksumXXHASH64> = None;
         let mut e_tag: Option<ETag> = None;
         let mut last_modified: Option<LastModified> = None;
         let mut part_number: Option<PartNumber> = None;
@@ -7724,6 +8074,13 @@ impl<'xml> DeserializeContent<'xml> for Part {
                 checksum_crc64nvme = Some(d.content()?);
                 Ok(())
             }
+            b"ChecksumMD5" => {
+                if checksum_md5.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_md5 = Some(d.content()?);
+                Ok(())
+            }
             b"ChecksumSHA1" => {
                 if checksum_sha1.is_some() {
                     return Err(DeError::DuplicateField);
@@ -7736,6 +8093,34 @@ impl<'xml> DeserializeContent<'xml> for Part {
                     return Err(DeError::DuplicateField);
                 }
                 checksum_sha256 = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumSHA512" => {
+                if checksum_sha512.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_sha512 = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumXXHASH128" => {
+                if checksum_xxhash128.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_xxhash128 = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumXXHASH3" => {
+                if checksum_xxhash3.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_xxhash3 = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumXXHASH64" => {
+                if checksum_xxhash64.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_xxhash64 = Some(d.content()?);
                 Ok(())
             }
             b"ETag" => {
@@ -7772,8 +8157,13 @@ impl<'xml> DeserializeContent<'xml> for Part {
             checksum_crc32,
             checksum_crc32c,
             checksum_crc64nvme,
+            checksum_md5,
             checksum_sha1,
             checksum_sha256,
+            checksum_sha512,
+            checksum_xxhash128,
+            checksum_xxhash3,
+            checksum_xxhash64,
             e_tag,
             last_modified,
             part_number,

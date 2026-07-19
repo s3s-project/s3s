@@ -49,6 +49,10 @@ pub(crate) struct ObjectAttributes {
     pub expires: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub website_redirect_location: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub checksum_algorithm: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub checksum_type: Option<String>,
 }
 
 impl ObjectAttributes {
@@ -132,6 +136,10 @@ impl FileSystem {
         self.resolve_abs_path(file_path)
     }
 
+    pub(crate) fn get_upload_part_info_path(&self, upload_id: Uuid, part_number: PartNumber) -> Result<PathBuf> {
+        self.resolve_abs_path(format!(".upload_part_info-{upload_id}.part-{part_number}.json"))
+    }
+
     /// load object attributes from fs (with backward compatibility)
     pub(crate) async fn load_object_attributes(
         &self,
@@ -202,6 +210,39 @@ impl FileSystem {
         file_writer.writer().write_all(&content).await?;
         file_writer.writer().flush().await?;
         file_writer.done().await?;
+        Ok(())
+    }
+
+    pub(crate) async fn load_upload_part_info(&self, upload_id: Uuid, part_number: PartNumber) -> Result<Option<InternalInfo>> {
+        let path = self.get_upload_part_info_path(upload_id, part_number)?;
+        if path.exists().not() {
+            return Ok(None);
+        }
+        let content = fs::read(&path).await?;
+        let map = serde_json::from_slice(&content)?;
+        Ok(Some(map))
+    }
+
+    pub(crate) async fn save_upload_part_info(
+        &self,
+        upload_id: Uuid,
+        part_number: PartNumber,
+        info: &InternalInfo,
+    ) -> Result<()> {
+        let path = self.get_upload_part_info_path(upload_id, part_number)?;
+        let content = serde_json::to_vec(info)?;
+        let mut file_writer = self.prepare_file_write(&path).await?;
+        file_writer.writer().write_all(&content).await?;
+        file_writer.writer().flush().await?;
+        file_writer.done().await?;
+        Ok(())
+    }
+
+    pub(crate) async fn delete_upload_part_info(&self, upload_id: Uuid, part_number: PartNumber) -> Result<()> {
+        let path = self.get_upload_part_info_path(upload_id, part_number)?;
+        if path.exists() {
+            fs::remove_file(&path).await?;
+        }
         Ok(())
     }
 

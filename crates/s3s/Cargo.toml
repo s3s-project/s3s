@@ -63,6 +63,7 @@ sync_wrapper.workspace = true
 thiserror.workspace = true
 time = { workspace = true, features = ["formatting", "parsing", "macros"] }
 tokio = { workspace = true, features = ["time"] }
+xxhash-rust = { workspace = true }
 tower.workspace = true
 tracing.workspace = true
 transform-stream.workspace = true

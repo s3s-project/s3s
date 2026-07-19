@@ -57,6 +57,119 @@ fn fmt_content_range(start: u64, end_inclusive: u64, size: u64) -> String {
     format!("bytes {start}-{end_inclusive}/{size}")
 }
 
+fn enable_expected_checksums(hasher: &mut s3s::checksum::ChecksumHasher, checksum: &s3s::dto::Checksum) {
+    if checksum.checksum_crc32.is_some() {
+        hasher.crc32 = Some(default());
+    }
+    if checksum.checksum_crc32c.is_some() {
+        hasher.crc32c = Some(default());
+    }
+    if checksum.checksum_sha1.is_some() {
+        hasher.sha1 = Some(default());
+    }
+    if checksum.checksum_sha256.is_some() {
+        hasher.sha256 = Some(default());
+    }
+    if checksum.checksum_crc64nvme.is_some() {
+        hasher.crc64nvme = Some(default());
+    }
+    if checksum.checksum_sha512.is_some() {
+        hasher.sha512 = Some(default());
+    }
+    if checksum.checksum_md5.is_some() {
+        hasher.md5 = Some(default());
+    }
+    if checksum.checksum_xxhash64.is_some() {
+        hasher.xxhash64 = Some(default());
+    }
+    if checksum.checksum_xxhash3.is_some() {
+        hasher.xxhash3 = Some(default());
+    }
+    if checksum.checksum_xxhash128.is_some() {
+        hasher.xxhash128 = Some(default());
+    }
+}
+
+fn enable_checksum_algorithm(hasher: &mut s3s::checksum::ChecksumHasher, algorithm: &str) -> S3Result<()> {
+    match algorithm {
+        ChecksumAlgorithm::CRC32 => hasher.crc32 = Some(default()),
+        ChecksumAlgorithm::CRC32C => hasher.crc32c = Some(default()),
+        ChecksumAlgorithm::SHA1 => hasher.sha1 = Some(default()),
+        ChecksumAlgorithm::SHA256 => hasher.sha256 = Some(default()),
+        ChecksumAlgorithm::CRC64NVME => hasher.crc64nvme = Some(default()),
+        ChecksumAlgorithm::SHA512 => hasher.sha512 = Some(default()),
+        ChecksumAlgorithm::MD5 => hasher.md5 = Some(default()),
+        ChecksumAlgorithm::XXHASH64 => hasher.xxhash64 = Some(default()),
+        ChecksumAlgorithm::XXHASH3 => hasher.xxhash3 = Some(default()),
+        ChecksumAlgorithm::XXHASH128 => hasher.xxhash128 = Some(default()),
+        _ => return Err(s3_error!(NotImplemented, "Unsupported checksum algorithm")),
+    }
+    Ok(())
+}
+
+fn checksum_mismatch(actual: &s3s::dto::Checksum, expected: &s3s::dto::Checksum) -> Option<&'static str> {
+    if expected.checksum_crc32.is_some() && actual.checksum_crc32 != expected.checksum_crc32 {
+        return Some("checksum_crc32");
+    }
+    if expected.checksum_crc32c.is_some() && actual.checksum_crc32c != expected.checksum_crc32c {
+        return Some("checksum_crc32c");
+    }
+    if expected.checksum_sha1.is_some() && actual.checksum_sha1 != expected.checksum_sha1 {
+        return Some("checksum_sha1");
+    }
+    if expected.checksum_sha256.is_some() && actual.checksum_sha256 != expected.checksum_sha256 {
+        return Some("checksum_sha256");
+    }
+    if expected.checksum_crc64nvme.is_some() && actual.checksum_crc64nvme != expected.checksum_crc64nvme {
+        return Some("checksum_crc64nvme");
+    }
+    if expected.checksum_sha512.is_some() && actual.checksum_sha512 != expected.checksum_sha512 {
+        return Some("checksum_sha512");
+    }
+    if expected.checksum_md5.is_some() && actual.checksum_md5 != expected.checksum_md5 {
+        return Some("checksum_md5");
+    }
+    if expected.checksum_xxhash64.is_some() && actual.checksum_xxhash64 != expected.checksum_xxhash64 {
+        return Some("checksum_xxhash64");
+    }
+    if expected.checksum_xxhash3.is_some() && actual.checksum_xxhash3 != expected.checksum_xxhash3 {
+        return Some("checksum_xxhash3");
+    }
+    if expected.checksum_xxhash128.is_some() && actual.checksum_xxhash128 != expected.checksum_xxhash128 {
+        return Some("checksum_xxhash128");
+    }
+    None
+}
+
+fn has_any_checksum(checksum: &s3s::dto::Checksum) -> bool {
+    checksum.checksum_crc32.is_some()
+        || checksum.checksum_crc32c.is_some()
+        || checksum.checksum_sha1.is_some()
+        || checksum.checksum_sha256.is_some()
+        || checksum.checksum_crc64nvme.is_some()
+        || checksum.checksum_sha512.is_some()
+        || checksum.checksum_md5.is_some()
+        || checksum.checksum_xxhash64.is_some()
+        || checksum.checksum_xxhash3.is_some()
+        || checksum.checksum_xxhash128.is_some()
+}
+
+fn completed_part_checksum(part: &CompletedPart) -> s3s::dto::Checksum {
+    s3s::dto::Checksum {
+        checksum_crc32: part.checksum_crc32.clone(),
+        checksum_crc32c: part.checksum_crc32c.clone(),
+        checksum_sha1: part.checksum_sha1.clone(),
+        checksum_sha256: part.checksum_sha256.clone(),
+        checksum_crc64nvme: part.checksum_crc64nvme.clone(),
+        checksum_sha512: part.checksum_sha512.clone(),
+        checksum_md5: part.checksum_md5.clone(),
+        checksum_xxhash64: part.checksum_xxhash64.clone(),
+        checksum_xxhash3: part.checksum_xxhash3.clone(),
+        checksum_xxhash128: part.checksum_xxhash128.clone(),
+        ..Default::default()
+    }
+}
+
 #[async_trait::async_trait]
 impl S3 for FileSystem {
     #[tracing::instrument]
@@ -190,6 +303,8 @@ impl S3 for FileSystem {
                 cache_control: input.cache_control,
                 expires: None,
                 website_redirect_location: input.website_redirect_location,
+                checksum_algorithm: None,
+                checksum_type: None,
             };
             dst_attrs.set_expires_timestamp(input.expires);
             self.save_object_attributes(&input.bucket, &input.key, &dst_attrs, None)
@@ -392,6 +507,11 @@ impl S3 for FileSystem {
             checksum_sha1: checksum.checksum_sha1,
             checksum_sha256: checksum.checksum_sha256,
             checksum_crc64nvme: checksum.checksum_crc64nvme,
+            checksum_sha512: checksum.checksum_sha512,
+            checksum_md5: checksum.checksum_md5,
+            checksum_xxhash64: checksum.checksum_xxhash64,
+            checksum_xxhash3: checksum.checksum_xxhash3,
+            checksum_xxhash128: checksum.checksum_xxhash128,
             ..Default::default()
         };
         Ok(S3Response::new(output))
@@ -457,6 +577,11 @@ impl S3 for FileSystem {
             checksum_sha1: checksum.checksum_sha1,
             checksum_sha256: checksum.checksum_sha256,
             checksum_crc64nvme: checksum.checksum_crc64nvme,
+            checksum_sha512: checksum.checksum_sha512,
+            checksum_md5: checksum.checksum_md5,
+            checksum_xxhash64: checksum.checksum_xxhash64,
+            checksum_xxhash3: checksum.checksum_xxhash3,
+            checksum_xxhash128: checksum.checksum_xxhash128,
             ..Default::default()
         };
         Ok(S3Response::new(output))
@@ -724,6 +849,21 @@ impl S3 for FileSystem {
         if input.checksum_crc64nvme.is_some() {
             checksum.crc64nvme = Some(default());
         }
+        if input.checksum_sha512.is_some() {
+            checksum.sha512 = Some(default());
+        }
+        if input.checksum_md5.is_some() {
+            checksum.md5 = Some(default());
+        }
+        if input.checksum_xxhash64.is_some() {
+            checksum.xxhash64 = Some(default());
+        }
+        if input.checksum_xxhash3.is_some() {
+            checksum.xxhash3 = Some(default());
+        }
+        if input.checksum_xxhash128.is_some() {
+            checksum.xxhash128 = Some(default());
+        }
         if let Some(alg) = input.checksum_algorithm {
             match alg.as_str() {
                 ChecksumAlgorithm::CRC32 => checksum.crc32 = Some(default()),
@@ -731,6 +871,11 @@ impl S3 for FileSystem {
                 ChecksumAlgorithm::SHA1 => checksum.sha1 = Some(default()),
                 ChecksumAlgorithm::SHA256 => checksum.sha256 = Some(default()),
                 ChecksumAlgorithm::CRC64NVME => checksum.crc64nvme = Some(default()),
+                ChecksumAlgorithm::SHA512 => checksum.sha512 = Some(default()),
+                ChecksumAlgorithm::MD5 => checksum.md5 = Some(default()),
+                ChecksumAlgorithm::XXHASH64 => checksum.xxhash64 = Some(default()),
+                ChecksumAlgorithm::XXHASH3 => checksum.xxhash3 = Some(default()),
+                ChecksumAlgorithm::XXHASH128 => checksum.xxhash128 = Some(default()),
                 _ => return Err(s3_error!(NotImplemented, "Unsupported checksum algorithm")),
             }
         }
@@ -789,6 +934,21 @@ impl S3 for FileSystem {
             if let Some(crc64nvme) = trailers.get("x-amz-checksum-crc64nvme") {
                 input.checksum_crc64nvme = Some(crc64nvme.to_str().map_err(|_| s3_error!(InvalidArgument))?.to_owned());
             }
+            if let Some(sha512) = trailers.get("x-amz-checksum-sha512") {
+                input.checksum_sha512 = Some(sha512.to_str().map_err(|_| s3_error!(InvalidArgument))?.to_owned());
+            }
+            if let Some(md5) = trailers.get("x-amz-checksum-md5") {
+                input.checksum_md5 = Some(md5.to_str().map_err(|_| s3_error!(InvalidArgument))?.to_owned());
+            }
+            if let Some(xxhash64) = trailers.get("x-amz-checksum-xxhash64") {
+                input.checksum_xxhash64 = Some(xxhash64.to_str().map_err(|_| s3_error!(InvalidArgument))?.to_owned());
+            }
+            if let Some(xxhash3) = trailers.get("x-amz-checksum-xxhash3") {
+                input.checksum_xxhash3 = Some(xxhash3.to_str().map_err(|_| s3_error!(InvalidArgument))?.to_owned());
+            }
+            if let Some(xxhash128) = trailers.get("x-amz-checksum-xxhash128") {
+                input.checksum_xxhash128 = Some(xxhash128.to_str().map_err(|_| s3_error!(InvalidArgument))?.to_owned());
+            }
         }
 
         if checksum.checksum_crc32 != input.checksum_crc32 {
@@ -811,6 +971,21 @@ impl S3 for FileSystem {
         if checksum.checksum_crc64nvme != input.checksum_crc64nvme {
             return Err(s3_error!(BadDigest, "checksum_crc64nvme mismatch"));
         }
+        if checksum.checksum_sha512 != input.checksum_sha512 {
+            return Err(s3_error!(BadDigest, "checksum_sha512 mismatch"));
+        }
+        if checksum.checksum_md5 != input.checksum_md5 {
+            return Err(s3_error!(BadDigest, "checksum_md5 mismatch"));
+        }
+        if checksum.checksum_xxhash64 != input.checksum_xxhash64 {
+            return Err(s3_error!(BadDigest, "checksum_xxhash64 mismatch"));
+        }
+        if checksum.checksum_xxhash3 != input.checksum_xxhash3 {
+            return Err(s3_error!(BadDigest, "checksum_xxhash3 mismatch"));
+        }
+        if checksum.checksum_xxhash128 != input.checksum_xxhash128 {
+            return Err(s3_error!(BadDigest, "checksum_xxhash128 mismatch"));
+        }
 
         debug!(path = %object_path.display(), ?size, %md5_sum, ?checksum, "write file");
 
@@ -824,6 +999,8 @@ impl S3 for FileSystem {
             cache_control,
             expires: None,
             website_redirect_location,
+            checksum_algorithm: None,
+            checksum_type: None,
         };
         obj_attrs.set_expires_timestamp(expires);
         self.save_object_attributes(&bucket, &key, &obj_attrs, None).await?;
@@ -840,6 +1017,11 @@ impl S3 for FileSystem {
             checksum_sha1: checksum.checksum_sha1,
             checksum_sha256: checksum.checksum_sha256,
             checksum_crc64nvme: checksum.checksum_crc64nvme,
+            checksum_sha512: checksum.checksum_sha512,
+            checksum_md5: checksum.checksum_md5,
+            checksum_xxhash64: checksum.checksum_xxhash64,
+            checksum_xxhash3: checksum.checksum_xxhash3,
+            checksum_xxhash128: checksum.checksum_xxhash128,
             ..Default::default()
         };
         Ok(S3Response::new(output))
@@ -853,7 +1035,15 @@ impl S3 for FileSystem {
         use crate::fs::ObjectAttributes;
 
         let input = req.input;
+        if let Some(checksum_type) = input.checksum_type.as_ref()
+            && checksum_type.as_str() != ChecksumType::FULL_OBJECT
+        {
+            return Err(s3_error!(NotImplemented, "Unsupported multipart checksum type"));
+        }
+
         let upload_id = self.create_upload_id(req.credentials.as_ref()).await?;
+        let checksum_algorithm = input.checksum_algorithm.as_ref().map(|x| x.as_str().to_owned());
+        let checksum_type = input.checksum_type.as_ref().map(|x| x.as_str().to_owned());
 
         // Save object attributes (including user metadata and standard attributes)
         let mut obj_attrs = ObjectAttributes {
@@ -865,6 +1055,8 @@ impl S3 for FileSystem {
             cache_control: input.cache_control,
             expires: None,
             website_redirect_location: input.website_redirect_location,
+            checksum_algorithm,
+            checksum_type,
         };
         obj_attrs.set_expires_timestamp(input.expires);
         self.save_object_attributes(&input.bucket, &input.key, &obj_attrs, Some(upload_id))
@@ -882,31 +1074,57 @@ impl S3 for FileSystem {
 
     #[tracing::instrument]
     async fn upload_part(&self, req: S3Request<UploadPartInput>) -> S3Result<S3Response<UploadPartOutput>> {
-        let UploadPartInput {
-            body,
-            upload_id,
-            part_number,
-            ..
-        } = req.input;
+        let mut input = req.input;
+        let trailing_headers = req.trailing_headers;
 
-        if part_number > 10_000 {
+        if input.part_number > 10_000 {
             return Err(s3_error!(
                 InvalidArgument,
                 "Part number must be an integer between 1 and 10000, inclusive"
             ));
         }
 
-        let body = body.ok_or_else(|| s3_error!(IncompleteBody))?;
+        let body = input.body.take().ok_or_else(|| s3_error!(IncompleteBody))?;
 
-        let upload_id = Uuid::parse_str(&upload_id).map_err(|_| s3_error!(InvalidRequest))?;
+        let upload_id = Uuid::parse_str(&input.upload_id).map_err(|_| s3_error!(InvalidRequest))?;
         if self.verify_upload_id(req.credentials.as_ref(), &upload_id).await?.not() {
             return Err(s3_error!(AccessDenied));
         }
 
-        let file_path = self.resolve_upload_part_path(upload_id, part_number)?;
+        let upload_attrs = self
+            .load_object_attributes(&input.bucket, &input.key, Some(upload_id))
+            .await?;
+
+        let file_path = self.resolve_upload_part_path(upload_id, input.part_number)?;
+
+        let mut expected_checksum = s3s::dto::Checksum {
+            checksum_crc32: input.checksum_crc32.clone(),
+            checksum_crc32c: input.checksum_crc32c.clone(),
+            checksum_sha1: input.checksum_sha1.clone(),
+            checksum_sha256: input.checksum_sha256.clone(),
+            checksum_crc64nvme: input.checksum_crc64nvme.clone(),
+            checksum_sha512: input.checksum_sha512.clone(),
+            checksum_md5: input.checksum_md5.clone(),
+            checksum_xxhash64: input.checksum_xxhash64.clone(),
+            checksum_xxhash3: input.checksum_xxhash3.clone(),
+            checksum_xxhash128: input.checksum_xxhash128.clone(),
+            ..Default::default()
+        };
+
+        let mut checksum: s3s::checksum::ChecksumHasher = default();
+        enable_expected_checksums(&mut checksum, &expected_checksum);
+        if let Some(algorithm) = upload_attrs.as_ref().and_then(|attrs| attrs.checksum_algorithm.as_deref()) {
+            enable_checksum_algorithm(&mut checksum, algorithm)?;
+        }
+        if let Some(algorithm) = input.checksum_algorithm.as_ref() {
+            enable_checksum_algorithm(&mut checksum, algorithm.as_str())?;
+        }
 
         let mut md5_hash = Md5::new();
-        let stream = body.inspect_ok(|bytes| md5_hash.update(bytes.as_ref()));
+        let stream = body.inspect_ok(|bytes| {
+            md5_hash.update(bytes.as_ref());
+            checksum.update(bytes.as_ref());
+        });
 
         let mut file_writer = self.prepare_file_write(&file_path).await?;
         let size = copy_bytes(stream, file_writer.writer()).await?;
@@ -914,10 +1132,68 @@ impl S3 for FileSystem {
 
         let md5_sum = hex(md5_hash.finalize());
 
+        if let Some(trailers) = trailing_headers
+            && let Some(trailers) = trailers.take()
+        {
+            if let Some(crc32) = trailers.get("x-amz-checksum-crc32") {
+                expected_checksum.checksum_crc32 = Some(crc32.to_str().map_err(|_| s3_error!(InvalidArgument))?.to_owned());
+            }
+            if let Some(crc32c) = trailers.get("x-amz-checksum-crc32c") {
+                expected_checksum.checksum_crc32c = Some(crc32c.to_str().map_err(|_| s3_error!(InvalidArgument))?.to_owned());
+            }
+            if let Some(sha1) = trailers.get("x-amz-checksum-sha1") {
+                expected_checksum.checksum_sha1 = Some(sha1.to_str().map_err(|_| s3_error!(InvalidArgument))?.to_owned());
+            }
+            if let Some(sha256) = trailers.get("x-amz-checksum-sha256") {
+                expected_checksum.checksum_sha256 = Some(sha256.to_str().map_err(|_| s3_error!(InvalidArgument))?.to_owned());
+            }
+            if let Some(crc64nvme) = trailers.get("x-amz-checksum-crc64nvme") {
+                expected_checksum.checksum_crc64nvme =
+                    Some(crc64nvme.to_str().map_err(|_| s3_error!(InvalidArgument))?.to_owned());
+            }
+            if let Some(sha512) = trailers.get("x-amz-checksum-sha512") {
+                expected_checksum.checksum_sha512 = Some(sha512.to_str().map_err(|_| s3_error!(InvalidArgument))?.to_owned());
+            }
+            if let Some(md5) = trailers.get("x-amz-checksum-md5") {
+                expected_checksum.checksum_md5 = Some(md5.to_str().map_err(|_| s3_error!(InvalidArgument))?.to_owned());
+            }
+            if let Some(xxhash64) = trailers.get("x-amz-checksum-xxhash64") {
+                expected_checksum.checksum_xxhash64 = Some(xxhash64.to_str().map_err(|_| s3_error!(InvalidArgument))?.to_owned());
+            }
+            if let Some(xxhash3) = trailers.get("x-amz-checksum-xxhash3") {
+                expected_checksum.checksum_xxhash3 = Some(xxhash3.to_str().map_err(|_| s3_error!(InvalidArgument))?.to_owned());
+            }
+            if let Some(xxhash128) = trailers.get("x-amz-checksum-xxhash128") {
+                expected_checksum.checksum_xxhash128 =
+                    Some(xxhash128.to_str().map_err(|_| s3_error!(InvalidArgument))?.to_owned());
+            }
+        }
+
+        let checksum = checksum.finalize();
+
+        if let Some(field) = checksum_mismatch(&checksum, &expected_checksum) {
+            return Err(s3_error!(BadDigest, "{} mismatch", field));
+        }
+
+        let mut info: InternalInfo = default();
+        crate::checksum::save_e_tag(&mut info, &md5_sum);
+        crate::checksum::modify_internal_info(&mut info, &checksum);
+        self.save_upload_part_info(upload_id, input.part_number, &info).await?;
+
         debug!(path = %file_path.display(), ?size, %md5_sum, "write file");
 
         let output = UploadPartOutput {
             e_tag: Some(ETag::Strong(md5_sum)),
+            checksum_crc32: checksum.checksum_crc32,
+            checksum_crc32c: checksum.checksum_crc32c,
+            checksum_sha1: checksum.checksum_sha1,
+            checksum_sha256: checksum.checksum_sha256,
+            checksum_crc64nvme: checksum.checksum_crc64nvme,
+            checksum_sha512: checksum.checksum_sha512,
+            checksum_md5: checksum.checksum_md5,
+            checksum_xxhash64: checksum.checksum_xxhash64,
+            checksum_xxhash3: checksum.checksum_xxhash3,
+            checksum_xxhash128: checksum.checksum_xxhash128,
             ..Default::default()
         };
         Ok(S3Response::new(output))
@@ -932,6 +1208,10 @@ impl S3 for FileSystem {
         if self.verify_upload_id(req.credentials.as_ref(), &upload_id).await?.not() {
             return Err(s3_error!(AccessDenied));
         }
+
+        let upload_attrs = self
+            .load_object_attributes(&input.bucket, &input.key, Some(upload_id))
+            .await?;
 
         let (src_bucket, src_key) = match input.copy_source {
             CopySource::AccessPoint { .. } | CopySource::Outpost { .. } => return Err(s3_error!(NotImplemented)),
@@ -972,20 +1252,51 @@ impl S3 for FileSystem {
         let _ = try_!(src_file.seek(io::SeekFrom::Start(start)).await);
         let body = StreamingBlob::wrap(bytes_stream(ReaderStream::with_capacity(src_file, 4096), content_length_usize));
 
+        let expected_checksum: s3s::dto::Checksum = default();
+
+        let mut checksum: s3s::checksum::ChecksumHasher = default();
+        enable_expected_checksums(&mut checksum, &expected_checksum);
+        if let Some(algorithm) = upload_attrs.as_ref().and_then(|attrs| attrs.checksum_algorithm.as_deref()) {
+            enable_checksum_algorithm(&mut checksum, algorithm)?;
+        }
+
         let mut md5_hash = Md5::new();
-        let stream = body.inspect_ok(|bytes| md5_hash.update(bytes.as_ref()));
+        let stream = body.inspect_ok(|bytes| {
+            md5_hash.update(bytes.as_ref());
+            checksum.update(bytes.as_ref());
+        });
 
         let mut file_writer = self.prepare_file_write(&dst_path).await?;
         let size = copy_bytes(stream, file_writer.writer()).await?;
         file_writer.done().await?;
 
         let md5_sum = hex(md5_hash.finalize());
+        let checksum = checksum.finalize();
+
+        if let Some(field) = checksum_mismatch(&checksum, &expected_checksum) {
+            return Err(s3_error!(BadDigest, "{} mismatch", field));
+        }
+
+        let mut info: InternalInfo = default();
+        crate::checksum::save_e_tag(&mut info, &md5_sum);
+        crate::checksum::modify_internal_info(&mut info, &checksum);
+        self.save_upload_part_info(upload_id, part_number, &info).await?;
 
         debug!(path = %dst_path.display(), ?size, %md5_sum, "write file");
 
         let output = UploadPartCopyOutput {
             copy_part_result: Some(CopyPartResult {
                 e_tag: Some(ETag::Strong(md5_sum)),
+                checksum_crc32: checksum.checksum_crc32,
+                checksum_crc32c: checksum.checksum_crc32c,
+                checksum_sha1: checksum.checksum_sha1,
+                checksum_sha256: checksum.checksum_sha256,
+                checksum_crc64nvme: checksum.checksum_crc64nvme,
+                checksum_sha512: checksum.checksum_sha512,
+                checksum_md5: checksum.checksum_md5,
+                checksum_xxhash64: checksum.checksum_xxhash64,
+                checksum_xxhash3: checksum.checksum_xxhash3,
+                checksum_xxhash128: checksum.checksum_xxhash128,
                 ..Default::default()
             }),
             ..Default::default()
@@ -999,6 +1310,8 @@ impl S3 for FileSystem {
         let ListPartsInput {
             bucket, key, upload_id, ..
         } = req.input;
+
+        let upload_uuid = Uuid::parse_str(&upload_id).map_err(|_| s3_error!(InvalidRequest))?;
 
         let mut parts: Vec<Part> = Vec::new();
         let mut iter = try_!(fs::read_dir(&self.root).await);
@@ -1021,12 +1334,25 @@ impl S3 for FileSystem {
             let file_meta = try_!(entry.metadata().await);
             let last_modified = Timestamp::from(try_!(file_meta.modified()));
             let size = try_!(i64::try_from(file_meta.len()));
+            let part_info = self.load_upload_part_info(upload_uuid, part_number).await?;
+            let checksum = part_info.as_ref().map_or_else(default, crate::checksum::from_internal_info);
+            let e_tag = part_info.as_ref().and_then(crate::checksum::load_e_tag).map(ETag::Strong);
 
             let part = Part {
+                checksum_crc32: checksum.checksum_crc32,
+                checksum_crc32c: checksum.checksum_crc32c,
+                checksum_sha1: checksum.checksum_sha1,
+                checksum_sha256: checksum.checksum_sha256,
+                checksum_crc64nvme: checksum.checksum_crc64nvme,
+                checksum_sha512: checksum.checksum_sha512,
+                checksum_md5: checksum.checksum_md5,
+                checksum_xxhash64: checksum.checksum_xxhash64,
+                checksum_xxhash3: checksum.checksum_xxhash3,
+                checksum_xxhash128: checksum.checksum_xxhash128,
+                e_tag,
                 last_modified: Some(last_modified),
                 part_number: Some(part_number),
                 size: Some(size),
-                ..Default::default()
             };
             parts.push(part);
         }
@@ -1053,6 +1379,17 @@ impl S3 for FileSystem {
             upload_id,
             if_match,
             if_none_match,
+            checksum_crc32,
+            checksum_crc32c,
+            checksum_sha1,
+            checksum_sha256,
+            checksum_crc64nvme,
+            checksum_sha512,
+            checksum_md5,
+            checksum_xxhash64,
+            checksum_xxhash3,
+            checksum_xxhash128,
+            checksum_type,
             ..
         } = req.input;
 
@@ -1066,6 +1403,19 @@ impl S3 for FileSystem {
         let upload_id = Uuid::parse_str(&upload_id).map_err(|_| s3_error!(InvalidRequest))?;
         if self.verify_upload_id(req.credentials.as_ref(), &upload_id).await?.not() {
             return Err(s3_error!(AccessDenied));
+        }
+
+        if let Some(checksum_type) = checksum_type.as_ref()
+            && checksum_type.as_str() != ChecksumType::FULL_OBJECT
+        {
+            return Err(s3_error!(NotImplemented, "Unsupported multipart checksum type"));
+        }
+
+        let upload_attrs = self.load_object_attributes(&bucket, &key, Some(upload_id)).await?;
+        if let Some(stored_checksum_type) = upload_attrs.as_ref().and_then(|attrs| attrs.checksum_type.as_deref())
+            && stored_checksum_type != ChecksumType::FULL_OBJECT
+        {
+            return Err(s3_error!(NotImplemented, "Unsupported multipart checksum type"));
         }
 
         // Check conditional headers before modifying any state
@@ -1101,9 +1451,29 @@ impl S3 for FileSystem {
 
         self.delete_upload_id(&upload_id).await?;
 
-        if let Ok(Some(attrs)) = self.load_object_attributes(&bucket, &key, Some(upload_id)).await {
-            self.save_object_attributes(&bucket, &key, &attrs, None).await?;
+        if let Some(attrs) = &upload_attrs {
+            self.save_object_attributes(&bucket, &key, attrs, None).await?;
             let _ = self.delete_metadata(&bucket, &key, Some(upload_id));
+        }
+
+        let expected_checksum = s3s::dto::Checksum {
+            checksum_crc32,
+            checksum_crc32c,
+            checksum_sha1,
+            checksum_sha256,
+            checksum_crc64nvme,
+            checksum_sha512,
+            checksum_md5,
+            checksum_xxhash64,
+            checksum_xxhash3,
+            checksum_xxhash128,
+            ..Default::default()
+        };
+
+        let mut checksum: s3s::checksum::ChecksumHasher = default();
+        enable_expected_checksums(&mut checksum, &expected_checksum);
+        if let Some(algorithm) = upload_attrs.as_ref().and_then(|attrs| attrs.checksum_algorithm.as_deref()) {
+            enable_checksum_algorithm(&mut checksum, algorithm)?;
         }
 
         let mut file_writer = self.prepare_file_write(&object_path).await?;
@@ -1124,6 +1494,13 @@ impl S3 for FileSystem {
             }
 
             let part_path = self.resolve_upload_part_path(upload_id, part_number)?;
+            let part_info = self.load_upload_part_info(upload_id, part_number).await?;
+            let saved_checksum = part_info.as_ref().map_or_else(default, crate::checksum::from_internal_info);
+            let expected_part_checksum = completed_part_checksum(&part);
+
+            if let Some(field) = checksum_mismatch(&saved_checksum, &expected_part_checksum) {
+                return Err(s3_error!(InvalidPart, "{} mismatch for part {}", field, part_number));
+            }
 
             let mut reader = try_!(fs::File::open(&part_path).await);
             let mut part_md5 = Md5::new();
@@ -1134,6 +1511,7 @@ impl S3 for FileSystem {
                     break;
                 }
                 part_md5.update(&buf[..nread]);
+                checksum.update(&buf[..nread]);
                 try_!(file_writer.writer().write_all(&buf[..nread]).await);
                 size += nread as u64;
             }
@@ -1146,6 +1524,7 @@ impl S3 for FileSystem {
 
             debug!(from = %part_path.display(), tmp = %file_writer.tmp_path().display(), to = %file_writer.dest_path().display(), ?size, "write file");
             try_!(fs::remove_file(&part_path).await);
+            self.delete_upload_part_info(upload_id, part_number).await?;
         }
         file_writer.done().await?;
 
@@ -1155,12 +1534,19 @@ impl S3 for FileSystem {
             etag_hash.update(hash);
         }
         let e_tag = format!("{}-{}", hex(etag_hash.finalize()), part_md5_hashes.len());
+        let checksum = checksum.finalize();
+        let checksum_type = has_any_checksum(&checksum).then(|| ChecksumType::from_static(ChecksumType::FULL_OBJECT));
+
+        if let Some(field) = checksum_mismatch(&checksum, &expected_checksum) {
+            return Err(s3_error!(BadDigest, "{} mismatch", field));
+        }
 
         debug!(?e_tag, path = %object_path.display(), "multipart etag");
 
         {
             let mut info = self.load_internal_info(&bucket, &key).await?.unwrap_or_default();
             crate::checksum::save_e_tag(&mut info, &e_tag);
+            crate::checksum::modify_internal_info(&mut info, &checksum);
             self.save_internal_info(&bucket, &key, &info).await?;
         }
 
@@ -1169,6 +1555,17 @@ impl S3 for FileSystem {
             future: Some(Box::pin(async move {
                 Ok(CompleteMultipartUploadOutput {
                     bucket: Some(bucket),
+                    checksum_crc32: checksum.checksum_crc32,
+                    checksum_crc32c: checksum.checksum_crc32c,
+                    checksum_sha1: checksum.checksum_sha1,
+                    checksum_sha256: checksum.checksum_sha256,
+                    checksum_crc64nvme: checksum.checksum_crc64nvme,
+                    checksum_sha512: checksum.checksum_sha512,
+                    checksum_md5: checksum.checksum_md5,
+                    checksum_xxhash64: checksum.checksum_xxhash64,
+                    checksum_xxhash3: checksum.checksum_xxhash3,
+                    checksum_xxhash128: checksum.checksum_xxhash128,
+                    checksum_type,
                     key: Some(key),
                     e_tag: Some(ETag::Strong(e_tag)),
                     ..Default::default()
@@ -1199,6 +1596,7 @@ impl S3 for FileSystem {
         let _ = self.delete_metadata(&bucket, &key, Some(upload_id));
 
         let prefix = format!(".upload_id-{upload_id}");
+        let info_prefix = format!(".upload_part_info-{upload_id}");
         let mut iter = try_!(fs::read_dir(&self.root).await);
         while let Some(entry) = try_!(iter.next_entry().await) {
             let file_type = try_!(entry.file_type().await);
@@ -1209,7 +1607,7 @@ impl S3 for FileSystem {
             let file_name = entry.file_name();
             let Some(name) = file_name.to_str() else { continue };
 
-            if name.starts_with(&prefix) {
+            if name.starts_with(&prefix) || name.starts_with(&info_prefix) {
                 try_!(fs::remove_file(entry.path()).await);
             }
         }
