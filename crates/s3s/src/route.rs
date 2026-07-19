@@ -276,7 +276,10 @@ pub trait S3Route: Send + Sync + 'static {
 mod tests {
     use super::*;
 
+    use crate::auth::{Credentials, SecretKey};
     use crate::header;
+
+    use hyper::header::HeaderValue;
 
     #[allow(dead_code)]
     pub struct AssumeRole {}
@@ -298,5 +301,73 @@ mod tests {
             tracing::debug!("call AssumeRole");
             return Err(s3_error!(NotImplemented));
         }
+    }
+
+    fn make_request(credentials: Option<Credentials>) -> S3Request<Body> {
+        S3Request {
+            input: Body::empty(),
+            method: Method::POST,
+            uri: Uri::from_static("http://example.com/"),
+            headers: HeaderMap::new(),
+            extensions: Extensions::new(),
+            credentials,
+            region: None,
+            service: None,
+            trailing_headers: None,
+        }
+    }
+
+    #[test]
+    fn assume_role_matches_urlencoded_post_root() {
+        let route = AssumeRole {};
+        let method = Method::POST;
+        let uri = Uri::from_static("/");
+        let mut headers = HeaderMap::new();
+        headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("application/x-www-form-urlencoded"));
+        let mut extensions = Extensions::new();
+
+        assert!(route.is_match(&method, &uri, &headers, &mut extensions));
+    }
+
+    #[test]
+    fn assume_role_rejects_non_matching_requests() {
+        let route = AssumeRole {};
+        let uri = Uri::from_static("/");
+        let mut headers = HeaderMap::new();
+        headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("application/json"));
+        let mut extensions = Extensions::new();
+
+        assert!(!route.is_match(&Method::GET, &uri, &headers, &mut extensions));
+        assert!(!route.is_match(&Method::POST, &uri, &headers, &mut extensions));
+    }
+
+    #[tokio::test]
+    async fn default_check_access_rejects_anonymous_request() {
+        let route = AssumeRole {};
+        let mut req = make_request(None);
+
+        let err = route.check_access(&mut req).await.unwrap_err();
+
+        assert_eq!(*err.code(), crate::S3ErrorCode::AccessDenied);
+    }
+
+    #[tokio::test]
+    async fn default_check_access_allows_signed_request() {
+        let route = AssumeRole {};
+        let credentials = Credentials {
+            access_key: "AKIAIOSFODNN7EXAMPLE".to_owned(),
+            secret_key: SecretKey::from("secret"),
+        };
+        let mut req = make_request(Some(credentials));
+
+        route.check_access(&mut req).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn assume_role_call_returns_not_implemented() {
+        let route = AssumeRole {};
+        let err = route.call(make_request(None)).await.unwrap_err();
+
+        assert_eq!(*err.code(), crate::S3ErrorCode::NotImplemented);
     }
 }

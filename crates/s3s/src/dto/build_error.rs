@@ -26,3 +26,16 @@ impl BuildError {
     //     }
     // }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn missing_field_formats_and_exposes_source() {
+        let err = BuildError::missing_field("bucket");
+
+        assert_eq!(err.to_string(), "Missing field: \"bucket\"");
+        assert!(std::error::Error::source(&err).is_none());
+    }
+}

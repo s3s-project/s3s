@@ -65,3 +65,46 @@ impl S3AccessContext<'_> {
         self.extensions
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::auth::SecretKey;
+    use hyper::header::HeaderValue;
+
+    #[test]
+    fn access_context_exposes_all_fields() {
+        let credentials = Credentials {
+            access_key: "AKIAIOSFODNN7EXAMPLE".to_owned(),
+            secret_key: SecretKey::from("secret"),
+        };
+        let s3_path = S3Path::object("bucket", "key");
+        let s3_op = S3Operation { name: "GetObject" };
+        let method = Method::GET;
+        let uri = Uri::from_static("http://example.com/bucket/key");
+        let mut headers = HeaderMap::new();
+        headers.insert("x-test", HeaderValue::from_static("value"));
+        let mut extensions = Extensions::new();
+
+        let mut ctx = S3AccessContext {
+            credentials: Some(&credentials),
+            s3_path: &s3_path,
+            s3_op: &s3_op,
+            method: &method,
+            uri: &uri,
+            headers: &headers,
+            extensions: &mut extensions,
+        };
+
+        assert_eq!(ctx.credentials().map(|x| x.access_key.as_str()), Some("AKIAIOSFODNN7EXAMPLE"));
+        assert_eq!(ctx.s3_path().as_object(), Some(("bucket", "key")));
+        assert_eq!(ctx.s3_op().name(), "GetObject");
+        assert_eq!(ctx.method(), &Method::GET);
+        assert_eq!(ctx.uri(), &uri);
+        assert_eq!(ctx.headers().get("x-test").unwrap().to_str().unwrap(), "value");
+
+        ctx.extensions_mut().insert::<usize>(42);
+        assert_eq!(ctx.extensions_mut().get::<usize>(), Some(&42));
+    }
+}
