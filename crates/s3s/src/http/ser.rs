@@ -120,7 +120,7 @@ pub fn set_keep_alive_xml_body(
     let mut ser = xml::Serializer::new(&mut buf);
     ser.decl().map_err(S3Error::internal_error)?;
 
-    res.body = Body::http_body(KeepAliveBody::new(fut, duration, Some(buf.into()), false));
+    res.body = Body::http_body(KeepAliveBody::new(fut, duration, Some(buf.into()), true));
     res.headers.insert(hyper::header::CONTENT_TYPE, APPLICATION_XML);
     res.headers
         .insert(hyper::header::TRANSFER_ENCODING, TRANSFER_ENCODING_CHUNKED);

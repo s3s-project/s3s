@@ -106,3 +106,92 @@ fn parse_expires(s: &str) -> Option<time::Duration> {
     let x = s.parse::<u32>().ok()?;
     Some(time::Duration::new(i64::from(x), 0))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::http::OrderedQs;
+
+    fn make_qs(pairs: &[(&str, &str)]) -> OrderedQs {
+        OrderedQs::from_vec_unchecked(
+            pairs
+                .iter()
+                .map(|&(name, value)| (name.to_owned(), value.to_owned()))
+                .collect(),
+        )
+    }
+
+    fn valid_query_strings() -> [(&'static str, &'static str); 6] {
+        [
+            ("X-Amz-Algorithm", "AWS4-HMAC-SHA256"),
+            ("X-Amz-Credential", "AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request"),
+            ("X-Amz-Date", "20130524T000000Z"),
+            ("X-Amz-Expires", "86400"),
+            ("X-Amz-SignedHeaders", "host"),
+            ("X-Amz-Signature", "aeeed9bbccd4d02ee5c0109b86d86835f995330da4c265957d157751f604d404"),
+        ]
+    }
+
+    #[test]
+    fn parse_extracts_presigned_url_fields() {
+        let qs = make_qs(&valid_query_strings());
+
+        let info = PresignedUrlV4::parse(&qs).unwrap();
+
+        assert_eq!(info.algorithm, "AWS4-HMAC-SHA256");
+        assert_eq!(info.credential.access_key_id, "AKIAIOSFODNN7EXAMPLE");
+        assert_eq!(info.credential.aws_region, "us-east-1");
+        assert_eq!(info.credential.aws_service, "s3");
+        assert_eq!(info.expires.whole_seconds(), 86_400);
+        assert_eq!(info.signed_headers.as_slice(), ["host"]);
+        assert_eq!(info.signature, "aeeed9bbccd4d02ee5c0109b86d86835f995330da4c265957d157751f604d404");
+        assert!(info.amz_date.to_time().is_some());
+    }
+
+    #[test]
+    fn parse_rejects_missing_query_fields() {
+        let qs = make_qs(&valid_query_strings()[..5]);
+        assert!(PresignedUrlV4::parse(&qs).is_err());
+    }
+
+    #[test]
+    fn parse_rejects_non_ascii_signed_headers() {
+        let mut pairs = valid_query_strings();
+        pairs[4] = ("X-Amz-SignedHeaders", "höst");
+        let qs = make_qs(&pairs);
+        assert!(PresignedUrlV4::parse(&qs).is_err());
+    }
+
+    #[test]
+    fn parse_rejects_invalid_credential() {
+        let mut pairs = valid_query_strings();
+        pairs[1] = ("X-Amz-Credential", "bad-credential");
+        let qs = make_qs(&pairs);
+        assert!(PresignedUrlV4::parse(&qs).is_err());
+    }
+
+    #[test]
+    fn parse_rejects_invalid_date() {
+        let mut pairs = valid_query_strings();
+        pairs[2] = ("X-Amz-Date", "not-a-date");
+        let qs = make_qs(&pairs);
+        assert!(PresignedUrlV4::parse(&qs).is_err());
+    }
+
+    #[test]
+    fn parse_rejects_invalid_signature() {
+        let mut pairs = valid_query_strings();
+        pairs[5] = ("X-Amz-Signature", "not-a-sha256");
+        let qs = make_qs(&pairs);
+        assert!(PresignedUrlV4::parse(&qs).is_err());
+    }
+
+    #[test]
+    fn parse_rejects_invalid_expires() {
+        let mut pairs = valid_query_strings();
+        pairs[3] = ("X-Amz-Expires", "NaN");
+        let qs = make_qs(&pairs);
+        assert!(PresignedUrlV4::parse(&qs).is_err());
+    }
+}
