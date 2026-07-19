@@ -23,9 +23,24 @@ pub fn modify_internal_info(info: &mut serde_json::Map<String, serde_json::Value
     if let Some(checksum_sha256) = &checksum.checksum_sha256 {
         info.insert("checksum_sha256".to_owned(), serde_json::Value::String(checksum_sha256.clone()));
     }
-
     if let Some(checksum_crc64nvme) = &checksum.checksum_crc64nvme {
         info.insert("checksum_crc64nvme".to_owned(), serde_json::Value::String(checksum_crc64nvme.clone()));
+    }
+
+    if let Some(checksum_sha512) = &checksum.checksum_sha512 {
+        info.insert("checksum_sha512".to_owned(), serde_json::Value::String(checksum_sha512.clone()));
+    }
+    if let Some(checksum_md5) = &checksum.checksum_md5 {
+        info.insert("checksum_md5".to_owned(), serde_json::Value::String(checksum_md5.clone()));
+    }
+    if let Some(checksum_xxhash64) = &checksum.checksum_xxhash64 {
+        info.insert("checksum_xxhash64".to_owned(), serde_json::Value::String(checksum_xxhash64.clone()));
+    }
+    if let Some(checksum_xxhash3) = &checksum.checksum_xxhash3 {
+        info.insert("checksum_xxhash3".to_owned(), serde_json::Value::String(checksum_xxhash3.clone()));
+    }
+    if let Some(checksum_xxhash128) = &checksum.checksum_xxhash128 {
+        info.insert("checksum_xxhash128".to_owned(), serde_json::Value::String(checksum_xxhash128.clone()));
     }
 }
 
@@ -43,9 +58,24 @@ pub fn from_internal_info(info: &InternalInfo) -> s3s::dto::Checksum {
     if let Some(checksum_sha256) = info.get("checksum_sha256") {
         ans.checksum_sha256 = Some(checksum_sha256.as_str().unwrap().to_owned());
     }
-
     if let Some(checksum_crc64nvme) = info.get("checksum_crc64nvme") {
         ans.checksum_crc64nvme = Some(checksum_crc64nvme.as_str().unwrap().to_owned());
+    }
+
+    if let Some(checksum_sha512) = info.get("checksum_sha512") {
+        ans.checksum_sha512 = Some(checksum_sha512.as_str().unwrap().to_owned());
+    }
+    if let Some(checksum_md5) = info.get("checksum_md5") {
+        ans.checksum_md5 = Some(checksum_md5.as_str().unwrap().to_owned());
+    }
+    if let Some(checksum_xxhash64) = info.get("checksum_xxhash64") {
+        ans.checksum_xxhash64 = Some(checksum_xxhash64.as_str().unwrap().to_owned());
+    }
+    if let Some(checksum_xxhash3) = info.get("checksum_xxhash3") {
+        ans.checksum_xxhash3 = Some(checksum_xxhash3.as_str().unwrap().to_owned());
+    }
+    if let Some(checksum_xxhash128) = info.get("checksum_xxhash128") {
+        ans.checksum_xxhash128 = Some(checksum_xxhash128.as_str().unwrap().to_owned());
     }
     ans
 }

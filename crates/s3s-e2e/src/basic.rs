@@ -427,6 +427,9 @@ impl Put {
         let bucket = self.bucket.as_str();
         let key = "with-checksum-trailer";
 
+        // aws-smithy-checksums v0.65.0 only computes streaming request trailers
+        // for this subset of checksum_algorithm values. Newer checksum variants are
+        // covered by lower-level tests until the SDK can drive PutObject with them.
         let checksum_algorithms = [
             ChecksumAlgorithm::Crc32,
             ChecksumAlgorithm::Crc32C,

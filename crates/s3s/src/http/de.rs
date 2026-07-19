@@ -82,9 +82,13 @@ pub fn parse_checksum_algorithm_header(req: &Request) -> S3Result<Option<crate::
         return Ok(ans);
     }
 
-    let Some(trailer) = req.headers.get("x-amz-trailer") else {
+    let trailer_name = HeaderName::from_static("x-amz-trailer");
+    let Some(trailer_value) = get_optional_header(req, &trailer_name)? else {
         return Ok(None);
     };
+    let trailer = trailer_value
+        .to_str()
+        .map_err(|err| invalid_header(err, &trailer_name, trailer_value))?;
 
     let mapping = &const {
         [
@@ -93,16 +97,27 @@ pub fn parse_checksum_algorithm_header(req: &Request) -> S3Result<Option<crate::
             (crate::header::X_AMZ_CHECKSUM_SHA1, crate::dto::ChecksumAlgorithm::SHA1),
             (crate::header::X_AMZ_CHECKSUM_SHA256, crate::dto::ChecksumAlgorithm::SHA256),
             (crate::header::X_AMZ_CHECKSUM_CRC64NVME, crate::dto::ChecksumAlgorithm::CRC64NVME),
+            (crate::header::X_AMZ_CHECKSUM_SHA512, crate::dto::ChecksumAlgorithm::SHA512),
+            (crate::header::X_AMZ_CHECKSUM_MD5, crate::dto::ChecksumAlgorithm::MD5),
+            (crate::header::X_AMZ_CHECKSUM_XXHASH64, crate::dto::ChecksumAlgorithm::XXHASH64),
+            (crate::header::X_AMZ_CHECKSUM_XXHASH3, crate::dto::ChecksumAlgorithm::XXHASH3),
+            (crate::header::X_AMZ_CHECKSUM_XXHASH128, crate::dto::ChecksumAlgorithm::XXHASH128),
         ]
     };
 
-    for (h, v) in mapping {
-        if trailer.as_bytes() == h.as_str().as_bytes() {
-            return Ok(Some(crate::dto::ChecksumAlgorithm::from_static(v)));
+    let mut ans = None;
+    for trailer_field in trailer.split(',').map(str::trim).filter(|name| !name.is_empty()) {
+        for (h, v) in mapping {
+            if trailer_field.eq_ignore_ascii_case(h.as_str()) {
+                if ans.replace(*v).is_some() {
+                    return Err(invalid_header(ParseHeaderError::Enum, &trailer_name, trailer));
+                }
+                break;
+            }
         }
     }
 
-    Ok(None)
+    Ok(ans.map(crate::dto::ChecksumAlgorithm::from_static))
 }
 
 pub fn parse_opt_header_timestamp(req: &Request, name: &HeaderName, fmt: TimestampFormat) -> S3Result<Option<Timestamp>> {
@@ -576,6 +591,75 @@ mod tests {
         let name = HeaderName::from_static("x-custom");
         let result: S3Result<Option<String>> = parse_opt_header(&req, &name);
         assert!(result.is_err());
+    }
+
+    fn parse_checksum_algorithm(headers: &[(&'static str, &'static str)]) -> S3Result<Option<crate::dto::ChecksumAlgorithm>> {
+        let mut req = make_request();
+        for (name, value) in headers {
+            req.headers.insert(*name, value.parse().unwrap());
+        }
+        parse_checksum_algorithm_header(&req)
+    }
+
+    #[test]
+    fn parse_checksum_algorithm_header_single_trailer() {
+        let ans = parse_checksum_algorithm(&[("x-amz-trailer", "x-amz-checksum-xxhash64")]).unwrap();
+        assert_eq!(
+            ans.as_ref().map(crate::dto::ChecksumAlgorithm::as_str),
+            Some(crate::dto::ChecksumAlgorithm::XXHASH64)
+        );
+    }
+
+    #[test]
+    fn parse_checksum_algorithm_header_trailer_list_with_checksum_first() {
+        let ans = parse_checksum_algorithm(&[("x-amz-trailer", "x-amz-checksum-xxhash3, x-amz-meta-foo")]).unwrap();
+        assert_eq!(
+            ans.as_ref().map(crate::dto::ChecksumAlgorithm::as_str),
+            Some(crate::dto::ChecksumAlgorithm::XXHASH3)
+        );
+    }
+
+    #[test]
+    fn parse_checksum_algorithm_header_trailer_list_with_checksum_last() {
+        let ans = parse_checksum_algorithm(&[("x-amz-trailer", "x-amz-meta-foo, x-amz-checksum-sha512")]).unwrap();
+        assert_eq!(
+            ans.as_ref().map(crate::dto::ChecksumAlgorithm::as_str),
+            Some(crate::dto::ChecksumAlgorithm::SHA512)
+        );
+    }
+
+    #[test]
+    fn parse_checksum_algorithm_header_trailer_is_case_insensitive() {
+        let ans = parse_checksum_algorithm(&[("x-amz-trailer", " X-Amz-Checksum-Xxhash128 ")]).unwrap();
+        assert_eq!(
+            ans.as_ref().map(crate::dto::ChecksumAlgorithm::as_str),
+            Some(crate::dto::ChecksumAlgorithm::XXHASH128)
+        );
+    }
+
+    #[test]
+    fn parse_checksum_algorithm_header_trailer_without_checksum() {
+        let ans = parse_checksum_algorithm(&[("x-amz-trailer", "x-amz-meta-foo, x-amz-meta-bar")]).unwrap();
+        assert!(ans.is_none());
+    }
+
+    #[test]
+    fn parse_checksum_algorithm_header_rejects_multiple_checksum_trailers() {
+        let err = parse_checksum_algorithm(&[("x-amz-trailer", "x-amz-checksum-crc32, x-amz-checksum-xxhash64")]);
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn parse_checksum_algorithm_header_prefers_explicit_algorithm() {
+        let ans = parse_checksum_algorithm(&[
+            ("x-amz-checksum-algorithm", "SHA256"),
+            ("x-amz-trailer", "x-amz-checksum-xxhash64"),
+        ])
+        .unwrap();
+        assert_eq!(
+            ans.as_ref().map(crate::dto::ChecksumAlgorithm::as_str),
+            Some(crate::dto::ChecksumAlgorithm::SHA256)
+        );
     }
 
     #[test]

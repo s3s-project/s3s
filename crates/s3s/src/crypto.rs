@@ -3,7 +3,8 @@
 //! This module defines the [`Checksum`] trait and provides concrete implementations
 //! for every checksum and hash algorithm supported by Amazon S3:
 //! non-cryptographic checksums: [`Crc32`], [`Crc32c`], [`Crc64Nvme`];
-//! cryptographic hash functions: [`Sha1`], [`Sha256`], and [`Md5`].
+//! cryptographic hash functions: [`Sha1`], [`Sha256`], [`Sha512`], and [`Md5`];
+//! xxHash algorithms: [`XxHash64`], [`XxHash3`], [`XxHash128`].
 
 use numeric_cast::TruncatingCast;
 
@@ -173,6 +174,107 @@ impl Checksum for Md5 {
     }
 }
 
+#[derive(Default)]
+pub struct Sha512(sha2::Sha512);
+
+impl Checksum for Sha512 {
+    type Output = [u8; 64];
+
+    fn new() -> Self {
+        Self::default()
+    }
+
+    fn update(&mut self, data: &[u8]) {
+        use sha2::Digest as _;
+        self.0.update(data);
+    }
+
+    fn finalize(self) -> Self::Output {
+        use sha2::Digest as _;
+        self.0.finalize().into()
+    }
+}
+
+pub struct XxHash64(xxhash_rust::xxh64::Xxh64);
+
+// Amazon S3 checksum names map to upstream xxHash variants as follows:
+// - XXHASH64  -> XXH64
+// - XXHASH3   -> XXH3 64-bit
+// - XXHASH128 -> XXH3 128-bit, called XXH128 by upstream xxHash
+// S3 documents XXHASH* headers as Base64-encoded 64/128-bit checksum values.
+// Use big-endian bytes for integer digests, matching the CRC implementations above.
+// See: https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObject.html
+
+impl Default for XxHash64 {
+    fn default() -> Self {
+        Self(xxhash_rust::xxh64::Xxh64::new(0))
+    }
+}
+
+impl Checksum for XxHash64 {
+    type Output = [u8; 8];
+
+    fn new() -> Self {
+        Self::default()
+    }
+
+    fn update(&mut self, data: &[u8]) {
+        self.0.update(data);
+    }
+
+    fn finalize(self) -> Self::Output {
+        self.0.digest().to_be_bytes()
+    }
+}
+
+pub struct XxHash3(xxhash_rust::xxh3::Xxh3);
+
+impl Default for XxHash3 {
+    fn default() -> Self {
+        Self(xxhash_rust::xxh3::Xxh3::new())
+    }
+}
+
+impl Checksum for XxHash3 {
+    type Output = [u8; 8];
+
+    fn new() -> Self {
+        Self::default()
+    }
+
+    fn update(&mut self, data: &[u8]) {
+        self.0.update(data);
+    }
+
+    fn finalize(self) -> Self::Output {
+        self.0.digest().to_be_bytes()
+    }
+}
+
+pub struct XxHash128(xxhash_rust::xxh3::Xxh3);
+
+impl Default for XxHash128 {
+    fn default() -> Self {
+        Self(xxhash_rust::xxh3::Xxh3::new())
+    }
+}
+
+impl Checksum for XxHash128 {
+    type Output = [u8; 16];
+
+    fn new() -> Self {
+        Self::default()
+    }
+
+    fn update(&mut self, data: &[u8]) {
+        self.0.update(data);
+    }
+
+    fn finalize(self) -> Self::Output {
+        self.0.digest128().to_be_bytes()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -277,6 +379,14 @@ mod tests {
     }
 
     #[test]
+    fn md5_known_value() {
+        let mut expected = [0u8; 16];
+        hex_simd::decode(b"d41d8cd98f00b204e9800998ecf8427e", hex_simd::Out::from_slice(&mut expected)).unwrap();
+        let output = Md5::checksum(b"");
+        assert_eq!(output, expected);
+    }
+
+    #[test]
     fn sha256_known_value() {
         // SHA-256 of empty string is well-known
         let mut expected = [0u8; 32];
@@ -287,5 +397,73 @@ mod tests {
         .unwrap();
         let output = Sha256::checksum(b"");
         assert_eq!(output, expected);
+    }
+
+    #[test]
+    fn sha512_checksum() {
+        let output = Sha512::checksum(b"hello");
+        assert_eq!(output.len(), 64);
+    }
+
+    #[test]
+    fn sha512_incremental() {
+        let mut h = Sha512::new();
+        h.update(b"hel");
+        h.update(b"lo");
+        assert_eq!(h.finalize(), Sha512::checksum(b"hello"));
+    }
+
+    #[test]
+    fn sha512_known_value() {
+        let mut expected = [0u8; 64];
+        hex_simd::decode(
+            b"cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e",
+            hex_simd::Out::from_slice(&mut expected),
+        )
+        .unwrap();
+        let output = Sha512::checksum(b"");
+        assert_eq!(output, expected);
+    }
+
+    #[test]
+    fn xxhash64_checksum() {
+        let output = XxHash64::checksum(b"hello");
+        assert_eq!(output.len(), 8);
+    }
+
+    #[test]
+    fn xxhash64_incremental() {
+        let mut h = XxHash64::new();
+        h.update(b"hel");
+        h.update(b"lo");
+        assert_eq!(h.finalize(), XxHash64::checksum(b"hello"));
+    }
+
+    #[test]
+    fn xxhash3_checksum() {
+        let output = XxHash3::checksum(b"hello");
+        assert_eq!(output.len(), 8);
+    }
+
+    #[test]
+    fn xxhash3_incremental() {
+        let mut h = XxHash3::new();
+        h.update(b"hel");
+        h.update(b"lo");
+        assert_eq!(h.finalize(), XxHash3::checksum(b"hello"));
+    }
+
+    #[test]
+    fn xxhash128_checksum() {
+        let output = XxHash128::checksum(b"hello");
+        assert_eq!(output.len(), 16);
+    }
+
+    #[test]
+    fn xxhash128_incremental() {
+        let mut h = XxHash128::new();
+        h.update(b"hel");
+        h.update(b"lo");
+        assert_eq!(h.finalize(), XxHash128::checksum(b"hello"));
     }
 }

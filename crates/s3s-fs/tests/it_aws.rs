@@ -847,6 +847,259 @@ async fn test_multipart() -> Result<()> {
     Ok(())
 }
 
+#[derive(Debug, Clone, Copy)]
+enum MultipartXxHashCase {
+    XxHash64,
+    XxHash3,
+    XxHash128,
+}
+
+impl MultipartXxHashCase {
+    fn name(self) -> &'static str {
+        match self {
+            Self::XxHash64 => "xxhash64",
+            Self::XxHash3 => "xxhash3",
+            Self::XxHash128 => "xxhash128",
+        }
+    }
+
+    fn algorithm(self) -> aws_sdk_s3::types::ChecksumAlgorithm {
+        use aws_sdk_s3::types::ChecksumAlgorithm;
+
+        match self {
+            Self::XxHash64 => ChecksumAlgorithm::Xxhash64,
+            Self::XxHash3 => ChecksumAlgorithm::Xxhash3,
+            Self::XxHash128 => ChecksumAlgorithm::Xxhash128,
+        }
+    }
+
+    fn expected_checksum(self, content: &[u8]) -> String {
+        use s3s::crypto::Checksum as _;
+        use s3s::crypto::XxHash3;
+        use s3s::crypto::XxHash64;
+        use s3s::crypto::XxHash128;
+
+        match self {
+            Self::XxHash64 => base64_simd::STANDARD.encode_to_string(XxHash64::checksum(content)),
+            Self::XxHash3 => base64_simd::STANDARD.encode_to_string(XxHash3::checksum(content)),
+            Self::XxHash128 => base64_simd::STANDARD.encode_to_string(XxHash128::checksum(content)),
+        }
+    }
+
+    fn upload_part_checksum(self, output: &aws_sdk_s3::operation::upload_part::UploadPartOutput) -> Option<&str> {
+        match self {
+            Self::XxHash64 => output.checksum_xxhash64(),
+            Self::XxHash3 => output.checksum_xxhash3(),
+            Self::XxHash128 => output.checksum_xxhash128(),
+        }
+    }
+
+    fn listed_part_checksum(self, part: &aws_sdk_s3::types::Part) -> Option<&str> {
+        match self {
+            Self::XxHash64 => part.checksum_xxhash64(),
+            Self::XxHash3 => part.checksum_xxhash3(),
+            Self::XxHash128 => part.checksum_xxhash128(),
+        }
+    }
+
+    fn completed_part(self, e_tag: String, checksum: String, part_number: i32) -> CompletedPart {
+        match self {
+            Self::XxHash64 => CompletedPart::builder()
+                .e_tag(e_tag)
+                .checksum_xxhash64(checksum)
+                .part_number(part_number)
+                .build(),
+            Self::XxHash3 => CompletedPart::builder()
+                .e_tag(e_tag)
+                .checksum_xxhash3(checksum)
+                .part_number(part_number)
+                .build(),
+            Self::XxHash128 => CompletedPart::builder()
+                .e_tag(e_tag)
+                .checksum_xxhash128(checksum)
+                .part_number(part_number)
+                .build(),
+        }
+    }
+
+    fn complete_checksum(
+        self,
+        output: &aws_sdk_s3::operation::complete_multipart_upload::CompleteMultipartUploadOutput,
+    ) -> Option<&str> {
+        match self {
+            Self::XxHash64 => output.checksum_xxhash64(),
+            Self::XxHash3 => output.checksum_xxhash3(),
+            Self::XxHash128 => output.checksum_xxhash128(),
+        }
+    }
+
+    fn head_checksum(self, output: &aws_sdk_s3::operation::head_object::HeadObjectOutput) -> Option<&str> {
+        match self {
+            Self::XxHash64 => output.checksum_xxhash64(),
+            Self::XxHash3 => output.checksum_xxhash3(),
+            Self::XxHash128 => output.checksum_xxhash128(),
+        }
+    }
+
+    fn get_checksum(self, output: &aws_sdk_s3::operation::get_object::GetObjectOutput) -> Option<&str> {
+        match self {
+            Self::XxHash64 => output.checksum_xxhash64(),
+            Self::XxHash3 => output.checksum_xxhash3(),
+            Self::XxHash128 => output.checksum_xxhash128(),
+        }
+    }
+}
+
+async fn assert_multipart_xxhash_checksums(client: &Client, bucket: &str, checksum_case: MultipartXxHashCase) -> Result<()> {
+    let key = format!("multipart-{}.txt", checksum_case.name());
+    let content = format!("multipart checksum coverage via {}\n", checksum_case.name());
+    let expected_checksum = checksum_case.expected_checksum(content.as_bytes());
+
+    let upload_id = client
+        .create_multipart_upload()
+        .bucket(bucket)
+        .key(key.as_str())
+        .checksum_algorithm(checksum_case.algorithm())
+        .send()
+        .await?
+        .upload_id
+        .expect("create_multipart_upload should return upload_id");
+
+    let part_number = 1;
+    let upload_part = client
+        .upload_part()
+        .bucket(bucket)
+        .key(key.as_str())
+        .upload_id(upload_id.as_str())
+        .body(ByteStream::from(content.into_bytes()))
+        .part_number(part_number)
+        .send()
+        .await?;
+
+    let part_etag = upload_part.e_tag().expect("upload_part should return e_tag").to_owned();
+    let part_checksum = checksum_case
+        .upload_part_checksum(&upload_part)
+        .unwrap_or_else(|| panic!("upload_part should return checksum_{}", checksum_case.name()))
+        .to_owned();
+    assert_eq!(part_checksum, expected_checksum, "upload_part checksum mismatch for {checksum_case:?}");
+
+    let listed = client
+        .list_parts()
+        .bucket(bucket)
+        .key(key.as_str())
+        .upload_id(upload_id.as_str())
+        .send()
+        .await?;
+    let listed_part = listed.parts().first().expect("list_parts should return one part");
+    let listed_checksum = checksum_case.listed_part_checksum(listed_part);
+    assert_eq!(
+        listed_checksum,
+        Some(expected_checksum.as_str()),
+        "list_parts checksum mismatch for {checksum_case:?}"
+    );
+
+    let completed_part = checksum_case.completed_part(part_etag, part_checksum, part_number);
+    let completed_upload = CompletedMultipartUpload::builder()
+        .set_parts(Some(vec![completed_part]))
+        .build();
+
+    let complete = client
+        .complete_multipart_upload()
+        .bucket(bucket)
+        .key(key.as_str())
+        .multipart_upload(completed_upload)
+        .upload_id(upload_id.as_str())
+        .send()
+        .await?;
+    let complete_checksum = checksum_case.complete_checksum(&complete);
+    assert_eq!(
+        complete_checksum,
+        Some(expected_checksum.as_str()),
+        "complete_multipart_upload checksum mismatch for {checksum_case:?}"
+    );
+    assert_eq!(complete.checksum_type().map(aws_sdk_s3::types::ChecksumType::as_str), Some("FULL_OBJECT"));
+
+    let head = client.head_object().bucket(bucket).key(key.as_str()).send().await?;
+    let head_checksum = checksum_case.head_checksum(&head);
+    assert_eq!(
+        head_checksum,
+        Some(expected_checksum.as_str()),
+        "head_object checksum mismatch for {checksum_case:?}"
+    );
+
+    let get = client
+        .get_object()
+        .bucket(bucket)
+        .key(key.as_str())
+        .checksum_mode(ChecksumMode::Enabled)
+        .send()
+        .await?;
+    let get_checksum = checksum_case.get_checksum(&get);
+    assert_eq!(
+        get_checksum,
+        Some(expected_checksum.as_str()),
+        "get_object checksum mismatch for {checksum_case:?}"
+    );
+
+    delete_object(client, bucket, key.as_str()).await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
+async fn test_multipart_xxhash_checksums() -> Result<()> {
+    let _guard = serial().await;
+
+    let client = Client::new(config());
+
+    let bucket = format!("test-multipart-xxhash-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&client, bucket).await?;
+
+    for checksum_case in [
+        MultipartXxHashCase::XxHash64,
+        MultipartXxHashCase::XxHash3,
+        MultipartXxHashCase::XxHash128,
+    ] {
+        assert_multipart_xxhash_checksums(&client, bucket, checksum_case).await?;
+    }
+
+    delete_bucket(&client, bucket).await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
+async fn test_multipart_checksum_type_composite_not_implemented() -> Result<()> {
+    use aws_sdk_s3::types::ChecksumAlgorithm;
+    use aws_sdk_s3::types::ChecksumType;
+
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-multipart-composite-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    create_bucket(&c, bucket).await?;
+
+    let err = c
+        .create_multipart_upload()
+        .bucket(bucket)
+        .key("composite.txt")
+        .checksum_algorithm(ChecksumAlgorithm::Xxhash64)
+        .checksum_type(ChecksumType::Composite)
+        .send()
+        .await
+        .expect_err("COMPOSITE checksum_type should be rejected until implemented");
+    let service_err = err.into_service_error();
+    assert_eq!(service_err.code(), Some("NotImplemented"));
+
+    delete_bucket(&c, bucket).await?;
+
+    Ok(())
+}
+
 /// Test that multipart uploaded objects have the correct `ETag` format: `{hash}-{part_count}`
 #[tokio::test]
 #[tracing::instrument]
@@ -972,14 +1225,22 @@ async fn test_upload_part_copy() -> Result<()> {
     let key = "sample.txt";
 
     let upload_id = {
-        let ans = c.create_multipart_upload().bucket(bucket).key(key).send().await?;
+        use aws_sdk_s3::types::ChecksumAlgorithm;
+
+        let ans = c
+            .create_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .checksum_algorithm(ChecksumAlgorithm::Crc32C)
+            .send()
+            .await?;
         ans.upload_id.unwrap()
     };
     let upload_id = upload_id.as_str();
     let src_path = format!("{src_bucket}/{src_key}");
     let upload_parts = {
         let part_number = 1;
-        let _ans = c
+        let ans = c
             .upload_part_copy()
             .bucket(bucket)
             .key(key)
@@ -988,7 +1249,21 @@ async fn test_upload_part_copy() -> Result<()> {
             .part_number(part_number)
             .send()
             .await?;
-        let part = CompletedPart::builder().part_number(part_number).build();
+
+        let copy_part_result = ans
+            .copy_part_result()
+            .expect("upload_part_copy should return copy_part_result");
+        let copied_checksum_crc32c = copy_part_result
+            .checksum_crc32_c()
+            .expect("upload_part_copy should return checksum_crc32_c")
+            .to_owned();
+        assert_eq!(copied_checksum_crc32c, crc32c);
+
+        let part = CompletedPart::builder()
+            .checksum_crc32_c(copied_checksum_crc32c)
+            .e_tag(copy_part_result.e_tag().expect("copy_part_result should return e_tag"))
+            .part_number(part_number)
+            .build();
         vec![part]
     };
 
@@ -1006,7 +1281,14 @@ async fn test_upload_part_copy() -> Result<()> {
     }
 
     {
-        let ans = c.get_object().bucket(bucket).key(key).send().await?;
+        let ans = c
+            .get_object()
+            .bucket(bucket)
+            .key(key)
+            .checksum_mode(ChecksumMode::Enabled)
+            .send()
+            .await?;
+        assert_eq!(ans.checksum_crc32_c(), Some(crc32c.as_str()));
 
         let content_length: usize = ans.content_length().unwrap().try_into().unwrap();
         let body = ans.body.collect().await?.into_bytes();
@@ -1014,7 +1296,7 @@ async fn test_upload_part_copy() -> Result<()> {
         assert_eq!(content_length, src_content.len());
         assert_eq!(body.as_ref(), src_content.as_bytes());
     }
-    println!("{key} CK3");
+
     {
         delete_object(&c, bucket, key).await?;
         delete_bucket(&c, bucket).await?;

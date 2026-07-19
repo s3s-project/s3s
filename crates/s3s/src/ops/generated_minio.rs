@@ -563,11 +563,21 @@ impl CompleteMultipartUpload {
 
         let checksum_crc64nvme: Option<ChecksumCRC64NVME> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_CRC64NVME)?;
 
+        let checksum_md5: Option<ChecksumMD5> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_MD5)?;
+
         let checksum_sha1: Option<ChecksumSHA1> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_SHA1)?;
 
         let checksum_sha256: Option<ChecksumSHA256> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_SHA256)?;
 
+        let checksum_sha512: Option<ChecksumSHA512> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_SHA512)?;
+
         let checksum_type: Option<ChecksumType> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_TYPE)?;
+
+        let checksum_xxhash128: Option<ChecksumXXHASH128> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_XXHASH128)?;
+
+        let checksum_xxhash3: Option<ChecksumXXHASH3> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_XXHASH3)?;
+
+        let checksum_xxhash64: Option<ChecksumXXHASH64> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_XXHASH64)?;
 
         let expected_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_EXPECTED_BUCKET_OWNER)?;
 
@@ -602,9 +612,14 @@ impl CompleteMultipartUpload {
             checksum_crc32,
             checksum_crc32c,
             checksum_crc64nvme,
+            checksum_md5,
             checksum_sha1,
             checksum_sha256,
+            checksum_sha512,
             checksum_type,
+            checksum_xxhash128,
+            checksum_xxhash3,
+            checksum_xxhash64,
             expected_bucket_owner,
             if_match,
             if_none_match,
@@ -3118,9 +3133,14 @@ impl GetObject {
         http::add_opt_header(&mut res, X_AMZ_CHECKSUM_CRC32, x.checksum_crc32)?;
         http::add_opt_header(&mut res, X_AMZ_CHECKSUM_CRC32C, x.checksum_crc32c)?;
         http::add_opt_header(&mut res, X_AMZ_CHECKSUM_CRC64NVME, x.checksum_crc64nvme)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_MD5, x.checksum_md5)?;
         http::add_opt_header(&mut res, X_AMZ_CHECKSUM_SHA1, x.checksum_sha1)?;
         http::add_opt_header(&mut res, X_AMZ_CHECKSUM_SHA256, x.checksum_sha256)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_SHA512, x.checksum_sha512)?;
         http::add_opt_header(&mut res, X_AMZ_CHECKSUM_TYPE, x.checksum_type)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_XXHASH128, x.checksum_xxhash128)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_XXHASH3, x.checksum_xxhash3)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_XXHASH64, x.checksum_xxhash64)?;
         http::add_opt_header(&mut res, CONTENT_DISPOSITION, x.content_disposition)?;
         http::add_opt_header(&mut res, CONTENT_ENCODING, x.content_encoding)?;
         http::add_opt_header(&mut res, CONTENT_LANGUAGE, x.content_language)?;
@@ -3762,9 +3782,14 @@ impl HeadObject {
         http::add_opt_header(&mut res, X_AMZ_CHECKSUM_CRC32, x.checksum_crc32)?;
         http::add_opt_header(&mut res, X_AMZ_CHECKSUM_CRC32C, x.checksum_crc32c)?;
         http::add_opt_header(&mut res, X_AMZ_CHECKSUM_CRC64NVME, x.checksum_crc64nvme)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_MD5, x.checksum_md5)?;
         http::add_opt_header(&mut res, X_AMZ_CHECKSUM_SHA1, x.checksum_sha1)?;
         http::add_opt_header(&mut res, X_AMZ_CHECKSUM_SHA256, x.checksum_sha256)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_SHA512, x.checksum_sha512)?;
         http::add_opt_header(&mut res, X_AMZ_CHECKSUM_TYPE, x.checksum_type)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_XXHASH128, x.checksum_xxhash128)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_XXHASH3, x.checksum_xxhash3)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_XXHASH64, x.checksum_xxhash64)?;
         http::add_opt_header(&mut res, CONTENT_DISPOSITION, x.content_disposition)?;
         http::add_opt_header(&mut res, CONTENT_ENCODING, x.content_encoding)?;
         http::add_opt_header(&mut res, CONTENT_LANGUAGE, x.content_language)?;
@@ -5468,9 +5493,19 @@ impl PutObject {
 
         let checksum_crc64nvme: Option<ChecksumCRC64NVME> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_CRC64NVME)?;
 
+        let checksum_md5: Option<ChecksumMD5> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_MD5)?;
+
         let checksum_sha1: Option<ChecksumSHA1> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_SHA1)?;
 
         let checksum_sha256: Option<ChecksumSHA256> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_SHA256)?;
+
+        let checksum_sha512: Option<ChecksumSHA512> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_SHA512)?;
+
+        let checksum_xxhash128: Option<ChecksumXXHASH128> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_XXHASH128)?;
+
+        let checksum_xxhash3: Option<ChecksumXXHASH3> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_XXHASH3)?;
+
+        let checksum_xxhash64: Option<ChecksumXXHASH64> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_XXHASH64)?;
 
         let content_disposition: Option<ContentDisposition> = http::parse_opt_header(req, &CONTENT_DISPOSITION)?;
 
@@ -5548,8 +5583,13 @@ impl PutObject {
             checksum_crc32,
             checksum_crc32c,
             checksum_crc64nvme,
+            checksum_md5,
             checksum_sha1,
             checksum_sha256,
+            checksum_sha512,
+            checksum_xxhash128,
+            checksum_xxhash3,
+            checksum_xxhash64,
             content_disposition,
             content_encoding,
             content_language,
@@ -5611,9 +5651,19 @@ impl PutObject {
 
         let checksum_crc64nvme: Option<ChecksumCRC64NVME> = http::parse_field_value(&m, "x-amz-checksum-crc64nvme")?;
 
+        let checksum_md5: Option<ChecksumMD5> = http::parse_field_value(&m, "x-amz-checksum-md5")?;
+
         let checksum_sha1: Option<ChecksumSHA1> = http::parse_field_value(&m, "x-amz-checksum-sha1")?;
 
         let checksum_sha256: Option<ChecksumSHA256> = http::parse_field_value(&m, "x-amz-checksum-sha256")?;
+
+        let checksum_sha512: Option<ChecksumSHA512> = http::parse_field_value(&m, "x-amz-checksum-sha512")?;
+
+        let checksum_xxhash128: Option<ChecksumXXHASH128> = http::parse_field_value(&m, "x-amz-checksum-xxhash128")?;
+
+        let checksum_xxhash3: Option<ChecksumXXHASH3> = http::parse_field_value(&m, "x-amz-checksum-xxhash3")?;
+
+        let checksum_xxhash64: Option<ChecksumXXHASH64> = http::parse_field_value(&m, "x-amz-checksum-xxhash64")?;
 
         let content_disposition: Option<ContentDisposition> = http::parse_field_value(&m, "content-disposition")?;
 
@@ -5700,8 +5750,13 @@ impl PutObject {
             checksum_crc32,
             checksum_crc32c,
             checksum_crc64nvme,
+            checksum_md5,
             checksum_sha1,
             checksum_sha256,
+            checksum_sha512,
+            checksum_xxhash128,
+            checksum_xxhash3,
+            checksum_xxhash64,
             content_disposition,
             content_encoding,
             content_language,
@@ -5742,9 +5797,14 @@ impl PutObject {
         http::add_opt_header(&mut res, X_AMZ_CHECKSUM_CRC32, x.checksum_crc32)?;
         http::add_opt_header(&mut res, X_AMZ_CHECKSUM_CRC32C, x.checksum_crc32c)?;
         http::add_opt_header(&mut res, X_AMZ_CHECKSUM_CRC64NVME, x.checksum_crc64nvme)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_MD5, x.checksum_md5)?;
         http::add_opt_header(&mut res, X_AMZ_CHECKSUM_SHA1, x.checksum_sha1)?;
         http::add_opt_header(&mut res, X_AMZ_CHECKSUM_SHA256, x.checksum_sha256)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_SHA512, x.checksum_sha512)?;
         http::add_opt_header(&mut res, X_AMZ_CHECKSUM_TYPE, x.checksum_type)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_XXHASH128, x.checksum_xxhash128)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_XXHASH3, x.checksum_xxhash3)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_XXHASH64, x.checksum_xxhash64)?;
         http::add_opt_header(&mut res, ETAG, x.e_tag)?;
         http::add_opt_header(&mut res, X_AMZ_EXPIRATION, x.expiration)?;
         http::add_opt_header(&mut res, X_AMZ_REQUEST_CHARGED, x.request_charged)?;
@@ -6320,9 +6380,19 @@ impl UploadPart {
 
         let checksum_crc64nvme: Option<ChecksumCRC64NVME> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_CRC64NVME)?;
 
+        let checksum_md5: Option<ChecksumMD5> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_MD5)?;
+
         let checksum_sha1: Option<ChecksumSHA1> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_SHA1)?;
 
         let checksum_sha256: Option<ChecksumSHA256> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_SHA256)?;
+
+        let checksum_sha512: Option<ChecksumSHA512> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_SHA512)?;
+
+        let checksum_xxhash128: Option<ChecksumXXHASH128> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_XXHASH128)?;
+
+        let checksum_xxhash3: Option<ChecksumXXHASH3> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_XXHASH3)?;
+
+        let checksum_xxhash64: Option<ChecksumXXHASH64> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_XXHASH64)?;
 
         let content_length: Option<ContentLength> = http::parse_opt_header(req, &CONTENT_LENGTH)?;
 
@@ -6351,8 +6421,13 @@ impl UploadPart {
             checksum_crc32,
             checksum_crc32c,
             checksum_crc64nvme,
+            checksum_md5,
             checksum_sha1,
             checksum_sha256,
+            checksum_sha512,
+            checksum_xxhash128,
+            checksum_xxhash3,
+            checksum_xxhash64,
             content_length,
             content_md5,
             expected_bucket_owner,
@@ -6372,8 +6447,13 @@ impl UploadPart {
         http::add_opt_header(&mut res, X_AMZ_CHECKSUM_CRC32, x.checksum_crc32)?;
         http::add_opt_header(&mut res, X_AMZ_CHECKSUM_CRC32C, x.checksum_crc32c)?;
         http::add_opt_header(&mut res, X_AMZ_CHECKSUM_CRC64NVME, x.checksum_crc64nvme)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_MD5, x.checksum_md5)?;
         http::add_opt_header(&mut res, X_AMZ_CHECKSUM_SHA1, x.checksum_sha1)?;
         http::add_opt_header(&mut res, X_AMZ_CHECKSUM_SHA256, x.checksum_sha256)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_SHA512, x.checksum_sha512)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_XXHASH128, x.checksum_xxhash128)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_XXHASH3, x.checksum_xxhash3)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_XXHASH64, x.checksum_xxhash64)?;
         http::add_opt_header(&mut res, ETAG, x.e_tag)?;
         http::add_opt_header(&mut res, X_AMZ_REQUEST_CHARGED, x.request_charged)?;
         http::add_opt_header(&mut res, X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM, x.sse_customer_algorithm)?;
@@ -6541,9 +6621,20 @@ impl WriteGetObjectResponse {
         let checksum_crc64nvme: Option<ChecksumCRC64NVME> =
             http::parse_opt_header(req, &X_AMZ_FWD_HEADER_X_AMZ_CHECKSUM_CRC64NVME)?;
 
+        let checksum_md5: Option<ChecksumMD5> = http::parse_opt_header(req, &X_AMZ_FWD_HEADER_X_AMZ_CHECKSUM_MD5)?;
+
         let checksum_sha1: Option<ChecksumSHA1> = http::parse_opt_header(req, &X_AMZ_FWD_HEADER_X_AMZ_CHECKSUM_SHA1)?;
 
         let checksum_sha256: Option<ChecksumSHA256> = http::parse_opt_header(req, &X_AMZ_FWD_HEADER_X_AMZ_CHECKSUM_SHA256)?;
+
+        let checksum_sha512: Option<ChecksumSHA512> = http::parse_opt_header(req, &X_AMZ_FWD_HEADER_X_AMZ_CHECKSUM_SHA512)?;
+
+        let checksum_xxhash128: Option<ChecksumXXHASH128> =
+            http::parse_opt_header(req, &X_AMZ_FWD_HEADER_X_AMZ_CHECKSUM_XXHASH128)?;
+
+        let checksum_xxhash3: Option<ChecksumXXHASH3> = http::parse_opt_header(req, &X_AMZ_FWD_HEADER_X_AMZ_CHECKSUM_XXHASH3)?;
+
+        let checksum_xxhash64: Option<ChecksumXXHASH64> = http::parse_opt_header(req, &X_AMZ_FWD_HEADER_X_AMZ_CHECKSUM_XXHASH64)?;
 
         let content_disposition: Option<ContentDisposition> = http::parse_opt_header(req, &X_AMZ_FWD_HEADER_CONTENT_DISPOSITION)?;
 
@@ -6629,8 +6720,13 @@ impl WriteGetObjectResponse {
             checksum_crc32,
             checksum_crc32c,
             checksum_crc64nvme,
+            checksum_md5,
             checksum_sha1,
             checksum_sha256,
+            checksum_sha512,
+            checksum_xxhash128,
+            checksum_xxhash3,
+            checksum_xxhash64,
             content_disposition,
             content_encoding,
             content_language,

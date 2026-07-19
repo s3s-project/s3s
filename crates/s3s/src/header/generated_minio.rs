@@ -74,13 +74,23 @@ pub const X_AMZ_CHECKSUM_CRC32C: HeaderName = HeaderName::from_static("x-amz-che
 
 pub const X_AMZ_CHECKSUM_CRC64NVME: HeaderName = HeaderName::from_static("x-amz-checksum-crc64nvme");
 
+pub const X_AMZ_CHECKSUM_MD5: HeaderName = HeaderName::from_static("x-amz-checksum-md5");
+
 pub const X_AMZ_CHECKSUM_MODE: HeaderName = HeaderName::from_static("x-amz-checksum-mode");
 
 pub const X_AMZ_CHECKSUM_SHA1: HeaderName = HeaderName::from_static("x-amz-checksum-sha1");
 
 pub const X_AMZ_CHECKSUM_SHA256: HeaderName = HeaderName::from_static("x-amz-checksum-sha256");
 
+pub const X_AMZ_CHECKSUM_SHA512: HeaderName = HeaderName::from_static("x-amz-checksum-sha512");
+
 pub const X_AMZ_CHECKSUM_TYPE: HeaderName = HeaderName::from_static("x-amz-checksum-type");
+
+pub const X_AMZ_CHECKSUM_XXHASH128: HeaderName = HeaderName::from_static("x-amz-checksum-xxhash128");
+
+pub const X_AMZ_CHECKSUM_XXHASH3: HeaderName = HeaderName::from_static("x-amz-checksum-xxhash3");
+
+pub const X_AMZ_CHECKSUM_XXHASH64: HeaderName = HeaderName::from_static("x-amz-checksum-xxhash64");
 
 pub const X_AMZ_CONFIRM_REMOVE_SELF_BUCKET_ACCESS: HeaderName =
     HeaderName::from_static("x-amz-confirm-remove-self-bucket-access");
@@ -153,9 +163,22 @@ pub const X_AMZ_FWD_HEADER_X_AMZ_CHECKSUM_CRC32C: HeaderName = HeaderName::from_
 pub const X_AMZ_FWD_HEADER_X_AMZ_CHECKSUM_CRC64NVME: HeaderName =
     HeaderName::from_static("x-amz-fwd-header-x-amz-checksum-crc64nvme");
 
+pub const X_AMZ_FWD_HEADER_X_AMZ_CHECKSUM_MD5: HeaderName = HeaderName::from_static("x-amz-fwd-header-x-amz-checksum-md5");
+
 pub const X_AMZ_FWD_HEADER_X_AMZ_CHECKSUM_SHA1: HeaderName = HeaderName::from_static("x-amz-fwd-header-x-amz-checksum-sha1");
 
 pub const X_AMZ_FWD_HEADER_X_AMZ_CHECKSUM_SHA256: HeaderName = HeaderName::from_static("x-amz-fwd-header-x-amz-checksum-sha256");
+
+pub const X_AMZ_FWD_HEADER_X_AMZ_CHECKSUM_SHA512: HeaderName = HeaderName::from_static("x-amz-fwd-header-x-amz-checksum-sha512");
+
+pub const X_AMZ_FWD_HEADER_X_AMZ_CHECKSUM_XXHASH128: HeaderName =
+    HeaderName::from_static("x-amz-fwd-header-x-amz-checksum-xxhash128");
+
+pub const X_AMZ_FWD_HEADER_X_AMZ_CHECKSUM_XXHASH3: HeaderName =
+    HeaderName::from_static("x-amz-fwd-header-x-amz-checksum-xxhash3");
+
+pub const X_AMZ_FWD_HEADER_X_AMZ_CHECKSUM_XXHASH64: HeaderName =
+    HeaderName::from_static("x-amz-fwd-header-x-amz-checksum-xxhash64");
 
 pub const X_AMZ_FWD_HEADER_X_AMZ_DELETE_MARKER: HeaderName = HeaderName::from_static("x-amz-fwd-header-x-amz-delete-marker");
 

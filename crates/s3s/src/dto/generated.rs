@@ -1137,6 +1137,11 @@ pub struct Checksum {
     /// if the object was uploaded with the <code>CRC64NVME</code> checksum algorithm, or if the object was uploaded without a
     /// checksum (and Amazon S3 added the default checksum, <code>CRC64NVME</code>, to the uploaded object). For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
     pub checksum_crc64nvme: Option<ChecksumCRC64NVME>,
+    /// <p>The Base64 encoded, 128-bit <code>MD5</code> digest of the object. This checksum is present
+    /// if the object was uploaded with the <code>MD5</code> checksum algorithm. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_md5: Option<ChecksumMD5>,
     /// <p>The Base64 encoded, 160-bit <code>SHA1</code> digest of the object. This will only be present if the object was uploaded
     /// with the object. When you use the API operation on an object that was uploaded using multipart uploads, this value may not be a direct checksum value of the full object. Instead, it's a calculation based on the checksum values of each individual part. For more information about how checksums are calculated
     /// with multipart uploads, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html#large-object-checksums">
@@ -1147,9 +1152,29 @@ pub struct Checksum {
     /// with multipart uploads, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html#large-object-checksums">
     /// Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
     pub checksum_sha256: Option<ChecksumSHA256>,
+    /// <p>The Base64 encoded, 512-bit <code>SHA512</code> digest of the object. This checksum is present
+    /// if the object was uploaded with the <code>SHA512</code> checksum algorithm. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_sha512: Option<ChecksumSHA512>,
     /// <p>The checksum type that is used to calculate the object’s
     /// checksum value. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
     pub checksum_type: Option<ChecksumType>,
+    /// <p>The Base64 encoded, 128-bit <code>XXHASH128</code> checksum of the object. This checksum is present
+    /// if the object was uploaded with the <code>XXHASH128</code> checksum algorithm. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_xxhash128: Option<ChecksumXXHASH128>,
+    /// <p>The Base64 encoded, 64-bit <code>XXHASH3</code> checksum of the object. This checksum is present
+    /// if the object was uploaded with the <code>XXHASH3</code> checksum algorithm. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_xxhash3: Option<ChecksumXXHASH3>,
+    /// <p>The Base64 encoded, 64-bit <code>XXHASH64</code> checksum of the object. This checksum is present
+    /// if the object was uploaded with the <code>XXHASH64</code> checksum algorithm. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_xxhash64: Option<ChecksumXXHASH64>,
 }
 
 impl fmt::Debug for Checksum {
@@ -1164,14 +1189,29 @@ impl fmt::Debug for Checksum {
         if let Some(ref val) = self.checksum_crc64nvme {
             d.field("checksum_crc64nvme", val);
         }
+        if let Some(ref val) = self.checksum_md5 {
+            d.field("checksum_md5", val);
+        }
         if let Some(ref val) = self.checksum_sha1 {
             d.field("checksum_sha1", val);
         }
         if let Some(ref val) = self.checksum_sha256 {
             d.field("checksum_sha256", val);
         }
+        if let Some(ref val) = self.checksum_sha512 {
+            d.field("checksum_sha512", val);
+        }
         if let Some(ref val) = self.checksum_type {
             d.field("checksum_type", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash128 {
+            d.field("checksum_xxhash128", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash3 {
+            d.field("checksum_xxhash3", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash64 {
+            d.field("checksum_xxhash64", val);
         }
         d.finish_non_exhaustive()
     }
@@ -1187,9 +1227,19 @@ impl ChecksumAlgorithm {
 
     pub const CRC64NVME: &'static str = "CRC64NVME";
 
+    pub const MD5: &'static str = "MD5";
+
     pub const SHA1: &'static str = "SHA1";
 
     pub const SHA256: &'static str = "SHA256";
+
+    pub const SHA512: &'static str = "SHA512";
+
+    pub const XXHASH128: &'static str = "XXHASH128";
+
+    pub const XXHASH3: &'static str = "XXHASH3";
+
+    pub const XXHASH64: &'static str = "XXHASH64";
 
     #[must_use]
     pub fn as_str(&self) -> &str {
@@ -1228,6 +1278,8 @@ pub type ChecksumCRC32 = String;
 pub type ChecksumCRC32C = String;
 
 pub type ChecksumCRC64NVME = String;
+
+pub type ChecksumMD5 = String;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChecksumMode(Cow<'static, str>);
@@ -1269,6 +1321,8 @@ pub type ChecksumSHA1 = String;
 
 pub type ChecksumSHA256 = String;
 
+pub type ChecksumSHA512 = String;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChecksumType(Cow<'static, str>);
 
@@ -1306,6 +1360,12 @@ impl FromStr for ChecksumType {
         Ok(Self::from(s.to_owned()))
     }
 }
+
+pub type ChecksumXXHASH128 = String;
+
+pub type ChecksumXXHASH3 = String;
+
+pub type ChecksumXXHASH64 = String;
 
 pub type Code = String;
 
@@ -1370,6 +1430,11 @@ pub struct CompleteMultipartUploadInput {
     /// always a full object checksum. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity
     /// in the Amazon S3 User Guide</a>.</p>
     pub checksum_crc64nvme: Option<ChecksumCRC64NVME>,
+    /// <p>This header can be used as a data integrity check to verify that the data received is the same data
+    /// that was originally sent. This header specifies the Base64 encoded, 128-bit <code>MD5</code>
+    /// digest of the object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity in the Amazon S3
+    /// User Guide</a>.</p>
+    pub checksum_md5: Option<ChecksumMD5>,
     /// <p>This header can be used as a data integrity check to verify that the data received is the same data that was originally sent.
     /// This header specifies the Base64 encoded, 160-bit <code>SHA1</code> digest of the object. For more information, see
     /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the
@@ -1380,6 +1445,11 @@ pub struct CompleteMultipartUploadInput {
     /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the
     /// <i>Amazon S3 User Guide</i>.</p>
     pub checksum_sha256: Option<ChecksumSHA256>,
+    /// <p>This header can be used as a data integrity check to verify that the data received is the same data
+    /// that was originally sent. This header specifies the Base64 encoded, 512-bit <code>SHA512</code>
+    /// digest of the object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity in the Amazon S3
+    /// User Guide</a>.</p>
+    pub checksum_sha512: Option<ChecksumSHA512>,
     /// <p>This header specifies the checksum type of the object, which determines how part-level
     /// checksums are combined to create an object-level checksum for multipart objects. You can
     /// use this header as a data integrity check to verify that the checksum type that is received
@@ -1388,6 +1458,21 @@ pub struct CompleteMultipartUploadInput {
     /// request, it’ll result in a <code>BadDigest</code> error. For more information, see Checking
     /// object integrity in the Amazon S3 User Guide. </p>
     pub checksum_type: Option<ChecksumType>,
+    /// <p>This header can be used as a data integrity check to verify that the data received is the same data
+    /// that was originally sent. This header specifies the Base64 encoded, 128-bit <code>XXHASH128</code>
+    /// checksum of the object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity in the Amazon S3
+    /// User Guide</a>.</p>
+    pub checksum_xxhash128: Option<ChecksumXXHASH128>,
+    /// <p>This header can be used as a data integrity check to verify that the data received is the same data
+    /// that was originally sent. This header specifies the Base64 encoded, 64-bit <code>XXHASH3</code>
+    /// checksum of the object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity in the Amazon S3
+    /// User Guide</a>.</p>
+    pub checksum_xxhash3: Option<ChecksumXXHASH3>,
+    /// <p>This header can be used as a data integrity check to verify that the data received is the same data
+    /// that was originally sent. This header specifies the Base64 encoded, 64-bit <code>XXHASH64</code>
+    /// checksum of the object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity in the Amazon S3
+    /// User Guide</a>.</p>
+    pub checksum_xxhash64: Option<ChecksumXXHASH64>,
     /// <p>The account ID of the expected bucket owner. If the account ID that you provide does not match the actual owner of the bucket, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).</p>
     pub expected_bucket_owner: Option<AccountId>,
     /// <p>Uploads the object only if the ETag (entity tag) value provided during the WRITE
@@ -1457,14 +1542,29 @@ impl fmt::Debug for CompleteMultipartUploadInput {
         if let Some(ref val) = self.checksum_crc64nvme {
             d.field("checksum_crc64nvme", val);
         }
+        if let Some(ref val) = self.checksum_md5 {
+            d.field("checksum_md5", val);
+        }
         if let Some(ref val) = self.checksum_sha1 {
             d.field("checksum_sha1", val);
         }
         if let Some(ref val) = self.checksum_sha256 {
             d.field("checksum_sha256", val);
         }
+        if let Some(ref val) = self.checksum_sha512 {
+            d.field("checksum_sha512", val);
+        }
         if let Some(ref val) = self.checksum_type {
             d.field("checksum_type", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash128 {
+            d.field("checksum_xxhash128", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash3 {
+            d.field("checksum_xxhash3", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash64 {
+            d.field("checksum_xxhash64", val);
         }
         if let Some(ref val) = self.expected_bucket_owner {
             d.field("expected_bucket_owner", val);
@@ -1533,6 +1633,10 @@ pub struct CompleteMultipartUploadOutput {
     /// always a full object checksum. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity
     /// in the Amazon S3 User Guide</a>. </p>
     pub checksum_crc64nvme: Option<ChecksumCRC64NVME>,
+    /// <p>The Base64 encoded, 128-bit <code>MD5</code> digest of the object. For more
+    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity in the Amazon S3
+    /// User Guide</a>.</p>
+    pub checksum_md5: Option<ChecksumMD5>,
     /// <p>The Base64 encoded, 160-bit <code>SHA1</code> digest of the object. This will only be present if the object was uploaded
     /// with the object. When you use the API operation on an object that was uploaded using multipart uploads, this value may not be a direct checksum value of the full object. Instead, it's a calculation based on the checksum values of each individual part. For more information about how checksums are calculated
     /// with multipart uploads, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html#large-object-checksums">
@@ -1543,6 +1647,10 @@ pub struct CompleteMultipartUploadOutput {
     /// with multipart uploads, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html#large-object-checksums">
     /// Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
     pub checksum_sha256: Option<ChecksumSHA256>,
+    /// <p>The Base64 encoded, 512-bit <code>SHA512</code> digest of the object. For more
+    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity in the Amazon S3
+    /// User Guide</a>.</p>
+    pub checksum_sha512: Option<ChecksumSHA512>,
     /// <p>The checksum type, which determines how part-level checksums are combined to create an
     /// object-level checksum for multipart objects. You can use this header as a data integrity
     /// check to verify that the checksum type that is received is the same checksum type that was
@@ -1550,6 +1658,18 @@ pub struct CompleteMultipartUploadOutput {
     /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity
     /// in the Amazon S3 User Guide</a>.</p>
     pub checksum_type: Option<ChecksumType>,
+    /// <p>The Base64 encoded, 128-bit <code>XXHASH128</code> checksum of the object. For more
+    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity in the Amazon S3
+    /// User Guide</a>.</p>
+    pub checksum_xxhash128: Option<ChecksumXXHASH128>,
+    /// <p>The Base64 encoded, 64-bit <code>XXHASH3</code> checksum of the object. For more
+    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity in the Amazon S3
+    /// User Guide</a>.</p>
+    pub checksum_xxhash3: Option<ChecksumXXHASH3>,
+    /// <p>The Base64 encoded, 64-bit <code>XXHASH64</code> checksum of the object. For more
+    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity in the Amazon S3
+    /// User Guide</a>.</p>
+    pub checksum_xxhash64: Option<ChecksumXXHASH64>,
     /// <p>Entity tag that identifies the newly created object's data. Objects with different
     /// object data will have different entity tags. The entity tag is an opaque string. The entity
     /// tag may or may not be an MD5 digest of the object data. If the entity tag is not an MD5
@@ -1603,14 +1723,29 @@ impl fmt::Debug for CompleteMultipartUploadOutput {
         if let Some(ref val) = self.checksum_crc64nvme {
             d.field("checksum_crc64nvme", val);
         }
+        if let Some(ref val) = self.checksum_md5 {
+            d.field("checksum_md5", val);
+        }
         if let Some(ref val) = self.checksum_sha1 {
             d.field("checksum_sha1", val);
         }
         if let Some(ref val) = self.checksum_sha256 {
             d.field("checksum_sha256", val);
         }
+        if let Some(ref val) = self.checksum_sha512 {
+            d.field("checksum_sha512", val);
+        }
         if let Some(ref val) = self.checksum_type {
             d.field("checksum_type", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash128 {
+            d.field("checksum_xxhash128", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash3 {
+            d.field("checksum_xxhash3", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash64 {
+            d.field("checksum_xxhash64", val);
         }
         if let Some(ref val) = self.e_tag {
             d.field("e_tag", val);
@@ -1674,12 +1809,37 @@ pub struct CompletedPart {
     /// <p>The Base64 encoded, 64-bit <code>CRC64NVME</code> checksum of the part. This checksum is present
     /// if the multipart upload request was created with the <code>CRC64NVME</code> checksum algorithm to the uploaded object). For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
     pub checksum_crc64nvme: Option<ChecksumCRC64NVME>,
+    /// <p>The Base64 encoded, 128-bit <code>MD5</code> digest of the part. This checksum is present if
+    /// the multipart upload request was created with the <code>MD5</code> checksum algorithm. For more
+    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_md5: Option<ChecksumMD5>,
     /// <p>The Base64 encoded, 160-bit <code>SHA1</code> checksum of the part. This checksum is present
     /// if the multipart upload request was created with the <code>SHA1</code> checksum algorithm. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
     pub checksum_sha1: Option<ChecksumSHA1>,
     /// <p>The Base64 encoded, 256-bit <code>SHA256</code> checksum of the part. This checksum is present
     /// if the multipart upload request was created with the <code>SHA256</code> checksum algorithm. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
     pub checksum_sha256: Option<ChecksumSHA256>,
+    /// <p>The Base64 encoded, 512-bit <code>SHA512</code> digest of the part. This checksum is present if
+    /// the multipart upload request was created with the <code>SHA512</code> checksum algorithm. For more
+    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_sha512: Option<ChecksumSHA512>,
+    /// <p>The Base64 encoded, 128-bit <code>XXHASH128</code> checksum of the part. This checksum is present if
+    /// the multipart upload request was created with the <code>XXHASH128</code> checksum algorithm. For more
+    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_xxhash128: Option<ChecksumXXHASH128>,
+    /// <p>The Base64 encoded, 64-bit <code>XXHASH3</code> checksum of the part. This checksum is present if
+    /// the multipart upload request was created with the <code>XXHASH3</code> checksum algorithm. For more
+    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_xxhash3: Option<ChecksumXXHASH3>,
+    /// <p>The Base64 encoded, 64-bit <code>XXHASH64</code> checksum of the part. This checksum is present if
+    /// the multipart upload request was created with the <code>XXHASH64</code> checksum algorithm. For more
+    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_xxhash64: Option<ChecksumXXHASH64>,
     /// <p>Entity tag returned when the part was uploaded.</p>
     pub e_tag: Option<ETag>,
     /// <p>Part number that identifies the part. This is a positive integer between 1 and
@@ -1720,11 +1880,26 @@ impl fmt::Debug for CompletedPart {
         if let Some(ref val) = self.checksum_crc64nvme {
             d.field("checksum_crc64nvme", val);
         }
+        if let Some(ref val) = self.checksum_md5 {
+            d.field("checksum_md5", val);
+        }
         if let Some(ref val) = self.checksum_sha1 {
             d.field("checksum_sha1", val);
         }
         if let Some(ref val) = self.checksum_sha256 {
             d.field("checksum_sha256", val);
+        }
+        if let Some(ref val) = self.checksum_sha512 {
+            d.field("checksum_sha512", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash128 {
+            d.field("checksum_xxhash128", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash3 {
+            d.field("checksum_xxhash3", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash64 {
+            d.field("checksum_xxhash64", val);
         }
         if let Some(ref val) = self.e_tag {
             d.field("e_tag", val);
@@ -2662,6 +2837,11 @@ pub struct CopyObjectResult {
     /// if the object being copied was uploaded with the <code>CRC64NVME</code> checksum algorithm, or if the object was uploaded without a
     /// checksum (and Amazon S3 added the default checksum, <code>CRC64NVME</code>, to the uploaded object). For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
     pub checksum_crc64nvme: Option<ChecksumCRC64NVME>,
+    /// <p>The Base64 encoded, 128-bit <code>MD5</code> digest of the object. This checksum is only present
+    /// if the object was uploaded with the <code>MD5</code> checksum algorithm. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_md5: Option<ChecksumMD5>,
     /// <p>The Base64 encoded, 160-bit <code>SHA1</code> digest of the object. This will only be present if the object was uploaded
     /// with the object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">
     /// Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
@@ -2670,9 +2850,29 @@ pub struct CopyObjectResult {
     /// with the object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">
     /// Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
     pub checksum_sha256: Option<ChecksumSHA256>,
+    /// <p>The Base64 encoded, 512-bit <code>SHA512</code> digest of the object. This checksum is only present
+    /// if the object was uploaded with the <code>SHA512</code> checksum algorithm. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_sha512: Option<ChecksumSHA512>,
     /// <p>The checksum type that is used to calculate the object’s
     /// checksum value. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
     pub checksum_type: Option<ChecksumType>,
+    /// <p>The Base64 encoded, 128-bit <code>XXHASH128</code> checksum of the object. This checksum is only present
+    /// if the object was uploaded with the <code>XXHASH128</code> checksum algorithm. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_xxhash128: Option<ChecksumXXHASH128>,
+    /// <p>The Base64 encoded, 64-bit <code>XXHASH3</code> checksum of the object. This checksum is only present
+    /// if the object was uploaded with the <code>XXHASH3</code> checksum algorithm. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_xxhash3: Option<ChecksumXXHASH3>,
+    /// <p>The Base64 encoded, 64-bit <code>XXHASH64</code> checksum of the object. This checksum is only present
+    /// if the object was uploaded with the <code>XXHASH64</code> checksum algorithm. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_xxhash64: Option<ChecksumXXHASH64>,
     /// <p>Returns the ETag of the new object. The ETag reflects only changes to the contents of an
     /// object, not its metadata.</p>
     pub e_tag: Option<ETag>,
@@ -2692,14 +2892,29 @@ impl fmt::Debug for CopyObjectResult {
         if let Some(ref val) = self.checksum_crc64nvme {
             d.field("checksum_crc64nvme", val);
         }
+        if let Some(ref val) = self.checksum_md5 {
+            d.field("checksum_md5", val);
+        }
         if let Some(ref val) = self.checksum_sha1 {
             d.field("checksum_sha1", val);
         }
         if let Some(ref val) = self.checksum_sha256 {
             d.field("checksum_sha256", val);
         }
+        if let Some(ref val) = self.checksum_sha512 {
+            d.field("checksum_sha512", val);
+        }
         if let Some(ref val) = self.checksum_type {
             d.field("checksum_type", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash128 {
+            d.field("checksum_xxhash128", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash3 {
+            d.field("checksum_xxhash3", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash64 {
+            d.field("checksum_xxhash64", val);
         }
         if let Some(ref val) = self.e_tag {
             d.field("e_tag", val);
@@ -2727,6 +2942,11 @@ pub struct CopyPartResult {
     /// <p>The Base64 encoded, 64-bit <code>CRC64NVME</code> checksum of the part. This checksum is present
     /// if the multipart upload request was created with the <code>CRC64NVME</code> checksum algorithm to the uploaded object). For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
     pub checksum_crc64nvme: Option<ChecksumCRC64NVME>,
+    /// <p>The Base64 encoded, 128-bit <code>MD5</code> digest of the part. This checksum is present if
+    /// the multipart upload request was created with the <code>MD5</code> checksum algorithm. For more
+    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_md5: Option<ChecksumMD5>,
     /// <p>This header can be used as a data integrity check to verify that the data received is the same data that was originally sent.
     /// This header specifies the Base64 encoded, 160-bit <code>SHA1</code> checksum of the part. For more information, see
     /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the
@@ -2737,6 +2957,26 @@ pub struct CopyPartResult {
     /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the
     /// <i>Amazon S3 User Guide</i>.</p>
     pub checksum_sha256: Option<ChecksumSHA256>,
+    /// <p>The Base64 encoded, 512-bit <code>SHA512</code> digest of the part. This checksum is present if
+    /// the multipart upload request was created with the <code>SHA512</code> checksum algorithm. For more
+    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_sha512: Option<ChecksumSHA512>,
+    /// <p>The Base64 encoded, 128-bit <code>XXHASH128</code> checksum of the part. This checksum is present if
+    /// the multipart upload request was created with the <code>XXHASH128</code> checksum algorithm. For more
+    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_xxhash128: Option<ChecksumXXHASH128>,
+    /// <p>The Base64 encoded, 64-bit <code>XXHASH3</code> checksum of the part. This checksum is present if
+    /// the multipart upload request was created with the <code>XXHASH3</code> checksum algorithm. For more
+    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_xxhash3: Option<ChecksumXXHASH3>,
+    /// <p>The Base64 encoded, 64-bit <code>XXHASH64</code> checksum of the part. This checksum is present if
+    /// the multipart upload request was created with the <code>XXHASH64</code> checksum algorithm. For more
+    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_xxhash64: Option<ChecksumXXHASH64>,
     /// <p>Entity tag of the object.</p>
     pub e_tag: Option<ETag>,
     /// <p>Date and time at which the object was uploaded.</p>
@@ -2755,11 +2995,26 @@ impl fmt::Debug for CopyPartResult {
         if let Some(ref val) = self.checksum_crc64nvme {
             d.field("checksum_crc64nvme", val);
         }
+        if let Some(ref val) = self.checksum_md5 {
+            d.field("checksum_md5", val);
+        }
         if let Some(ref val) = self.checksum_sha1 {
             d.field("checksum_sha1", val);
         }
         if let Some(ref val) = self.checksum_sha256 {
             d.field("checksum_sha256", val);
+        }
+        if let Some(ref val) = self.checksum_sha512 {
+            d.field("checksum_sha512", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash128 {
+            d.field("checksum_xxhash128", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash3 {
+            d.field("checksum_xxhash3", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash64 {
+            d.field("checksum_xxhash64", val);
         }
         if let Some(ref val) = self.e_tag {
             d.field("e_tag", val);
@@ -9421,6 +9676,10 @@ pub struct GetObjectOutput {
     /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity
     /// in the Amazon S3 User Guide</a>.</p>
     pub checksum_crc64nvme: Option<ChecksumCRC64NVME>,
+    /// <p>The Base64 encoded, 128-bit <code>MD5</code> digest of the object. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking
+    /// object integrity in the Amazon S3 User Guide</a>.</p>
+    pub checksum_md5: Option<ChecksumMD5>,
     /// <p>The Base64 encoded, 160-bit <code>SHA1</code> digest of the object. This will only be present if the object was uploaded
     /// with the object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">
     /// Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
@@ -9429,11 +9688,27 @@ pub struct GetObjectOutput {
     /// with the object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">
     /// Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
     pub checksum_sha256: Option<ChecksumSHA256>,
+    /// <p>The Base64 encoded, 512-bit <code>SHA512</code> digest of the object. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking
+    /// object integrity in the Amazon S3 User Guide</a>.</p>
+    pub checksum_sha512: Option<ChecksumSHA512>,
     /// <p>The checksum type, which determines how part-level checksums are combined to create an
     /// object-level checksum for multipart objects. You can use this header response to verify
     /// that the checksum type that is received is the same checksum type that was specified in the
     /// <code>CreateMultipartUpload</code> request. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
     pub checksum_type: Option<ChecksumType>,
+    /// <p>The Base64 encoded, 128-bit <code>XXHASH128</code> checksum of the object. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking
+    /// object integrity in the Amazon S3 User Guide</a>.</p>
+    pub checksum_xxhash128: Option<ChecksumXXHASH128>,
+    /// <p>The Base64 encoded, 64-bit <code>XXHASH3</code> checksum of the object. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking
+    /// object integrity in the Amazon S3 User Guide</a>.</p>
+    pub checksum_xxhash3: Option<ChecksumXXHASH3>,
+    /// <p>The Base64 encoded, 64-bit <code>XXHASH64</code> checksum of the object. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking
+    /// object integrity in the Amazon S3 User Guide</a>.</p>
+    pub checksum_xxhash64: Option<ChecksumXXHASH64>,
     /// <p>Specifies presentational information for the object.</p>
     pub content_disposition: Option<ContentDisposition>,
     /// <p>Indicates what content encodings have been applied to the object and thus what decoding
@@ -9602,14 +9877,29 @@ impl fmt::Debug for GetObjectOutput {
         if let Some(ref val) = self.checksum_crc64nvme {
             d.field("checksum_crc64nvme", val);
         }
+        if let Some(ref val) = self.checksum_md5 {
+            d.field("checksum_md5", val);
+        }
         if let Some(ref val) = self.checksum_sha1 {
             d.field("checksum_sha1", val);
         }
         if let Some(ref val) = self.checksum_sha256 {
             d.field("checksum_sha256", val);
         }
+        if let Some(ref val) = self.checksum_sha512 {
+            d.field("checksum_sha512", val);
+        }
         if let Some(ref val) = self.checksum_type {
             d.field("checksum_type", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash128 {
+            d.field("checksum_xxhash128", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash3 {
+            d.field("checksum_xxhash3", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash64 {
+            d.field("checksum_xxhash64", val);
         }
         if let Some(ref val) = self.content_disposition {
             d.field("content_disposition", val);
@@ -10376,6 +10666,10 @@ pub struct HeadObjectOutput {
     /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity
     /// in the Amazon S3 User Guide</a>.</p>
     pub checksum_crc64nvme: Option<ChecksumCRC64NVME>,
+    /// <p>The Base64 encoded, 128-bit <code>MD5</code> digest of the object. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking
+    /// object integrity in the Amazon S3 User Guide</a>.</p>
+    pub checksum_md5: Option<ChecksumMD5>,
     /// <p>The Base64 encoded, 160-bit <code>SHA1</code> digest of the object. This will only be present if the object was uploaded
     /// with the object. When you use the API operation on an object that was uploaded using multipart uploads, this value may not be a direct checksum value of the full object. Instead, it's a calculation based on the checksum values of each individual part. For more information about how checksums are calculated
     /// with multipart uploads, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html#large-object-checksums">
@@ -10386,6 +10680,10 @@ pub struct HeadObjectOutput {
     /// with multipart uploads, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html#large-object-checksums">
     /// Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
     pub checksum_sha256: Option<ChecksumSHA256>,
+    /// <p>The Base64 encoded, 512-bit <code>SHA512</code> digest of the object. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking
+    /// object integrity in the Amazon S3 User Guide</a>.</p>
+    pub checksum_sha512: Option<ChecksumSHA512>,
     /// <p>The checksum type, which determines how part-level checksums are combined to create an
     /// object-level checksum for multipart objects. You can use this header response to verify
     /// that the checksum type that is received is the same checksum type that was specified in
@@ -10393,6 +10691,18 @@ pub struct HeadObjectOutput {
     /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity
     /// in the Amazon S3 User Guide</a>.</p>
     pub checksum_type: Option<ChecksumType>,
+    /// <p>The Base64 encoded, 128-bit <code>XXHASH128</code> checksum of the object. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking
+    /// object integrity in the Amazon S3 User Guide</a>.</p>
+    pub checksum_xxhash128: Option<ChecksumXXHASH128>,
+    /// <p>The Base64 encoded, 64-bit <code>XXHASH3</code> checksum of the object. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking
+    /// object integrity in the Amazon S3 User Guide</a>.</p>
+    pub checksum_xxhash3: Option<ChecksumXXHASH3>,
+    /// <p>The Base64 encoded, 64-bit <code>XXHASH64</code> checksum of the object. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking
+    /// object integrity in the Amazon S3 User Guide</a>.</p>
+    pub checksum_xxhash64: Option<ChecksumXXHASH64>,
     /// <p>Specifies presentational information for the object.</p>
     pub content_disposition: Option<ContentDisposition>,
     /// <p>Indicates what content encodings have been applied to the object and thus what decoding
@@ -10590,14 +10900,29 @@ impl fmt::Debug for HeadObjectOutput {
         if let Some(ref val) = self.checksum_crc64nvme {
             d.field("checksum_crc64nvme", val);
         }
+        if let Some(ref val) = self.checksum_md5 {
+            d.field("checksum_md5", val);
+        }
         if let Some(ref val) = self.checksum_sha1 {
             d.field("checksum_sha1", val);
         }
         if let Some(ref val) = self.checksum_sha256 {
             d.field("checksum_sha256", val);
         }
+        if let Some(ref val) = self.checksum_sha512 {
+            d.field("checksum_sha512", val);
+        }
         if let Some(ref val) = self.checksum_type {
             d.field("checksum_type", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash128 {
+            d.field("checksum_xxhash128", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash3 {
+            d.field("checksum_xxhash3", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash64 {
+            d.field("checksum_xxhash64", val);
         }
         if let Some(ref val) = self.content_disposition {
             d.field("content_disposition", val);
@@ -14662,12 +14987,37 @@ pub struct ObjectPart {
     /// if the multipart upload request was created with the <code>CRC64NVME</code> checksum algorithm, or if the object was uploaded without a
     /// checksum (and Amazon S3 added the default checksum, <code>CRC64NVME</code>, to the uploaded object). For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
     pub checksum_crc64nvme: Option<ChecksumCRC64NVME>,
+    /// <p>The Base64 encoded, 128-bit <code>MD5</code> digest of the part. This checksum is present if
+    /// the multipart upload request was created with the <code>MD5</code> checksum algorithm. For more
+    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_md5: Option<ChecksumMD5>,
     /// <p>The Base64 encoded, 160-bit <code>SHA1</code> checksum of the part. This checksum is present
     /// if the multipart upload request was created with the <code>SHA1</code> checksum algorithm. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
     pub checksum_sha1: Option<ChecksumSHA1>,
     /// <p>The Base64 encoded, 256-bit <code>SHA256</code> checksum of the part. This checksum is present
     /// if the multipart upload request was created with the <code>SHA256</code> checksum algorithm. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
     pub checksum_sha256: Option<ChecksumSHA256>,
+    /// <p>The Base64 encoded, 512-bit <code>SHA512</code> digest of the part. This checksum is present if
+    /// the multipart upload request was created with the <code>SHA512</code> checksum algorithm. For more
+    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_sha512: Option<ChecksumSHA512>,
+    /// <p>The Base64 encoded, 128-bit <code>XXHASH128</code> checksum of the part. This checksum is present if
+    /// the multipart upload request was created with the <code>XXHASH128</code> checksum algorithm. For more
+    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_xxhash128: Option<ChecksumXXHASH128>,
+    /// <p>The Base64 encoded, 64-bit <code>XXHASH3</code> checksum of the part. This checksum is present if
+    /// the multipart upload request was created with the <code>XXHASH3</code> checksum algorithm. For more
+    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_xxhash3: Option<ChecksumXXHASH3>,
+    /// <p>The Base64 encoded, 64-bit <code>XXHASH64</code> checksum of the part. This checksum is present if
+    /// the multipart upload request was created with the <code>XXHASH64</code> checksum algorithm. For more
+    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_xxhash64: Option<ChecksumXXHASH64>,
     /// <p>The part number identifying the part. This value is a positive integer between 1 and
     /// 10,000.</p>
     pub part_number: Option<PartNumber>,
@@ -14687,11 +15037,26 @@ impl fmt::Debug for ObjectPart {
         if let Some(ref val) = self.checksum_crc64nvme {
             d.field("checksum_crc64nvme", val);
         }
+        if let Some(ref val) = self.checksum_md5 {
+            d.field("checksum_md5", val);
+        }
         if let Some(ref val) = self.checksum_sha1 {
             d.field("checksum_sha1", val);
         }
         if let Some(ref val) = self.checksum_sha256 {
             d.field("checksum_sha256", val);
+        }
+        if let Some(ref val) = self.checksum_sha512 {
+            d.field("checksum_sha512", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash128 {
+            d.field("checksum_xxhash128", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash3 {
+            d.field("checksum_xxhash3", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash64 {
+            d.field("checksum_xxhash64", val);
         }
         if let Some(ref val) = self.part_number {
             d.field("part_number", val);
@@ -15097,12 +15462,37 @@ pub struct Part {
     /// if the multipart upload request was created with the <code>CRC64NVME</code> checksum algorithm, or if the object was uploaded without a
     /// checksum (and Amazon S3 added the default checksum, <code>CRC64NVME</code>, to the uploaded object). For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
     pub checksum_crc64nvme: Option<ChecksumCRC64NVME>,
+    /// <p>The Base64 encoded, 128-bit <code>MD5</code> digest of the part. This checksum is present if
+    /// the multipart upload request was created with the <code>MD5</code> checksum algorithm. For more
+    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_md5: Option<ChecksumMD5>,
     /// <p>The Base64 encoded, 160-bit <code>SHA1</code> checksum of the part. This checksum is present
     /// if the object was uploaded with the <code>SHA1</code> checksum algorithm. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
     pub checksum_sha1: Option<ChecksumSHA1>,
     /// <p>The Base64 encoded, 256-bit <code>SHA256</code> checksum of the part. This checksum is present
     /// if the object was uploaded with the <code>SHA256</code> checksum algorithm. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
     pub checksum_sha256: Option<ChecksumSHA256>,
+    /// <p>The Base64 encoded, 512-bit <code>SHA512</code> digest of the part. This checksum is present if
+    /// the multipart upload request was created with the <code>SHA512</code> checksum algorithm. For more
+    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_sha512: Option<ChecksumSHA512>,
+    /// <p>The Base64 encoded, 128-bit <code>XXHASH128</code> checksum of the part. This checksum is present if
+    /// the multipart upload request was created with the <code>XXHASH128</code> checksum algorithm. For more
+    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_xxhash128: Option<ChecksumXXHASH128>,
+    /// <p>The Base64 encoded, 64-bit <code>XXHASH3</code> checksum of the part. This checksum is present if
+    /// the multipart upload request was created with the <code>XXHASH3</code> checksum algorithm. For more
+    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_xxhash3: Option<ChecksumXXHASH3>,
+    /// <p>The Base64 encoded, 64-bit <code>XXHASH64</code> checksum of the part. This checksum is present if
+    /// the multipart upload request was created with the <code>XXHASH64</code> checksum algorithm. For more
+    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_xxhash64: Option<ChecksumXXHASH64>,
     /// <p>Entity tag returned when the part was uploaded.</p>
     pub e_tag: Option<ETag>,
     /// <p>Date and time at which the part was uploaded.</p>
@@ -15126,11 +15516,26 @@ impl fmt::Debug for Part {
         if let Some(ref val) = self.checksum_crc64nvme {
             d.field("checksum_crc64nvme", val);
         }
+        if let Some(ref val) = self.checksum_md5 {
+            d.field("checksum_md5", val);
+        }
         if let Some(ref val) = self.checksum_sha1 {
             d.field("checksum_sha1", val);
         }
         if let Some(ref val) = self.checksum_sha256 {
             d.field("checksum_sha256", val);
+        }
+        if let Some(ref val) = self.checksum_sha512 {
+            d.field("checksum_sha512", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash128 {
+            d.field("checksum_xxhash128", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash3 {
+            d.field("checksum_xxhash3", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash64 {
+            d.field("checksum_xxhash64", val);
         }
         if let Some(ref val) = self.e_tag {
             d.field("e_tag", val);
@@ -15457,6 +15862,11 @@ pub struct PostObjectInput {
     /// always a full object checksum. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity
     /// in the Amazon S3 User Guide</a>.</p>
     pub checksum_crc64nvme: Option<ChecksumCRC64NVME>,
+    /// <p>This header can be used as a data integrity check to verify that the data received is the same data
+    /// that was originally sent. This header specifies the Base64 encoded, 128-bit <code>MD5</code>
+    /// digest of the object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity in the Amazon S3
+    /// User Guide</a>.</p>
+    pub checksum_md5: Option<ChecksumMD5>,
     /// <p>This header can be used as a data integrity check to verify that the data received is the same data that was originally sent.
     /// This header specifies the Base64 encoded, 160-bit <code>SHA1</code> digest of the object. For more information, see
     /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the
@@ -15467,6 +15877,26 @@ pub struct PostObjectInput {
     /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the
     /// <i>Amazon S3 User Guide</i>.</p>
     pub checksum_sha256: Option<ChecksumSHA256>,
+    /// <p>This header can be used as a data integrity check to verify that the data received is the same data
+    /// that was originally sent. This header specifies the Base64 encoded, 512-bit <code>SHA512</code>
+    /// digest of the object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity in the Amazon S3
+    /// User Guide</a>.</p>
+    pub checksum_sha512: Option<ChecksumSHA512>,
+    /// <p>This header can be used as a data integrity check to verify that the data received is the same data
+    /// that was originally sent. This header specifies the Base64 encoded, 128-bit <code>XXHASH128</code>
+    /// checksum of the object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity in the Amazon S3
+    /// User Guide</a>.</p>
+    pub checksum_xxhash128: Option<ChecksumXXHASH128>,
+    /// <p>This header can be used as a data integrity check to verify that the data received is the same data
+    /// that was originally sent. This header specifies the Base64 encoded, 64-bit <code>XXHASH3</code>
+    /// checksum of the object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity in the Amazon S3
+    /// User Guide</a>.</p>
+    pub checksum_xxhash3: Option<ChecksumXXHASH3>,
+    /// <p>This header can be used as a data integrity check to verify that the data received is the same data
+    /// that was originally sent. This header specifies the Base64 encoded, 64-bit <code>XXHASH64</code>
+    /// checksum of the object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity in the Amazon S3
+    /// User Guide</a>.</p>
+    pub checksum_xxhash64: Option<ChecksumXXHASH64>,
     /// <p>Specifies presentational information for the object. For more information, see <a href="https://www.rfc-editor.org/rfc/rfc6266#section-4">https://www.rfc-editor.org/rfc/rfc6266#section-4</a>.</p>
     pub content_disposition: Option<ContentDisposition>,
     /// <p>Specifies what content encodings have been applied to the object and thus what decoding
@@ -15762,11 +16192,26 @@ impl fmt::Debug for PostObjectInput {
         if let Some(ref val) = self.checksum_crc64nvme {
             d.field("checksum_crc64nvme", val);
         }
+        if let Some(ref val) = self.checksum_md5 {
+            d.field("checksum_md5", val);
+        }
         if let Some(ref val) = self.checksum_sha1 {
             d.field("checksum_sha1", val);
         }
         if let Some(ref val) = self.checksum_sha256 {
             d.field("checksum_sha256", val);
+        }
+        if let Some(ref val) = self.checksum_sha512 {
+            d.field("checksum_sha512", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash128 {
+            d.field("checksum_xxhash128", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash3 {
+            d.field("checksum_xxhash3", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash64 {
+            d.field("checksum_xxhash64", val);
         }
         if let Some(ref val) = self.content_disposition {
             d.field("content_disposition", val);
@@ -15898,6 +16343,11 @@ pub struct PostObjectOutput {
     /// checksums are calculated with multipart uploads, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity
     /// in the Amazon S3 User Guide</a>.</p>
     pub checksum_crc64nvme: Option<ChecksumCRC64NVME>,
+    /// <p>The Base64 encoded, 128-bit <code>MD5</code> digest of the object. This header is present if
+    /// the object was uploaded with the <code>MD5</code> checksum algorithm. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking
+    /// object integrity in the Amazon S3 User Guide</a>.</p>
+    pub checksum_md5: Option<ChecksumMD5>,
     /// <p>The Base64 encoded, 160-bit <code>SHA1</code> digest of the object. This will only be present if the object was uploaded
     /// with the object. When you use the API operation on an object that was uploaded using multipart uploads, this value may not be a direct checksum value of the full object. Instead, it's a calculation based on the checksum values of each individual part. For more information about how checksums are calculated
     /// with multipart uploads, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html#large-object-checksums">
@@ -15908,12 +16358,32 @@ pub struct PostObjectOutput {
     /// with multipart uploads, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html#large-object-checksums">
     /// Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
     pub checksum_sha256: Option<ChecksumSHA256>,
+    /// <p>The Base64 encoded, 512-bit <code>SHA512</code> digest of the object. This header is present if
+    /// the object was uploaded with the <code>SHA512</code> checksum algorithm. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking
+    /// object integrity in the Amazon S3 User Guide</a>.</p>
+    pub checksum_sha512: Option<ChecksumSHA512>,
     /// <p>This header specifies the checksum type of the object, which determines how part-level
     /// checksums are combined to create an object-level checksum for multipart objects. For
     /// <code>PutObject</code> uploads, the checksum type is always <code>FULL_OBJECT</code>. You can use this header as a
     /// data integrity check to verify that the checksum type that is received is the same checksum
     /// that was specified. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
     pub checksum_type: Option<ChecksumType>,
+    /// <p>The Base64 encoded, 128-bit <code>XXHASH128</code> checksum of the object. This header is present if
+    /// the object was uploaded with the <code>XXHASH128</code> checksum algorithm. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking
+    /// object integrity in the Amazon S3 User Guide</a>.</p>
+    pub checksum_xxhash128: Option<ChecksumXXHASH128>,
+    /// <p>The Base64 encoded, 64-bit <code>XXHASH3</code> checksum of the object. This header is present if
+    /// the object was uploaded with the <code>XXHASH3</code> checksum algorithm. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking
+    /// object integrity in the Amazon S3 User Guide</a>.</p>
+    pub checksum_xxhash3: Option<ChecksumXXHASH3>,
+    /// <p>The Base64 encoded, 64-bit <code>XXHASH64</code> checksum of the object. This header is present if
+    /// the object was uploaded with the <code>XXHASH64</code> checksum algorithm. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking
+    /// object integrity in the Amazon S3 User Guide</a>.</p>
+    pub checksum_xxhash64: Option<ChecksumXXHASH64>,
     /// <p>Entity tag for the uploaded object.</p>
     /// <p>
     /// <b>General purpose buckets </b> - To ensure that data is not
@@ -15992,14 +16462,29 @@ impl fmt::Debug for PostObjectOutput {
         if let Some(ref val) = self.checksum_crc64nvme {
             d.field("checksum_crc64nvme", val);
         }
+        if let Some(ref val) = self.checksum_md5 {
+            d.field("checksum_md5", val);
+        }
         if let Some(ref val) = self.checksum_sha1 {
             d.field("checksum_sha1", val);
         }
         if let Some(ref val) = self.checksum_sha256 {
             d.field("checksum_sha256", val);
         }
+        if let Some(ref val) = self.checksum_sha512 {
+            d.field("checksum_sha512", val);
+        }
         if let Some(ref val) = self.checksum_type {
             d.field("checksum_type", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash128 {
+            d.field("checksum_xxhash128", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash3 {
+            d.field("checksum_xxhash3", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash64 {
+            d.field("checksum_xxhash64", val);
         }
         if let Some(ref val) = self.e_tag {
             d.field("e_tag", val);
@@ -17559,6 +18044,11 @@ pub struct PutObjectInput {
     /// always a full object checksum. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity
     /// in the Amazon S3 User Guide</a>.</p>
     pub checksum_crc64nvme: Option<ChecksumCRC64NVME>,
+    /// <p>This header can be used as a data integrity check to verify that the data received is the same data
+    /// that was originally sent. This header specifies the Base64 encoded, 128-bit <code>MD5</code>
+    /// digest of the object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity in the Amazon S3
+    /// User Guide</a>.</p>
+    pub checksum_md5: Option<ChecksumMD5>,
     /// <p>This header can be used as a data integrity check to verify that the data received is the same data that was originally sent.
     /// This header specifies the Base64 encoded, 160-bit <code>SHA1</code> digest of the object. For more information, see
     /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the
@@ -17569,6 +18059,26 @@ pub struct PutObjectInput {
     /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the
     /// <i>Amazon S3 User Guide</i>.</p>
     pub checksum_sha256: Option<ChecksumSHA256>,
+    /// <p>This header can be used as a data integrity check to verify that the data received is the same data
+    /// that was originally sent. This header specifies the Base64 encoded, 512-bit <code>SHA512</code>
+    /// digest of the object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity in the Amazon S3
+    /// User Guide</a>.</p>
+    pub checksum_sha512: Option<ChecksumSHA512>,
+    /// <p>This header can be used as a data integrity check to verify that the data received is the same data
+    /// that was originally sent. This header specifies the Base64 encoded, 128-bit <code>XXHASH128</code>
+    /// checksum of the object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity in the Amazon S3
+    /// User Guide</a>.</p>
+    pub checksum_xxhash128: Option<ChecksumXXHASH128>,
+    /// <p>This header can be used as a data integrity check to verify that the data received is the same data
+    /// that was originally sent. This header specifies the Base64 encoded, 64-bit <code>XXHASH3</code>
+    /// checksum of the object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity in the Amazon S3
+    /// User Guide</a>.</p>
+    pub checksum_xxhash3: Option<ChecksumXXHASH3>,
+    /// <p>This header can be used as a data integrity check to verify that the data received is the same data
+    /// that was originally sent. This header specifies the Base64 encoded, 64-bit <code>XXHASH64</code>
+    /// checksum of the object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity in the Amazon S3
+    /// User Guide</a>.</p>
+    pub checksum_xxhash64: Option<ChecksumXXHASH64>,
     /// <p>Specifies presentational information for the object. For more information, see <a href="https://www.rfc-editor.org/rfc/rfc6266#section-4">https://www.rfc-editor.org/rfc/rfc6266#section-4</a>.</p>
     pub content_disposition: Option<ContentDisposition>,
     /// <p>Specifies what content encodings have been applied to the object and thus what decoding
@@ -17858,11 +18368,26 @@ impl fmt::Debug for PutObjectInput {
         if let Some(ref val) = self.checksum_crc64nvme {
             d.field("checksum_crc64nvme", val);
         }
+        if let Some(ref val) = self.checksum_md5 {
+            d.field("checksum_md5", val);
+        }
         if let Some(ref val) = self.checksum_sha1 {
             d.field("checksum_sha1", val);
         }
         if let Some(ref val) = self.checksum_sha256 {
             d.field("checksum_sha256", val);
+        }
+        if let Some(ref val) = self.checksum_sha512 {
+            d.field("checksum_sha512", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash128 {
+            d.field("checksum_xxhash128", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash3 {
+            d.field("checksum_xxhash3", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash64 {
+            d.field("checksum_xxhash64", val);
         }
         if let Some(ref val) = self.content_disposition {
             d.field("content_disposition", val);
@@ -18135,6 +18660,11 @@ pub struct PutObjectOutput {
     /// checksums are calculated with multipart uploads, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity
     /// in the Amazon S3 User Guide</a>.</p>
     pub checksum_crc64nvme: Option<ChecksumCRC64NVME>,
+    /// <p>The Base64 encoded, 128-bit <code>MD5</code> digest of the object. This header is present if
+    /// the object was uploaded with the <code>MD5</code> checksum algorithm. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking
+    /// object integrity in the Amazon S3 User Guide</a>.</p>
+    pub checksum_md5: Option<ChecksumMD5>,
     /// <p>The Base64 encoded, 160-bit <code>SHA1</code> digest of the object. This will only be present if the object was uploaded
     /// with the object. When you use the API operation on an object that was uploaded using multipart uploads, this value may not be a direct checksum value of the full object. Instead, it's a calculation based on the checksum values of each individual part. For more information about how checksums are calculated
     /// with multipart uploads, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html#large-object-checksums">
@@ -18145,12 +18675,32 @@ pub struct PutObjectOutput {
     /// with multipart uploads, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html#large-object-checksums">
     /// Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
     pub checksum_sha256: Option<ChecksumSHA256>,
+    /// <p>The Base64 encoded, 512-bit <code>SHA512</code> digest of the object. This header is present if
+    /// the object was uploaded with the <code>SHA512</code> checksum algorithm. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking
+    /// object integrity in the Amazon S3 User Guide</a>.</p>
+    pub checksum_sha512: Option<ChecksumSHA512>,
     /// <p>This header specifies the checksum type of the object, which determines how part-level
     /// checksums are combined to create an object-level checksum for multipart objects. For
     /// <code>PutObject</code> uploads, the checksum type is always <code>FULL_OBJECT</code>. You can use this header as a
     /// data integrity check to verify that the checksum type that is received is the same checksum
     /// that was specified. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
     pub checksum_type: Option<ChecksumType>,
+    /// <p>The Base64 encoded, 128-bit <code>XXHASH128</code> checksum of the object. This header is present if
+    /// the object was uploaded with the <code>XXHASH128</code> checksum algorithm. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking
+    /// object integrity in the Amazon S3 User Guide</a>.</p>
+    pub checksum_xxhash128: Option<ChecksumXXHASH128>,
+    /// <p>The Base64 encoded, 64-bit <code>XXHASH3</code> checksum of the object. This header is present if
+    /// the object was uploaded with the <code>XXHASH3</code> checksum algorithm. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking
+    /// object integrity in the Amazon S3 User Guide</a>.</p>
+    pub checksum_xxhash3: Option<ChecksumXXHASH3>,
+    /// <p>The Base64 encoded, 64-bit <code>XXHASH64</code> checksum of the object. This header is present if
+    /// the object was uploaded with the <code>XXHASH64</code> checksum algorithm. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking
+    /// object integrity in the Amazon S3 User Guide</a>.</p>
+    pub checksum_xxhash64: Option<ChecksumXXHASH64>,
     /// <p>Entity tag for the uploaded object.</p>
     /// <p>
     /// <b>General purpose buckets </b> - To ensure that data is not
@@ -18229,14 +18779,29 @@ impl fmt::Debug for PutObjectOutput {
         if let Some(ref val) = self.checksum_crc64nvme {
             d.field("checksum_crc64nvme", val);
         }
+        if let Some(ref val) = self.checksum_md5 {
+            d.field("checksum_md5", val);
+        }
         if let Some(ref val) = self.checksum_sha1 {
             d.field("checksum_sha1", val);
         }
         if let Some(ref val) = self.checksum_sha256 {
             d.field("checksum_sha256", val);
         }
+        if let Some(ref val) = self.checksum_sha512 {
+            d.field("checksum_sha512", val);
+        }
         if let Some(ref val) = self.checksum_type {
             d.field("checksum_type", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash128 {
+            d.field("checksum_xxhash128", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash3 {
+            d.field("checksum_xxhash3", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash64 {
+            d.field("checksum_xxhash64", val);
         }
         if let Some(ref val) = self.e_tag {
             d.field("e_tag", val);
@@ -21291,6 +21856,11 @@ pub struct UploadPartInput {
     /// the same data that was originally sent. This header specifies the Base64 encoded, 64-bit
     /// <code>CRC64NVME</code> checksum of the part. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
     pub checksum_crc64nvme: Option<ChecksumCRC64NVME>,
+    /// <p>This header can be used as a data integrity check to verify that the data received is the same data
+    /// that was originally sent. This header specifies the Base64 encoded, 128-bit <code>MD5</code>
+    /// digest of the part. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_md5: Option<ChecksumMD5>,
     /// <p>This header can be used as a data integrity check to verify that the data received is the same data that was originally sent.
     /// This header specifies the Base64 encoded, 160-bit <code>SHA1</code> digest of the object. For more information, see
     /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the
@@ -21301,6 +21871,26 @@ pub struct UploadPartInput {
     /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the
     /// <i>Amazon S3 User Guide</i>.</p>
     pub checksum_sha256: Option<ChecksumSHA256>,
+    /// <p>This header can be used as a data integrity check to verify that the data received is the same data
+    /// that was originally sent. This header specifies the Base64 encoded, 512-bit <code>SHA512</code>
+    /// digest of the part. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_sha512: Option<ChecksumSHA512>,
+    /// <p>This header can be used as a data integrity check to verify that the data received is the same data
+    /// that was originally sent. This header specifies the Base64 encoded, 128-bit <code>XXHASH128</code>
+    /// checksum of the part. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_xxhash128: Option<ChecksumXXHASH128>,
+    /// <p>This header can be used as a data integrity check to verify that the data received is the same data
+    /// that was originally sent. This header specifies the Base64 encoded, 64-bit <code>XXHASH3</code>
+    /// checksum of the part. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_xxhash3: Option<ChecksumXXHASH3>,
+    /// <p>This header can be used as a data integrity check to verify that the data received is the same data
+    /// that was originally sent. This header specifies the Base64 encoded, 64-bit <code>XXHASH64</code>
+    /// checksum of the part. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_xxhash64: Option<ChecksumXXHASH64>,
     /// <p>Size of the body in bytes. This parameter is useful when the size of the body cannot be
     /// determined automatically.</p>
     pub content_length: Option<ContentLength>,
@@ -21363,11 +21953,26 @@ impl fmt::Debug for UploadPartInput {
         if let Some(ref val) = self.checksum_crc64nvme {
             d.field("checksum_crc64nvme", val);
         }
+        if let Some(ref val) = self.checksum_md5 {
+            d.field("checksum_md5", val);
+        }
         if let Some(ref val) = self.checksum_sha1 {
             d.field("checksum_sha1", val);
         }
         if let Some(ref val) = self.checksum_sha256 {
             d.field("checksum_sha256", val);
+        }
+        if let Some(ref val) = self.checksum_sha512 {
+            d.field("checksum_sha512", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash128 {
+            d.field("checksum_xxhash128", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash3 {
+            d.field("checksum_xxhash3", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash64 {
+            d.field("checksum_xxhash64", val);
         }
         if let Some(ref val) = self.content_length {
             d.field("content_length", val);
@@ -21423,6 +22028,11 @@ pub struct UploadPartOutput {
     /// the same data that was originally sent. This header specifies the Base64 encoded, 64-bit
     /// <code>CRC64NVME</code> checksum of the part. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
     pub checksum_crc64nvme: Option<ChecksumCRC64NVME>,
+    /// <p>The Base64 encoded, 128-bit <code>MD5</code> checksum of the part. This will only be present if
+    /// the checksum was provided in the request. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking
+    /// object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_md5: Option<ChecksumMD5>,
     /// <p>The Base64 encoded, 160-bit <code>SHA1</code> digest of the object. This will only be present if the object was uploaded
     /// with the object. When you use the API operation on an object that was uploaded using multipart uploads, this value may not be a direct checksum value of the full object. Instead, it's a calculation based on the checksum values of each individual part. For more information about how checksums are calculated
     /// with multipart uploads, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html#large-object-checksums">
@@ -21433,6 +22043,26 @@ pub struct UploadPartOutput {
     /// with multipart uploads, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html#large-object-checksums">
     /// Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
     pub checksum_sha256: Option<ChecksumSHA256>,
+    /// <p>The Base64 encoded, 512-bit <code>SHA512</code> checksum of the part. This will only be present if
+    /// the checksum was provided in the request. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking
+    /// object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_sha512: Option<ChecksumSHA512>,
+    /// <p>The Base64 encoded, 128-bit <code>XXHASH128</code> checksum of the part. This will only be present if
+    /// the checksum was provided in the request. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking
+    /// object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_xxhash128: Option<ChecksumXXHASH128>,
+    /// <p>The Base64 encoded, 64-bit <code>XXHASH3</code> checksum of the part. This will only be present if
+    /// the checksum was provided in the request. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking
+    /// object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_xxhash3: Option<ChecksumXXHASH3>,
+    /// <p>The Base64 encoded, 64-bit <code>XXHASH64</code> checksum of the part. This will only be present if
+    /// the checksum was provided in the request. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking
+    /// object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_xxhash64: Option<ChecksumXXHASH64>,
     /// <p>Entity tag for the uploaded object.</p>
     pub e_tag: Option<ETag>,
     pub request_charged: Option<RequestCharged>,
@@ -21471,11 +22101,26 @@ impl fmt::Debug for UploadPartOutput {
         if let Some(ref val) = self.checksum_crc64nvme {
             d.field("checksum_crc64nvme", val);
         }
+        if let Some(ref val) = self.checksum_md5 {
+            d.field("checksum_md5", val);
+        }
         if let Some(ref val) = self.checksum_sha1 {
             d.field("checksum_sha1", val);
         }
         if let Some(ref val) = self.checksum_sha256 {
             d.field("checksum_sha256", val);
+        }
+        if let Some(ref val) = self.checksum_sha512 {
+            d.field("checksum_sha512", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash128 {
+            d.field("checksum_xxhash128", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash3 {
+            d.field("checksum_xxhash3", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash64 {
+            d.field("checksum_xxhash64", val);
         }
         if let Some(ref val) = self.e_tag {
             d.field("e_tag", val);
@@ -21605,6 +22250,11 @@ pub struct WriteGetObjectResponseInput {
     /// the same data that was originally sent. This header specifies the Base64 encoded, 64-bit
     /// <code>CRC64NVME</code> checksum of the part. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
     pub checksum_crc64nvme: Option<ChecksumCRC64NVME>,
+    /// <p>This header can be used as a data integrity check to verify that the data received is the same data
+    /// that was originally sent. This header specifies the Base64 encoded, 128-bit <code>MD5</code>
+    /// digest of the part. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_md5: Option<ChecksumMD5>,
     /// <p>This header can be used as a data integrity check to verify that the data received is
     /// the same data that was originally sent. This specifies the Base64 encoded, 160-bit <code>SHA1</code>
     /// digest of the object returned by the Object Lambda function. This may not match the
@@ -21625,6 +22275,26 @@ pub struct WriteGetObjectResponseInput {
     /// <p>Only one checksum header can be specified at a time. If you supply multiple checksum
     /// headers, this request will fail.</p>
     pub checksum_sha256: Option<ChecksumSHA256>,
+    /// <p>This header can be used as a data integrity check to verify that the data received is the same data
+    /// that was originally sent. This header specifies the Base64 encoded, 512-bit <code>SHA512</code>
+    /// digest of the part. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_sha512: Option<ChecksumSHA512>,
+    /// <p>This header can be used as a data integrity check to verify that the data received is the same data
+    /// that was originally sent. This header specifies the Base64 encoded, 128-bit <code>XXHASH128</code>
+    /// checksum of the part. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_xxhash128: Option<ChecksumXXHASH128>,
+    /// <p>This header can be used as a data integrity check to verify that the data received is the same data
+    /// that was originally sent. This header specifies the Base64 encoded, 64-bit <code>XXHASH3</code>
+    /// checksum of the part. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_xxhash3: Option<ChecksumXXHASH3>,
+    /// <p>This header can be used as a data integrity check to verify that the data received is the same data
+    /// that was originally sent. This header specifies the Base64 encoded, 64-bit <code>XXHASH64</code>
+    /// checksum of the part. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_xxhash64: Option<ChecksumXXHASH64>,
     /// <p>Specifies presentational information for the object.</p>
     pub content_disposition: Option<ContentDisposition>,
     /// <p>Specifies what content encodings have been applied to the object and thus what decoding
@@ -21817,11 +22487,26 @@ impl fmt::Debug for WriteGetObjectResponseInput {
         if let Some(ref val) = self.checksum_crc64nvme {
             d.field("checksum_crc64nvme", val);
         }
+        if let Some(ref val) = self.checksum_md5 {
+            d.field("checksum_md5", val);
+        }
         if let Some(ref val) = self.checksum_sha1 {
             d.field("checksum_sha1", val);
         }
         if let Some(ref val) = self.checksum_sha256 {
             d.field("checksum_sha256", val);
+        }
+        if let Some(ref val) = self.checksum_sha512 {
+            d.field("checksum_sha512", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash128 {
+            d.field("checksum_xxhash128", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash3 {
+            d.field("checksum_xxhash3", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash64 {
+            d.field("checksum_xxhash64", val);
         }
         if let Some(ref val) = self.content_disposition {
             d.field("content_disposition", val);
@@ -22361,11 +23046,21 @@ pub mod builders {
 
         checksum_crc64nvme: Option<ChecksumCRC64NVME>,
 
+        checksum_md5: Option<ChecksumMD5>,
+
         checksum_sha1: Option<ChecksumSHA1>,
 
         checksum_sha256: Option<ChecksumSHA256>,
 
+        checksum_sha512: Option<ChecksumSHA512>,
+
         checksum_type: Option<ChecksumType>,
+
+        checksum_xxhash128: Option<ChecksumXXHASH128>,
+
+        checksum_xxhash3: Option<ChecksumXXHASH3>,
+
+        checksum_xxhash64: Option<ChecksumXXHASH64>,
 
         expected_bucket_owner: Option<AccountId>,
 
@@ -22411,6 +23106,11 @@ pub mod builders {
             self
         }
 
+        pub fn set_checksum_md5(&mut self, field: Option<ChecksumMD5>) -> &mut Self {
+            self.checksum_md5 = field;
+            self
+        }
+
         pub fn set_checksum_sha1(&mut self, field: Option<ChecksumSHA1>) -> &mut Self {
             self.checksum_sha1 = field;
             self
@@ -22421,8 +23121,28 @@ pub mod builders {
             self
         }
 
+        pub fn set_checksum_sha512(&mut self, field: Option<ChecksumSHA512>) -> &mut Self {
+            self.checksum_sha512 = field;
+            self
+        }
+
         pub fn set_checksum_type(&mut self, field: Option<ChecksumType>) -> &mut Self {
             self.checksum_type = field;
+            self
+        }
+
+        pub fn set_checksum_xxhash128(&mut self, field: Option<ChecksumXXHASH128>) -> &mut Self {
+            self.checksum_xxhash128 = field;
+            self
+        }
+
+        pub fn set_checksum_xxhash3(&mut self, field: Option<ChecksumXXHASH3>) -> &mut Self {
+            self.checksum_xxhash3 = field;
+            self
+        }
+
+        pub fn set_checksum_xxhash64(&mut self, field: Option<ChecksumXXHASH64>) -> &mut Self {
+            self.checksum_xxhash64 = field;
             self
         }
 
@@ -22506,6 +23226,12 @@ pub mod builders {
         }
 
         #[must_use]
+        pub fn checksum_md5(mut self, field: Option<ChecksumMD5>) -> Self {
+            self.checksum_md5 = field;
+            self
+        }
+
+        #[must_use]
         pub fn checksum_sha1(mut self, field: Option<ChecksumSHA1>) -> Self {
             self.checksum_sha1 = field;
             self
@@ -22518,8 +23244,32 @@ pub mod builders {
         }
 
         #[must_use]
+        pub fn checksum_sha512(mut self, field: Option<ChecksumSHA512>) -> Self {
+            self.checksum_sha512 = field;
+            self
+        }
+
+        #[must_use]
         pub fn checksum_type(mut self, field: Option<ChecksumType>) -> Self {
             self.checksum_type = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_xxhash128(mut self, field: Option<ChecksumXXHASH128>) -> Self {
+            self.checksum_xxhash128 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_xxhash3(mut self, field: Option<ChecksumXXHASH3>) -> Self {
+            self.checksum_xxhash3 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_xxhash64(mut self, field: Option<ChecksumXXHASH64>) -> Self {
+            self.checksum_xxhash64 = field;
             self
         }
 
@@ -22594,9 +23344,14 @@ pub mod builders {
             let checksum_crc32 = self.checksum_crc32;
             let checksum_crc32c = self.checksum_crc32c;
             let checksum_crc64nvme = self.checksum_crc64nvme;
+            let checksum_md5 = self.checksum_md5;
             let checksum_sha1 = self.checksum_sha1;
             let checksum_sha256 = self.checksum_sha256;
+            let checksum_sha512 = self.checksum_sha512;
             let checksum_type = self.checksum_type;
+            let checksum_xxhash128 = self.checksum_xxhash128;
+            let checksum_xxhash3 = self.checksum_xxhash3;
+            let checksum_xxhash64 = self.checksum_xxhash64;
             let expected_bucket_owner = self.expected_bucket_owner;
             let if_match = self.if_match;
             let if_none_match = self.if_none_match;
@@ -22613,9 +23368,14 @@ pub mod builders {
                 checksum_crc32,
                 checksum_crc32c,
                 checksum_crc64nvme,
+                checksum_md5,
                 checksum_sha1,
                 checksum_sha256,
+                checksum_sha512,
                 checksum_type,
+                checksum_xxhash128,
+                checksum_xxhash3,
+                checksum_xxhash64,
                 expected_bucket_owner,
                 if_match,
                 if_none_match,
@@ -28504,9 +29264,19 @@ pub mod builders {
 
         checksum_crc64nvme: Option<ChecksumCRC64NVME>,
 
+        checksum_md5: Option<ChecksumMD5>,
+
         checksum_sha1: Option<ChecksumSHA1>,
 
         checksum_sha256: Option<ChecksumSHA256>,
+
+        checksum_sha512: Option<ChecksumSHA512>,
+
+        checksum_xxhash128: Option<ChecksumXXHASH128>,
+
+        checksum_xxhash3: Option<ChecksumXXHASH3>,
+
+        checksum_xxhash64: Option<ChecksumXXHASH64>,
 
         content_disposition: Option<ContentDisposition>,
 
@@ -28621,6 +29391,11 @@ pub mod builders {
             self
         }
 
+        pub fn set_checksum_md5(&mut self, field: Option<ChecksumMD5>) -> &mut Self {
+            self.checksum_md5 = field;
+            self
+        }
+
         pub fn set_checksum_sha1(&mut self, field: Option<ChecksumSHA1>) -> &mut Self {
             self.checksum_sha1 = field;
             self
@@ -28628,6 +29403,26 @@ pub mod builders {
 
         pub fn set_checksum_sha256(&mut self, field: Option<ChecksumSHA256>) -> &mut Self {
             self.checksum_sha256 = field;
+            self
+        }
+
+        pub fn set_checksum_sha512(&mut self, field: Option<ChecksumSHA512>) -> &mut Self {
+            self.checksum_sha512 = field;
+            self
+        }
+
+        pub fn set_checksum_xxhash128(&mut self, field: Option<ChecksumXXHASH128>) -> &mut Self {
+            self.checksum_xxhash128 = field;
+            self
+        }
+
+        pub fn set_checksum_xxhash3(&mut self, field: Option<ChecksumXXHASH3>) -> &mut Self {
+            self.checksum_xxhash3 = field;
+            self
+        }
+
+        pub fn set_checksum_xxhash64(&mut self, field: Option<ChecksumXXHASH64>) -> &mut Self {
+            self.checksum_xxhash64 = field;
             self
         }
 
@@ -28851,6 +29646,12 @@ pub mod builders {
         }
 
         #[must_use]
+        pub fn checksum_md5(mut self, field: Option<ChecksumMD5>) -> Self {
+            self.checksum_md5 = field;
+            self
+        }
+
+        #[must_use]
         pub fn checksum_sha1(mut self, field: Option<ChecksumSHA1>) -> Self {
             self.checksum_sha1 = field;
             self
@@ -28859,6 +29660,30 @@ pub mod builders {
         #[must_use]
         pub fn checksum_sha256(mut self, field: Option<ChecksumSHA256>) -> Self {
             self.checksum_sha256 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_sha512(mut self, field: Option<ChecksumSHA512>) -> Self {
+            self.checksum_sha512 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_xxhash128(mut self, field: Option<ChecksumXXHASH128>) -> Self {
+            self.checksum_xxhash128 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_xxhash3(mut self, field: Option<ChecksumXXHASH3>) -> Self {
+            self.checksum_xxhash3 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_xxhash64(mut self, field: Option<ChecksumXXHASH64>) -> Self {
+            self.checksum_xxhash64 = field;
             self
         }
 
@@ -29070,8 +29895,13 @@ pub mod builders {
             let checksum_crc32 = self.checksum_crc32;
             let checksum_crc32c = self.checksum_crc32c;
             let checksum_crc64nvme = self.checksum_crc64nvme;
+            let checksum_md5 = self.checksum_md5;
             let checksum_sha1 = self.checksum_sha1;
             let checksum_sha256 = self.checksum_sha256;
+            let checksum_sha512 = self.checksum_sha512;
+            let checksum_xxhash128 = self.checksum_xxhash128;
+            let checksum_xxhash3 = self.checksum_xxhash3;
+            let checksum_xxhash64 = self.checksum_xxhash64;
             let content_disposition = self.content_disposition;
             let content_encoding = self.content_encoding;
             let content_language = self.content_language;
@@ -29115,8 +29945,13 @@ pub mod builders {
                 checksum_crc32,
                 checksum_crc32c,
                 checksum_crc64nvme,
+                checksum_md5,
                 checksum_sha1,
                 checksum_sha256,
+                checksum_sha512,
+                checksum_xxhash128,
+                checksum_xxhash3,
+                checksum_xxhash64,
                 content_disposition,
                 content_encoding,
                 content_language,
@@ -30769,9 +31604,19 @@ pub mod builders {
 
         checksum_crc64nvme: Option<ChecksumCRC64NVME>,
 
+        checksum_md5: Option<ChecksumMD5>,
+
         checksum_sha1: Option<ChecksumSHA1>,
 
         checksum_sha256: Option<ChecksumSHA256>,
+
+        checksum_sha512: Option<ChecksumSHA512>,
+
+        checksum_xxhash128: Option<ChecksumXXHASH128>,
+
+        checksum_xxhash3: Option<ChecksumXXHASH3>,
+
+        checksum_xxhash64: Option<ChecksumXXHASH64>,
 
         content_disposition: Option<ContentDisposition>,
 
@@ -30880,6 +31725,11 @@ pub mod builders {
             self
         }
 
+        pub fn set_checksum_md5(&mut self, field: Option<ChecksumMD5>) -> &mut Self {
+            self.checksum_md5 = field;
+            self
+        }
+
         pub fn set_checksum_sha1(&mut self, field: Option<ChecksumSHA1>) -> &mut Self {
             self.checksum_sha1 = field;
             self
@@ -30887,6 +31737,26 @@ pub mod builders {
 
         pub fn set_checksum_sha256(&mut self, field: Option<ChecksumSHA256>) -> &mut Self {
             self.checksum_sha256 = field;
+            self
+        }
+
+        pub fn set_checksum_sha512(&mut self, field: Option<ChecksumSHA512>) -> &mut Self {
+            self.checksum_sha512 = field;
+            self
+        }
+
+        pub fn set_checksum_xxhash128(&mut self, field: Option<ChecksumXXHASH128>) -> &mut Self {
+            self.checksum_xxhash128 = field;
+            self
+        }
+
+        pub fn set_checksum_xxhash3(&mut self, field: Option<ChecksumXXHASH3>) -> &mut Self {
+            self.checksum_xxhash3 = field;
+            self
+        }
+
+        pub fn set_checksum_xxhash64(&mut self, field: Option<ChecksumXXHASH64>) -> &mut Self {
+            self.checksum_xxhash64 = field;
             self
         }
 
@@ -31095,6 +31965,12 @@ pub mod builders {
         }
 
         #[must_use]
+        pub fn checksum_md5(mut self, field: Option<ChecksumMD5>) -> Self {
+            self.checksum_md5 = field;
+            self
+        }
+
+        #[must_use]
         pub fn checksum_sha1(mut self, field: Option<ChecksumSHA1>) -> Self {
             self.checksum_sha1 = field;
             self
@@ -31103,6 +31979,30 @@ pub mod builders {
         #[must_use]
         pub fn checksum_sha256(mut self, field: Option<ChecksumSHA256>) -> Self {
             self.checksum_sha256 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_sha512(mut self, field: Option<ChecksumSHA512>) -> Self {
+            self.checksum_sha512 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_xxhash128(mut self, field: Option<ChecksumXXHASH128>) -> Self {
+            self.checksum_xxhash128 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_xxhash3(mut self, field: Option<ChecksumXXHASH3>) -> Self {
+            self.checksum_xxhash3 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_xxhash64(mut self, field: Option<ChecksumXXHASH64>) -> Self {
+            self.checksum_xxhash64 = field;
             self
         }
 
@@ -31296,8 +32196,13 @@ pub mod builders {
             let checksum_crc32 = self.checksum_crc32;
             let checksum_crc32c = self.checksum_crc32c;
             let checksum_crc64nvme = self.checksum_crc64nvme;
+            let checksum_md5 = self.checksum_md5;
             let checksum_sha1 = self.checksum_sha1;
             let checksum_sha256 = self.checksum_sha256;
+            let checksum_sha512 = self.checksum_sha512;
+            let checksum_xxhash128 = self.checksum_xxhash128;
+            let checksum_xxhash3 = self.checksum_xxhash3;
+            let checksum_xxhash64 = self.checksum_xxhash64;
             let content_disposition = self.content_disposition;
             let content_encoding = self.content_encoding;
             let content_language = self.content_language;
@@ -31338,8 +32243,13 @@ pub mod builders {
                 checksum_crc32,
                 checksum_crc32c,
                 checksum_crc64nvme,
+                checksum_md5,
                 checksum_sha1,
                 checksum_sha256,
+                checksum_sha512,
+                checksum_xxhash128,
+                checksum_xxhash3,
+                checksum_xxhash64,
                 content_disposition,
                 content_encoding,
                 content_language,
@@ -32454,9 +33364,19 @@ pub mod builders {
 
         checksum_crc64nvme: Option<ChecksumCRC64NVME>,
 
+        checksum_md5: Option<ChecksumMD5>,
+
         checksum_sha1: Option<ChecksumSHA1>,
 
         checksum_sha256: Option<ChecksumSHA256>,
+
+        checksum_sha512: Option<ChecksumSHA512>,
+
+        checksum_xxhash128: Option<ChecksumXXHASH128>,
+
+        checksum_xxhash3: Option<ChecksumXXHASH3>,
+
+        checksum_xxhash64: Option<ChecksumXXHASH64>,
 
         content_length: Option<ContentLength>,
 
@@ -32510,6 +33430,11 @@ pub mod builders {
             self
         }
 
+        pub fn set_checksum_md5(&mut self, field: Option<ChecksumMD5>) -> &mut Self {
+            self.checksum_md5 = field;
+            self
+        }
+
         pub fn set_checksum_sha1(&mut self, field: Option<ChecksumSHA1>) -> &mut Self {
             self.checksum_sha1 = field;
             self
@@ -32517,6 +33442,26 @@ pub mod builders {
 
         pub fn set_checksum_sha256(&mut self, field: Option<ChecksumSHA256>) -> &mut Self {
             self.checksum_sha256 = field;
+            self
+        }
+
+        pub fn set_checksum_sha512(&mut self, field: Option<ChecksumSHA512>) -> &mut Self {
+            self.checksum_sha512 = field;
+            self
+        }
+
+        pub fn set_checksum_xxhash128(&mut self, field: Option<ChecksumXXHASH128>) -> &mut Self {
+            self.checksum_xxhash128 = field;
+            self
+        }
+
+        pub fn set_checksum_xxhash3(&mut self, field: Option<ChecksumXXHASH3>) -> &mut Self {
+            self.checksum_xxhash3 = field;
+            self
+        }
+
+        pub fn set_checksum_xxhash64(&mut self, field: Option<ChecksumXXHASH64>) -> &mut Self {
+            self.checksum_xxhash64 = field;
             self
         }
 
@@ -32607,6 +33552,12 @@ pub mod builders {
         }
 
         #[must_use]
+        pub fn checksum_md5(mut self, field: Option<ChecksumMD5>) -> Self {
+            self.checksum_md5 = field;
+            self
+        }
+
+        #[must_use]
         pub fn checksum_sha1(mut self, field: Option<ChecksumSHA1>) -> Self {
             self.checksum_sha1 = field;
             self
@@ -32615,6 +33566,30 @@ pub mod builders {
         #[must_use]
         pub fn checksum_sha256(mut self, field: Option<ChecksumSHA256>) -> Self {
             self.checksum_sha256 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_sha512(mut self, field: Option<ChecksumSHA512>) -> Self {
+            self.checksum_sha512 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_xxhash128(mut self, field: Option<ChecksumXXHASH128>) -> Self {
+            self.checksum_xxhash128 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_xxhash3(mut self, field: Option<ChecksumXXHASH3>) -> Self {
+            self.checksum_xxhash3 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_xxhash64(mut self, field: Option<ChecksumXXHASH64>) -> Self {
+            self.checksum_xxhash64 = field;
             self
         }
 
@@ -32685,8 +33660,13 @@ pub mod builders {
             let checksum_crc32 = self.checksum_crc32;
             let checksum_crc32c = self.checksum_crc32c;
             let checksum_crc64nvme = self.checksum_crc64nvme;
+            let checksum_md5 = self.checksum_md5;
             let checksum_sha1 = self.checksum_sha1;
             let checksum_sha256 = self.checksum_sha256;
+            let checksum_sha512 = self.checksum_sha512;
+            let checksum_xxhash128 = self.checksum_xxhash128;
+            let checksum_xxhash3 = self.checksum_xxhash3;
+            let checksum_xxhash64 = self.checksum_xxhash64;
             let content_length = self.content_length;
             let content_md5 = self.content_md5;
             let expected_bucket_owner = self.expected_bucket_owner;
@@ -32704,8 +33684,13 @@ pub mod builders {
                 checksum_crc32,
                 checksum_crc32c,
                 checksum_crc64nvme,
+                checksum_md5,
                 checksum_sha1,
                 checksum_sha256,
+                checksum_sha512,
+                checksum_xxhash128,
+                checksum_xxhash3,
+                checksum_xxhash64,
                 content_length,
                 content_md5,
                 expected_bucket_owner,
@@ -33033,9 +34018,19 @@ pub mod builders {
 
         checksum_crc64nvme: Option<ChecksumCRC64NVME>,
 
+        checksum_md5: Option<ChecksumMD5>,
+
         checksum_sha1: Option<ChecksumSHA1>,
 
         checksum_sha256: Option<ChecksumSHA256>,
+
+        checksum_sha512: Option<ChecksumSHA512>,
+
+        checksum_xxhash128: Option<ChecksumXXHASH128>,
+
+        checksum_xxhash3: Option<ChecksumXXHASH3>,
+
+        checksum_xxhash64: Option<ChecksumXXHASH64>,
 
         content_disposition: Option<ContentDisposition>,
 
@@ -33138,6 +34133,11 @@ pub mod builders {
             self
         }
 
+        pub fn set_checksum_md5(&mut self, field: Option<ChecksumMD5>) -> &mut Self {
+            self.checksum_md5 = field;
+            self
+        }
+
         pub fn set_checksum_sha1(&mut self, field: Option<ChecksumSHA1>) -> &mut Self {
             self.checksum_sha1 = field;
             self
@@ -33145,6 +34145,26 @@ pub mod builders {
 
         pub fn set_checksum_sha256(&mut self, field: Option<ChecksumSHA256>) -> &mut Self {
             self.checksum_sha256 = field;
+            self
+        }
+
+        pub fn set_checksum_sha512(&mut self, field: Option<ChecksumSHA512>) -> &mut Self {
+            self.checksum_sha512 = field;
+            self
+        }
+
+        pub fn set_checksum_xxhash128(&mut self, field: Option<ChecksumXXHASH128>) -> &mut Self {
+            self.checksum_xxhash128 = field;
+            self
+        }
+
+        pub fn set_checksum_xxhash3(&mut self, field: Option<ChecksumXXHASH3>) -> &mut Self {
+            self.checksum_xxhash3 = field;
+            self
+        }
+
+        pub fn set_checksum_xxhash64(&mut self, field: Option<ChecksumXXHASH64>) -> &mut Self {
+            self.checksum_xxhash64 = field;
             self
         }
 
@@ -33351,6 +34371,12 @@ pub mod builders {
         }
 
         #[must_use]
+        pub fn checksum_md5(mut self, field: Option<ChecksumMD5>) -> Self {
+            self.checksum_md5 = field;
+            self
+        }
+
+        #[must_use]
         pub fn checksum_sha1(mut self, field: Option<ChecksumSHA1>) -> Self {
             self.checksum_sha1 = field;
             self
@@ -33359,6 +34385,30 @@ pub mod builders {
         #[must_use]
         pub fn checksum_sha256(mut self, field: Option<ChecksumSHA256>) -> Self {
             self.checksum_sha256 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_sha512(mut self, field: Option<ChecksumSHA512>) -> Self {
+            self.checksum_sha512 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_xxhash128(mut self, field: Option<ChecksumXXHASH128>) -> Self {
+            self.checksum_xxhash128 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_xxhash3(mut self, field: Option<ChecksumXXHASH3>) -> Self {
+            self.checksum_xxhash3 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_xxhash64(mut self, field: Option<ChecksumXXHASH64>) -> Self {
+            self.checksum_xxhash64 = field;
             self
         }
 
@@ -33562,8 +34612,13 @@ pub mod builders {
             let checksum_crc32 = self.checksum_crc32;
             let checksum_crc32c = self.checksum_crc32c;
             let checksum_crc64nvme = self.checksum_crc64nvme;
+            let checksum_md5 = self.checksum_md5;
             let checksum_sha1 = self.checksum_sha1;
             let checksum_sha256 = self.checksum_sha256;
+            let checksum_sha512 = self.checksum_sha512;
+            let checksum_xxhash128 = self.checksum_xxhash128;
+            let checksum_xxhash3 = self.checksum_xxhash3;
+            let checksum_xxhash64 = self.checksum_xxhash64;
             let content_disposition = self.content_disposition;
             let content_encoding = self.content_encoding;
             let content_language = self.content_language;
@@ -33604,8 +34659,13 @@ pub mod builders {
                 checksum_crc32,
                 checksum_crc32c,
                 checksum_crc64nvme,
+                checksum_md5,
                 checksum_sha1,
                 checksum_sha256,
+                checksum_sha512,
+                checksum_xxhash128,
+                checksum_xxhash3,
+                checksum_xxhash64,
                 content_disposition,
                 content_encoding,
                 content_language,
@@ -33832,16 +34892,31 @@ impl DtoExt for Checksum {
         if self.checksum_crc64nvme.as_deref() == Some("") {
             self.checksum_crc64nvme = None;
         }
+        if self.checksum_md5.as_deref() == Some("") {
+            self.checksum_md5 = None;
+        }
         if self.checksum_sha1.as_deref() == Some("") {
             self.checksum_sha1 = None;
         }
         if self.checksum_sha256.as_deref() == Some("") {
             self.checksum_sha256 = None;
         }
+        if self.checksum_sha512.as_deref() == Some("") {
+            self.checksum_sha512 = None;
+        }
         if let Some(ref val) = self.checksum_type
             && val.as_str() == ""
         {
             self.checksum_type = None;
+        }
+        if self.checksum_xxhash128.as_deref() == Some("") {
+            self.checksum_xxhash128 = None;
+        }
+        if self.checksum_xxhash3.as_deref() == Some("") {
+            self.checksum_xxhash3 = None;
+        }
+        if self.checksum_xxhash64.as_deref() == Some("") {
+            self.checksum_xxhash64 = None;
         }
     }
 }
@@ -33863,16 +34938,31 @@ impl DtoExt for CompleteMultipartUploadInput {
         if self.checksum_crc64nvme.as_deref() == Some("") {
             self.checksum_crc64nvme = None;
         }
+        if self.checksum_md5.as_deref() == Some("") {
+            self.checksum_md5 = None;
+        }
         if self.checksum_sha1.as_deref() == Some("") {
             self.checksum_sha1 = None;
         }
         if self.checksum_sha256.as_deref() == Some("") {
             self.checksum_sha256 = None;
         }
+        if self.checksum_sha512.as_deref() == Some("") {
+            self.checksum_sha512 = None;
+        }
         if let Some(ref val) = self.checksum_type
             && val.as_str() == ""
         {
             self.checksum_type = None;
+        }
+        if self.checksum_xxhash128.as_deref() == Some("") {
+            self.checksum_xxhash128 = None;
+        }
+        if self.checksum_xxhash3.as_deref() == Some("") {
+            self.checksum_xxhash3 = None;
+        }
+        if self.checksum_xxhash64.as_deref() == Some("") {
+            self.checksum_xxhash64 = None;
         }
         if self.expected_bucket_owner.as_deref() == Some("") {
             self.expected_bucket_owner = None;
@@ -33910,16 +35000,31 @@ impl DtoExt for CompleteMultipartUploadOutput {
         if self.checksum_crc64nvme.as_deref() == Some("") {
             self.checksum_crc64nvme = None;
         }
+        if self.checksum_md5.as_deref() == Some("") {
+            self.checksum_md5 = None;
+        }
         if self.checksum_sha1.as_deref() == Some("") {
             self.checksum_sha1 = None;
         }
         if self.checksum_sha256.as_deref() == Some("") {
             self.checksum_sha256 = None;
         }
+        if self.checksum_sha512.as_deref() == Some("") {
+            self.checksum_sha512 = None;
+        }
         if let Some(ref val) = self.checksum_type
             && val.as_str() == ""
         {
             self.checksum_type = None;
+        }
+        if self.checksum_xxhash128.as_deref() == Some("") {
+            self.checksum_xxhash128 = None;
+        }
+        if self.checksum_xxhash3.as_deref() == Some("") {
+            self.checksum_xxhash3 = None;
+        }
+        if self.checksum_xxhash64.as_deref() == Some("") {
+            self.checksum_xxhash64 = None;
         }
         if self.expiration.as_deref() == Some("") {
             self.expiration = None;
@@ -33962,11 +35067,26 @@ impl DtoExt for CompletedPart {
         if self.checksum_crc64nvme.as_deref() == Some("") {
             self.checksum_crc64nvme = None;
         }
+        if self.checksum_md5.as_deref() == Some("") {
+            self.checksum_md5 = None;
+        }
         if self.checksum_sha1.as_deref() == Some("") {
             self.checksum_sha1 = None;
         }
         if self.checksum_sha256.as_deref() == Some("") {
             self.checksum_sha256 = None;
+        }
+        if self.checksum_sha512.as_deref() == Some("") {
+            self.checksum_sha512 = None;
+        }
+        if self.checksum_xxhash128.as_deref() == Some("") {
+            self.checksum_xxhash128 = None;
+        }
+        if self.checksum_xxhash3.as_deref() == Some("") {
+            self.checksum_xxhash3 = None;
+        }
+        if self.checksum_xxhash64.as_deref() == Some("") {
+            self.checksum_xxhash64 = None;
         }
     }
 }
@@ -34138,16 +35258,31 @@ impl DtoExt for CopyObjectResult {
         if self.checksum_crc64nvme.as_deref() == Some("") {
             self.checksum_crc64nvme = None;
         }
+        if self.checksum_md5.as_deref() == Some("") {
+            self.checksum_md5 = None;
+        }
         if self.checksum_sha1.as_deref() == Some("") {
             self.checksum_sha1 = None;
         }
         if self.checksum_sha256.as_deref() == Some("") {
             self.checksum_sha256 = None;
         }
+        if self.checksum_sha512.as_deref() == Some("") {
+            self.checksum_sha512 = None;
+        }
         if let Some(ref val) = self.checksum_type
             && val.as_str() == ""
         {
             self.checksum_type = None;
+        }
+        if self.checksum_xxhash128.as_deref() == Some("") {
+            self.checksum_xxhash128 = None;
+        }
+        if self.checksum_xxhash3.as_deref() == Some("") {
+            self.checksum_xxhash3 = None;
+        }
+        if self.checksum_xxhash64.as_deref() == Some("") {
+            self.checksum_xxhash64 = None;
         }
     }
 }
@@ -34162,11 +35297,26 @@ impl DtoExt for CopyPartResult {
         if self.checksum_crc64nvme.as_deref() == Some("") {
             self.checksum_crc64nvme = None;
         }
+        if self.checksum_md5.as_deref() == Some("") {
+            self.checksum_md5 = None;
+        }
         if self.checksum_sha1.as_deref() == Some("") {
             self.checksum_sha1 = None;
         }
         if self.checksum_sha256.as_deref() == Some("") {
             self.checksum_sha256 = None;
+        }
+        if self.checksum_sha512.as_deref() == Some("") {
+            self.checksum_sha512 = None;
+        }
+        if self.checksum_xxhash128.as_deref() == Some("") {
+            self.checksum_xxhash128 = None;
+        }
+        if self.checksum_xxhash3.as_deref() == Some("") {
+            self.checksum_xxhash3 = None;
+        }
+        if self.checksum_xxhash64.as_deref() == Some("") {
+            self.checksum_xxhash64 = None;
         }
     }
 }
@@ -35220,16 +36370,31 @@ impl DtoExt for GetObjectOutput {
         if self.checksum_crc64nvme.as_deref() == Some("") {
             self.checksum_crc64nvme = None;
         }
+        if self.checksum_md5.as_deref() == Some("") {
+            self.checksum_md5 = None;
+        }
         if self.checksum_sha1.as_deref() == Some("") {
             self.checksum_sha1 = None;
         }
         if self.checksum_sha256.as_deref() == Some("") {
             self.checksum_sha256 = None;
         }
+        if self.checksum_sha512.as_deref() == Some("") {
+            self.checksum_sha512 = None;
+        }
         if let Some(ref val) = self.checksum_type
             && val.as_str() == ""
         {
             self.checksum_type = None;
+        }
+        if self.checksum_xxhash128.as_deref() == Some("") {
+            self.checksum_xxhash128 = None;
+        }
+        if self.checksum_xxhash3.as_deref() == Some("") {
+            self.checksum_xxhash3 = None;
+        }
+        if self.checksum_xxhash64.as_deref() == Some("") {
+            self.checksum_xxhash64 = None;
         }
         if self.content_disposition.as_deref() == Some("") {
             self.content_disposition = None;
@@ -35494,16 +36659,31 @@ impl DtoExt for HeadObjectOutput {
         if self.checksum_crc64nvme.as_deref() == Some("") {
             self.checksum_crc64nvme = None;
         }
+        if self.checksum_md5.as_deref() == Some("") {
+            self.checksum_md5 = None;
+        }
         if self.checksum_sha1.as_deref() == Some("") {
             self.checksum_sha1 = None;
         }
         if self.checksum_sha256.as_deref() == Some("") {
             self.checksum_sha256 = None;
         }
+        if self.checksum_sha512.as_deref() == Some("") {
+            self.checksum_sha512 = None;
+        }
         if let Some(ref val) = self.checksum_type
             && val.as_str() == ""
         {
             self.checksum_type = None;
+        }
+        if self.checksum_xxhash128.as_deref() == Some("") {
+            self.checksum_xxhash128 = None;
+        }
+        if self.checksum_xxhash3.as_deref() == Some("") {
+            self.checksum_xxhash3 = None;
+        }
+        if self.checksum_xxhash64.as_deref() == Some("") {
+            self.checksum_xxhash64 = None;
         }
         if self.content_disposition.as_deref() == Some("") {
             self.content_disposition = None;
@@ -36364,11 +37544,26 @@ impl DtoExt for ObjectPart {
         if self.checksum_crc64nvme.as_deref() == Some("") {
             self.checksum_crc64nvme = None;
         }
+        if self.checksum_md5.as_deref() == Some("") {
+            self.checksum_md5 = None;
+        }
         if self.checksum_sha1.as_deref() == Some("") {
             self.checksum_sha1 = None;
         }
         if self.checksum_sha256.as_deref() == Some("") {
             self.checksum_sha256 = None;
+        }
+        if self.checksum_sha512.as_deref() == Some("") {
+            self.checksum_sha512 = None;
+        }
+        if self.checksum_xxhash128.as_deref() == Some("") {
+            self.checksum_xxhash128 = None;
+        }
+        if self.checksum_xxhash3.as_deref() == Some("") {
+            self.checksum_xxhash3 = None;
+        }
+        if self.checksum_xxhash64.as_deref() == Some("") {
+            self.checksum_xxhash64 = None;
         }
     }
 }
@@ -36442,11 +37637,26 @@ impl DtoExt for Part {
         if self.checksum_crc64nvme.as_deref() == Some("") {
             self.checksum_crc64nvme = None;
         }
+        if self.checksum_md5.as_deref() == Some("") {
+            self.checksum_md5 = None;
+        }
         if self.checksum_sha1.as_deref() == Some("") {
             self.checksum_sha1 = None;
         }
         if self.checksum_sha256.as_deref() == Some("") {
             self.checksum_sha256 = None;
+        }
+        if self.checksum_sha512.as_deref() == Some("") {
+            self.checksum_sha512 = None;
+        }
+        if self.checksum_xxhash128.as_deref() == Some("") {
+            self.checksum_xxhash128 = None;
+        }
+        if self.checksum_xxhash3.as_deref() == Some("") {
+            self.checksum_xxhash3 = None;
+        }
+        if self.checksum_xxhash64.as_deref() == Some("") {
+            self.checksum_xxhash64 = None;
         }
     }
 }
@@ -36486,11 +37696,26 @@ impl DtoExt for PostObjectInput {
         if self.checksum_crc64nvme.as_deref() == Some("") {
             self.checksum_crc64nvme = None;
         }
+        if self.checksum_md5.as_deref() == Some("") {
+            self.checksum_md5 = None;
+        }
         if self.checksum_sha1.as_deref() == Some("") {
             self.checksum_sha1 = None;
         }
         if self.checksum_sha256.as_deref() == Some("") {
             self.checksum_sha256 = None;
+        }
+        if self.checksum_sha512.as_deref() == Some("") {
+            self.checksum_sha512 = None;
+        }
+        if self.checksum_xxhash128.as_deref() == Some("") {
+            self.checksum_xxhash128 = None;
+        }
+        if self.checksum_xxhash3.as_deref() == Some("") {
+            self.checksum_xxhash3 = None;
+        }
+        if self.checksum_xxhash64.as_deref() == Some("") {
+            self.checksum_xxhash64 = None;
         }
         if self.content_disposition.as_deref() == Some("") {
             self.content_disposition = None;
@@ -36578,16 +37803,31 @@ impl DtoExt for PostObjectOutput {
         if self.checksum_crc64nvme.as_deref() == Some("") {
             self.checksum_crc64nvme = None;
         }
+        if self.checksum_md5.as_deref() == Some("") {
+            self.checksum_md5 = None;
+        }
         if self.checksum_sha1.as_deref() == Some("") {
             self.checksum_sha1 = None;
         }
         if self.checksum_sha256.as_deref() == Some("") {
             self.checksum_sha256 = None;
         }
+        if self.checksum_sha512.as_deref() == Some("") {
+            self.checksum_sha512 = None;
+        }
         if let Some(ref val) = self.checksum_type
             && val.as_str() == ""
         {
             self.checksum_type = None;
+        }
+        if self.checksum_xxhash128.as_deref() == Some("") {
+            self.checksum_xxhash128 = None;
+        }
+        if self.checksum_xxhash3.as_deref() == Some("") {
+            self.checksum_xxhash3 = None;
+        }
+        if self.checksum_xxhash64.as_deref() == Some("") {
+            self.checksum_xxhash64 = None;
         }
         if self.expiration.as_deref() == Some("") {
             self.expiration = None;
@@ -36988,11 +38228,26 @@ impl DtoExt for PutObjectInput {
         if self.checksum_crc64nvme.as_deref() == Some("") {
             self.checksum_crc64nvme = None;
         }
+        if self.checksum_md5.as_deref() == Some("") {
+            self.checksum_md5 = None;
+        }
         if self.checksum_sha1.as_deref() == Some("") {
             self.checksum_sha1 = None;
         }
         if self.checksum_sha256.as_deref() == Some("") {
             self.checksum_sha256 = None;
+        }
+        if self.checksum_sha512.as_deref() == Some("") {
+            self.checksum_sha512 = None;
+        }
+        if self.checksum_xxhash128.as_deref() == Some("") {
+            self.checksum_xxhash128 = None;
+        }
+        if self.checksum_xxhash3.as_deref() == Some("") {
+            self.checksum_xxhash3 = None;
+        }
+        if self.checksum_xxhash64.as_deref() == Some("") {
+            self.checksum_xxhash64 = None;
         }
         if self.content_disposition.as_deref() == Some("") {
             self.content_disposition = None;
@@ -37150,16 +38405,31 @@ impl DtoExt for PutObjectOutput {
         if self.checksum_crc64nvme.as_deref() == Some("") {
             self.checksum_crc64nvme = None;
         }
+        if self.checksum_md5.as_deref() == Some("") {
+            self.checksum_md5 = None;
+        }
         if self.checksum_sha1.as_deref() == Some("") {
             self.checksum_sha1 = None;
         }
         if self.checksum_sha256.as_deref() == Some("") {
             self.checksum_sha256 = None;
         }
+        if self.checksum_sha512.as_deref() == Some("") {
+            self.checksum_sha512 = None;
+        }
         if let Some(ref val) = self.checksum_type
             && val.as_str() == ""
         {
             self.checksum_type = None;
+        }
+        if self.checksum_xxhash128.as_deref() == Some("") {
+            self.checksum_xxhash128 = None;
+        }
+        if self.checksum_xxhash3.as_deref() == Some("") {
+            self.checksum_xxhash3 = None;
+        }
+        if self.checksum_xxhash64.as_deref() == Some("") {
+            self.checksum_xxhash64 = None;
         }
         if self.expiration.as_deref() == Some("") {
             self.expiration = None;
@@ -37714,11 +38984,26 @@ impl DtoExt for UploadPartInput {
         if self.checksum_crc64nvme.as_deref() == Some("") {
             self.checksum_crc64nvme = None;
         }
+        if self.checksum_md5.as_deref() == Some("") {
+            self.checksum_md5 = None;
+        }
         if self.checksum_sha1.as_deref() == Some("") {
             self.checksum_sha1 = None;
         }
         if self.checksum_sha256.as_deref() == Some("") {
             self.checksum_sha256 = None;
+        }
+        if self.checksum_sha512.as_deref() == Some("") {
+            self.checksum_sha512 = None;
+        }
+        if self.checksum_xxhash128.as_deref() == Some("") {
+            self.checksum_xxhash128 = None;
+        }
+        if self.checksum_xxhash3.as_deref() == Some("") {
+            self.checksum_xxhash3 = None;
+        }
+        if self.checksum_xxhash64.as_deref() == Some("") {
+            self.checksum_xxhash64 = None;
         }
         if self.content_md5.as_deref() == Some("") {
             self.content_md5 = None;
@@ -37753,11 +39038,26 @@ impl DtoExt for UploadPartOutput {
         if self.checksum_crc64nvme.as_deref() == Some("") {
             self.checksum_crc64nvme = None;
         }
+        if self.checksum_md5.as_deref() == Some("") {
+            self.checksum_md5 = None;
+        }
         if self.checksum_sha1.as_deref() == Some("") {
             self.checksum_sha1 = None;
         }
         if self.checksum_sha256.as_deref() == Some("") {
             self.checksum_sha256 = None;
+        }
+        if self.checksum_sha512.as_deref() == Some("") {
+            self.checksum_sha512 = None;
+        }
+        if self.checksum_xxhash128.as_deref() == Some("") {
+            self.checksum_xxhash128 = None;
+        }
+        if self.checksum_xxhash3.as_deref() == Some("") {
+            self.checksum_xxhash3 = None;
+        }
+        if self.checksum_xxhash64.as_deref() == Some("") {
+            self.checksum_xxhash64 = None;
         }
         if let Some(ref val) = self.request_charged
             && val.as_str() == ""
@@ -37824,11 +39124,26 @@ impl DtoExt for WriteGetObjectResponseInput {
         if self.checksum_crc64nvme.as_deref() == Some("") {
             self.checksum_crc64nvme = None;
         }
+        if self.checksum_md5.as_deref() == Some("") {
+            self.checksum_md5 = None;
+        }
         if self.checksum_sha1.as_deref() == Some("") {
             self.checksum_sha1 = None;
         }
         if self.checksum_sha256.as_deref() == Some("") {
             self.checksum_sha256 = None;
+        }
+        if self.checksum_sha512.as_deref() == Some("") {
+            self.checksum_sha512 = None;
+        }
+        if self.checksum_xxhash128.as_deref() == Some("") {
+            self.checksum_xxhash128 = None;
+        }
+        if self.checksum_xxhash3.as_deref() == Some("") {
+            self.checksum_xxhash3 = None;
+        }
+        if self.checksum_xxhash64.as_deref() == Some("") {
+            self.checksum_xxhash64 = None;
         }
         if self.content_disposition.as_deref() == Some("") {
             self.content_disposition = None;
@@ -37912,8 +39227,13 @@ pub(crate) fn put_object_input_into_post_object_input(x: PutObjectInput) -> Post
         checksum_crc32: x.checksum_crc32,
         checksum_crc32c: x.checksum_crc32c,
         checksum_crc64nvme: x.checksum_crc64nvme,
+        checksum_md5: x.checksum_md5,
         checksum_sha1: x.checksum_sha1,
         checksum_sha256: x.checksum_sha256,
+        checksum_sha512: x.checksum_sha512,
+        checksum_xxhash128: x.checksum_xxhash128,
+        checksum_xxhash3: x.checksum_xxhash3,
+        checksum_xxhash64: x.checksum_xxhash64,
         content_disposition: x.content_disposition,
         content_encoding: x.content_encoding,
         content_language: x.content_language,
@@ -37960,8 +39280,13 @@ pub(crate) fn post_object_input_into_put_object_input(x: PostObjectInput) -> Put
         checksum_crc32: x.checksum_crc32,
         checksum_crc32c: x.checksum_crc32c,
         checksum_crc64nvme: x.checksum_crc64nvme,
+        checksum_md5: x.checksum_md5,
         checksum_sha1: x.checksum_sha1,
         checksum_sha256: x.checksum_sha256,
+        checksum_sha512: x.checksum_sha512,
+        checksum_xxhash128: x.checksum_xxhash128,
+        checksum_xxhash3: x.checksum_xxhash3,
+        checksum_xxhash64: x.checksum_xxhash64,
         content_disposition: x.content_disposition,
         content_encoding: x.content_encoding,
         content_language: x.content_language,
@@ -38000,9 +39325,14 @@ pub(crate) fn put_object_output_into_post_object_output(x: PutObjectOutput) -> P
         checksum_crc32: x.checksum_crc32,
         checksum_crc32c: x.checksum_crc32c,
         checksum_crc64nvme: x.checksum_crc64nvme,
+        checksum_md5: x.checksum_md5,
         checksum_sha1: x.checksum_sha1,
         checksum_sha256: x.checksum_sha256,
+        checksum_sha512: x.checksum_sha512,
         checksum_type: x.checksum_type,
+        checksum_xxhash128: x.checksum_xxhash128,
+        checksum_xxhash3: x.checksum_xxhash3,
+        checksum_xxhash64: x.checksum_xxhash64,
         e_tag: x.e_tag,
         expiration: x.expiration,
         request_charged: x.request_charged,
@@ -38022,9 +39352,14 @@ pub(crate) fn post_object_output_into_put_object_output(x: PostObjectOutput) -> 
         checksum_crc32: x.checksum_crc32,
         checksum_crc32c: x.checksum_crc32c,
         checksum_crc64nvme: x.checksum_crc64nvme,
+        checksum_md5: x.checksum_md5,
         checksum_sha1: x.checksum_sha1,
         checksum_sha256: x.checksum_sha256,
+        checksum_sha512: x.checksum_sha512,
         checksum_type: x.checksum_type,
+        checksum_xxhash128: x.checksum_xxhash128,
+        checksum_xxhash3: x.checksum_xxhash3,
+        checksum_xxhash64: x.checksum_xxhash64,
         e_tag: x.e_tag,
         expiration: x.expiration,
         request_charged: x.request_charged,
