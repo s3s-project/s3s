@@ -50,11 +50,11 @@ def delete_bucket(client, bucket: str):
         resp = client.list_objects_v2(Bucket=bucket)
         for obj in resp.get("Contents", []):
             client.delete_object(Bucket=bucket, Key=obj["Key"])
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
     try:
         client.delete_bucket(Bucket=bucket)
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
 
 
@@ -344,7 +344,7 @@ def main():
         try:
             test()
             passed += 1
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             print(f"FAIL: {test.__name__}: {e}")
             failed += 1
 
