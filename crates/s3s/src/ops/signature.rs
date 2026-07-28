@@ -337,7 +337,8 @@ impl SignatureContext<'_> {
     pub async fn v4_check_presigned_url(&mut self) -> S3Result<CredentialsExt> {
         let qs = self.qs.unwrap(); // assume: qs has "X-Amz-Signature"
 
-        let presigned_url = PresignedUrlV4::parse(qs).map_err(|err| invalid_request!(err, "missing presigned url v4 fields"))?;
+        let presigned_url = PresignedUrlV4::parse(qs)
+            .map_err(|err| S3Error::with_source(S3ErrorCode::AuthorizationQueryParametersError, Box::new(err)))?;
 
         if presigned_url.algorithm != "AWS4-HMAC-SHA256" {
             return Err(s3_error!(
@@ -869,6 +870,50 @@ mod tests {
             })
             .expect_err("raw fallback signature mismatch should be rejected");
         assert_eq!(err.code(), &S3ErrorCode::SignatureDoesNotMatch);
+    }
+
+    #[tokio::test]
+    async fn v4_presigned_url_rejects_invalid_expires_as_authorization_query_error() {
+        use crate::config::StaticConfigProvider;
+
+        let qs = OrderedQs::parse(concat!(
+            "X-Amz-Algorithm=AWS4-HMAC-SHA256",
+            "&X-Amz-Credential=AKIAIOSFODNN7EXAMPLE%2F20130524%2Fus-east-1%2Fs3%2Faws4_request",
+            "&X-Amz-Date=20130524T000000Z",
+            "&X-Amz-Expires=604801",
+            "&X-Amz-SignedHeaders=host",
+            "&X-Amz-Signature=aeeed9bbccd4d02ee5c0109b86d86835f995330da4c265957d157751f604d404"
+        ))
+        .expect("query should parse");
+        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+        let method = Method::GET;
+        let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+        let mut body = Body::empty();
+        let mut cx = SignatureContext {
+            auth: None,
+            config: &config,
+            req_version: ::http::Version::HTTP_11,
+            req_method: &method,
+            req_uri: &uri,
+            req_body: &mut body,
+            qs: Some(&qs),
+            hs: OrderedHeaders::from_slice_unchecked(&[]),
+            decoded_uri_path: "/test.txt",
+            raw_uri_path: "/test.txt",
+            vh_bucket: None,
+            content_length: None,
+            mime: None,
+            decoded_content_length: None,
+            transformed_body: None,
+            multipart: None,
+            trailing_headers: None,
+        };
+
+        let err = cx
+            .v4_check_presigned_url()
+            .await
+            .expect_err("expiration beyond seven days must be rejected before authentication");
+        assert_eq!(err.code(), &S3ErrorCode::AuthorizationQueryParametersError);
     }
 
     #[tokio::test]
