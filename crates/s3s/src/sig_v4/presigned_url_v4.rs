@@ -194,7 +194,7 @@ mod tests {
 
     #[test]
     fn parse_rejects_invalid_expires() {
-        for expires in ["604801", "4294967295", "NaN", "-1"] {
+        for expires in ["604801", "4294967295", "4294967296", "999999999999999999999999", "NaN", "-1"] {
             let mut pairs = valid_query_strings();
             pairs[3] = ("X-Amz-Expires", expires);
             let qs = make_qs(&pairs);

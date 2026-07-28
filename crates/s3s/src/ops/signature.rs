@@ -776,6 +776,19 @@ mod tests {
         )
     }
 
+    fn presigned_query_fields(amz_date: &AmzDate, service: &str) -> Vec<(String, String)> {
+        vec![
+            ("X-Amz-Algorithm".to_owned(), "AWS4-HMAC-SHA256".to_owned()),
+            (
+                "X-Amz-Credential".to_owned(),
+                format!("AKIAIOSFODNN7EXAMPLE/{}/us-east-1/{service}/aws4_request", amz_date.fmt_date()),
+            ),
+            ("X-Amz-Date".to_owned(), amz_date.fmt_iso8601().to_string()),
+            ("X-Amz-Expires".to_owned(), "604800".to_owned()),
+            ("X-Amz-SignedHeaders".to_owned(), "host".to_owned()),
+        ]
+    }
+
     #[test]
     fn test_extract_amz_content_sha256_missing() {
         // Test that extract_amz_content_sha256 returns None when header is missing
@@ -897,7 +910,7 @@ mod tests {
             req_uri: &uri,
             req_body: &mut body,
             qs: Some(&qs),
-            hs: OrderedHeaders::from_slice_unchecked(&[]),
+            hs: OrderedHeaders::from_slice_unchecked(&[("authorization", "AWS4-HMAC-SHA256 Credential=invalid")]),
             decoded_uri_path: "/test.txt",
             raw_uri_path: "/test.txt",
             vh_bucket: None,
@@ -910,10 +923,72 @@ mod tests {
         };
 
         let err = cx
-            .v4_check_presigned_url()
+            .v4_check()
             .await
+            .expect("X-Amz-Signature must take precedence over header auth")
             .expect_err("expiration beyond seven days must be rejected before authentication");
         assert_eq!(err.code(), &S3ErrorCode::AuthorizationQueryParametersError);
+    }
+
+    #[tokio::test]
+    async fn x_amz_expires_limit_applies_only_to_presigned_query_auth() {
+        use crate::config::StaticConfigProvider;
+
+        let qs = OrderedQs::parse("X-Amz-Expires=604801").expect("query should parse");
+        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+        let method = Method::GET;
+        let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+        let mut body = Body::empty();
+        let mut anonymous = SignatureContext {
+            auth: None,
+            config: &config,
+            req_version: ::http::Version::HTTP_11,
+            req_method: &method,
+            req_uri: &uri,
+            req_body: &mut body,
+            qs: Some(&qs),
+            hs: OrderedHeaders::from_slice_unchecked(&[]),
+            decoded_uri_path: "/test.txt",
+            raw_uri_path: "/test.txt",
+            vh_bucket: None,
+            content_length: None,
+            mime: None,
+            decoded_content_length: None,
+            transformed_body: None,
+            multipart: None,
+            trailing_headers: None,
+        };
+        assert!(
+            anonymous.v4_check().await.is_none(),
+            "an unsigned query must not be treated as presigned auth"
+        );
+
+        let mut body = Body::empty();
+        let mut header_auth = SignatureContext {
+            auth: None,
+            config: &config,
+            req_version: ::http::Version::HTTP_11,
+            req_method: &method,
+            req_uri: &uri,
+            req_body: &mut body,
+            qs: Some(&qs),
+            hs: OrderedHeaders::from_slice_unchecked(&[("authorization", "AWS4-HMAC-SHA256 Credential=invalid")]),
+            decoded_uri_path: "/test.txt",
+            raw_uri_path: "/test.txt",
+            vh_bucket: None,
+            content_length: None,
+            mime: None,
+            decoded_content_length: None,
+            transformed_body: None,
+            multipart: None,
+            trailing_headers: None,
+        };
+        let err = header_auth
+            .v4_check()
+            .await
+            .expect("authorization header must select header auth")
+            .expect_err("malformed header auth should fail");
+        assert_ne!(err.code(), &S3ErrorCode::AuthorizationQueryParametersError);
     }
 
     #[tokio::test]
@@ -1037,18 +1112,14 @@ file content\r\n\
         use crate::config::{S3ConfigProvider, StaticConfigProvider};
         use std::sync::Arc;
 
-        // Credential scope uses "custom-svc" instead of the allowed "s3" or "sts".
-        // The date is old (2013) with a huge Expires so the expiry check does not fire first.
-        let qs = OrderedQs::parse(concat!(
-            "X-Amz-Algorithm=AWS4-HMAC-SHA256",
-            "&X-Amz-Credential=AKIAIOSFODNN7EXAMPLE%2F20130524%2Fus-east-1%2Fcustom-svc%2Faws4_request",
-            "&X-Amz-Date=20130524T000000Z",
-            "&X-Amz-Expires=999999999",
-            "&X-Amz-SignedHeaders=host",
-            // Signature must be 64 lowercase hex chars to pass PresignedUrlV4::parse.
-            "&X-Amz-Signature=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        ))
-        .unwrap();
+        let amz_date = AmzDate::parse(&fmt_current_amz_date(time::OffsetDateTime::now_utc()))
+            .expect("current time should produce a valid x-amz-date");
+        let mut query_strings = presigned_query_fields(&amz_date, "custom-svc");
+        query_strings.push((
+            "X-Amz-Signature".to_owned(),
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned(),
+        ));
+        let qs = OrderedQs::from_vec_unchecked(query_strings);
 
         let access_key = "AKIAIOSFODNN7EXAMPLE";
         let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
@@ -1102,27 +1173,22 @@ file content\r\n\
         let uri = Uri::from_static("https://s3.amazonaws.com/test-bucket/path/sitemap.xmlage=");
         let decoded_uri_path = "/test-bucket/path/sitemap.xmlage=";
         let raw_uri_path = "/test-bucket/path/sitemap.xmlage=";
-        let amz_date = AmzDate::parse("20130524T000000Z").unwrap();
+        let amz_date = AmzDate::parse(&fmt_current_amz_date(time::OffsetDateTime::now_utc()))
+            .expect("current time should produce a valid x-amz-date");
         let headers_for_signing = OrderedHeaders::from_slice_unchecked(&[("host", "s3.amazonaws.com")]);
-        let query_strings_for_signing = &[
-            ("X-Amz-Algorithm", "AWS4-HMAC-SHA256"),
-            ("X-Amz-Credential", "AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request"),
-            ("X-Amz-Date", "20130524T000000Z"),
-            ("X-Amz-Expires", "999999999"),
-            ("X-Amz-SignedHeaders", "host"),
-        ];
+        let query_strings_for_signing = presigned_query_fields(&amz_date, "s3");
 
         let canonical_requests = [
             sig_v4::create_presigned_canonical_request(
                 &method,
                 decoded_uri_path,
-                query_strings_for_signing,
+                &query_strings_for_signing,
                 &headers_for_signing,
             ),
             sig_v4::create_presigned_canonical_request_with_raw_uri_path(
                 &method,
                 raw_uri_path,
-                query_strings_for_signing,
+                &query_strings_for_signing,
                 &headers_for_signing,
             ),
         ];
@@ -1131,17 +1197,9 @@ file content\r\n\
         for canonical_request in canonical_requests {
             let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
             let signature = sig_v4::calculate_signature(&string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
-            let qs = OrderedQs::parse(&format!(
-                "{}&X-Amz-Signature={signature}",
-                concat!(
-                    "X-Amz-Algorithm=AWS4-HMAC-SHA256",
-                    "&X-Amz-Credential=AKIAIOSFODNN7EXAMPLE%2F20130524%2Fus-east-1%2Fs3%2Faws4_request",
-                    "&X-Amz-Date=20130524T000000Z",
-                    "&X-Amz-Expires=999999999",
-                    "&X-Amz-SignedHeaders=host"
-                )
-            ))
-            .unwrap();
+            let mut signed_query_strings = query_strings_for_signing.clone();
+            signed_query_strings.push(("X-Amz-Signature".to_owned(), signature));
+            let qs = OrderedQs::from_vec_unchecked(signed_query_strings);
             let headers = OrderedHeaders::from_slice_unchecked(&[("host", "s3.amazonaws.com")]);
 
             let mut body = Body::empty();
@@ -1189,34 +1247,21 @@ file content\r\n\
         let uri = Uri::from_static("https://s3.amazonaws.com/test-bucket/path/sitemap.xmlage=");
         let decoded_uri_path = "/test-bucket/path/sitemap.xmlage=";
         let raw_uri_path = "/test-bucket/path/sitemap.xmlage=";
-        let amz_date = AmzDate::parse("20130524T000000Z").unwrap();
+        let amz_date = AmzDate::parse(&fmt_current_amz_date(time::OffsetDateTime::now_utc()))
+            .expect("current time should produce a valid x-amz-date");
         let headers_for_signing = OrderedHeaders::from_slice_unchecked(&[("host", "s3.amazonaws.com")]);
-        let query_strings_for_signing = &[
-            ("X-Amz-Algorithm", "AWS4-HMAC-SHA256"),
-            ("X-Amz-Credential", "AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request"),
-            ("X-Amz-Date", "20130524T000000Z"),
-            ("X-Amz-Expires", "999999999"),
-            ("X-Amz-SignedHeaders", "host"),
-        ];
+        let query_strings_for_signing = presigned_query_fields(&amz_date, "s3");
         let canonical_request = sig_v4::create_presigned_canonical_request(
             &method,
             decoded_uri_path,
-            query_strings_for_signing,
+            &query_strings_for_signing,
             &headers_for_signing,
         );
         let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
         let signature = sig_v4::calculate_signature(&string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
-        let qs = OrderedQs::parse(&format!(
-            "{}&X-Amz-Signature={signature}",
-            concat!(
-                "X-Amz-Algorithm=AWS4-HMAC-SHA256",
-                "&X-Amz-Credential=AKIAIOSFODNN7EXAMPLE%2F20130524%2Fus-east-1%2Fs3%2Faws4_request",
-                "&X-Amz-Date=20130524T000000Z",
-                "&X-Amz-Expires=999999999",
-                "&X-Amz-SignedHeaders=host"
-            )
-        ))
-        .unwrap();
+        let mut signed_query_strings = query_strings_for_signing;
+        signed_query_strings.push(("X-Amz-Signature".to_owned(), signature));
+        let qs = OrderedQs::from_vec_unchecked(signed_query_strings);
 
         let mut body = Body::empty();
         let mut cx = SignatureContext {
@@ -1267,34 +1312,23 @@ file content\r\n\
         let content_sha256 = hex_sha256(body_data, str::to_owned);
         let method = Method::PUT;
         let uri = Uri::from_static("https://s3.amazonaws.com/test-bucket/test-key");
-        let amz_date = AmzDate::parse("20130524T000000Z").unwrap();
+        let amz_date = AmzDate::parse(&fmt_current_amz_date(time::OffsetDateTime::now_utc()))
+            .expect("current time should produce a valid x-amz-date");
         let headers_for_signing = OrderedHeaders::from_slice_unchecked(&[("host", "s3.amazonaws.com")]);
-        let query_strings_for_signing = &[
-            ("X-Amz-Algorithm", "AWS4-HMAC-SHA256"),
-            ("X-Amz-Credential", "AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request"),
-            ("X-Amz-Date", "20130524T000000Z"),
-            ("X-Amz-Expires", "999999999"),
-            ("X-Amz-SignedHeaders", "host"),
-        ];
+        let query_strings_for_signing = presigned_query_fields(&amz_date, "s3");
 
         let canonical_request = sig_v4::create_presigned_canonical_request(
             &method,
             "/test-bucket/test-key",
-            query_strings_for_signing,
+            &query_strings_for_signing,
             &headers_for_signing,
         );
         let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
         let signature = sig_v4::calculate_signature(&string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
 
-        let qs = OrderedQs::parse(&format!(
-            "X-Amz-Algorithm=AWS4-HMAC-SHA256&\
-             X-Amz-Credential=AKIAIOSFODNN7EXAMPLE%2F20130524%2Fus-east-1%2Fs3%2Faws4_request&\
-             X-Amz-Date=20130524T000000Z&\
-             X-Amz-Expires=999999999&\
-             X-Amz-SignedHeaders=host&\
-             X-Amz-Signature={signature}"
-        ))
-        .unwrap();
+        let mut signed_query_strings = query_strings_for_signing;
+        signed_query_strings.push(("X-Amz-Signature".to_owned(), signature));
+        let qs = OrderedQs::from_vec_unchecked(signed_query_strings);
 
         let headers = OrderedHeaders::from_slice_unchecked(&[
             ("host", "s3.amazonaws.com"),
@@ -1357,34 +1391,23 @@ file content\r\n\
         let body_data = b"hello";
         let method = Method::PUT;
         let uri = Uri::from_static("https://s3.amazonaws.com/test-bucket/test-key");
-        let amz_date = AmzDate::parse("20130524T000000Z").unwrap();
+        let amz_date = AmzDate::parse(&fmt_current_amz_date(time::OffsetDateTime::now_utc()))
+            .expect("current time should produce a valid x-amz-date");
         let headers_for_signing = OrderedHeaders::from_slice_unchecked(&[("host", "s3.amazonaws.com")]);
-        let query_strings_for_signing = &[
-            ("X-Amz-Algorithm", "AWS4-HMAC-SHA256"),
-            ("X-Amz-Credential", "AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request"),
-            ("X-Amz-Date", "20130524T000000Z"),
-            ("X-Amz-Expires", "999999999"),
-            ("X-Amz-SignedHeaders", "host"),
-        ];
+        let query_strings_for_signing = presigned_query_fields(&amz_date, "s3");
 
         let canonical_request = sig_v4::create_presigned_canonical_request(
             &method,
             "/test-bucket/test-key",
-            query_strings_for_signing,
+            &query_strings_for_signing,
             &headers_for_signing,
         );
         let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
         let signature = sig_v4::calculate_signature(&string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
 
-        let qs = OrderedQs::parse(&format!(
-            "X-Amz-Algorithm=AWS4-HMAC-SHA256&\
-             X-Amz-Credential=AKIAIOSFODNN7EXAMPLE%2F20130524%2Fus-east-1%2Fs3%2Faws4_request&\
-             X-Amz-Date=20130524T000000Z&\
-             X-Amz-Expires=999999999&\
-             X-Amz-SignedHeaders=host&\
-             X-Amz-Signature={signature}"
-        ))
-        .unwrap();
+        let mut signed_query_strings = query_strings_for_signing;
+        signed_query_strings.push(("X-Amz-Signature".to_owned(), signature));
+        let qs = OrderedQs::from_vec_unchecked(signed_query_strings);
 
         let headers = OrderedHeaders::from_slice_unchecked(&[
             ("host", "s3.amazonaws.com"),
