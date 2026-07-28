@@ -745,7 +745,7 @@ impl SignatureContext<'_> {
         let signature = sig_v2::calculate_signature(&secret_key, &string_to_sign);
 
         let expected_signature = presigned_url.signature;
-        if !signatures_match(&signature, expected_signature) {
+        if !signatures_match(&signature, &expected_signature) {
             debug!(?signature, expected=?expected_signature, "signature mismatch");
             return Err(s3_error!(SignatureDoesNotMatch));
         }

@@ -622,8 +622,8 @@ mod tests {
     #[test]
     fn chunk_signature_verifiers_do_not_use_ordinary_comparison() {
         let source = include_str!("aws_chunked_stream.rs");
-        assert!(!source.contains("chunk_signature.as_bytes() == expected_signature"));
-        assert!(!source.contains("trailer_signature.as_bytes() != provided.as_slice()"));
+        assert!(!source.contains(concat!("chunk_signature.as_bytes()", " == expected_signature")));
+        assert!(!source.contains(concat!("trailer_signature.as_bytes()", " != provided.as_slice()")));
     }
 
     #[tokio::test]
