@@ -64,9 +64,9 @@ if __name__ == "__main__":
     counts = {}
 
     for name, group in groups.items():
-        pass_count = len([x for x in group if x.status == "PASS"])
-        fail_count = len([x for x in group if x.status == "FAIL"])
-        na_count = len([x for x in group if x.status == "NA"])
+        pass_count = sum(1 for x in group if x.status == "PASS")
+        fail_count = sum(1 for x in group if x.status == "FAIL")
+        na_count = sum(1 for x in group if x.status == "NA")
         counts[name] = {"pass": pass_count, "fail": fail_count, "na": na_count}
 
         print(
