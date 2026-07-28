@@ -1,7 +1,7 @@
 #!/usr/bin/env python
-from dataclasses import dataclass
 import argparse
 import subprocess
+from dataclasses import dataclass
 
 INSTALLERS = {}
 
@@ -47,7 +47,7 @@ def cargo_install(
     opt_bin = f"--bin {bin}" if bin else ""
     opt_force = "--force" if force else ""
     sh(
-        f"cargo install --path crates/{package} --locked "  #
+        f"cargo install --path crates/{package} --locked "
         f"{opt_offline} {opt_features} {opt_bin} {opt_force}"
     )
 
