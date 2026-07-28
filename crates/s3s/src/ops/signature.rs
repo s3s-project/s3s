@@ -115,7 +115,7 @@ struct SignatureVerificationContext<'a> {
     service: &'a str,
 }
 
-fn sig_v4_signatures_match(actual_signature: &str, expected_signature: &str) -> bool {
+fn signatures_match(actual_signature: &str, expected_signature: &str) -> bool {
     actual_signature.as_bytes().ct_eq(expected_signature.as_bytes()).into()
 }
 
@@ -140,7 +140,7 @@ impl SignatureVerificationContext<'_> {
         let string_to_sign = sig_v4::create_string_to_sign(canonical_request, self.amz_date, self.region, self.service);
         let signature = sig_v4::calculate_signature(&string_to_sign, self.secret_key, self.amz_date, self.region, self.service);
 
-        if sig_v4_signatures_match(&signature, self.expected_signature) {
+        if signatures_match(&signature, self.expected_signature) {
             return Ok(signature);
         }
 
@@ -154,7 +154,7 @@ impl SignatureVerificationContext<'_> {
         let raw_signature =
             sig_v4::calculate_signature(&string_to_sign, self.secret_key, self.amz_date, self.region, self.service);
 
-        if !sig_v4_signatures_match(&raw_signature, self.expected_signature) {
+        if !signatures_match(&raw_signature, self.expected_signature) {
             debug!(?signature, ?raw_signature, expected=?self.expected_signature, "signature mismatch");
             return Err(s3_error!(SignatureDoesNotMatch));
         }
@@ -317,7 +317,7 @@ impl SignatureContext<'_> {
         let signature = sig_v4::calculate_signature(string_to_sign, &secret_key, &amz_date, region, service);
 
         let expected_signature = info.x_amz_signature;
-        if !sig_v4_signatures_match(&signature, expected_signature) {
+        if !signatures_match(&signature, expected_signature) {
             debug!(?signature, expected=?expected_signature, "signature mismatch");
             return Err(s3_error!(SignatureDoesNotMatch));
         }
@@ -678,7 +678,7 @@ impl SignatureContext<'_> {
         debug!(?string_to_sign, "sig_v2 header_auth");
 
         let expected_signature = auth_v2.signature;
-        if signature != expected_signature {
+        if !signatures_match(&signature, expected_signature) {
             debug!(?signature, expected=?expected_signature, "signature mismatch");
             return Err(s3_error!(SignatureDoesNotMatch));
         }
@@ -708,7 +708,7 @@ impl SignatureContext<'_> {
         let signature = sig_v2::calculate_signature(&secret_key, string_to_sign);
 
         let expected_signature = info.signature;
-        if signature != expected_signature {
+        if !signatures_match(&signature, expected_signature) {
             debug!(?signature, expected=?expected_signature, "signature mismatch");
             return Err(s3_error!(SignatureDoesNotMatch));
         }
@@ -745,7 +745,7 @@ impl SignatureContext<'_> {
         let signature = sig_v2::calculate_signature(&secret_key, &string_to_sign);
 
         let expected_signature = presigned_url.signature;
-        if signature != expected_signature {
+        if !signatures_match(&signature, expected_signature) {
             debug!(?signature, expected=?expected_signature, "signature mismatch");
             return Err(s3_error!(SignatureDoesNotMatch));
         }
@@ -1789,10 +1789,17 @@ file content\r\n\
     }
 
     #[test]
-    fn sig_v4_signatures_match_reports_match_and_mismatch() {
-        assert!(sig_v4_signatures_match("abcd", "abcd"));
-        assert!(!sig_v4_signatures_match("abcd", "abce"));
-        assert!(!sig_v4_signatures_match("abcd", "abc"));
+    fn signatures_match_reports_match_and_mismatch() {
+        assert!(signatures_match("abcd", "abcd"));
+        assert!(!signatures_match("xbcd", "abcd"));
+        assert!(!signatures_match("abcx", "abcd"));
+        assert!(!signatures_match("abcd", "abc"));
+    }
+
+    #[test]
+    fn sig_v2_verifiers_do_not_use_ordinary_signature_comparison() {
+        let source = include_str!("signature.rs");
+        assert!(!source.contains("signature != expected_signature"));
     }
 
     #[tokio::test]

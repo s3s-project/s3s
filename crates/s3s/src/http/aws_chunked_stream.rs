@@ -20,6 +20,7 @@ use futures::pin_mut;
 use futures::stream::{Stream, StreamExt};
 use hyper::body::{Buf, Bytes};
 use memchr::memchr;
+use subtle::ConstantTimeEq;
 
 /// Maximum size for chunk metadata
 /// Prevents `DoS` via oversized chunk size declarations
@@ -138,13 +139,17 @@ fn parse_chunk_meta(mut input: &[u8]) -> nom::IResult<&[u8], ChunkMeta<'_>> {
 }
 
 /// check signature
+fn signature_bytes_match(actual: &[u8], expected: &[u8]) -> bool {
+    actual.ct_eq(expected).into()
+}
+
 fn check_signature(ctx: &SignatureCtx, expected_signature: &[u8], chunk_data: &[Bytes]) -> Option<Box<str>> {
     let string_to_sign =
         sig_v4::create_chunk_string_to_sign(&ctx.amz_date, &ctx.region, &ctx.service, &ctx.prev_signature, chunk_data);
 
     let chunk_signature = sig_v4::calculate_signature(&string_to_sign, &ctx.secret_key, &ctx.amz_date, &ctx.region, &ctx.service);
 
-    (chunk_signature.as_bytes() == expected_signature).then(|| chunk_signature.into())
+    signature_bytes_match(chunk_signature.as_bytes(), expected_signature).then(|| chunk_signature.into())
 }
 
 impl AwsChunkedStream {
@@ -325,7 +330,7 @@ impl AwsChunkedStream {
                 create_trailer_string_to_sign(&ctx.amz_date, &ctx.region, &ctx.service, &ctx.prev_signature, &canonical_trailers);
             let trailer_signature =
                 sig_v4::calculate_signature(&string_to_sign, &ctx.secret_key, &ctx.amz_date, &ctx.region, &ctx.service);
-            if trailer_signature.as_bytes() != provided.as_slice() {
+            if !signature_bytes_match(trailer_signature.as_bytes(), provided.as_slice()) {
                 return Some(Err(AwsChunkedStreamError::SignatureMismatch));
             }
         } else if !unsigned {
@@ -604,6 +609,21 @@ mod tests {
             buf.extend_from_slice(b);
         }
         buf.into()
+    }
+
+    #[test]
+    fn signature_bytes_match_reports_match_and_mismatch() {
+        assert!(signature_bytes_match(b"abcd", b"abcd"));
+        assert!(!signature_bytes_match(b"xbcd", b"abcd"));
+        assert!(!signature_bytes_match(b"abcx", b"abcd"));
+        assert!(!signature_bytes_match(b"abcd", b"abc"));
+    }
+
+    #[test]
+    fn chunk_signature_verifiers_do_not_use_ordinary_comparison() {
+        let source = include_str!("aws_chunked_stream.rs");
+        assert!(!source.contains("chunk_signature.as_bytes() == expected_signature"));
+        assert!(!source.contains("trailer_signature.as_bytes() != provided.as_slice()"));
     }
 
     #[tokio::test]
