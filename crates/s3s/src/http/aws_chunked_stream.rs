@@ -621,9 +621,22 @@ mod tests {
 
     #[test]
     fn chunk_signature_verifiers_do_not_use_ordinary_comparison() {
-        let source = include_str!("aws_chunked_stream.rs");
-        assert!(!source.contains(concat!("chunk_signature.as_bytes()", " == expected_signature")));
-        assert!(!source.contains(concat!("trailer_signature.as_bytes()", " != provided.as_slice()")));
+        let source: String = include_str!("aws_chunked_stream.rs")
+            .chars()
+            .filter(|ch| !ch.is_whitespace())
+            .collect();
+
+        for (actual, expected) in [
+            ("chunk_signature.as_bytes()", "expected_signature"),
+            ("trailer_signature.as_bytes()", "provided.as_slice()"),
+        ] {
+            for operator in ["==", "!="] {
+                for (left, right) in [(actual, expected), (expected, actual)] {
+                    let comparison = format!("{left}{operator}{right}");
+                    assert!(!source.contains(&comparison), "ordinary signature comparison: {comparison}");
+                }
+            }
+        }
     }
 
     #[tokio::test]

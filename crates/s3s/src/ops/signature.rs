@@ -1798,8 +1798,17 @@ file content\r\n\
 
     #[test]
     fn sig_v2_verifiers_do_not_use_ordinary_signature_comparison() {
-        let source = include_str!("signature.rs");
-        assert!(!source.contains(concat!("signature !", "= expected_signature")));
+        let source: String = include_str!("signature.rs")
+            .chars()
+            .filter(|ch| !ch.is_whitespace())
+            .collect();
+
+        for operator in ["==", "!="] {
+            for (left, right) in [("signature", "expected_signature"), ("expected_signature", "signature")] {
+                let comparison = format!("{left}{operator}{right}");
+                assert!(!source.contains(&comparison), "ordinary signature comparison: {comparison}");
+            }
+        }
     }
 
     #[tokio::test]
