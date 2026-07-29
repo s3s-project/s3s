@@ -1799,7 +1799,7 @@ file content\r\n\
     #[test]
     fn sig_v2_verifiers_do_not_use_ordinary_signature_comparison() {
         let source = include_str!("signature.rs");
-        assert!(!source.contains("signature != expected_signature"));
+        assert!(!source.contains(concat!("signature !", "= expected_signature")));
     }
 
     #[tokio::test]
