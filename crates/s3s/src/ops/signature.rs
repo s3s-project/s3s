@@ -337,8 +337,13 @@ impl SignatureContext<'_> {
     pub async fn v4_check_presigned_url(&mut self) -> S3Result<CredentialsExt> {
         let qs = self.qs.unwrap(); // assume: qs has "X-Amz-Signature"
 
-        let presigned_url = PresignedUrlV4::parse(qs)
-            .map_err(|err| S3Error::with_source(S3ErrorCode::AuthorizationQueryParametersError, Box::new(err)))?;
+        let presigned_url = PresignedUrlV4::parse(qs).map_err(|err| {
+            s3_error!(
+                err,
+                AuthorizationQueryParametersError,
+                "The authorization query parameters that you provided are not valid."
+            )
+        })?;
 
         if presigned_url.algorithm != "AWS4-HMAC-SHA256" {
             return Err(s3_error!(
@@ -928,6 +933,8 @@ mod tests {
             .expect("X-Amz-Signature must take precedence over header auth")
             .expect_err("expiration beyond seven days must be rejected before authentication");
         assert_eq!(err.code(), &S3ErrorCode::AuthorizationQueryParametersError);
+        assert_eq!(err.message(), Some("The authorization query parameters that you provided are not valid."));
+        assert!(err.source().is_some(), "parse error must remain available as the source");
     }
 
     #[tokio::test]
