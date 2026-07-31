@@ -146,6 +146,20 @@ fn is_valid_domain(mut s: &str) -> bool {
     true
 }
 
+/// Checks whether two base domains would compete for the same host header.
+///
+/// Two domains overlap when they are equal, or when one is a DNS subdomain of the other.
+/// The suffix must end on a label boundary, matching [`parse_host_header`]: `s3.example.com`
+/// is a subdomain of `example.com`, while `s3-example.com` is an unrelated domain.
+fn is_overlapping(a: &str, b: &str) -> bool {
+    a == b || is_subdomain_of(a, b) || is_subdomain_of(b, a)
+}
+
+/// Checks whether `host` is a strict DNS subdomain of `base_domain`.
+fn is_subdomain_of(host: &str, base_domain: &str) -> bool {
+    host.strip_suffix(base_domain).is_some_and(|rest| rest.ends_with('.'))
+}
+
 fn parse_host_header<'a>(base_domain: &'a str, host: &'a str) -> Option<VirtualHost<'a>> {
     if host == base_domain {
         return Some(VirtualHost::new(base_domain));
@@ -224,7 +238,7 @@ impl MultiDomain {
             }
 
             for other in &v {
-                if domain.ends_with(other) || other.ends_with(domain) {
+                if is_overlapping(domain, other) {
                     return Err(DomainError::OverlappingSubdomains);
                 }
             }
@@ -307,10 +321,59 @@ mod tests {
         let md = result.unwrap();
         assert_eq!(md.base_domains, domains);
 
+        // a real subdomain is ambiguous and stays rejected
+        let domains = ["example.com", "s3.example.com"];
+        let result = MultiDomain::new(&domains);
+        let err = result.unwrap_err();
+        assert!(matches!(err, DomainError::OverlappingSubdomains));
+
+        let domains = ["s3.example.com", "example.com"];
+        let result = MultiDomain::new(&domains);
+        let err = result.unwrap_err();
+        assert!(matches!(err, DomainError::OverlappingSubdomains));
+
+        // a shared suffix without a label boundary is not an overlap
+        let domains = ["example.com", "s3-example.com"];
+        let result = MultiDomain::new(&domains);
+        let md = result.unwrap();
+        assert_eq!(md.base_domains, domains);
+
+        let domains = ["rustfs.example.com", "s3-rustfs.example.com"];
+        let result = MultiDomain::new(&domains);
+        let md = result.unwrap();
+        assert_eq!(md.base_domains, domains);
+
+        let domains = ["example.com:8080", "s3-example.com:8080"];
+        let result = MultiDomain::new(&domains);
+        let md = result.unwrap();
+        assert_eq!(md.base_domains, domains);
+
+        let domains = ["example.com:8080", "s3.example.com:8080"];
+        let result = MultiDomain::new(&domains);
+        let err = result.unwrap_err();
+        assert!(matches!(err, DomainError::OverlappingSubdomains));
+
         let domains: [&str; 0] = [];
         let result = MultiDomain::new(&domains);
         let err = result.unwrap_err();
         assert!(matches!(err, DomainError::ZeroDomains));
+    }
+
+    #[test]
+    fn multi_domain_parse_shared_suffix() {
+        let domains = ["rustfs.example.com", "s3-rustfs.example.com"];
+        let md = MultiDomain::new(domains.iter().copied()).unwrap();
+
+        for domain in domains {
+            let vh = md.parse_host_header(domain).unwrap();
+            assert_eq!(vh.domain(), domain);
+            assert_eq!(vh.bucket(), None);
+
+            let host = format!("bucket.{domain}");
+            let vh = md.parse_host_header(&host).unwrap();
+            assert_eq!(vh.domain(), domain);
+            assert_eq!(vh.bucket(), Some("bucket"));
+        }
     }
 
     #[test]
