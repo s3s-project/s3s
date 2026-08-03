@@ -1,5 +1,14 @@
 use super::*;
 
+pub(super) struct NeverGetSecretKeyAuth;
+
+#[async_trait::async_trait]
+impl crate::auth::S3Auth for NeverGetSecretKeyAuth {
+    async fn get_secret_key(&self, _access_key: &str) -> crate::error::S3Result<crate::auth::SecretKey> {
+        panic!("secret key lookup must not occur for a wrong-region request")
+    }
+}
+
 // use crate::service::S3Service;
 
 // use stdx::mem::output_size;
@@ -555,7 +564,7 @@ mod post_policy_test_helpers {
     use std::fmt::Write;
 
     use crate::S3Request;
-    use crate::auth::{SecretKey, SimpleAuth};
+    use crate::auth::{S3Auth, SecretKey, SimpleAuth};
     use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
     use crate::http::{Body, Request};
     use crate::ops::CallContext;
@@ -601,7 +610,7 @@ mod post_policy_test_helpers {
     pub fn create_test_context<'a>(
         s3: &'a Arc<dyn crate::s3_trait::S3>,
         config: &'a Arc<dyn S3ConfigProvider>,
-        auth: &'a SimpleAuth,
+        auth: &'a dyn S3Auth,
     ) -> CallContext<'a> {
         CallContext {
             s3,
@@ -815,7 +824,7 @@ async fn post_object_rejects_wrong_region() {
         ..Default::default()
     };
     let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(s3_config)));
-    let auth = post_policy_test_helpers::create_test_auth();
+    let auth = NeverGetSecretKeyAuth;
     let ccx = post_policy_test_helpers::create_test_context(&s3, &config, &auth);
     let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
     let policy_json = &format!(

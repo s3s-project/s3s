@@ -311,15 +311,6 @@ impl SignatureContext<'_> {
         }
 
         let region = credential.aws_region;
-        let service = credential.aws_service;
-
-        if !matches!(service, "s3" | "sts") {
-            return Err(s3_error!(
-                NotImplemented,
-                "unknown service '{}' in credential scope; expected 's3' or 'sts'",
-                service,
-            ));
-        }
 
         {
             let config = self.config.snapshot();
@@ -329,6 +320,16 @@ impl SignatureContext<'_> {
 
         let access_key = credential.access_key_id.to_owned();
         let secret_key = auth.get_secret_key(&access_key).await?;
+
+        let service = credential.aws_service;
+
+        if !matches!(service, "s3" | "sts") {
+            return Err(s3_error!(
+                NotImplemented,
+                "unknown service '{}' in credential scope; expected 's3' or 'sts'",
+                service,
+            ));
+        }
 
         let string_to_sign = info.policy;
         let signature = sig_v4::calculate_signature(string_to_sign, &secret_key, &amz_date, region, service);
@@ -369,15 +370,6 @@ impl SignatureContext<'_> {
         }
 
         let region = presigned_url.credential.aws_region;
-        let service = presigned_url.credential.aws_service;
-
-        if !matches!(service, "s3" | "sts") {
-            return Err(s3_error!(
-                NotImplemented,
-                "unknown service '{}' in credential scope; expected 's3' or 'sts'",
-                service,
-            ));
-        }
 
         let amz_content_sha256 = extract_amz_content_sha256(&self.hs)?;
 
@@ -418,6 +410,16 @@ impl SignatureContext<'_> {
         let auth = require_auth(self.auth)?;
         let access_key = presigned_url.credential.access_key_id;
         let secret_key = auth.get_secret_key(access_key).await?;
+
+        let service = presigned_url.credential.aws_service;
+
+        if !matches!(service, "s3" | "sts") {
+            return Err(s3_error!(
+                NotImplemented,
+                "unknown service '{}' in credential scope; expected 's3' or 'sts'",
+                service,
+            ));
+        }
 
         let expected_signature = presigned_url.signature;
         let headers = self.hs.find_multiple_with_on_missing(&presigned_url.signed_headers, |name| {
@@ -1082,8 +1084,6 @@ file content\r\n\
 
     #[tokio::test]
     async fn v4_presigned_url_rejects_wrong_region() {
-        use crate::auth::SecretKey;
-        use crate::auth::SimpleAuth;
         use crate::config::{S3ConfigProvider, StaticConfigProvider};
         use std::sync::Arc;
 
@@ -1097,9 +1097,7 @@ file content\r\n\
         ))
         .unwrap();
 
-        let access_key = "AKIAIOSFODNN7EXAMPLE";
-        let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
-        let auth = SimpleAuth::from_single(access_key, secret_key);
+        let auth = crate::ops::tests::NeverGetSecretKeyAuth;
         let s3_config = S3Config {
             expected_region: Some("us-west-2".parse().expect("valid test region")),
             ..Default::default()
@@ -1475,14 +1473,11 @@ file content\r\n\
 
     #[tokio::test]
     async fn v4_header_auth_rejects_wrong_region() {
-        use crate::auth::SecretKey;
-        use crate::auth::SimpleAuth;
         use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
         use std::sync::Arc;
 
         let access_key = "AKIAIOSFODNN7EXAMPLE";
-        let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
-        let auth = SimpleAuth::from_single(access_key, secret_key);
+        let auth = crate::ops::tests::NeverGetSecretKeyAuth;
         let s3_config = S3Config {
             presigned_url_max_skew_time_secs: u32::MAX,
             expected_region: Some("us-west-2".parse().expect("valid test region")),
