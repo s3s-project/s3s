@@ -131,6 +131,19 @@ fn validate_sig_v4_clock_skew(amz_date: &AmzDate, now: time::OffsetDateTime, con
     Ok(())
 }
 
+fn validate_sig_v4_region(region: &str, config: &S3Config) -> S3Result<()> {
+    if let Some(expected_region) = &config.expected_region
+        && region != expected_region.as_str()
+    {
+        return Err(s3_error!(
+            AuthorizationHeaderMalformed,
+            "The authorization header is malformed; the region is wrong; expecting '{expected_region}'."
+        ));
+    }
+
+    Ok(())
+}
+
 impl SignatureVerificationContext<'_> {
     fn verify_with_raw_path_fallback(
         &self,
@@ -297,11 +310,6 @@ impl SignatureContext<'_> {
             return Err(s3_error!(SignatureDoesNotMatch, "credential scope date does not match x-amz-date"));
         }
 
-        validate_sig_v4_clock_skew(&amz_date, time::OffsetDateTime::now_utc(), &self.config.snapshot())?;
-
-        let access_key = credential.access_key_id.to_owned();
-        let secret_key = auth.get_secret_key(&access_key).await?;
-
         let region = credential.aws_region;
         let service = credential.aws_service;
 
@@ -312,6 +320,15 @@ impl SignatureContext<'_> {
                 service,
             ));
         }
+
+        {
+            let config = self.config.snapshot();
+            validate_sig_v4_region(region, &config)?;
+            validate_sig_v4_clock_skew(&amz_date, time::OffsetDateTime::now_utc(), &config)?;
+        }
+
+        let access_key = credential.access_key_id.to_owned();
+        let secret_key = auth.get_secret_key(&access_key).await?;
 
         let string_to_sign = info.policy;
         let signature = sig_v4::calculate_signature(string_to_sign, &secret_key, &amz_date, region, service);
@@ -351,6 +368,17 @@ impl SignatureContext<'_> {
             return Err(s3_error!(SignatureDoesNotMatch, "credential scope date does not match x-amz-date"));
         }
 
+        let region = presigned_url.credential.aws_region;
+        let service = presigned_url.credential.aws_service;
+
+        if !matches!(service, "s3" | "sts") {
+            return Err(s3_error!(
+                NotImplemented,
+                "unknown service '{}' in credential scope; expected 's3' or 'sts'",
+                service,
+            ));
+        }
+
         let amz_content_sha256 = extract_amz_content_sha256(&self.hs)?;
 
         // Presigned URLs do not support streaming (chunked) payload signing,
@@ -361,6 +389,9 @@ impl SignatureContext<'_> {
 
         {
             // check expiration
+            let config = self.config.snapshot();
+            validate_sig_v4_region(region, &config)?;
+
             let now = time::OffsetDateTime::now_utc();
 
             let date = presigned_url
@@ -374,7 +405,6 @@ impl SignatureContext<'_> {
             // This is to account for clock skew between the client and server.
             // See also https://github.com/minio/minio/blob/b5177993b371817699d3fa25685f54f88d8bfcce/cmd/signature-v4.go#L238-L242
 
-            let config = self.config.snapshot();
             let max_skew_time = time::Duration::seconds(i64::from(config.presigned_url_max_skew_time_secs));
             if duration.is_negative() && duration.abs() > max_skew_time {
                 return Err(s3_error!(RequestTimeTooSkewed, "request date is later than server time too much"));
@@ -388,17 +418,6 @@ impl SignatureContext<'_> {
         let auth = require_auth(self.auth)?;
         let access_key = presigned_url.credential.access_key_id;
         let secret_key = auth.get_secret_key(access_key).await?;
-
-        let region = presigned_url.credential.aws_region;
-        let service = presigned_url.credential.aws_service;
-
-        if !matches!(service, "s3" | "sts") {
-            return Err(s3_error!(
-                NotImplemented,
-                "unknown service '{}' in credential scope; expected 's3' or 'sts'",
-                service,
-            ));
-        }
 
         let expected_signature = presigned_url.signature;
         let headers = self.hs.find_multiple_with_on_missing(&presigned_url.signed_headers, |name| {
@@ -488,7 +507,11 @@ impl SignatureContext<'_> {
             return Err(s3_error!(SignatureDoesNotMatch, "credential scope date does not match x-amz-date"));
         }
 
-        validate_sig_v4_clock_skew(&amz_date, time::OffsetDateTime::now_utc(), &self.config.snapshot())?;
+        {
+            let config = self.config.snapshot();
+            validate_sig_v4_region(region, &config)?;
+            validate_sig_v4_clock_skew(&amz_date, time::OffsetDateTime::now_utc(), &config)?;
+        }
 
         let amz_content_sha256 = extract_amz_content_sha256(&self.hs)?;
 
@@ -812,6 +835,22 @@ mod tests {
     }
 
     #[test]
+    fn sig_v4_region_validation_is_optional_and_reports_mismatch() {
+        let mut config = S3Config::default();
+        validate_sig_v4_region("us-east-1", &config).expect("unset expected region should accept any region");
+
+        config.expected_region = Some("us-west-2".parse().expect("valid test region"));
+        validate_sig_v4_region("us-west-2", &config).expect("matching region should be accepted");
+
+        let err = validate_sig_v4_region("us-east-1", &config).expect_err("mismatched region should be rejected");
+        assert_eq!(err.code(), &S3ErrorCode::AuthorizationHeaderMalformed);
+        assert_eq!(
+            err.message(),
+            Some("The authorization header is malformed; the region is wrong; expecting 'us-west-2'.")
+        );
+    }
+
+    #[test]
     fn raw_path_fallback_rejects_missing_or_mismatched_signatures() {
         let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
         let amz_date = AmzDate::parse("20130524T000000Z").unwrap();
@@ -1042,6 +1081,62 @@ file content\r\n\
     }
 
     #[tokio::test]
+    async fn v4_presigned_url_rejects_wrong_region() {
+        use crate::auth::SecretKey;
+        use crate::auth::SimpleAuth;
+        use crate::config::{S3ConfigProvider, StaticConfigProvider};
+        use std::sync::Arc;
+
+        let qs = OrderedQs::parse(concat!(
+            "X-Amz-Algorithm=AWS4-HMAC-SHA256",
+            "&X-Amz-Credential=AKIAIOSFODNN7EXAMPLE%2F20130524%2Fus-east-1%2Fs3%2Faws4_request",
+            "&X-Amz-Date=20130524T000000Z",
+            "&X-Amz-Expires=999999999",
+            "&X-Amz-SignedHeaders=host",
+            "&X-Amz-Signature=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ))
+        .unwrap();
+
+        let access_key = "AKIAIOSFODNN7EXAMPLE";
+        let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+        let auth = SimpleAuth::from_single(access_key, secret_key);
+        let s3_config = S3Config {
+            expected_region: Some("us-west-2".parse().expect("valid test region")),
+            ..Default::default()
+        };
+        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(s3_config)));
+
+        let method = Method::GET;
+        let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+        let mut body = Body::empty();
+        let mut cx = SignatureContext {
+            auth: Some(&auth),
+            config: &config,
+            req_version: ::http::Version::HTTP_11,
+            req_method: &method,
+            req_uri: &uri,
+            req_body: &mut body,
+            qs: Some(&qs),
+            hs: OrderedHeaders::from_slice_unchecked(&[("host", "s3.amazonaws.com")]),
+            decoded_uri_path: "/test.txt",
+            raw_uri_path: "/test.txt",
+            vh_bucket: None,
+            content_length: None,
+            mime: None,
+            decoded_content_length: None,
+            transformed_body: None,
+            multipart: None,
+            trailing_headers: None,
+        };
+
+        let err = cx
+            .v4_check_presigned_url()
+            .await
+            .expect_err("presigned URL for another region should be rejected");
+        assert_eq!(err.code(), &S3ErrorCode::AuthorizationHeaderMalformed);
+    }
+
+    #[tokio::test]
     async fn v4_presigned_url_accepts_standard_and_raw_uri_path_signatures() {
         use crate::auth::SecretKey;
         use crate::auth::SimpleAuth;
@@ -1051,7 +1146,11 @@ file content\r\n\
         let access_key = "AKIAIOSFODNN7EXAMPLE";
         let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
         let auth = SimpleAuth::from_single(access_key, secret_key.clone());
-        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+        let s3_config = S3Config {
+            expected_region: Some("us-east-1".parse().expect("valid test region")),
+            ..Default::default()
+        };
+        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(s3_config)));
 
         let method = Method::GET;
         let uri = Uri::from_static("https://s3.amazonaws.com/test-bucket/path/sitemap.xmlage=");
@@ -1375,6 +1474,62 @@ file content\r\n\
     }
 
     #[tokio::test]
+    async fn v4_header_auth_rejects_wrong_region() {
+        use crate::auth::SecretKey;
+        use crate::auth::SimpleAuth;
+        use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
+        use std::sync::Arc;
+
+        let access_key = "AKIAIOSFODNN7EXAMPLE";
+        let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+        let auth = SimpleAuth::from_single(access_key, secret_key);
+        let s3_config = S3Config {
+            presigned_url_max_skew_time_secs: u32::MAX,
+            expected_region: Some("us-west-2".parse().expect("valid test region")),
+            ..Default::default()
+        };
+        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(s3_config)));
+
+        let authorization = format!(
+            "AWS4-HMAC-SHA256 Credential={access_key}/20130524/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        );
+        let headers = OrderedHeaders::from_slice_unchecked(&[
+            ("authorization", authorization.as_str()),
+            ("host", "s3.amazonaws.com"),
+            ("x-amz-content-sha256", "UNSIGNED-PAYLOAD"),
+            ("x-amz-date", "20130524T000000Z"),
+        ]);
+        let method = Method::GET;
+        let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+        let mut body = Body::empty();
+        let mut cx = SignatureContext {
+            auth: Some(&auth),
+            config: &config,
+            req_version: ::http::Version::HTTP_11,
+            req_method: &method,
+            req_uri: &uri,
+            req_body: &mut body,
+            qs: None,
+            hs: headers,
+            decoded_uri_path: "/test.txt",
+            raw_uri_path: "/test.txt",
+            vh_bucket: None,
+            content_length: Some(0),
+            mime: None,
+            decoded_content_length: None,
+            transformed_body: None,
+            multipart: None,
+            trailing_headers: None,
+        };
+
+        let err = cx
+            .v4_check_header_auth()
+            .await
+            .expect_err("header signature for another region should be rejected");
+        assert_eq!(err.code(), &S3ErrorCode::AuthorizationHeaderMalformed);
+    }
+
+    #[tokio::test]
     async fn v4_header_auth_accepts_standard_and_raw_uri_path_signatures() {
         use crate::auth::SecretKey;
         use crate::auth::SimpleAuth;
@@ -1386,6 +1541,7 @@ file content\r\n\
         let auth = SimpleAuth::from_single(access_key, secret_key.clone());
         let s3_config = S3Config {
             presigned_url_max_skew_time_secs: u32::MAX,
+            expected_region: Some("us-east-1".parse().expect("valid test region")),
             ..Default::default()
         };
         let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(s3_config)));

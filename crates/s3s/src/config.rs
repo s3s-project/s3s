@@ -43,6 +43,8 @@ use std::sync::Arc;
 use arc_swap::ArcSwap;
 use serde::{Deserialize, Serialize};
 
+use crate::region::Region;
+
 /// S3 Service Configuration Provider trait.
 ///
 /// This trait provides a `snapshot` method that returns an `Arc<S3Config>`.
@@ -134,6 +136,15 @@ pub struct S3Config {
     /// Default: 900 (15 minutes)
     pub presigned_url_max_skew_time_secs: u32,
 
+    /// Region accepted in `SigV4` credential scopes.
+    ///
+    /// When set, requests signed for another region are rejected with
+    /// `AuthorizationHeaderMalformed`. When unset, any region is accepted.
+    ///
+    /// Default: None
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expected_region: Option<Region>,
+
     /// Whether to normalize forward slashes in object keys.
     ///
     /// If enabled, multiple consecutive slashes will be treated as a single slash:
@@ -165,6 +176,7 @@ impl Default for S3Config {
             form_max_fields_size: 20 * 1024 * 1024,            // 20 MB
             form_max_parts: 1000,
             presigned_url_max_skew_time_secs: 900, // 15 minutes
+            expected_region: None,
             normalize_forward_slash_path: false,
         }
     }
@@ -283,6 +295,7 @@ mod tests {
         assert_eq!(config.form_max_fields_size, 20 * 1024 * 1024);
         assert_eq!(config.form_max_parts, 1000);
         assert_eq!(config.presigned_url_max_skew_time_secs, 900);
+        assert_eq!(config.expected_region, None);
     }
 
     #[test]
@@ -371,6 +384,7 @@ mod tests {
             form_max_fields_size: 5 * 1024 * 1024,
             form_max_parts: 500,
             presigned_url_max_skew_time_secs: 600,
+            expected_region: Some("us-west-2".parse().expect("valid test region")),
             normalize_forward_slash_path: false,
         };
 
@@ -390,6 +404,12 @@ mod tests {
         // Other fields should have defaults
         assert_eq!(config.post_object_max_file_size, 5 * 1024 * 1024 * 1024);
         assert_eq!(config.form_max_field_size, 1024 * 1024);
+    }
+
+    #[test]
+    fn test_serde_omits_unset_expected_region() {
+        let json = serde_json::to_value(S3Config::default()).expect("serialize failed");
+        assert!(json.get("expected_region").is_none());
     }
 
     #[test]

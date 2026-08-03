@@ -591,6 +591,7 @@ mod post_policy_test_helpers {
         let config = S3Config {
             presigned_url_max_skew_time_secs: u32::MAX,
             post_object_max_file_size,
+            expected_region: Some("us-east-1".parse().expect("valid test region")),
             ..Default::default()
         };
         Arc::new(StaticConfigProvider::new(Arc::new(config)))
@@ -799,6 +800,34 @@ mod post_policy_test_helpers {
                 .unwrap(),
         )
     }
+}
+
+#[tokio::test]
+async fn post_object_rejects_wrong_region() {
+    use crate::auth::SecretKey;
+    use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
+    use std::sync::Arc;
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+    let s3_config = S3Config {
+        presigned_url_max_skew_time_secs: u32::MAX,
+        expected_region: Some("us-west-2".parse().expect("valid test region")),
+        ..Default::default()
+    };
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(s3_config)));
+    let auth = post_policy_test_helpers::create_test_auth();
+    let ccx = post_policy_test_helpers::create_test_context(&s3, &config, &auth);
+    let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+    let policy_json = &format!(
+        r#"{{"expiration":"2030-01-01T00:00:00.000Z","conditions":[{}]}}"#,
+        post_policy_test_helpers::BASE_CONDITIONS,
+    );
+    let mut req = post_policy_test_helpers::build_post_object_request(policy_json, "test", &secret_key, false);
+
+    let Err(err) = super::prepare(&mut req, &ccx).await else {
+        panic!("POST policy signed for another region should be rejected");
+    };
+    assert_eq!(err.code(), &crate::error::S3ErrorCode::AuthorizationHeaderMalformed);
 }
 
 /// Test that policy max < config max results in using policy max for file size limit
