@@ -163,7 +163,7 @@ dependencies = [
  "aws-types",
  "bytes",
  "fastrand",
- "http 1.4.2",
+ "http 1.5.0",
  "time",
  "tokio",
  "tracing",
@@ -224,7 +224,7 @@ dependencies = [
  "bytes-utils",
  "fastrand",
  "http 0.2.12",
- "http 1.4.2",
+ "http 1.5.0",
  "http-body 0.4.6",
  "http-body 1.1.0",
  "percent-encoding",
@@ -260,7 +260,7 @@ dependencies = [
  "hex",
  "hmac 0.13.0",
  "http 0.2.12",
- "http 1.4.2",
+ "http 1.5.0",
  "http-body 1.1.0",
  "lru",
  "percent-encoding",
@@ -292,7 +292,7 @@ dependencies = [
  "aws-types",
  "fastrand",
  "http 0.2.12",
- "http 1.4.2",
+ "http 1.5.0",
  "regex-lite",
  "tracing",
 ]
@@ -314,7 +314,7 @@ dependencies = [
  "hex",
  "hmac 0.13.0",
  "http 0.2.12",
- "http 1.4.2",
+ "http 1.5.0",
  "p256",
  "percent-encoding",
  "sha2 0.11.0",
@@ -346,7 +346,7 @@ dependencies = [
  "bytes",
  "crc-fast",
  "hex",
- "http 1.4.2",
+ "http 1.5.0",
  "http-body 1.1.0",
  "http-body-util",
  "md-5",
@@ -380,7 +380,7 @@ dependencies = [
  "bytes-utils",
  "futures-core",
  "futures-util",
- "http 1.4.2",
+ "http 1.5.0",
  "http-body 1.1.0",
  "http-body-util",
  "percent-encoding",
@@ -399,7 +399,7 @@ dependencies = [
  "aws-smithy-runtime-api",
  "aws-smithy-types",
  "h2",
- "http 1.4.2",
+ "http 1.5.0",
  "hyper",
  "hyper-rustls",
  "hyper-util",
@@ -459,7 +459,7 @@ dependencies = [
  "bytes",
  "fastrand",
  "http 0.2.12",
- "http 1.4.2",
+ "http 1.5.0",
  "http-body 0.4.6",
  "http-body 1.1.0",
  "http-body-util",
@@ -480,7 +480,7 @@ dependencies = [
  "aws-smithy-types",
  "bytes",
  "http 0.2.12",
- "http 1.4.2",
+ "http 1.5.0",
  "pin-project-lite",
  "tokio",
  "tracing",
@@ -506,7 +506,7 @@ checksum = "7d56e0a4e53127a632224e43633b0fe045fa9e1e3cfc68b9830f1115e103f910"
 dependencies = [
  "aws-smithy-runtime-api",
  "aws-smithy-types",
- "http 1.4.2",
+ "http 1.5.0",
 ]
 
 [[package]]
@@ -520,7 +520,7 @@ dependencies = [
  "bytes-utils",
  "futures-core",
  "http 0.2.12",
- "http 1.4.2",
+ "http 1.5.0",
  "http-body 0.4.6",
  "http-body 1.1.0",
  "http-body-util",
@@ -582,7 +582,7 @@ dependencies = [
  "bytes",
  "form_urlencoded",
  "futures-util",
- "http 1.4.2",
+ "http 1.5.0",
  "http-body 1.1.0",
  "http-body-util",
  "hyper",
@@ -613,7 +613,7 @@ checksum = "08c78f31d7b1291f7ee735c1c6780ccde7785daae9a9206026862dab7d8792d1"
 dependencies = [
  "bytes",
  "futures-core",
- "http 1.4.2",
+ "http 1.5.0",
  "http-body 1.1.0",
  "http-body-util",
  "mime",
@@ -776,9 +776,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.6.4"
+version = "4.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d91e0c145792ef73a6ad36d27c75ac09f1832222a3c209689d90f534685ee5b7"
+checksum = "301b56658598e48f3648647ac6fc887be7e7108eddfa4e9b63fcf3ec58c0cadf"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -786,9 +786,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.6.2"
+version = "4.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f09628afdcc538b57f3c6341e9c8e9970f18e4a481690a64974d7023bd33548b"
+checksum = "94a65403d1a1bd28f7dc68eb8506e8874808ee5eecb59298de588e2e1407a078"
 dependencies = [
  "anstream",
  "anstyle",
@@ -841,7 +841,7 @@ version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "faf9468729b8cbcea668e36183cb69d317348c2e08e994829fb56ebfdfbaac34"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -1105,7 +1105,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -1326,7 +1326,7 @@ dependencies = [
  "fnv",
  "futures-core",
  "futures-sink",
- "http 1.4.2",
+ "http 1.5.0",
  "indexmap",
  "slab",
  "tokio",
@@ -1404,9 +1404,9 @@ dependencies = [
 
 [[package]]
 name = "http"
-version = "1.4.2"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6970f50e31d6fc17d3fa27329444bfa74e196cf62e95052a3f6fee181dba6425"
+checksum = "918d3568bebf352712bc2ef3d46a8bcf1a75b373be6539de198e9105cbbf9ce0"
 dependencies = [
  "bytes",
  "itoa",
@@ -1430,7 +1430,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ca2a8f2913ee65f60facd6a5905613afaa448497a0230cc41ce022d93290bc2c"
 dependencies = [
  "bytes",
- "http 1.4.2",
+ "http 1.5.0",
 ]
 
 [[package]]
@@ -1441,7 +1441,7 @@ checksum = "e9f41fd6a08e4d4ec69df65976da761afd5ad5e58a9d4acb46bd1c953a9e3ff2"
 dependencies = [
  "bytes",
  "futures-core",
- "http 1.4.2",
+ "http 1.5.0",
  "http-body 1.1.0",
  "pin-project-lite",
 ]
@@ -1478,7 +1478,7 @@ dependencies = [
  "futures-channel",
  "futures-core",
  "h2",
- "http 1.4.2",
+ "http 1.5.0",
  "http-body 1.1.0",
  "httparse",
  "httpdate",
@@ -1495,7 +1495,7 @@ version = "0.27.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "33ca68d021ef39cf6463ab54c1d0f5daf03377b70561305bb89a8f83aab66e0f"
 dependencies = [
- "http 1.4.2",
+ "http 1.5.0",
  "hyper",
  "hyper-util",
  "rustls",
@@ -1515,7 +1515,7 @@ dependencies = [
  "bytes",
  "futures-channel",
  "futures-util",
- "http 1.4.2",
+ "http 1.5.0",
  "http-body 1.1.0",
  "hyper",
  "ipnet",
@@ -2191,7 +2191,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2297,7 +2297,7 @@ dependencies = [
  "base64",
  "bytes",
  "futures-core",
- "http 1.4.2",
+ "http 1.5.0",
  "http-body 1.1.0",
  "http-body-util",
  "hyper",
@@ -2425,7 +2425,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2477,7 +2477,7 @@ dependencies = [
  "futures",
  "hex-simd",
  "hmac 0.13.0",
- "http 1.4.2",
+ "http 1.5.0",
  "http-body 1.1.0",
  "http-body-util",
  "httparse",
@@ -2538,7 +2538,7 @@ name = "s3s-codegen"
 version = "0.0.0"
 dependencies = [
  "heck",
- "http 1.4.2",
+ "http 1.5.0",
  "numeric_cast",
  "regex",
  "s3s-model",
@@ -2667,7 +2667,7 @@ version = "0.0.0"
 dependencies = [
  "futures",
  "getrandom 0.4.3",
- "http 1.4.2",
+ "http 1.5.0",
  "s3s",
  "wasm-bindgen-test",
 ]
@@ -3165,7 +3165,7 @@ dependencies = [
  "bitflags",
  "bytes",
  "futures-util",
- "http 1.4.2",
+ "http 1.5.0",
  "http-body 1.1.0",
  "pin-project-lite",
  "tower",
@@ -3511,7 +3511,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
