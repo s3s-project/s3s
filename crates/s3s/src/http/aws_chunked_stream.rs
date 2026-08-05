@@ -76,7 +76,7 @@ struct SignatureCtx {
 pub enum AwsChunkedStreamError {
     /// Underlying error
     #[error("AwsChunkedStreamError: Underlying: {}",.0)]
-    Underlying(StdError),
+    Underlying(#[source] StdError),
     /// Signature mismatch
     #[error("AwsChunkedStreamError: SignatureMismatch")]
     SignatureMismatch,
@@ -941,7 +941,8 @@ mod tests {
     async fn test_underlying_error() {
         // Test Underlying error propagation
         use std::io;
-        let err: Result<Bytes, StdError> = Err(Box::new(io::Error::other("network error")));
+        let cause = io::Error::new(io::ErrorKind::ConnectionReset, "network error");
+        let err: Result<Bytes, StdError> = Err(Box::new(cause));
         let chunk_results: Vec<Result<Bytes, _>> = vec![err];
 
         let seed_signature = "test";
@@ -962,6 +963,16 @@ mod tests {
 
         let result = chunked_stream.next().await.unwrap();
         assert!(matches!(result, Err(AwsChunkedStreamError::Underlying(_))));
+
+        let err = result.unwrap_err();
+        assert_eq!(err.to_string(), "AwsChunkedStreamError: Underlying: network error");
+
+        // The cause chain must stay intact so that callers can classify the failure,
+        // for example to tell a client disconnect apart from a server-side fault.
+        let err: &dyn std::error::Error = &err;
+        let source = err.source().expect("the underlying error should be exposed as the source");
+        let kind = source.downcast_ref::<io::Error>().map(io::Error::kind);
+        assert_eq!(kind, Some(io::ErrorKind::ConnectionReset));
     }
 
     #[tokio::test]

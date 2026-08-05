@@ -109,7 +109,7 @@ impl Multipart {
 #[derive(Debug, thiserror::Error)]
 pub enum MultipartError {
     #[error("MultipartError: Underlying: {0}")]
-    Underlying(StdError),
+    Underlying(#[source] StdError),
     #[error("MultipartError: InvalidFormat")]
     InvalidFormat,
     #[error("MultipartError: FieldTooLarge: field size {0} bytes exceeds limit of {1} bytes")]
@@ -338,7 +338,7 @@ pub enum FileStreamError {
     Incomplete,
     /// IO error
     #[error("FileStreamError: Underlying: {0}")]
-    Underlying(StdError),
+    Underlying(#[source] StdError),
     /// Boundary buffer too large
     #[error("FileStreamError: BoundaryBufferTooLarge: size {0} exceeds limit {1}")]
     BoundaryBufferTooLarge(usize, usize),
@@ -583,6 +583,7 @@ fn parse_content_disposition(input: &[u8]) -> nom::IResult<&[u8], ContentDisposi
 mod tests {
     use super::*;
 
+    use std::io;
     use std::slice;
 
     async fn aggregate_file_stream(mut file_stream: FileStream) -> Result<Bytes, FileStreamError> {
@@ -995,5 +996,31 @@ mod tests {
         }
 
         assert!(errored, "Should have received BoundaryBufferTooLarge error");
+    }
+
+    #[test]
+    fn multipart_underlying_error_exposes_source() {
+        let cause = io::Error::new(io::ErrorKind::ConnectionReset, "boom");
+        let err = MultipartError::Underlying(Box::new(cause));
+
+        assert_eq!(err.to_string(), "MultipartError: Underlying: boom");
+
+        let err: &dyn std::error::Error = &err;
+        let source = err.source().expect("the underlying error should be exposed as the source");
+        let kind = source.downcast_ref::<io::Error>().map(io::Error::kind);
+        assert_eq!(kind, Some(io::ErrorKind::ConnectionReset));
+    }
+
+    #[test]
+    fn file_stream_underlying_error_exposes_source() {
+        let cause = io::Error::new(io::ErrorKind::ConnectionReset, "boom");
+        let err = FileStreamError::Underlying(Box::new(cause));
+
+        assert_eq!(err.to_string(), "FileStreamError: Underlying: boom");
+
+        let err: &dyn std::error::Error = &err;
+        let source = err.source().expect("the underlying error should be exposed as the source");
+        let kind = source.downcast_ref::<io::Error>().map(io::Error::kind);
+        assert_eq!(kind, Some(io::ErrorKind::ConnectionReset));
     }
 }

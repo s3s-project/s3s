@@ -43,7 +43,7 @@ enum State {
 pub enum UploadStreamError {
     /// Underlying stream error.
     #[error("UploadStreamError: Underlying: {0}")]
-    Underlying(StdError),
+    Underlying(#[source] StdError),
     /// Payload SHA-256 mismatch.
     #[error("UploadStreamError: Sha256Mismatch")]
     Sha256Mismatch,
@@ -308,12 +308,21 @@ mod tests {
     #[tokio::test]
     async fn propagate_underlying_error() {
         let checksum = Sha256Sum::from_bytes(Sha256::checksum(b""));
-        let err: Result<Bytes, StdError> = Err(Box::new(io::Error::other("boom")));
+        let cause = io::Error::new(io::ErrorKind::ConnectionReset, "boom");
+        let err: Result<Bytes, StdError> = Err(Box::new(cause));
         let stream = futures::stream::iter(vec![err]);
 
         let mut upload = UploadStream::new(stream, 0, checksum);
 
         let err = upload.next().await.unwrap().unwrap_err();
         assert!(matches!(err, UploadStreamError::Underlying(_)));
+        assert_eq!(err.to_string(), "UploadStreamError: Underlying: boom");
+
+        // The cause chain must stay intact so that callers can classify the failure,
+        // for example to tell a client disconnect apart from a server-side fault.
+        let err: &dyn std::error::Error = &err;
+        let source = err.source().expect("the underlying error should be exposed as the source");
+        let kind = source.downcast_ref::<io::Error>().map(io::Error::kind);
+        assert_eq!(kind, Some(io::ErrorKind::ConnectionReset));
     }
 }
