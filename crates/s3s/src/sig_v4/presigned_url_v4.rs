@@ -8,6 +8,8 @@ use crate::utils::crypto::is_sha256_checksum;
 
 use smallvec::SmallVec;
 
+const MAX_EXPIRES_SECONDS: u32 = 7 * 24 * 60 * 60;
+
 /// Presigned url information
 #[derive(Debug)]
 pub struct PresignedUrlV4<'a> {
@@ -104,6 +106,9 @@ impl<'a> PresignedUrlV4<'a> {
 
 fn parse_expires(s: &str) -> Option<time::Duration> {
     let x = s.parse::<u32>().ok()?;
+    if x > MAX_EXPIRES_SECONDS {
+        return None;
+    }
     Some(time::Duration::new(i64::from(x), 0))
 }
 
@@ -189,8 +194,29 @@ mod tests {
 
     #[test]
     fn parse_rejects_invalid_expires() {
-        let mut pairs = valid_query_strings();
-        pairs[3] = ("X-Amz-Expires", "NaN");
+        for expires in ["604801", "4294967295", "4294967296", "999999999999999999999999", "NaN", "-1"] {
+            let mut pairs = valid_query_strings();
+            pairs[3] = ("X-Amz-Expires", expires);
+            let qs = make_qs(&pairs);
+            assert!(PresignedUrlV4::parse(&qs).is_err(), "X-Amz-Expires={expires} must be rejected");
+        }
+    }
+
+    #[test]
+    fn parse_accepts_expires_boundaries() {
+        for expires in ["0", "1", "604800"] {
+            let mut pairs = valid_query_strings();
+            pairs[3] = ("X-Amz-Expires", expires);
+            let qs = make_qs(&pairs);
+            let parsed = PresignedUrlV4::parse(&qs).expect("boundary expiration should parse");
+            assert_eq!(parsed.expires.whole_seconds().to_string(), expires);
+        }
+    }
+
+    #[test]
+    fn parse_rejects_duplicate_expires() {
+        let mut pairs = valid_query_strings().to_vec();
+        pairs.push(("X-Amz-Expires", "1"));
         let qs = make_qs(&pairs);
         assert!(PresignedUrlV4::parse(&qs).is_err());
     }
