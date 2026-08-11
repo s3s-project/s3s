@@ -321,37 +321,25 @@ mod tests {
         let md = result.unwrap();
         assert_eq!(md.base_domains, domains);
 
-        // a real subdomain is ambiguous and stays rejected
-        let domains = ["example.com", "s3.example.com"];
-        let result = MultiDomain::new(&domains);
-        let err = result.unwrap_err();
-        assert!(matches!(err, DomainError::OverlappingSubdomains));
-
-        let domains = ["s3.example.com", "example.com"];
-        let result = MultiDomain::new(&domains);
-        let err = result.unwrap_err();
-        assert!(matches!(err, DomainError::OverlappingSubdomains));
+        // a real subdomain is ambiguous and stays rejected, in either order
+        for domains in [
+            ["example.com", "s3.example.com"],
+            ["s3.example.com", "example.com"],
+            ["example.com:8080", "s3.example.com:8080"],
+        ] {
+            let err = MultiDomain::new(&domains).unwrap_err();
+            assert_eq!(err, DomainError::OverlappingSubdomains, "{domains:?}");
+        }
 
         // a shared suffix without a label boundary is not an overlap
-        let domains = ["example.com", "s3-example.com"];
-        let result = MultiDomain::new(&domains);
-        let md = result.unwrap();
-        assert_eq!(md.base_domains, domains);
-
-        let domains = ["rustfs.example.com", "s3-rustfs.example.com"];
-        let result = MultiDomain::new(&domains);
-        let md = result.unwrap();
-        assert_eq!(md.base_domains, domains);
-
-        let domains = ["example.com:8080", "s3-example.com:8080"];
-        let result = MultiDomain::new(&domains);
-        let md = result.unwrap();
-        assert_eq!(md.base_domains, domains);
-
-        let domains = ["example.com:8080", "s3.example.com:8080"];
-        let result = MultiDomain::new(&domains);
-        let err = result.unwrap_err();
-        assert!(matches!(err, DomainError::OverlappingSubdomains));
+        for domains in [
+            ["example.com", "s3-example.com"],
+            ["rustfs.example.com", "s3-rustfs.example.com"],
+            ["example.com:8080", "s3-example.com:8080"],
+        ] {
+            let md = MultiDomain::new(&domains).unwrap();
+            assert_eq!(md.base_domains, domains, "{domains:?}");
+        }
 
         let domains: [&str; 0] = [];
         let result = MultiDomain::new(&domains);
