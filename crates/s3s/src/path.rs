@@ -582,11 +582,11 @@ mod tests {
     #[test]
     fn parse_s3_path_error_display() {
         let err = ParseS3PathError::InvalidPath;
-        assert!(!format!("{err}").is_empty());
+        assert_ne!(format!("{err}").len(), 0);
         let err = ParseS3PathError::InvalidBucketName;
-        assert!(!format!("{err}").is_empty());
+        assert_ne!(format!("{err}").len(), 0);
         let err = ParseS3PathError::KeyTooLong;
-        assert!(!format!("{err}").is_empty());
+        assert_ne!(format!("{err}").len(), 0);
     }
 
     #[test]
