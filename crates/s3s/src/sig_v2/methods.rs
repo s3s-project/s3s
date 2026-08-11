@@ -488,7 +488,7 @@ mod tests {
 
         // Sanity-check: a non-empty signature is produced for this input
         let sig = calculate_signature(&secret_key, &string_to_sign);
-        assert!(!sig.is_empty());
+        assert_ne!(sig.len(), 0);
     }
 
     /// Regression test for <https://github.com/s3s-project/s3s/issues/137>
@@ -514,7 +514,7 @@ mod tests {
 
         // Sanity-check: a non-empty signature is produced for this input
         let sig = calculate_signature(&secret_key, &string_to_sign);
-        assert!(!sig.is_empty());
+        assert_ne!(sig.len(), 0);
     }
 
     /// Regression test for <https://github.com/s3s-project/s3s/issues/137>
@@ -546,6 +546,6 @@ mod tests {
 
         // Sanity-check: a non-empty signature is produced for this input
         let sig = calculate_signature(&secret_key, &string_to_sign);
-        assert!(!sig.is_empty());
+        assert_ne!(sig.len(), 0);
     }
 }

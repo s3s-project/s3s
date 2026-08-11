@@ -1169,8 +1169,8 @@ fn codegen_router(ops: &Operations, rust_types: &RustTypes) {
                     if group.len() == 1 {
                         let route = &group[0];
                         assert!(route.query_tag.is_none());
-                        assert!(route.required_headers.is_empty());
-                        assert!(route.required_query_strings.is_empty());
+                        assert_eq!(route.required_headers, Vec::<&str>::new());
+                        assert_eq!(route.required_query_strings, Vec::<&str>::new());
                         assert!(route.needs_full_body.not());
                         succ(route, false);
                     } else {
