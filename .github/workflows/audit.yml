@@ -8,6 +8,7 @@ on:
     paths:
       - '**/Cargo.toml'
       - '**/Cargo.lock'
+      - '.cargo/**' # audit.toml / deny.toml: config changes must run the audit job
   merge_group:
     types: [checks_requested]
   schedule:
