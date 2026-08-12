@@ -40,22 +40,16 @@ impl Signature {
     #[must_use]
     pub fn from_base64(value: &str) -> Option<Self> {
         // SigV2 signatures are always 28 chars (20-byte HMAC-SHA1 with padding);
-        // reject other lengths before decoding.
+        // reject other lengths before any validation work.
         if value.len() != 28 {
             return None;
         }
 
-        // A full decode is required: `decoded_length` alone does not validate
-        // the Base64 alphabet. The canonical re-encode check rejects
-        // non-canonical variants such as non-zero padding bits. When the
-        // decoded length equals the buffer length, the buffer holds exactly
-        // the decoded bytes, so re-encoding the buffer is equivalent.
-        let mut buf = [0_u8; 20];
-        let decoded_len = base64_simd::STANDARD
-            .decode(value.as_bytes(), base64_simd::Out::from_slice(&mut buf))
-            .ok()?
-            .len();
-        (decoded_len == buf.len() && base64_simd::STANDARD.encode_to_string(buf) == value).then(|| Self(value.into()))
+        // `check` validates the alphabet, the padding structure, and the
+        // canonical padding bits (`STANDARD` is not forgiving). The
+        // decoded-length check pins the payload to exactly 20 bytes.
+        base64_simd::STANDARD.check(value.as_bytes()).ok()?;
+        (base64_simd::STANDARD.decoded_length(value.as_bytes()).ok()? == 20).then(|| Self(value.into()))
     }
 
     /// Wraps a signature produced by `sig_v4::calculate_signature` /
@@ -145,6 +139,9 @@ mod tests {
         assert!(Signature::from_base64("AAAAAAAAAAAAAAAAAAAAAAAA").is_none());
         // 32 chars would decode to 24 bytes, not 20.
         assert!(Signature::from_base64("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA").is_none());
+        // 28 chars with double padding decode to 19 bytes, not 20:
+        // `check` alone would accept this, the decoded-length check rejects it.
+        assert!(Signature::from_base64("AAAAAAAAAAAAAAAAAAAAAAAAAA==").is_none());
     }
 
     #[test]
