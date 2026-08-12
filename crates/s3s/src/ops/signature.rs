@@ -384,7 +384,6 @@ impl SignatureContext<'_> {
 
         {
             // check expiration
-            let config = self.config.snapshot();
             validate_sig_v4_region(region, &config)?;
 
             let now = time::OffsetDateTime::now_utc();
