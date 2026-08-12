@@ -2,11 +2,10 @@
 # See: https://github.com/RustSec/rustsec/blob/main/cargo-audit/audit.toml.example
 
 [advisories]
-# rsa v0.9.10: Marvin Attack timing sidechannel in RSA PKCS#1 decryption.
-# Transitive dependency via reqsign-core → opendal → s3s-fs (dev-dependency).
-# Only used for S3 signature verification, not decryption. Low risk. No fix available.
+# lru v0.16.x: panic-safety use-after-free in `LruCache::pop()`.
+# Transitive via aws-sdk-s3, which pins lru ^0.16.x even at the latest release.
+# Requires a key whose `Drop` panics during `pop()`; no patched version is
+# reachable upstream yet.
 ignore = [
-    "RUSTSEC-2023-0071",
-    # proc-macro-error2: unmaintained, transitive via jiff → defmt → defmt-macros
-    "RUSTSEC-2026-0173",
+    "RUSTSEC-2026-0253",
 ]
