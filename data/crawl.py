@@ -1,7 +1,7 @@
+import json
+import re
 from pathlib import Path
 from pprint import pprint  # noqa: F401
-import re
-import json
 
 import requests
 import typer
@@ -148,12 +148,11 @@ def crawl_error_codes_from_markdown(md_text: str):
                     http_status_raw = val
                 continue
 
-        if code and description:
-            if code not in entries:
-                entries[code] = {
-                    "description": description,
-                    "http_status_raw": http_status_raw,
-                }
+        if code and description and code not in entries:
+            entries[code] = {
+                "description": description,
+                "http_status_raw": http_status_raw,
+            }
 
     if not entries:
         return None

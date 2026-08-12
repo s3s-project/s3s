@@ -26,7 +26,7 @@ import os
 import socket
 import sys
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from urllib.parse import quote, urlparse
 
 import boto3
@@ -73,7 +73,7 @@ def setup():
     try:
         client.create_bucket(Bucket=BUCKET)
         log(f"Created bucket: {BUCKET}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         log(f"Bucket creation: {e}")
 
 
@@ -84,12 +84,12 @@ def cleanup():
         resp = client.list_objects_v2(Bucket=BUCKET)
         for obj in resp.get("Contents", []):
             client.delete_object(Bucket=BUCKET, Key=obj["Key"])
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
     try:
         client.delete_bucket(Bucket=BUCKET)
         log(f"Deleted bucket: {BUCKET}")
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
 
 
@@ -118,7 +118,7 @@ def make_sigv4_headers(method, url, headers, payload=b"", content_sha256=None):
     uri = quote(parsed.path, safe="/")
     query = parsed.query
 
-    t = datetime.now(timezone.utc)
+    t = datetime.now(UTC)
     amz_date = t.strftime("%Y%m%dT%H%M%SZ")
     date_stamp = t.strftime("%Y%m%d")
 
@@ -198,7 +198,7 @@ def test_1_normal_put_with_content_length():
         data = resp["Body"].read()
         assert data == body, f"Data mismatch: {data!r}"
         record(test_name, "PASS", f"Uploaded {len(body)} bytes successfully")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         record(test_name, "FAIL", str(e))
 
 
@@ -248,7 +248,7 @@ def test_2_put_with_chunked_transfer_encoding():
                 )
         else:
             record(test_name, "FAIL", f"HTTP {resp.status_code}: {resp.text[:200]}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         record(test_name, "FAIL", str(e))
 
 
@@ -287,7 +287,7 @@ def test_3_put_empty_body_no_content_length():
                 )
         else:
             record(test_name, "FAIL", f"HTTP {resp.status_code}: {resp.text[:200]}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         record(test_name, "FAIL", str(e))
 
 
@@ -324,7 +324,7 @@ def test_4_put_with_unsigned_payload_no_content_length():
             )
         else:
             record(test_name, "FAIL", f"HTTP {resp.status_code}: {resp.text[:200]}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         record(test_name, "FAIL", str(e))
 
 
@@ -380,7 +380,7 @@ def test_5_raw_socket_put_no_content_length():
                 if not chunk:
                     break
                 response += chunk
-        except socket.timeout:
+        except TimeoutError:
             pass
         finally:
             sock.close()
@@ -406,7 +406,7 @@ def test_5_raw_socket_put_no_content_length():
             record(test_name, "INFO", f"Server returned Forbidden (403): {status_line}")
         else:
             record(test_name, "INFO", f"Server response: {status_line}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         record(test_name, "FAIL", str(e))
 
 
@@ -438,7 +438,7 @@ def test_6_put_zero_content_length():
             )
         else:
             record(test_name, "FAIL", f"HTTP {resp.status_code}: {resp.text[:200]}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         record(test_name, "FAIL", str(e))
 
 
@@ -479,7 +479,7 @@ def test_7_put_via_requests_no_content_length():
             )
         else:
             record(test_name, "FAIL", f"HTTP {resp.status_code}: {resp.text[:200]}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         record(test_name, "FAIL", str(e))
 
 

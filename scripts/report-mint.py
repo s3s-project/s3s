@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
-from dataclasses import dataclass
-from typing import Any, Dict, Optional
 import json
 import sys
-from pprint import pprint  # noqa: F401
+from dataclasses import dataclass
 from itertools import groupby
+from pprint import pprint  # noqa: F401
+from typing import Any
 
 
 # https://github.com/minio/mint#mint-log-format
 @dataclass
 class MintLog:
     name: str
-    function: Optional[str]
-    args: Optional[Dict[str, Any]]
+    function: str | None
+    args: dict[str, Any] | None
     duration: int
     status: str
-    alert: Optional[str]
-    message: Optional[str]
-    error: Optional[str]
+    alert: str | None
+    message: str | None
+    error: str | None
 
 
 def from_json(x: Any) -> MintLog:
@@ -37,7 +37,7 @@ if __name__ == "__main__":
     log_path = sys.argv[1]
     logs = []
     with open(log_path) as f:
-        for line in f.readlines():
+        for line in f:
             line = line.strip()
             if len(line) == 0:
                 continue
@@ -48,7 +48,7 @@ if __name__ == "__main__":
 
             try:
                 json_value = json.loads(json_str)
-            except Exception:
+            except json.JSONDecodeError:
                 print(f"error parsing log line: {line}")
                 continue
 
@@ -64,9 +64,9 @@ if __name__ == "__main__":
     counts = {}
 
     for name, group in groups.items():
-        pass_count = len(list(x for x in group if x.status == "PASS"))
-        fail_count = len(list(x for x in group if x.status == "FAIL"))
-        na_count = len(list(x for x in group if x.status == "NA"))
+        pass_count = sum(1 for x in group if x.status == "PASS")
+        fail_count = sum(1 for x in group if x.status == "FAIL")
+        na_count = sum(1 for x in group if x.status == "NA")
         counts[name] = {"pass": pass_count, "fail": fail_count, "na": na_count}
 
         print(
