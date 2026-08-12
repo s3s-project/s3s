@@ -336,8 +336,9 @@ impl SignatureContext<'_> {
 
     pub async fn v4_check_presigned_url(&mut self) -> S3Result<CredentialsExt> {
         let qs = self.qs.unwrap(); // assume: qs has "X-Amz-Signature"
+        let config = self.config.snapshot();
 
-        let presigned_url = PresignedUrlV4::parse(qs).map_err(|err| {
+        let presigned_url = PresignedUrlV4::parse(qs, config.presigned_url_max_expires_secs).map_err(|err| {
             s3_error!(
                 err,
                 AuthorizationQueryParametersError,
@@ -380,7 +381,6 @@ impl SignatureContext<'_> {
             // This is to account for clock skew between the client and server.
             // See also https://github.com/minio/minio/blob/b5177993b371817699d3fa25685f54f88d8bfcce/cmd/signature-v4.go#L238-L242
 
-            let config = self.config.snapshot();
             let max_skew_time = time::Duration::seconds(i64::from(config.presigned_url_max_skew_time_secs));
             if duration.is_negative() && duration.abs() > max_skew_time {
                 return Err(s3_error!(RequestTimeTooSkewed, "request date is later than server time too much"));
@@ -935,6 +935,57 @@ mod tests {
         assert_eq!(err.code(), &S3ErrorCode::AuthorizationQueryParametersError);
         assert_eq!(err.message(), Some("The authorization query parameters that you provided are not valid."));
         assert!(err.source().is_some(), "parse error must remain available as the source");
+    }
+
+    #[tokio::test]
+    async fn v4_presigned_url_accepts_expires_beyond_aws_default_when_configured() {
+        use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
+
+        let amz_date = AmzDate::parse(&fmt_current_amz_date(time::OffsetDateTime::now_utc()))
+            .expect("current time should produce a valid x-amz-date");
+        let mut query_strings = presigned_query_fields(&amz_date, "s3");
+        query_strings[3] = ("X-Amz-Expires".to_owned(), "604801".to_owned());
+        query_strings.push((
+            "X-Amz-Signature".to_owned(),
+            "aeeed9bbccd4d02ee5c0109b86d86835f995330da4c265957d157751f604d404".to_owned(),
+        ));
+        let qs = OrderedQs::from_vec_unchecked(query_strings);
+
+        let s3_config = S3Config {
+            presigned_url_max_skew_time_secs: u32::MAX,
+            presigned_url_max_expires_secs: 700_000,
+            ..Default::default()
+        };
+        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(s3_config)));
+        let method = Method::GET;
+        let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+        let mut body = Body::empty();
+        let mut cx = SignatureContext {
+            auth: None,
+            config: &config,
+            req_version: ::http::Version::HTTP_11,
+            req_method: &method,
+            req_uri: &uri,
+            req_body: &mut body,
+            qs: Some(&qs),
+            hs: OrderedHeaders::from_slice_unchecked(&[("host", "s3.amazonaws.com")]),
+            decoded_uri_path: "/test.txt",
+            raw_uri_path: "/test.txt",
+            vh_bucket: None,
+            content_length: None,
+            mime: None,
+            decoded_content_length: None,
+            transformed_body: None,
+            multipart: None,
+            trailing_headers: None,
+        };
+
+        let err = cx
+            .v4_check()
+            .await
+            .expect("X-Amz-Signature must select presigned auth")
+            .expect_err("missing auth provider should fail after presigned parsing succeeds");
+        assert_eq!(err.code(), &S3ErrorCode::NotImplemented);
     }
 
     #[tokio::test]
