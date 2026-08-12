@@ -1,6 +1,7 @@
 //! aws-chunked stream
 
 use crate::auth::SecretKey;
+use crate::auth::signature::Signature;
 use crate::error::StdError;
 use crate::protocol::TrailingHeaders;
 use crate::sig_v4;
@@ -20,6 +21,7 @@ use futures::pin_mut;
 use futures::stream::{Stream, StreamExt};
 use hyper::body::{Buf, Bytes};
 use memchr::memchr;
+use subtle::ConstantTimeEq;
 
 /// Maximum size for chunk metadata
 /// Prevents `DoS` via oversized chunk size declarations
@@ -68,7 +70,7 @@ struct SignatureCtx {
     secret_key: SecretKey,
 
     /// previous chunk's signature
-    prev_signature: Box<str>,
+    prev_signature: Signature,
 }
 
 /// [`AwsChunkedStream`]
@@ -138,13 +140,15 @@ fn parse_chunk_meta(mut input: &[u8]) -> nom::IResult<&[u8], ChunkMeta<'_>> {
 }
 
 /// check signature
-fn check_signature(ctx: &SignatureCtx, expected_signature: &[u8], chunk_data: &[Bytes]) -> Option<Box<str>> {
+fn check_signature(ctx: &SignatureCtx, expected_signature: &[u8], chunk_data: &[Bytes]) -> Option<Signature> {
+    let expected_signature = Signature::from_hex(std::str::from_utf8(expected_signature).ok()?)?;
+
     let string_to_sign =
-        sig_v4::create_chunk_string_to_sign(&ctx.amz_date, &ctx.region, &ctx.service, &ctx.prev_signature, chunk_data);
+        sig_v4::create_chunk_string_to_sign(&ctx.amz_date, &ctx.region, &ctx.service, ctx.prev_signature.as_str(), chunk_data);
 
     let chunk_signature = sig_v4::calculate_signature(&string_to_sign, &ctx.secret_key, &ctx.amz_date, &ctx.region, &ctx.service);
 
-    (chunk_signature.as_bytes() == expected_signature).then(|| chunk_signature.into())
+    bool::from(chunk_signature.ct_eq(&expected_signature)).then_some(chunk_signature)
 }
 
 impl AwsChunkedStream {
@@ -152,7 +156,7 @@ impl AwsChunkedStream {
     #[allow(clippy::too_many_arguments)]
     pub fn new<S>(
         body: S,
-        seed_signature: Box<str>,
+        seed_signature: Signature,
         amz_date: AmzDate,
         region: Box<str>,
         service: Box<str>,
@@ -321,11 +325,20 @@ impl AwsChunkedStream {
 
         // Verify the trailer signature if present, or require it when unsigned=false
         if let Some(provided) = provided_signature.as_ref() {
-            let string_to_sign =
-                create_trailer_string_to_sign(&ctx.amz_date, &ctx.region, &ctx.service, &ctx.prev_signature, &canonical_trailers);
+            let Some(provided) = std::str::from_utf8(provided).ok().and_then(Signature::from_hex) else {
+                return Some(Err(AwsChunkedStreamError::SignatureMismatch));
+            };
+
+            let string_to_sign = create_trailer_string_to_sign(
+                &ctx.amz_date,
+                &ctx.region,
+                &ctx.service,
+                ctx.prev_signature.as_str(),
+                &canonical_trailers,
+            );
             let trailer_signature =
                 sig_v4::calculate_signature(&string_to_sign, &ctx.secret_key, &ctx.amz_date, &ctx.region, &ctx.service);
-            if trailer_signature.as_bytes() != provided.as_slice() {
+            if !bool::from(trailer_signature.ct_eq(&provided)) {
                 return Some(Err(AwsChunkedStreamError::SignatureMismatch));
             }
         } else if !unsigned {
@@ -634,7 +647,7 @@ mod tests {
         let stream = futures::stream::iter(chunk_results);
         let mut chunked_stream = AwsChunkedStream::new(
             stream,
-            seed_signature.into(),
+            Signature::from_hex(seed_signature).unwrap(),
             date,
             region.into(),
             service.into(),
@@ -688,7 +701,7 @@ mod tests {
         let stream = futures::stream::iter(chunk_results);
         let mut chunked_stream = AwsChunkedStream::new(
             stream,
-            seed_signature.into(),
+            Signature::from_hex(seed_signature).unwrap(),
             date,
             region.into(),
             service.into(),
@@ -745,14 +758,14 @@ mod tests {
         let canonical = b"x-amz-meta-foo:bar\n".to_vec();
         let string_to_sign = create_trailer_string_to_sign(&date, region, service, seed_signature, &canonical);
         let sig = sig_v4::calculate_signature(&string_to_sign, &SecretKey::from(secret_access_key), &date, region, service);
-        let trailers_block = Bytes::from(format!("x-amz-meta-foo: bar\r\nx-amz-trailer-signature:{sig}"));
+        let trailers_block = Bytes::from(format!("x-amz-meta-foo: bar\r\nx-amz-trailer-signature:{}", sig.as_str()));
 
         let chunk_results: Vec<Result<Bytes, _>> = vec![Ok(chunk1), Ok(chunk2), Ok(chunk3), Ok(trailers_block)];
 
         let stream = futures::stream::iter(chunk_results);
         let mut chunked_stream = AwsChunkedStream::new(
             stream,
-            seed_signature.into(),
+            Signature::from_hex(seed_signature).unwrap(),
             date,
             region.into(),
             service.into(),
@@ -794,7 +807,7 @@ mod tests {
 
         let chunk_results: Vec<Result<Bytes, _>> = vec![Ok(chunk1), Ok(chunk2), Ok(trailers_block)];
 
-        let seed_signature = "deadbeef"; // not used for unsigned per-chunk, but used to build ctx
+        let seed_signature = "0000000000000000000000000000000000000000000000000000000000000000"; // not used for unsigned per-chunk, but used to build ctx
         let timestamp = "20130524T000000Z";
         let region = "us-east-1";
         let service = "s3";
@@ -804,7 +817,7 @@ mod tests {
         let stream = futures::stream::iter(chunk_results);
         let mut chunked_stream = AwsChunkedStream::new(
             stream,
-            seed_signature.into(),
+            Signature::from_hex(seed_signature).unwrap(),
             date,
             region.into(),
             service.into(),
@@ -832,14 +845,14 @@ mod tests {
         let chunk_meta = b"ZZZZ\r\n"; // Invalid hex
         let chunk_results: Vec<Result<Bytes, _>> = vec![Ok(Bytes::from_static(chunk_meta))];
 
-        let seed_signature = "test";
+        let seed_signature = "0000000000000000000000000000000000000000000000000000000000000000";
         let timestamp = "20130524T000000Z";
         let date = AmzDate::parse(timestamp).unwrap();
 
         let stream = futures::stream::iter(chunk_results);
         let mut chunked_stream = AwsChunkedStream::new(
             stream,
-            seed_signature.into(),
+            Signature::from_hex(seed_signature).unwrap(),
             date,
             "us-east-1".into(),
             "s3".into(),
@@ -858,14 +871,14 @@ mod tests {
         let chunk_meta = b"10"; // Missing \r\n
         let chunk_results: Vec<Result<Bytes, _>> = vec![Ok(Bytes::from_static(chunk_meta))];
 
-        let seed_signature = "test";
+        let seed_signature = "0000000000000000000000000000000000000000000000000000000000000000";
         let timestamp = "20130524T000000Z";
         let date = AmzDate::parse(timestamp).unwrap();
 
         let stream = futures::stream::iter(chunk_results);
         let mut chunked_stream = AwsChunkedStream::new(
             stream,
-            seed_signature.into(),
+            Signature::from_hex(seed_signature).unwrap(),
             date,
             "us-east-1".into(),
             "s3".into(),
@@ -887,14 +900,14 @@ mod tests {
         let chunk1 = join(&[chunk_meta, chunk_data, b"\r\n"]);
         let chunk_results: Vec<Result<Bytes, _>> = vec![Ok(chunk1)];
 
-        let seed_signature = "test";
+        let seed_signature = "0000000000000000000000000000000000000000000000000000000000000000";
         let timestamp = "20130524T000000Z";
         let date = AmzDate::parse(timestamp).unwrap();
 
         let stream = futures::stream::iter(chunk_results);
         let mut chunked_stream = AwsChunkedStream::new(
             stream,
-            seed_signature.into(),
+            Signature::from_hex(seed_signature).unwrap(),
             date,
             "us-east-1".into(),
             "s3".into(),
@@ -916,14 +929,14 @@ mod tests {
 
         let chunk_results: Vec<Result<Bytes, _>> = vec![Ok(chunk1)];
 
-        let seed_signature = "test";
+        let seed_signature = "0000000000000000000000000000000000000000000000000000000000000000";
         let timestamp = "20130524T000000Z";
         let date = AmzDate::parse(timestamp).unwrap();
 
         let stream = futures::stream::iter(chunk_results);
         let mut chunked_stream = AwsChunkedStream::new(
             stream,
-            seed_signature.into(),
+            Signature::from_hex(seed_signature).unwrap(),
             date,
             "us-east-1".into(),
             "s3".into(),
@@ -944,14 +957,14 @@ mod tests {
         let err: Result<Bytes, StdError> = Err(Box::new(io::Error::other("network error")));
         let chunk_results: Vec<Result<Bytes, _>> = vec![err];
 
-        let seed_signature = "test";
+        let seed_signature = "0000000000000000000000000000000000000000000000000000000000000000";
         let timestamp = "20130524T000000Z";
         let date = AmzDate::parse(timestamp).unwrap();
 
         let stream = futures::stream::iter(chunk_results);
         let mut chunked_stream = AwsChunkedStream::new(
             stream,
-            seed_signature.into(),
+            Signature::from_hex(seed_signature).unwrap(),
             date,
             "us-east-1".into(),
             "s3".into(),
@@ -972,14 +985,14 @@ mod tests {
         let chunk1 = join(&[chunk_meta, chunk_data, b"\r\n"]);
         let chunk_results: Vec<Result<Bytes, _>> = vec![Ok(chunk1)];
 
-        let seed_signature = "test";
+        let seed_signature = "0000000000000000000000000000000000000000000000000000000000000000";
         let timestamp = "20130524T000000Z";
         let date = AmzDate::parse(timestamp).unwrap();
 
         let stream = futures::stream::iter(chunk_results);
         let mut chunked_stream = AwsChunkedStream::new(
             stream,
-            seed_signature.into(),
+            Signature::from_hex(seed_signature).unwrap(),
             date,
             "us-east-1".into(),
             "s3".into(),
@@ -1005,14 +1018,14 @@ mod tests {
 
         let chunk_results: Vec<Result<Bytes, _>> = vec![Ok(chunk1), Ok(chunk2)];
 
-        let seed_signature = "test";
+        let seed_signature = "0000000000000000000000000000000000000000000000000000000000000000";
         let timestamp = "20130524T000000Z";
         let date = AmzDate::parse(timestamp).unwrap();
 
         let stream = futures::stream::iter(chunk_results);
         let mut chunked_stream = AwsChunkedStream::new(
             stream,
-            seed_signature.into(),
+            Signature::from_hex(seed_signature).unwrap(),
             date,
             "us-east-1".into(),
             "s3".into(),
@@ -1042,14 +1055,14 @@ mod tests {
 
         let chunk_results: Vec<Result<Bytes, _>> = vec![Ok(chunk1), Ok(chunk2)];
 
-        let seed_signature = "test";
+        let seed_signature = "0000000000000000000000000000000000000000000000000000000000000000";
         let timestamp = "20130524T000000Z";
         let date = AmzDate::parse(timestamp).unwrap();
 
         let stream = futures::stream::iter(chunk_results);
         let mut chunked_stream = AwsChunkedStream::new(
             stream,
-            seed_signature.into(),
+            Signature::from_hex(seed_signature).unwrap(),
             date,
             "us-east-1".into(),
             "s3".into(),
@@ -1098,7 +1111,7 @@ mod tests {
 
         let chunk_results: Vec<Result<Bytes, _>> = vec![Ok(chunk1), Ok(chunk2), Ok(Bytes::from(trailers))];
 
-        let seed_signature = "deadbeef";
+        let seed_signature = "0000000000000000000000000000000000000000000000000000000000000000";
         let timestamp = "20130524T000000Z";
         let region = "us-east-1";
         let service = "s3";
@@ -1108,7 +1121,7 @@ mod tests {
         let stream = futures::stream::iter(chunk_results);
         let mut chunked_stream = AwsChunkedStream::new(
             stream,
-            seed_signature.into(),
+            Signature::from_hex(seed_signature).unwrap(),
             date,
             region.into(),
             service.into(),
@@ -1140,7 +1153,7 @@ mod tests {
 
         let chunk_results: Vec<Result<Bytes, _>> = vec![Ok(Bytes::from(meta_part1)), Ok(Bytes::from(meta_part2))];
 
-        let seed_signature = "deadbeef";
+        let seed_signature = "0000000000000000000000000000000000000000000000000000000000000000";
         let timestamp = "20130524T000000Z";
         let region = "us-east-1";
         let service = "s3";
@@ -1150,7 +1163,7 @@ mod tests {
         let stream = futures::stream::iter(chunk_results);
         let mut chunked_stream = AwsChunkedStream::new(
             stream,
-            seed_signature.into(),
+            Signature::from_hex(seed_signature).unwrap(),
             date,
             region.into(),
             service.into(),
@@ -1199,7 +1212,7 @@ mod tests {
 
         let chunk_results: Vec<Result<Bytes, _>> = vec![Ok(chunk1), Ok(chunk2), Ok(Bytes::from(large_trailers))];
 
-        let seed_signature = "deadbeef";
+        let seed_signature = "0000000000000000000000000000000000000000000000000000000000000000";
         let timestamp = "20130524T000000Z";
         let region = "us-east-1";
         let service = "s3";
@@ -1209,7 +1222,7 @@ mod tests {
         let stream = futures::stream::iter(chunk_results);
         let mut chunked_stream = AwsChunkedStream::new(
             stream,
-            seed_signature.into(),
+            Signature::from_hex(seed_signature).unwrap(),
             date,
             region.into(),
             service.into(),
@@ -1284,7 +1297,7 @@ mod tests {
 
         let chunk_results: Vec<Result<Bytes, _>> = vec![Ok(chunk1), Ok(chunk2), Ok(Bytes::from(many_trailers))];
 
-        let seed_signature = "deadbeef";
+        let seed_signature = "0000000000000000000000000000000000000000000000000000000000000000";
         let timestamp = "20130524T000000Z";
         let region = "us-east-1";
         let service = "s3";
@@ -1294,7 +1307,7 @@ mod tests {
         let stream = futures::stream::iter(chunk_results);
         let mut chunked_stream = AwsChunkedStream::new(
             stream,
-            seed_signature.into(),
+            Signature::from_hex(seed_signature).unwrap(),
             date,
             region.into(),
             service.into(),

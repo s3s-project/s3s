@@ -1,5 +1,6 @@
 use crate::auth::S3Auth;
 use crate::auth::SecretKey;
+use crate::auth::signature::Signature;
 use crate::config::{S3Config, S3ConfigProvider};
 use crate::error::*;
 use crate::http;
@@ -107,16 +108,12 @@ fn has_unencoded_reserved_path_char(path: &str) -> bool {
 }
 
 struct SignatureVerificationContext<'a> {
-    expected_signature: &'a str,
+    expected_signature: Signature,
     raw_uri_path: &'a str,
     secret_key: &'a SecretKey,
     amz_date: &'a AmzDate,
     region: &'a str,
     service: &'a str,
-}
-
-fn sig_v4_signatures_match(actual_signature: &str, expected_signature: &str) -> bool {
-    actual_signature.as_bytes().ct_eq(expected_signature.as_bytes()).into()
 }
 
 fn validate_sig_v4_clock_skew(amz_date: &AmzDate, now: time::OffsetDateTime, config: &S3Config) -> S3Result<()> {
@@ -136,11 +133,11 @@ impl SignatureVerificationContext<'_> {
         &self,
         canonical_request: &str,
         raw_canonical_request: impl FnOnce() -> String,
-    ) -> S3Result<String> {
+    ) -> S3Result<Signature> {
         let string_to_sign = sig_v4::create_string_to_sign(canonical_request, self.amz_date, self.region, self.service);
         let signature = sig_v4::calculate_signature(&string_to_sign, self.secret_key, self.amz_date, self.region, self.service);
 
-        if sig_v4_signatures_match(&signature, self.expected_signature) {
+        if bool::from(signature.ct_eq(&self.expected_signature)) {
             return Ok(signature);
         }
 
@@ -154,7 +151,7 @@ impl SignatureVerificationContext<'_> {
         let raw_signature =
             sig_v4::calculate_signature(&string_to_sign, self.secret_key, self.amz_date, self.region, self.service);
 
-        if !sig_v4_signatures_match(&raw_signature, self.expected_signature) {
+        if !bool::from(raw_signature.ct_eq(&self.expected_signature)) {
             debug!(?signature, ?raw_signature, expected=?self.expected_signature, "signature mismatch");
             return Err(s3_error!(SignatureDoesNotMatch));
         }
@@ -316,8 +313,8 @@ impl SignatureContext<'_> {
         let string_to_sign = info.policy;
         let signature = sig_v4::calculate_signature(string_to_sign, &secret_key, &amz_date, region, service);
 
-        let expected_signature = info.x_amz_signature;
-        if !sig_v4_signatures_match(&signature, expected_signature) {
+        let expected_signature = Signature::from_hex(info.x_amz_signature).ok_or_else(|| s3_error!(SignatureDoesNotMatch))?;
+        if !bool::from(signature.ct_eq(&expected_signature)) {
             debug!(?signature, expected=?expected_signature, "signature mismatch");
             return Err(s3_error!(SignatureDoesNotMatch));
         }
@@ -406,7 +403,7 @@ impl SignatureContext<'_> {
             ));
         }
 
-        let expected_signature = presigned_url.signature;
+        let expected_signature = Signature::from_hex(presigned_url.signature).ok_or_else(|| s3_error!(SignatureDoesNotMatch))?;
         let headers = self.hs.find_multiple_with_on_missing(&presigned_url.signed_headers, |name| {
             // HTTP/2 replaces `host` header with `:authority`
             // but `:authority` is not in the request headers
@@ -507,7 +504,7 @@ impl SignatureContext<'_> {
 
         let is_stream = amz_content_sha256.is_some_and(|v| v.is_streaming());
 
-        let expected_signature = authorization.signature;
+        let expected_signature = Signature::from_hex(authorization.signature).ok_or_else(|| s3_error!(SignatureDoesNotMatch))?;
         let method = &self.req_method;
         let query_strings: &[(String, String)] = self.qs.as_ref().map_or(&[], AsRef::as_ref);
 
@@ -592,7 +589,7 @@ impl SignatureContext<'_> {
             let unsigned = matches!(amz_content_sha256, Some(AmzContentSha256::StreamingUnsignedPayloadTrailer));
             let stream = AwsChunkedStream::new(
                 mem::take(self.req_body),
-                signature.into(),
+                signature,
                 amz_date,
                 region.into(),
                 service.into(),
@@ -683,8 +680,8 @@ impl SignatureContext<'_> {
 
         debug!(?string_to_sign, "sig_v2 header_auth");
 
-        let expected_signature = auth_v2.signature;
-        if signature != expected_signature {
+        let expected_signature = Signature::from_base64(auth_v2.signature).ok_or_else(|| s3_error!(SignatureDoesNotMatch))?;
+        if !bool::from(signature.ct_eq(&expected_signature)) {
             debug!(?signature, expected=?expected_signature, "signature mismatch");
             return Err(s3_error!(SignatureDoesNotMatch));
         }
@@ -713,8 +710,8 @@ impl SignatureContext<'_> {
         let string_to_sign = info.policy;
         let signature = sig_v2::calculate_signature(&secret_key, string_to_sign);
 
-        let expected_signature = info.signature;
-        if signature != expected_signature {
+        let expected_signature = Signature::from_base64(info.signature).ok_or_else(|| s3_error!(SignatureDoesNotMatch))?;
+        if !bool::from(signature.ct_eq(&expected_signature)) {
             debug!(?signature, expected=?expected_signature, "signature mismatch");
             return Err(s3_error!(SignatureDoesNotMatch));
         }
@@ -750,8 +747,9 @@ impl SignatureContext<'_> {
         );
         let signature = sig_v2::calculate_signature(&secret_key, &string_to_sign);
 
-        let expected_signature = presigned_url.signature;
-        if signature != expected_signature {
+        let expected_signature =
+            Signature::from_base64(presigned_url.signature.as_ref()).ok_or_else(|| s3_error!(SignatureDoesNotMatch))?;
+        if !bool::from(signature.ct_eq(&expected_signature)) {
             debug!(?signature, expected=?expected_signature, "signature mismatch");
             return Err(s3_error!(SignatureDoesNotMatch));
         }
@@ -849,7 +847,7 @@ mod tests {
             sig_v4::Payload::Unsigned,
         );
         let verifier = SignatureVerificationContext {
-            expected_signature: "0000000000000000000000000000000000000000000000000000000000000000",
+            expected_signature: Signature::from_hex("0000000000000000000000000000000000000000000000000000000000000000").unwrap(),
             raw_uri_path: "/test-bucket/path",
             secret_key: &secret_key,
             amz_date: &amz_date,
@@ -869,7 +867,7 @@ mod tests {
             sig_v4::Payload::Unsigned,
         );
         let verifier = SignatureVerificationContext {
-            expected_signature: "0000000000000000000000000000000000000000000000000000000000000000",
+            expected_signature: Signature::from_hex("0000000000000000000000000000000000000000000000000000000000000000").unwrap(),
             raw_uri_path: "/test-bucket/path=",
             secret_key: &secret_key,
             amz_date: &amz_date,
@@ -1256,7 +1254,7 @@ file content\r\n\
             let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
             let signature = sig_v4::calculate_signature(&string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
             let mut signed_query_strings = query_strings_for_signing.clone();
-            signed_query_strings.push(("X-Amz-Signature".to_owned(), signature));
+            signed_query_strings.push(("X-Amz-Signature".to_owned(), signature.as_str().to_owned()));
             let qs = OrderedQs::from_vec_unchecked(signed_query_strings);
             let headers = OrderedHeaders::from_slice_unchecked(&[("host", "s3.amazonaws.com")]);
 
@@ -1318,7 +1316,7 @@ file content\r\n\
         let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
         let signature = sig_v4::calculate_signature(&string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
         let mut signed_query_strings = query_strings_for_signing;
-        signed_query_strings.push(("X-Amz-Signature".to_owned(), signature));
+        signed_query_strings.push(("X-Amz-Signature".to_owned(), signature.as_str().to_owned()));
         let qs = OrderedQs::from_vec_unchecked(signed_query_strings);
 
         let mut body = Body::empty();
@@ -1385,7 +1383,7 @@ file content\r\n\
         let signature = sig_v4::calculate_signature(&string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
 
         let mut signed_query_strings = query_strings_for_signing;
-        signed_query_strings.push(("X-Amz-Signature".to_owned(), signature));
+        signed_query_strings.push(("X-Amz-Signature".to_owned(), signature.as_str().to_owned()));
         let qs = OrderedQs::from_vec_unchecked(signed_query_strings);
 
         let headers = OrderedHeaders::from_slice_unchecked(&[
@@ -1464,7 +1462,7 @@ file content\r\n\
         let signature = sig_v4::calculate_signature(&string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
 
         let mut signed_query_strings = query_strings_for_signing;
-        signed_query_strings.push(("X-Amz-Signature".to_owned(), signature));
+        signed_query_strings.push(("X-Amz-Signature".to_owned(), signature.as_str().to_owned()));
         let qs = OrderedQs::from_vec_unchecked(signed_query_strings);
 
         let headers = OrderedHeaders::from_slice_unchecked(&[
@@ -1548,7 +1546,8 @@ file content\r\n\
             let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
             let signature = sig_v4::calculate_signature(&string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
             let authorization = format!(
-                "AWS4-HMAC-SHA256 Credential={access_key}/20130524/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature={signature}"
+                "AWS4-HMAC-SHA256 Credential={access_key}/20130524/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature={}",
+                signature.as_str(),
             );
             let headers = OrderedHeaders::from_slice_unchecked(&[
                 ("authorization", authorization.as_str()),
@@ -1625,7 +1624,8 @@ file content\r\n\
         let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
         let signature = sig_v4::calculate_signature(&string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
         let authorization = format!(
-            "AWS4-HMAC-SHA256 Credential={access_key}/20130524/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature={signature}"
+            "AWS4-HMAC-SHA256 Credential={access_key}/20130524/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature={}",
+            signature.as_str(),
         );
 
         let headers = OrderedHeaders::from_slice_unchecked(&[
@@ -1703,7 +1703,8 @@ file content\r\n\
         let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
         let signature = sig_v4::calculate_signature(&string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
         let authorization = format!(
-            "AWS4-HMAC-SHA256 Credential={access_key}/20130524/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature={signature}"
+            "AWS4-HMAC-SHA256 Credential={access_key}/20130524/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature={}",
+            signature.as_str(),
         );
         let headers = OrderedHeaders::from_slice_unchecked(&[
             ("authorization", authorization.as_str()),
@@ -1739,6 +1740,7 @@ file content\r\n\
         assert_eq!(cred.access_key, access_key);
     }
 
+    #[allow(clippy::too_many_lines)]
     #[tokio::test]
     async fn v4_header_auth_raw_uri_path_signature_seeds_streaming_body() {
         use crate::auth::SecretKey;
@@ -1789,21 +1791,29 @@ file content\r\n\
         let seed_string_to_sign = sig_v4::create_string_to_sign(&raw_canonical_request, &amz_date, "us-east-1", "s3");
         let seed_signature = sig_v4::calculate_signature(&seed_string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
 
-        let chunk_string_to_sign =
-            sig_v4::create_chunk_string_to_sign(&amz_date, "us-east-1", "s3", &seed_signature, std::slice::from_ref(&chunk_data));
+        let chunk_string_to_sign = sig_v4::create_chunk_string_to_sign(
+            &amz_date,
+            "us-east-1",
+            "s3",
+            seed_signature.as_str(),
+            std::slice::from_ref(&chunk_data),
+        );
         let chunk_signature = sig_v4::calculate_signature(&chunk_string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
-        let final_string_to_sign = sig_v4::create_chunk_string_to_sign(&amz_date, "us-east-1", "s3", &chunk_signature, &[]);
+        let final_string_to_sign =
+            sig_v4::create_chunk_string_to_sign(&amz_date, "us-east-1", "s3", chunk_signature.as_str(), &[]);
         let final_signature = sig_v4::calculate_signature(&final_string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
 
         let mut streaming_body = Vec::new();
-        streaming_body.extend_from_slice(format!("{:x};chunk-signature={chunk_signature}\r\n", chunk_data.len()).as_bytes());
+        streaming_body
+            .extend_from_slice(format!("{:x};chunk-signature={}\r\n", chunk_data.len(), chunk_signature.as_str()).as_bytes());
         streaming_body.extend_from_slice(&chunk_data);
         streaming_body.extend_from_slice(b"\r\n");
-        streaming_body.extend_from_slice(format!("0;chunk-signature={final_signature}\r\n\r\n").as_bytes());
+        streaming_body.extend_from_slice(format!("0;chunk-signature={}\r\n\r\n", final_signature.as_str()).as_bytes());
         let content_length = u64::try_from(streaming_body.len()).unwrap();
 
         let authorization = format!(
-            "AWS4-HMAC-SHA256 Credential={access_key}/20130524/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date;x-amz-decoded-content-length, Signature={seed_signature}"
+            "AWS4-HMAC-SHA256 Credential={access_key}/20130524/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date;x-amz-decoded-content-length, Signature={}",
+            seed_signature.as_str()
         );
         let headers = OrderedHeaders::from_slice_unchecked(&[
             ("authorization", authorization.as_str()),
@@ -1883,7 +1893,7 @@ file content\r\n\
 
         let auth_v2 = AuthorizationV2 {
             access_key,
-            signature: &signature,
+            signature: signature.as_str(),
         };
 
         let mut cx = SignatureContext {
@@ -1912,13 +1922,6 @@ file content\r\n\
             .expect("valid SigV2 auth should succeed");
         assert_eq!(cred.region, None, "SigV2 carries no region");
         assert_eq!(cred.service.as_deref(), Some("s3"), "SigV2 service is always 's3'");
-    }
-
-    #[test]
-    fn sig_v4_signatures_match_reports_match_and_mismatch() {
-        assert!(sig_v4_signatures_match("abcd", "abcd"));
-        assert!(!sig_v4_signatures_match("abcd", "abce"));
-        assert!(!sig_v4_signatures_match("abcd", "abc"));
     }
 
     #[tokio::test]
@@ -1956,8 +1959,9 @@ file content\r\n\
         let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
         let signature = sig_v4::calculate_signature(&string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
         let authorization = format!(
-            "AWS4-HMAC-SHA256 Credential={access_key}/{}/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature={signature}",
-            amz_date.fmt_date()
+            "AWS4-HMAC-SHA256 Credential={access_key}/{}/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature={}",
+            amz_date.fmt_date(),
+            signature.as_str(),
         );
 
         let headers = OrderedHeaders::from_slice_unchecked(&[
@@ -2051,7 +2055,7 @@ file content\r\n\
             boundary = boundary,
             date = amz_date.fmt_date(),
             policy_b64 = policy_b64,
-            signature = signature,
+            signature = signature.as_str(),
         );
 
         let mime: Mime = format!("multipart/form-data; boundary={boundary}").parse().unwrap();
