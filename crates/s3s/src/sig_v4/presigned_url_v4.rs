@@ -8,6 +8,7 @@ use crate::utils::crypto::is_sha256_checksum;
 
 use smallvec::SmallVec;
 
+// AWS SigV4 spec maximum: https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-presigned-url.html#PresignedUrl-Expiration
 const MAX_EXPIRES_SECONDS: u32 = 7 * 24 * 60 * 60;
 
 /// Presigned url information
@@ -105,6 +106,7 @@ impl<'a> PresignedUrlV4<'a> {
 }
 
 fn parse_expires(s: &str) -> Option<time::Duration> {
+    // u32 parse rejects negative values and non-integers implicitly
     let x = s.parse::<u32>().ok()?;
     if x > MAX_EXPIRES_SECONDS {
         return None;
