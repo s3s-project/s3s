@@ -21,7 +21,6 @@ use futures::pin_mut;
 use futures::stream::{Stream, StreamExt};
 use hyper::body::{Buf, Bytes};
 use memchr::memchr;
-use subtle::ConstantTimeEq;
 
 /// Maximum size for chunk metadata
 /// Prevents `DoS` via oversized chunk size declarations
@@ -148,7 +147,7 @@ fn check_signature(ctx: &SignatureCtx, expected_signature: &[u8], chunk_data: &[
 
     let chunk_signature = sig_v4::calculate_signature(&string_to_sign, &ctx.secret_key, &ctx.amz_date, &ctx.region, &ctx.service);
 
-    bool::from(chunk_signature.ct_eq(&expected_signature)).then_some(chunk_signature)
+    Signature::compare(&chunk_signature, &expected_signature).then_some(chunk_signature)
 }
 
 impl AwsChunkedStream {
@@ -338,7 +337,7 @@ impl AwsChunkedStream {
             );
             let trailer_signature =
                 sig_v4::calculate_signature(&string_to_sign, &ctx.secret_key, &ctx.amz_date, &ctx.region, &ctx.service);
-            if !bool::from(trailer_signature.ct_eq(&provided)) {
+            if !Signature::compare(&trailer_signature, &provided) {
                 return Some(Err(AwsChunkedStreamError::SignatureMismatch));
             }
         } else if !unsigned {

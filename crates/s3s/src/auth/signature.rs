@@ -9,7 +9,7 @@
 //!   (the length difference is algorithm-public, not secret).
 //! - `PartialEq` / `Eq` / `Hash` are deliberately NOT implemented: an ordinary
 //!   `==` comparison is a compile error; comparison must go through
-//!   [`ConstantTimeEq`] to avoid timing side channels.
+//!   [`Signature::compare`] or [`ConstantTimeEq`] to avoid timing side channels.
 //! - [`Signature::as_str`] is for string-to-sign chaining and logging, NOT for
 //!   comparison.
 //! - Do NOT add unchecked constructors (e.g. `From<&str>`); doing so would
@@ -71,6 +71,18 @@ impl Signature {
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+
+    /// Compares two signatures in constant time.
+    ///
+    /// Returns `true` if `left` and `right` hold the same canonical value.
+    /// Cross-form comparisons (`SigV4` vs `SigV2`) are always `false`.
+    ///
+    /// This is the canonical way to compare signatures; see the module-level
+    /// invariants for why `==` / `!=` must not be used.
+    #[must_use]
+    pub fn compare(left: &Self, right: &Self) -> bool {
+        bool::from(left.ct_eq(right))
     }
 }
 
@@ -169,6 +181,18 @@ mod tests {
         let hex_sig = Signature::from_hex(HEX_64).unwrap();
         let b64_sig = Signature::from_base64(B64_20).unwrap();
         assert!(!bool::from(hex_sig.ct_eq(&b64_sig)));
+    }
+
+    #[test]
+    fn compare_reports_match_and_mismatch() {
+        let a = Signature::from_hex(HEX_64).unwrap();
+        let same = Signature::from_hex(HEX_64).unwrap();
+        let different = Signature::from_hex(&format!("0{}", &HEX_64[1..])).unwrap();
+        let b64 = Signature::from_base64(B64_20).unwrap();
+
+        assert!(Signature::compare(&a, &same));
+        assert!(!Signature::compare(&a, &different));
+        assert!(!Signature::compare(&a, &b64));
     }
 
     #[test]

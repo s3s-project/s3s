@@ -26,7 +26,6 @@ use std::sync::Arc;
 use hyper::Method;
 use hyper::Uri;
 use mime::Mime;
-use subtle::ConstantTimeEq;
 use tracing::debug;
 
 /// Maximum allowed size for STS request body (8KB should be enough for operations like `AssumeRole`)
@@ -137,7 +136,7 @@ impl SignatureVerificationContext<'_> {
         let string_to_sign = sig_v4::create_string_to_sign(canonical_request, self.amz_date, self.region, self.service);
         let signature = sig_v4::calculate_signature(&string_to_sign, self.secret_key, self.amz_date, self.region, self.service);
 
-        if bool::from(signature.ct_eq(&self.expected_signature)) {
+        if Signature::compare(&signature, &self.expected_signature) {
             return Ok(signature);
         }
 
@@ -151,7 +150,7 @@ impl SignatureVerificationContext<'_> {
         let raw_signature =
             sig_v4::calculate_signature(&string_to_sign, self.secret_key, self.amz_date, self.region, self.service);
 
-        if !bool::from(raw_signature.ct_eq(&self.expected_signature)) {
+        if !Signature::compare(&raw_signature, &self.expected_signature) {
             debug!(?signature, ?raw_signature, expected=?self.expected_signature, "signature mismatch");
             return Err(s3_error!(SignatureDoesNotMatch));
         }
@@ -314,7 +313,7 @@ impl SignatureContext<'_> {
         let signature = sig_v4::calculate_signature(string_to_sign, &secret_key, &amz_date, region, service);
 
         let expected_signature = Signature::from_hex(info.x_amz_signature).ok_or_else(|| s3_error!(SignatureDoesNotMatch))?;
-        if !bool::from(signature.ct_eq(&expected_signature)) {
+        if !Signature::compare(&signature, &expected_signature) {
             debug!(?signature, expected=?expected_signature, "signature mismatch");
             return Err(s3_error!(SignatureDoesNotMatch));
         }
@@ -681,7 +680,7 @@ impl SignatureContext<'_> {
         debug!(?string_to_sign, "sig_v2 header_auth");
 
         let expected_signature = Signature::from_base64(auth_v2.signature).ok_or_else(|| s3_error!(SignatureDoesNotMatch))?;
-        if !bool::from(signature.ct_eq(&expected_signature)) {
+        if !Signature::compare(&signature, &expected_signature) {
             debug!(?signature, expected=?expected_signature, "signature mismatch");
             return Err(s3_error!(SignatureDoesNotMatch));
         }
@@ -711,7 +710,7 @@ impl SignatureContext<'_> {
         let signature = sig_v2::calculate_signature(&secret_key, string_to_sign);
 
         let expected_signature = Signature::from_base64(info.signature).ok_or_else(|| s3_error!(SignatureDoesNotMatch))?;
-        if !bool::from(signature.ct_eq(&expected_signature)) {
+        if !Signature::compare(&signature, &expected_signature) {
             debug!(?signature, expected=?expected_signature, "signature mismatch");
             return Err(s3_error!(SignatureDoesNotMatch));
         }
@@ -749,7 +748,7 @@ impl SignatureContext<'_> {
 
         let expected_signature =
             Signature::from_base64(presigned_url.signature.as_ref()).ok_or_else(|| s3_error!(SignatureDoesNotMatch))?;
-        if !bool::from(signature.ct_eq(&expected_signature)) {
+        if !Signature::compare(&signature, &expected_signature) {
             debug!(?signature, expected=?expected_signature, "signature mismatch");
             return Err(s3_error!(SignatureDoesNotMatch));
         }
