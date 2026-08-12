@@ -3,9 +3,10 @@
 
 [advisories]
 # lru v0.16.x: panic-safety use-after-free in `LruCache::pop()`.
-# Transitive via aws-sdk-s3, which pins lru ^0.16.x even at the latest release.
+# Transitive via aws-sdk-s3, which pins lru ^0.16.x as of 2026-08.
 # Requires a key whose `Drop` panics during `pop()`; no patched version is
-# reachable upstream yet.
+# reachable upstream yet. Revisit: remove this ignore once aws-sdk-s3 allows
+# lru >= 0.18.2.
 ignore = [
     "RUSTSEC-2026-0253",
 ]
