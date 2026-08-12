@@ -4,7 +4,9 @@
 //!
 //! - Values are validated at construction and always hold a canonical encoded
 //!   form (`SigV4`: 64 lowercase hex chars; `SigV2`: 28-char standard Base64 with
-//!   padding), so [`ConstantTimeEq`] always compares equal-length inputs.
+//!   padding). Comparisons within the same form are always equal-length and
+//!   constant-time over the content; cross-form comparison is always unequal
+//!   (the length difference is algorithm-public, not secret).
 //! - `PartialEq` / `Eq` / `Hash` are deliberately NOT implemented: an ordinary
 //!   `==` comparison is a compile error; comparison must go through
 //!   [`ConstantTimeEq`] to avoid timing side channels.
@@ -37,6 +39,12 @@ impl Signature {
     /// Returns `None` if `value` is not a canonical `SigV2` signature.
     #[must_use]
     pub fn from_base64(value: &str) -> Option<Self> {
+        // SigV2 signatures are always 28 chars (20-byte HMAC-SHA1 with padding);
+        // reject other lengths before decoding.
+        if value.len() != 28 {
+            return None;
+        }
+
         // A full decode is required: `decoded_length` alone does not validate
         // the Base64 alphabet. The canonical re-encode check rejects
         // non-canonical variants such as non-zero padding bits. When the
@@ -135,6 +143,8 @@ mod tests {
     fn from_base64_rejects_non_20_byte_payload() {
         // 24 chars decode to 18 bytes, not 20.
         assert!(Signature::from_base64("AAAAAAAAAAAAAAAAAAAAAAAA").is_none());
+        // 32 chars would decode to 24 bytes, not 20.
+        assert!(Signature::from_base64("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA").is_none());
     }
 
     #[test]
