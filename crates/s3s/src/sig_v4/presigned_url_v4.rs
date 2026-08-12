@@ -64,11 +64,18 @@ impl<'a> PresignedQs<'a> {
 }
 
 impl<'a> PresignedUrlV4<'a> {
-    /// Parses `PresignedUrl` from query
+    /// Parses `PresignedUrl` from query with a caller-supplied `X-Amz-Expires` upper bound.
+    ///
+    /// `max_expires_secs` is the maximum allowed `X-Amz-Expires` value in seconds.
+    /// Values larger than this upper bound are rejected during parsing.
     ///
     /// # Errors
     /// Returns `ParsePresignedUrlError` if it failed to parse
-    pub fn parse(qs: &'a OrderedQs) -> Result<Self, ParsePresignedUrlError> {
+    pub fn parse(qs: &'a OrderedQs, max_expires_secs: u32) -> Result<Self, ParsePresignedUrlError> {
+        Self::parse_impl(qs, max_expires_secs)
+    }
+
+    fn parse_impl(qs: &'a OrderedQs, max_expires_secs: u32) -> Result<Self, ParsePresignedUrlError> {
         let err = || ParsePresignedUrlError { _priv: () };
 
         let info = PresignedQs::from_ordered_qs(qs).ok_or_else(err)?;
@@ -79,7 +86,7 @@ impl<'a> PresignedUrlV4<'a> {
 
         let amz_date = AmzDate::parse(info.date).map_err(|_e| err())?;
 
-        let expires = parse_expires(info.expires).ok_or_else(err)?;
+        let expires = parse_expires(info.expires, max_expires_secs).ok_or_else(err)?;
 
         if !info.signed_headers.is_ascii() {
             return Err(err());
@@ -102,8 +109,12 @@ impl<'a> PresignedUrlV4<'a> {
     }
 }
 
-fn parse_expires(s: &str) -> Option<time::Duration> {
+fn parse_expires(s: &str, max_expires_secs: u32) -> Option<time::Duration> {
+    // u32 parse rejects negative values and non-integers implicitly
     let x = s.parse::<u32>().ok()?;
+    if x > max_expires_secs {
+        return None;
+    }
     Some(time::Duration::new(i64::from(x), 0))
 }
 
@@ -112,6 +123,10 @@ mod tests {
     use super::*;
 
     use crate::http::OrderedQs;
+
+    fn default_max_expires_secs() -> u32 {
+        crate::config::DEFAULT_PRESIGNED_URL_MAX_EXPIRES_SECS
+    }
 
     fn make_qs(pairs: &[(&str, &str)]) -> OrderedQs {
         OrderedQs::from_vec_unchecked(
@@ -137,7 +152,7 @@ mod tests {
     fn parse_extracts_presigned_url_fields() {
         let qs = make_qs(&valid_query_strings());
 
-        let info = PresignedUrlV4::parse(&qs).unwrap();
+        let info = PresignedUrlV4::parse(&qs, default_max_expires_secs()).unwrap();
 
         assert_eq!(info.algorithm, "AWS4-HMAC-SHA256");
         assert_eq!(info.credential.access_key_id, "AKIAIOSFODNN7EXAMPLE");
@@ -152,7 +167,7 @@ mod tests {
     #[test]
     fn parse_rejects_missing_query_fields() {
         let qs = make_qs(&valid_query_strings()[..5]);
-        assert!(PresignedUrlV4::parse(&qs).is_err());
+        assert!(PresignedUrlV4::parse(&qs, default_max_expires_secs()).is_err());
     }
 
     #[test]
@@ -160,7 +175,7 @@ mod tests {
         let mut pairs = valid_query_strings();
         pairs[4] = ("X-Amz-SignedHeaders", "höst");
         let qs = make_qs(&pairs);
-        assert!(PresignedUrlV4::parse(&qs).is_err());
+        assert!(PresignedUrlV4::parse(&qs, default_max_expires_secs()).is_err());
     }
 
     #[test]
@@ -168,7 +183,7 @@ mod tests {
         let mut pairs = valid_query_strings();
         pairs[1] = ("X-Amz-Credential", "bad-credential");
         let qs = make_qs(&pairs);
-        assert!(PresignedUrlV4::parse(&qs).is_err());
+        assert!(PresignedUrlV4::parse(&qs, default_max_expires_secs()).is_err());
     }
 
     #[test]
@@ -176,7 +191,7 @@ mod tests {
         let mut pairs = valid_query_strings();
         pairs[2] = ("X-Amz-Date", "not-a-date");
         let qs = make_qs(&pairs);
-        assert!(PresignedUrlV4::parse(&qs).is_err());
+        assert!(PresignedUrlV4::parse(&qs, default_max_expires_secs()).is_err());
     }
 
     #[test]
@@ -184,14 +199,50 @@ mod tests {
         let mut pairs = valid_query_strings();
         pairs[5] = ("X-Amz-Signature", "not-a-sha256");
         let qs = make_qs(&pairs);
-        assert!(PresignedUrlV4::parse(&qs).is_err());
+        assert!(PresignedUrlV4::parse(&qs, default_max_expires_secs()).is_err());
     }
 
     #[test]
     fn parse_rejects_invalid_expires() {
+        for expires in ["604801", "4294967295", "4294967296", "999999999999999999999999", "NaN", "-1"] {
+            let mut pairs = valid_query_strings();
+            pairs[3] = ("X-Amz-Expires", expires);
+            let qs = make_qs(&pairs);
+            assert!(
+                PresignedUrlV4::parse(&qs, default_max_expires_secs()).is_err(),
+                "X-Amz-Expires={expires} must be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn parse_accepts_expires_boundaries() {
+        for expires in ["0", "1", "604800"] {
+            let mut pairs = valid_query_strings();
+            pairs[3] = ("X-Amz-Expires", expires);
+            let qs = make_qs(&pairs);
+            let parsed = PresignedUrlV4::parse(&qs, default_max_expires_secs()).expect("boundary expiration should parse");
+            assert_eq!(parsed.expires.whole_seconds().to_string(), expires);
+        }
+    }
+
+    #[test]
+    fn parse_respects_custom_max_expires() {
         let mut pairs = valid_query_strings();
-        pairs[3] = ("X-Amz-Expires", "NaN");
+        pairs[3] = ("X-Amz-Expires", "604801");
         let qs = make_qs(&pairs);
-        assert!(PresignedUrlV4::parse(&qs).is_err());
+
+        let parsed = PresignedUrlV4::parse(&qs, 700_000).expect("custom max should allow larger expires");
+        assert_eq!(parsed.expires.whole_seconds(), 604_801);
+
+        assert!(PresignedUrlV4::parse(&qs, 3_600).is_err(), "custom max should reject larger expires");
+    }
+
+    #[test]
+    fn parse_rejects_duplicate_expires() {
+        let mut pairs = valid_query_strings().to_vec();
+        pairs.push(("X-Amz-Expires", "1"));
+        let qs = make_qs(&pairs);
+        assert!(PresignedUrlV4::parse(&qs, default_max_expires_secs()).is_err());
     }
 }

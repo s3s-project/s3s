@@ -267,7 +267,7 @@ async fn test_list_objects_v2() -> Result<()> {
     let response = log_and_unwrap!(result);
 
     let contents: Vec<_> = response.contents().iter().filter_map(|obj| obj.key()).collect();
-    assert!(!contents.is_empty());
+    assert_ne!(contents.len(), 0);
     assert!(contents.contains(&key1));
     assert!(contents.contains(&key2));
 
