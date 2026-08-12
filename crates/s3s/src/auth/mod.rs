@@ -73,6 +73,8 @@
 mod secret_key;
 pub use self::secret_key::{Credentials, SecretKey};
 
+pub(crate) mod signature;
+
 mod simple_auth;
 pub use self::simple_auth::SimpleAuth;
 

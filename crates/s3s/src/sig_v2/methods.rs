@@ -1,4 +1,5 @@
 use crate::auth::SecretKey;
+use crate::auth::signature::Signature;
 use crate::http::OrderedHeaders;
 use crate::http::OrderedQs;
 use crate::utils::crypto::hmac_sha1;
@@ -11,8 +12,8 @@ fn base64(data: impl AsRef<[u8]>) -> String {
     base64_simd::STANDARD.encode_to_string(data)
 }
 
-pub fn calculate_signature(secret_key: &SecretKey, string_to_sign: &str) -> String {
-    base64(hmac_sha1(secret_key.expose(), string_to_sign))
+pub fn calculate_signature(secret_key: &SecretKey, string_to_sign: &str) -> Signature {
+    Signature::from_computed(base64(hmac_sha1(secret_key.expose(), string_to_sign)))
 }
 
 const INCLUDED_QUERY: &[&str] = &[
@@ -211,7 +212,7 @@ mod tests {
                 )
             );
 
-            assert_eq!(signature, "qgk2+6Sv9/oM7G3qLEjTH1a1l1g=");
+            assert_eq!(signature.as_str(), "qgk2+6Sv9/oM7G3qLEjTH1a1l1g=");
         }
 
         {
@@ -239,7 +240,7 @@ mod tests {
                 )
             );
 
-            assert_eq!(signature, "iqRzw+ileNPu1fhspnRs8nOjjIA=");
+            assert_eq!(signature.as_str(), "iqRzw+ileNPu1fhspnRs8nOjjIA=");
         }
 
         {
@@ -264,7 +265,7 @@ mod tests {
                 )
             );
 
-            assert_eq!(signature, "m0WP8eCtspQl5Ahe6L1SozdX9YA=");
+            assert_eq!(signature.as_str(), "m0WP8eCtspQl5Ahe6L1SozdX9YA=");
         }
 
         {
@@ -289,7 +290,7 @@ mod tests {
                 )
             );
 
-            assert_eq!(signature, "82ZHiFIjc+WbcwFKGUVEQspPn+0=");
+            assert_eq!(signature.as_str(), "82ZHiFIjc+WbcwFKGUVEQspPn+0=");
         }
 
         {
@@ -319,8 +320,8 @@ mod tests {
             );
 
             // FIXME: The example is wrong?
-            // assert_eq!(signature, "XbyTlbQdu9Xw5o8P4iMwPktxQd8=");
-            assert_eq!(signature, "Ri1hpB1zpS9pGqR7y8kuNFCl4sE=");
+            // assert_eq!(signature.as_str(), "XbyTlbQdu9Xw5o8P4iMwPktxQd8=");
+            assert_eq!(signature.as_str(), "Ri1hpB1zpS9pGqR7y8kuNFCl4sE=");
         }
 
         {
@@ -361,8 +362,8 @@ mod tests {
                 )
             );
 
-            // assert_eq!(signature, "dKZcB+bz2EPXgSdXZp9ozGeOM4I="); // The example is wrong?
-            assert_eq!(signature, "jtBQa0Aq+DkULFI8qrpwIjGEx0E=");
+            // assert_eq!(signature.as_str(), "dKZcB+bz2EPXgSdXZp9ozGeOM4I="); // The example is wrong?
+            assert_eq!(signature.as_str(), "jtBQa0Aq+DkULFI8qrpwIjGEx0E=");
         }
 
         {
@@ -387,7 +388,7 @@ mod tests {
                 )
             );
 
-            assert_eq!(signature, "qGdzdERIC03wnaRNKh6OqZehG9s=");
+            assert_eq!(signature.as_str(), "qGdzdERIC03wnaRNKh6OqZehG9s=");
         }
 
         {
@@ -412,7 +413,7 @@ mod tests {
                 )
             );
 
-            assert_eq!(signature, "DNEZGsoieTZ92F3bUfSPQcbGmlM=");
+            assert_eq!(signature.as_str(), "DNEZGsoieTZ92F3bUfSPQcbGmlM=");
         }
 
         {
@@ -446,7 +447,7 @@ mod tests {
                 )
             );
 
-            assert_eq!(signature, presigned_url.signature);
+            assert_eq!(signature.as_str(), presigned_url.signature.as_ref());
         }
     }
 
@@ -488,7 +489,7 @@ mod tests {
 
         // Sanity-check: a non-empty signature is produced for this input
         let sig = calculate_signature(&secret_key, &string_to_sign);
-        assert_ne!(sig.len(), 0);
+        assert_ne!(sig.as_str().len(), 0);
     }
 
     /// Regression test for <https://github.com/s3s-project/s3s/issues/137>
@@ -514,7 +515,7 @@ mod tests {
 
         // Sanity-check: a non-empty signature is produced for this input
         let sig = calculate_signature(&secret_key, &string_to_sign);
-        assert_ne!(sig.len(), 0);
+        assert_ne!(sig.as_str().len(), 0);
     }
 
     /// Regression test for <https://github.com/s3s-project/s3s/issues/137>
@@ -546,6 +547,6 @@ mod tests {
 
         // Sanity-check: a non-empty signature is produced for this input
         let sig = calculate_signature(&secret_key, &string_to_sign);
-        assert_ne!(sig.len(), 0);
+        assert_ne!(sig.as_str().len(), 0);
     }
 }

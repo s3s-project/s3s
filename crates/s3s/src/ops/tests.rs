@@ -518,7 +518,7 @@ async fn post_multipart_bucket_routes_to_post_object() {
         ),
         amz_date = amz_date_str,
         b = boundary,
-        signature = signature,
+        signature = signature.as_str(),
         bucket = bucket,
         policy_b64 = policy_b64,
         algorithm = algorithm,
@@ -766,7 +766,7 @@ mod post_policy_test_helpers {
 
         let body = build_multipart_fields(
             &[
-                ("x-amz-signature", &signature),
+                ("x-amz-signature", signature.as_str()),
                 ("bucket", bucket),
                 ("policy", &policy_b64),
                 ("x-amz-algorithm", algorithm),
