@@ -1145,7 +1145,7 @@ mod tests {
 
         let qs = OrderedQs::from_vec_unchecked(query_strings.iter().map(|&(n, v)| (n.to_owned(), v.to_owned())).collect());
 
-        let info = PresignedUrlV4::parse(&qs).unwrap();
+        let info = PresignedUrlV4::parse(&qs, crate::config::DEFAULT_PRESIGNED_URL_MAX_EXPIRES_SECS).unwrap();
 
         let canonical_request = create_presigned_canonical_request(&method, uri.path(), query_strings, &headers);
 
