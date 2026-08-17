@@ -34,6 +34,107 @@ use super::*;
 //     }
 // }
 
+fn get_object_microbench_body() -> crate::dto::StreamingBlob {
+    crate::dto::StreamingBlob::new(crate::http::Body::from(bytes::Bytes::from_static(&[b'a'; 1024])))
+}
+
+fn get_object_microbench_last_modified() -> crate::dto::Timestamp {
+    crate::dto::Timestamp::parse(crate::dto::TimestampFormat::HttpDate, "Wed, 21 Oct 2015 07:28:00 GMT").unwrap()
+}
+
+fn get_object_microbench_common_output(metadata_len: usize, include_timestamps: bool) -> crate::dto::GetObjectOutput {
+    let metadata = (metadata_len != 0).then(|| {
+        (0..metadata_len)
+            .map(|idx| (format!("bench-key-{idx}"), format!("bench-value-{idx}")))
+            .collect()
+    });
+
+    crate::dto::GetObjectOutput {
+        accept_ranges: Some("bytes".to_owned()),
+        body: Some(get_object_microbench_body()),
+        cache_control: Some("no-cache".to_owned()),
+        content_length: Some(1024),
+        content_type: Some("application/octet-stream".to_owned()),
+        e_tag: Some(crate::dto::ETag::Strong("0123456789abcdef0123456789abcdef".to_owned())),
+        last_modified: include_timestamps.then(get_object_microbench_last_modified),
+        metadata,
+        ..Default::default()
+    }
+}
+
+fn get_object_microbench_hundredths(numerator: u128, denominator: u128) -> String {
+    let scaled = numerator.saturating_mul(100) / denominator;
+    format!("{}.{:02}", scaled / 100, scaled % 100)
+}
+
+fn run_get_object_microbench_case<F>(name: &'static str, iterations: u64, mut f: F)
+where
+    F: FnMut() -> crate::error::S3Result<crate::http::Response>,
+{
+    use std::hint::black_box;
+
+    for _ in 0..1_000 {
+        let res = f().unwrap();
+        black_box(res.headers.len());
+    }
+
+    let start = std::time::Instant::now();
+    let mut header_count = 0usize;
+    for _ in 0..iterations {
+        let res = f().unwrap();
+        header_count = header_count.wrapping_add(res.headers.len());
+        black_box(res);
+    }
+    let elapsed = start.elapsed();
+    println!(
+        "s3s_get_serialize_bench case={name} iterations={iterations} total_ns={} ns_per_op={} avg_headers={}",
+        elapsed.as_nanos(),
+        get_object_microbench_hundredths(elapsed.as_nanos(), u128::from(iterations)),
+        get_object_microbench_hundredths(u128::try_from(header_count).unwrap(), u128::from(iterations))
+    );
+}
+
+#[test]
+#[ignore = "focused microbenchmark for GET response serialization attribution"]
+fn get_object_response_serialization_microbench() {
+    use crate::dto::ETag;
+    use crate::http;
+
+    const DEFAULT_ITERS: u64 = 200_000;
+    let iterations = std::env::var("S3S_GET_SERIALIZE_BENCH_ITERS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(DEFAULT_ITERS);
+
+    run_get_object_microbench_case("response_default", iterations, || Ok(http::Response::default()));
+    run_get_object_microbench_case("set_stream_body_only", iterations, || {
+        let mut res = http::Response::default();
+        http::set_stream_body(&mut res, get_object_microbench_body());
+        Ok(res)
+    });
+    run_get_object_microbench_case("manual_common_headers", iterations, || {
+        let mut res = http::Response::default();
+        http::set_stream_body(&mut res, get_object_microbench_body());
+        http::add_opt_header(&mut res, hyper::header::CONTENT_LENGTH, Some(1024_i64))?;
+        http::add_opt_header(&mut res, hyper::header::CONTENT_TYPE, Some("application/octet-stream".to_owned()))?;
+        http::add_opt_header(
+            &mut res,
+            hyper::header::ETAG,
+            Some(ETag::Strong("0123456789abcdef0123456789abcdef".to_owned())),
+        )?;
+        Ok(res)
+    });
+    run_get_object_microbench_case("get_object_common_no_timestamp", iterations, || {
+        generated::GetObject::serialize_http(get_object_microbench_common_output(0, false))
+    });
+    run_get_object_microbench_case("get_object_common_timestamp", iterations, || {
+        generated::GetObject::serialize_http(get_object_microbench_common_output(0, true))
+    });
+    run_get_object_microbench_case("get_object_common_metadata_2", iterations, || {
+        generated::GetObject::serialize_http(get_object_microbench_common_output(2, true))
+    });
+}
+
 /// Verifies that when an anonymous (unauthenticated) request is processed, the `None`
 /// branch of the credential match **explicitly clears** `region` and `service`.
 ///
