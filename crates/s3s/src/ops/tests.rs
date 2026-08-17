@@ -116,7 +116,7 @@ where
     let start = std::time::Instant::now();
     let mut value_count = 0u128;
     for _ in 0..iterations {
-        value_count = value_count.saturating_add(f().await as u128);
+        value_count = value_count.saturating_add(black_box(f().await) as u128);
     }
     let elapsed = start.elapsed();
     println!(
@@ -224,18 +224,20 @@ async fn get_object_output_path_microbench() {
     })
     .await;
     run_get_object_async_microbench_case("body_once_poll_frame", iterations, || async {
-        get_object_microbench_drain_body(crate::http::Body::from(bytes::Bytes::from_static(&[b'a'; 1024])))
+        let body = black_box(crate::http::Body::from(bytes::Bytes::from_static(&[b'a'; 1024])));
+        black_box(get_object_microbench_drain_body(body))
     })
     .await;
     run_get_object_async_microbench_case("body_streaming_blob_poll_frame", iterations, || async {
-        get_object_microbench_drain_body(crate::http::Body::from(get_object_microbench_body()))
+        let body = black_box(crate::http::Body::from(get_object_microbench_body()));
+        black_box(get_object_microbench_drain_body(body))
     })
     .await;
     run_get_object_async_microbench_case("serialize_common_and_poll_body", iterations, || async {
-        let resp = generated::GetObject::serialize_http(get_object_microbench_common_output(0, true)).unwrap();
+        let resp = black_box(generated::GetObject::serialize_http(get_object_microbench_common_output(0, true)).unwrap());
         let header_count = resp.headers.len();
         let body_bytes = get_object_microbench_drain_body(resp.body);
-        header_count + body_bytes
+        black_box(header_count + body_bytes)
     })
     .await;
 
