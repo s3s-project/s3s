@@ -79,10 +79,10 @@ where
     }
 
     let start = std::time::Instant::now();
-    let mut header_count = 0usize;
+    let mut header_count = 0u128;
     for _ in 0..iterations {
         let res = f().unwrap();
-        header_count = header_count.wrapping_add(res.headers.len());
+        header_count = header_count.saturating_add(res.headers.len() as u128);
         black_box(res);
     }
     let elapsed = start.elapsed();
@@ -90,7 +90,7 @@ where
         "s3s_get_serialize_bench case={name} iterations={iterations} total_ns={} ns_per_op={} avg_headers={}",
         elapsed.as_nanos(),
         get_object_microbench_hundredths(elapsed.as_nanos(), u128::from(iterations)),
-        get_object_microbench_hundredths(u128::try_from(header_count).unwrap(), u128::from(iterations))
+        get_object_microbench_hundredths(header_count, u128::from(iterations))
     );
 }
 
@@ -105,6 +105,7 @@ fn get_object_response_serialization_microbench() {
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(DEFAULT_ITERS);
+    assert!(iterations != 0, "S3S_GET_SERIALIZE_BENCH_ITERS must be greater than 0");
 
     run_get_object_microbench_case("response_default", iterations, || Ok(http::Response::default()));
     run_get_object_microbench_case("set_stream_body_only", iterations, || {
