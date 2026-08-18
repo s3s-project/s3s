@@ -159,9 +159,9 @@ pub trait S3Host: Send + Sync + 'static {
     /// Returns an error if the `Host` is invalid for this service.
     ///
     /// The returned [`VirtualHost`] may leave the bucket unset; the caller
-    /// then parses the request as path-style. Built-in implementations leave
-    /// the bucket unset for hosts that cannot be CNAME-style buckets — see
-    /// the [module-level docs](self) for the exact fallback behaviour.
+    /// then parses the request as path-style. Whether a host is left without
+    /// a bucket depends on the implementation — see the
+    /// [module-level docs](self) for the exact fallback behaviour.
     fn parse_host_header<'a>(&'a self, host: &'a str) -> S3Result<VirtualHost<'a>>;
 }
 
