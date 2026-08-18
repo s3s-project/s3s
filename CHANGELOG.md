@@ -17,6 +17,10 @@ MSRV of this minor version: 1.96.0
 
 + Update CI MSRV toolchain to 1.96.0 in [#637](https://github.com/s3s-project/s3s/pull/637)
 
+### Testing
+
++ (s3s-fs) Recover `opendal` integration tests by updating to `opendal` 0.58, which drops the vulnerable `rsa` transitive dependency chain removed in [#624](https://github.com/s3s-project/s3s/pull/624) ([#665](https://github.com/s3s-project/s3s/pull/665)) (fixes [#627](https://github.com/s3s-project/s3s/issues/627))
+
 [Unreleased]: https://github.com/s3s-project/s3s/compare/v0.14.1...HEAD
 
 ## [v0.14.1] - 2026-07-03
