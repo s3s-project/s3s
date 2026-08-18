@@ -62,6 +62,14 @@ fn get_object_microbench_common_output(metadata_len: usize, include_timestamps: 
     }
 }
 
+fn get_object_microbench_http_request() -> crate::HttpRequest {
+    hyper::Request::builder()
+        .method(hyper::Method::GET)
+        .uri("http://localhost/bench-bucket/bench-key")
+        .body(crate::http::Body::empty())
+        .unwrap()
+}
+
 fn get_object_microbench_hundredths(numerator: u128, denominator: u128) -> String {
     let scaled = numerator.saturating_mul(100) / denominator;
     format!("{}.{:02}", scaled / 100, scaled % 100)
@@ -92,6 +100,54 @@ where
         get_object_microbench_hundredths(elapsed.as_nanos(), u128::from(iterations)),
         get_object_microbench_hundredths(header_count, u128::from(iterations))
     );
+}
+
+async fn run_get_object_async_microbench_case<F, Fut>(name: &'static str, iterations: u64, mut f: F)
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = usize>,
+{
+    use std::hint::black_box;
+
+    for _ in 0..1_000 {
+        black_box(f().await);
+    }
+
+    let start = std::time::Instant::now();
+    let mut value_count = 0u128;
+    for _ in 0..iterations {
+        value_count = value_count.saturating_add(black_box(f().await) as u128);
+    }
+    let elapsed = start.elapsed();
+    println!(
+        "s3s_get_output_path_bench case={name} iterations={iterations} total_ns={} ns_per_op={} avg_value={}",
+        elapsed.as_nanos(),
+        get_object_microbench_hundredths(elapsed.as_nanos(), u128::from(iterations)),
+        get_object_microbench_hundredths(value_count, u128::from(iterations))
+    );
+}
+
+fn get_object_microbench_drain_body(mut body: crate::http::Body) -> usize {
+    use std::pin::Pin;
+    use std::task::Context;
+    use std::task::Poll;
+
+    let waker = futures::task::noop_waker();
+    let mut cx = Context::from_waker(&waker);
+    let mut body = Pin::new(&mut body);
+    let mut bytes = 0usize;
+    loop {
+        match http_body::Body::poll_frame(body.as_mut(), &mut cx) {
+            Poll::Ready(Some(Ok(frame))) => {
+                if let Ok(data) = frame.into_data() {
+                    bytes = bytes.saturating_add(data.len());
+                }
+            }
+            Poll::Ready(Some(Err(err))) => panic!("body poll failed: {err}"),
+            Poll::Ready(None) => return bytes,
+            Poll::Pending => panic!("microbench body unexpectedly returned Pending"),
+        }
+    }
 }
 
 #[test]
@@ -134,6 +190,99 @@ fn get_object_response_serialization_microbench() {
     run_get_object_microbench_case("get_object_common_metadata_2", iterations, || {
         generated::GetObject::serialize_http(get_object_microbench_common_output(2, true))
     });
+}
+
+struct GetObjectOutputPathMicrobenchS3;
+
+#[async_trait::async_trait]
+impl crate::s3_trait::S3 for GetObjectOutputPathMicrobenchS3 {
+    async fn get_object(
+        &self,
+        _req: crate::S3Request<crate::dto::GetObjectInput>,
+    ) -> crate::error::S3Result<crate::S3Response<crate::dto::GetObjectOutput>> {
+        Ok(crate::S3Response::new(get_object_microbench_common_output(0, true)))
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+#[ignore = "focused microbenchmark for GET output path attribution"]
+async fn get_object_output_path_microbench() {
+    use std::hint::black_box;
+
+    const DEFAULT_ITERS: u64 = 100_000;
+    let iterations = std::env::var("S3S_GET_OUTPUT_PATH_BENCH_ITERS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(DEFAULT_ITERS);
+    assert!(iterations != 0, "S3S_GET_OUTPUT_PATH_BENCH_ITERS must be greater than 0");
+
+    run_get_object_async_microbench_case("http_get_request_builder", iterations, || async {
+        let req = get_object_microbench_http_request();
+        let value = req.uri().path().len();
+        black_box(req);
+        value
+    })
+    .await;
+    run_get_object_async_microbench_case("body_once_poll_frame", iterations, || async {
+        let body = black_box(crate::http::Body::from(bytes::Bytes::from_static(&[b'a'; 1024])));
+        black_box(get_object_microbench_drain_body(body))
+    })
+    .await;
+    run_get_object_async_microbench_case("body_streaming_blob_poll_frame", iterations, || async {
+        let body = black_box(crate::http::Body::from(get_object_microbench_body()));
+        black_box(get_object_microbench_drain_body(body))
+    })
+    .await;
+    run_get_object_async_microbench_case("serialize_common_and_poll_body", iterations, || async {
+        let resp = black_box(generated::GetObject::serialize_http(get_object_microbench_common_output(0, true)).unwrap());
+        let header_count = resp.headers.len();
+        let body_bytes = get_object_microbench_drain_body(resp.body);
+        black_box(header_count + body_bytes)
+    })
+    .await;
+
+    let s3: std::sync::Arc<dyn crate::s3_trait::S3> = std::sync::Arc::new(GetObjectOutputPathMicrobenchS3);
+    let config: std::sync::Arc<dyn crate::config::S3ConfigProvider> =
+        std::sync::Arc::new(crate::config::StaticConfigProvider::default());
+    let ccx = CallContext {
+        s3: &s3,
+        config: &config,
+        host: None,
+        auth: None,
+        access: None,
+        route: None,
+        validation: None,
+    };
+    run_get_object_async_microbench_case("generated_get_object_operation_call", iterations, || async {
+        let mut req = crate::http::Request::from(get_object_microbench_http_request());
+        req.s3ext.s3_path = Some(crate::path::S3Path::object("bench-bucket", "bench-key"));
+        let resp = generated::GetObject.call(&ccx, &mut req).await.unwrap();
+        let value = resp.headers.len();
+        black_box(resp);
+        value
+    })
+    .await;
+
+    let service = crate::service::S3ServiceBuilder::new(GetObjectOutputPathMicrobenchS3).build();
+    run_get_object_async_microbench_case("s3service_call_path_style_get", iterations, || {
+        let service = service.clone();
+        async move {
+            let resp = service.call(get_object_microbench_http_request()).await.unwrap();
+            let value = resp.headers().len();
+            black_box(resp);
+            value
+        }
+    })
+    .await;
+    run_get_object_async_microbench_case("s3service_call_and_poll_body", iterations, || {
+        let service = service.clone();
+        async move {
+            let resp = service.call(get_object_microbench_http_request()).await.unwrap();
+            let (parts, body) = resp.into_parts();
+            parts.headers.len() + get_object_microbench_drain_body(body)
+        }
+    })
+    .await;
 }
 
 /// Verifies that when an anonymous (unauthenticated) request is processed, the `None`
