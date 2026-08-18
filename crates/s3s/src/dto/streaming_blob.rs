@@ -218,6 +218,14 @@ mod tests {
         assert_eq!(blob.remaining_length().exact(), Some(0));
     }
 
+    #[tokio::test]
+    async fn streaming_blob_from_empty_bytes_is_empty_stream() {
+        let mut blob = StreamingBlob::from_bytes(Bytes::new());
+        assert_eq!(blob.size_hint(), (0, Some(0)));
+        assert_eq!(blob.remaining_length().exact(), Some(0));
+        assert!(blob.next().await.is_none());
+    }
+
     #[test]
     fn streaming_blob_debug() {
         let body = Body::from(Bytes::from_static(b"test"));
@@ -251,10 +259,25 @@ mod tests {
     }
 
     #[test]
+    fn streaming_blob_from_bytes_trait_roundtrip_preserves_once_body() {
+        let blob = StreamingBlob::from(Bytes::from_static(b"data"));
+        let mut body_back: Body = Body::from(blob);
+        assert_eq!(body_back.take_bytes().unwrap(), Bytes::from_static(b"data"));
+    }
+
+    #[test]
     fn streaming_blob_into_dyn_byte_stream() {
         let body = Body::from(Bytes::from_static(b"test"));
         let blob = StreamingBlob::new(body);
         let _dyn_stream: DynByteStream = blob.into();
+    }
+
+    #[tokio::test]
+    async fn streaming_blob_from_bytes_into_dyn_byte_stream() {
+        let blob = StreamingBlob::from_bytes(Bytes::from_static(b"test"));
+        let dyn_stream: DynByteStream = blob.into();
+        let collected = dyn_stream.map(Result::unwrap).collect::<Vec<_>>().await;
+        assert_eq!(collected, vec![Bytes::from_static(b"test")]);
     }
 
     #[test]
