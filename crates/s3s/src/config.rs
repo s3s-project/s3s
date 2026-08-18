@@ -491,6 +491,10 @@ mod tests {
             else {
                 panic!("S3Config shape should be a struct");
             };
+            // One entry per field in S3Config:
+            // xml_max_body_size, post_object_max_file_size, form_max_field_size,
+            // form_max_fields_size, form_max_parts, presigned_url_max_skew_time_secs,
+            // expected_region, presigned_url_max_expires_secs, normalize_forward_slash_path
             assert_eq!(s.fields.len(), 9);
         }
 
