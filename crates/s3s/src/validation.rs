@@ -3,6 +3,8 @@
 //! The [`NameValidation`] trait lets users plug in a custom bucket name validator.
 //! [`AwsNameValidation`] provides the standard AWS bucket naming rules.
 
+#![deny(missing_docs)]
+
 /// Trait for validating S3 bucket names
 ///
 /// Implementations should return `true` for valid names and `false` for invalid ones.
@@ -18,6 +20,7 @@ pub struct AwsNameValidation {
 }
 
 impl AwsNameValidation {
+    /// Creates a new `AwsNameValidation`.
     #[must_use]
     pub const fn new() -> Self {
         Self { _priv: () }

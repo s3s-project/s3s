@@ -4,6 +4,8 @@
 //! alias for heap-allocated streams, and [`RemainingLength`] which
 //! communicates a known or estimated byte count remaining in a stream.
 
+#![deny(missing_docs)]
+
 use crate::error::StdError;
 
 use std::collections::VecDeque;
@@ -14,14 +16,24 @@ use std::task::{Context, Poll};
 use bytes::Bytes;
 use futures::Stream;
 
+/// A stream of bytes, typically the body of an S3 request or response.
+///
+/// Extends [`Stream`] with a way to report the known or estimated remaining
+/// byte count of the stream.
 pub trait ByteStream: Stream {
+    /// Returns the known or estimated remaining byte count.
     fn remaining_length(&self) -> RemainingLength {
         RemainingLength::unknown()
     }
 }
 
+/// A heap-allocated, object-safe byte stream.
+///
+/// This is the default stream type used by [`crate::Body`] and the DTO
+/// streaming types.
 pub type DynByteStream = Pin<Box<dyn ByteStream<Item = Result<Bytes, StdError>> + Send + Sync + 'static>>;
 
+/// The known or estimated remaining byte count of a stream.
 pub struct RemainingLength {
     lower: usize,
     upper: Option<usize>,
@@ -40,11 +52,13 @@ impl RemainingLength {
         Self { lower, upper }
     }
 
+    /// Creates a `RemainingLength` whose length is unknown.
     #[must_use]
     pub fn unknown() -> Self {
         Self { lower: 0, upper: None }
     }
 
+    /// Creates a `RemainingLength` with an exact known length.
     #[must_use]
     pub fn new_exact(n: usize) -> Self {
         Self {
@@ -53,6 +67,7 @@ impl RemainingLength {
         }
     }
 
+    /// Returns the exact remaining length, if it is exactly known.
     #[must_use]
     pub fn exact(&self) -> Option<usize> {
         self.upper.filter(|&upper| upper == self.lower)

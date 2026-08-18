@@ -1,3 +1,9 @@
+#![deny(missing_docs)]
+
+/// An S3 operation.
+///
+/// Identifies a single S3 API operation, such as `GetObject` or `ListBuckets`.
+/// Instances are passed to access control providers for fine-grained authorization.
 pub struct S3Operation {
     pub(crate) name: &'static str,
 }
