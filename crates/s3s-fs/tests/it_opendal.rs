@@ -230,11 +230,6 @@ async fn test_list() -> Result<()> {
         found_keys.push(path.clone());
         debug!("Found entry: {}", path);
 
-        // Only collect entries that match our test keys to avoid false positives
-        if path == key1 || path == key2 {
-            // Found our keys, continue until we have both or no more entries
-        }
-
         // Safety break to avoid infinite loop (should not be needed now)
         if found_keys.len() > 20 {
             debug!("Breaking after 20 entries to avoid infinite loop");
