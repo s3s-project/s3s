@@ -1,3 +1,5 @@
+#![deny(missing_docs)]
+
 use crate::Body;
 use crate::StdError;
 use crate::auth::Credentials;
@@ -11,7 +13,14 @@ use http::Uri;
 
 use stdx::default::default;
 
+/// An S3 HTTP request.
+///
+/// Type alias for [`http::Request`] with the default [`Body`].
 pub type HttpRequest<B = Body> = http::Request<B>;
+
+/// An S3 HTTP response.
+///
+/// Type alias for [`http::Response`] with the default [`Body`].
 pub type HttpResponse<B = Body> = http::Response<B>;
 
 /// An error that indicates a failure of an HTTP request.
@@ -20,6 +29,7 @@ pub type HttpResponse<B = Body> = http::Response<B>;
 pub struct HttpError(StdError);
 
 impl HttpError {
+    /// Creates a new `HttpError` from the given error.
     #[must_use]
     pub fn new(err: StdError) -> Self {
         Self(err)
