@@ -332,9 +332,7 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
             req.headers.insert(hyper::header::HOST, val);
         }
 
-        let decoded_uri_path = urlencoding::decode(req.uri.path())
-            .map_err(|_| S3ErrorCode::InvalidURI)?
-            .into_owned();
+        let decoded_uri_path = urlencoding::decode(req.uri.path()).map_err(|_| S3ErrorCode::InvalidURI)?;
 
         host_header = extract_host(req)?;
         let vh;
@@ -357,7 +355,7 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                     vh_region = vh.region().map(str::to_owned);
                     break 'parse crate::path::parse_virtual_hosted_style_with_validation_and_normalization(
                         vh_bucket,
-                        &decoded_uri_path,
+                        decoded_uri_path.as_ref(),
                         validation,
                         ccx.config.snapshot().normalize_forward_slash_path,
                     );
@@ -367,7 +365,7 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                 vh_bucket = None;
                 vh_region = None;
                 crate::path::parse_path_style_with_validation_and_normalization(
-                    &decoded_uri_path,
+                    decoded_uri_path.as_ref(),
                     validation,
                     ccx.config.snapshot().normalize_forward_slash_path,
                 )
