@@ -6,6 +6,8 @@
 use std::fmt;
 use std::str::FromStr;
 
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
 /// Error returned when a region string is invalid.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("invalid region: {0:?}")]
@@ -96,6 +98,25 @@ impl FromStr for Region {
     }
 }
 
+impl Serialize for Region {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for Region {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        Self::new(value.into_boxed_str()).map_err(serde::de::Error::custom)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -153,5 +174,14 @@ mod tests {
         let r: Region = "ap-south-1".parse().unwrap();
         let s = r.into_boxed_str();
         assert_eq!(&*s, "ap-south-1");
+    }
+
+    #[test]
+    fn serde_rejects_invalid_region() {
+        let region: Region = serde_json::from_str(r#""ap-south-1""#).expect("valid region should deserialize");
+        assert_eq!(region.as_str(), "ap-south-1");
+
+        let err = serde_json::from_str::<Region>(r#""AP-SOUTH-1""#).expect_err("invalid region should be rejected");
+        assert!(err.to_string().contains("invalid region"));
     }
 }
