@@ -5,6 +5,8 @@
 //! a [`crate::dto::Checksum`] struct whose fields are populated with
 //! base64-encoded digests for every algorithm that was enabled.
 
+#![deny(missing_docs)]
+
 use crate::crypto::Checksum as _;
 use crate::crypto::Crc32;
 use crate::crypto::Crc32c;
@@ -20,21 +22,37 @@ use crate::dto::Checksum;
 
 use stdx::default::default;
 
+/// Computes one or more S3 checksums simultaneously in a single pass.
+///
+/// Enable one or more algorithms by setting the corresponding field to `Some(...)`,
+/// feed data with [`update`](Self::update), then finalize with [`finalize`](Self::finalize)
+/// to obtain a [`crate::dto::Checksum`] holding base64-encoded digests.
 #[derive(Default)]
 pub struct ChecksumHasher {
+    /// CRC-32 (ISO-HDLC) checksum, used for `x-amz-checksum-crc32`.
     pub crc32: Option<Crc32>,
+    /// CRC-32C (Castagnoli / iSCSI) checksum, used for `x-amz-checksum-crc32c`.
     pub crc32c: Option<Crc32c>,
+    /// SHA-1 digest, used for `x-amz-checksum-sha1`.
     pub sha1: Option<Sha1>,
+    /// SHA-256 digest, used for `x-amz-checksum-sha256`.
     pub sha256: Option<Sha256>,
+    /// SHA-512 digest, used for `x-amz-checksum-sha512`.
     pub sha512: Option<Sha512>,
+    /// CRC-64/NVMe checksum, used for `x-amz-checksum-crc64nvme`.
     pub crc64nvme: Option<Crc64Nvme>,
+    /// MD5 digest, used for `x-amz-checksum-md5`.
     pub md5: Option<Md5>,
+    /// XXHASH64 checksum, used for `x-amz-checksum-xxhash64`.
     pub xxhash64: Option<XxHash64>,
+    /// XXHASH3 checksum, used for `x-amz-checksum-xxhash3`.
     pub xxhash3: Option<XxHash3>,
+    /// XXHASH128 checksum, used for `x-amz-checksum-xxhash128`.
     pub xxhash128: Option<XxHash128>,
 }
 
 impl ChecksumHasher {
+    /// Feeds `data` into every enabled algorithm.
     pub fn update(&mut self, data: &[u8]) {
         if let Some(crc32) = &mut self.crc32 {
             crc32.update(data);
@@ -68,6 +86,9 @@ impl ChecksumHasher {
         }
     }
 
+    /// Finalizes every enabled algorithm and returns the resulting [`crate::dto::Checksum`].
+    ///
+    /// The returned fields hold base64-encoded digests.
     #[must_use]
     pub fn finalize(self) -> Checksum {
         let mut ans: Checksum = default();
