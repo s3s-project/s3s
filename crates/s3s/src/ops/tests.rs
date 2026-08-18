@@ -169,6 +169,7 @@ fn get_object_microbench_drain_body(mut body: crate::http::Body) -> usize {
 #[ignore = "focused microbenchmark for GET response serialization attribution"]
 fn get_object_response_serialization_microbench() {
     use crate::dto::ETag;
+    use crate::dto::TimestampFormat;
     use crate::http;
 
     const DEFAULT_ITERS: u64 = 200_000;
@@ -184,6 +185,15 @@ fn get_object_response_serialization_microbench() {
         http::set_stream_body(&mut res, get_object_microbench_body());
         Ok(res)
     });
+    run_get_object_microbench_case("generated_empty_output", iterations, || {
+        generated::GetObject::serialize_http(crate::dto::GetObjectOutput::default())
+    });
+    run_get_object_microbench_case("generated_body_only", iterations, || {
+        generated::GetObject::serialize_http(crate::dto::GetObjectOutput {
+            body: Some(get_object_microbench_body()),
+            ..Default::default()
+        })
+    });
     run_get_object_microbench_case("manual_common_headers", iterations, || {
         let mut res = http::Response::default();
         http::set_stream_body(&mut res, get_object_microbench_body());
@@ -193,6 +203,40 @@ fn get_object_response_serialization_microbench() {
             &mut res,
             hyper::header::ETAG,
             Some(ETag::Strong("0123456789abcdef0123456789abcdef".to_owned())),
+        )?;
+        Ok(res)
+    });
+    run_get_object_microbench_case("manual_common_headers_5", iterations, || {
+        let mut res = http::Response::default();
+        http::set_stream_body(&mut res, get_object_microbench_body());
+        http::add_opt_header(&mut res, crate::header::ACCEPT_RANGES, Some("bytes".to_owned()))?;
+        http::add_opt_header(&mut res, crate::header::CACHE_CONTROL, Some("no-cache".to_owned()))?;
+        http::add_opt_header(&mut res, hyper::header::CONTENT_LENGTH, Some(1024_i64))?;
+        http::add_opt_header(&mut res, hyper::header::CONTENT_TYPE, Some("application/octet-stream".to_owned()))?;
+        http::add_opt_header(
+            &mut res,
+            hyper::header::ETAG,
+            Some(ETag::Strong("0123456789abcdef0123456789abcdef".to_owned())),
+        )?;
+        Ok(res)
+    });
+    run_get_object_microbench_case("manual_common_headers_5_last_modified", iterations, || {
+        let mut res = http::Response::default();
+        http::set_stream_body(&mut res, get_object_microbench_body());
+        http::add_opt_header(&mut res, crate::header::ACCEPT_RANGES, Some("bytes".to_owned()))?;
+        http::add_opt_header(&mut res, crate::header::CACHE_CONTROL, Some("no-cache".to_owned()))?;
+        http::add_opt_header(&mut res, hyper::header::CONTENT_LENGTH, Some(1024_i64))?;
+        http::add_opt_header(&mut res, hyper::header::CONTENT_TYPE, Some("application/octet-stream".to_owned()))?;
+        http::add_opt_header(
+            &mut res,
+            hyper::header::ETAG,
+            Some(ETag::Strong("0123456789abcdef0123456789abcdef".to_owned())),
+        )?;
+        http::add_opt_header_timestamp(
+            &mut res,
+            hyper::header::LAST_MODIFIED,
+            Some(get_object_microbench_last_modified()),
+            TimestampFormat::HttpDate,
         )?;
         Ok(res)
     });
