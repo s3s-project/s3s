@@ -5,6 +5,7 @@ use crate::http::Body;
 use crate::stream::*;
 
 use std::fmt;
+use std::mem;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
@@ -12,7 +13,12 @@ use futures::Stream;
 use hyper::body::Bytes;
 
 pub struct StreamingBlob {
-    inner: DynByteStream,
+    inner: StreamingBlobInner,
+}
+
+enum StreamingBlobInner {
+    Once(Bytes),
+    Stream(DynByteStream),
 }
 
 impl StreamingBlob {
@@ -20,7 +26,15 @@ impl StreamingBlob {
     where
         S: ByteStream<Item = Result<Bytes, StdError>> + Send + Sync + 'static,
     {
-        Self { inner: Box::pin(stream) }
+        Self {
+            inner: StreamingBlobInner::Stream(Box::pin(stream)),
+        }
+    }
+
+    pub fn from_bytes(bytes: Bytes) -> Self {
+        Self {
+            inner: StreamingBlobInner::Once(bytes),
+        }
     }
 
     pub fn wrap<S, E>(stream: S) -> Self
@@ -28,11 +42,23 @@ impl StreamingBlob {
         S: Stream<Item = Result<Bytes, E>> + Send + Sync + 'static,
         E: std::error::Error + Send + Sync + 'static,
     {
-        Self { inner: wrap(stream) }
+        Self {
+            inner: StreamingBlobInner::Stream(wrap(stream)),
+        }
     }
 
     fn into_inner(self) -> DynByteStream {
-        self.inner
+        match self.inner {
+            StreamingBlobInner::Once(bytes) => Box::pin(Body::from(bytes)),
+            StreamingBlobInner::Stream(stream) => stream,
+        }
+    }
+
+    fn into_body(self) -> Body {
+        match self.inner {
+            StreamingBlobInner::Once(bytes) => Body::from(bytes),
+            StreamingBlobInner::Stream(stream) => Body::from(stream),
+        }
     }
 }
 
@@ -47,18 +73,35 @@ impl fmt::Debug for StreamingBlob {
 impl Stream for StreamingBlob {
     type Item = Result<Bytes, StdError>;
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        Pin::new(&mut self.inner).poll_next(cx)
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        match &mut self.get_mut().inner {
+            StreamingBlobInner::Once(bytes) => {
+                let bytes = mem::take(bytes);
+                if bytes.is_empty() {
+                    Poll::Ready(None)
+                } else {
+                    Poll::Ready(Some(Ok(bytes)))
+                }
+            }
+            StreamingBlobInner::Stream(stream) => stream.as_mut().poll_next(cx),
+        }
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        self.inner.size_hint()
+        match &self.inner {
+            StreamingBlobInner::Once(bytes) if bytes.is_empty() => (0, Some(0)),
+            StreamingBlobInner::Once(_) => (1, Some(1)),
+            StreamingBlobInner::Stream(stream) => stream.size_hint(),
+        }
     }
 }
 
 impl ByteStream for StreamingBlob {
     fn remaining_length(&self) -> RemainingLength {
-        self.inner.remaining_length()
+        match &self.inner {
+            StreamingBlobInner::Once(bytes) => RemainingLength::new_exact(bytes.len()),
+            StreamingBlobInner::Stream(stream) => stream.remaining_length(),
+        }
     }
 }
 
@@ -70,13 +113,21 @@ impl From<StreamingBlob> for DynByteStream {
 
 impl From<DynByteStream> for StreamingBlob {
     fn from(value: DynByteStream) -> Self {
-        Self { inner: value }
+        Self {
+            inner: StreamingBlobInner::Stream(value),
+        }
+    }
+}
+
+impl From<Bytes> for StreamingBlob {
+    fn from(value: Bytes) -> Self {
+        Self::from_bytes(value)
     }
 }
 
 impl From<StreamingBlob> for Body {
     fn from(value: StreamingBlob) -> Self {
-        Body::from(value.into_inner())
+        value.into_body()
     }
 }
 
@@ -158,6 +209,23 @@ mod tests {
         assert_eq!(collected, vec![Bytes::from_static(b"abc"), Bytes::from_static(b"def")]);
     }
 
+    #[tokio::test]
+    async fn streaming_blob_from_bytes_and_poll() {
+        let mut blob = StreamingBlob::from_bytes(Bytes::from_static(b"hello world"));
+        assert_eq!(blob.remaining_length().exact(), Some(11));
+        assert_eq!(blob.next().await.unwrap().unwrap(), Bytes::from_static(b"hello world"));
+        assert!(blob.next().await.is_none());
+        assert_eq!(blob.remaining_length().exact(), Some(0));
+    }
+
+    #[tokio::test]
+    async fn streaming_blob_from_empty_bytes_is_empty_stream() {
+        let mut blob = StreamingBlob::from_bytes(Bytes::new());
+        assert_eq!(blob.size_hint(), (0, Some(0)));
+        assert_eq!(blob.remaining_length().exact(), Some(0));
+        assert!(blob.next().await.is_none());
+    }
+
     #[test]
     fn streaming_blob_debug() {
         let body = Body::from(Bytes::from_static(b"test"));
@@ -184,10 +252,32 @@ mod tests {
     }
 
     #[test]
+    fn streaming_blob_from_bytes_roundtrip_preserves_once_body() {
+        let blob = StreamingBlob::from_bytes(Bytes::from_static(b"data"));
+        let mut body_back: Body = Body::from(blob);
+        assert_eq!(body_back.take_bytes().unwrap(), Bytes::from_static(b"data"));
+    }
+
+    #[test]
+    fn streaming_blob_from_bytes_trait_roundtrip_preserves_once_body() {
+        let blob = StreamingBlob::from(Bytes::from_static(b"data"));
+        let mut body_back: Body = Body::from(blob);
+        assert_eq!(body_back.take_bytes().unwrap(), Bytes::from_static(b"data"));
+    }
+
+    #[test]
     fn streaming_blob_into_dyn_byte_stream() {
         let body = Body::from(Bytes::from_static(b"test"));
         let blob = StreamingBlob::new(body);
         let _dyn_stream: DynByteStream = blob.into();
+    }
+
+    #[tokio::test]
+    async fn streaming_blob_from_bytes_into_dyn_byte_stream() {
+        let blob = StreamingBlob::from_bytes(Bytes::from_static(b"test"));
+        let dyn_stream: DynByteStream = blob.into();
+        let collected = dyn_stream.map(Result::unwrap).collect::<Vec<_>>().await;
+        assert_eq!(collected, vec![Bytes::from_static(b"test")]);
     }
 
     #[test]

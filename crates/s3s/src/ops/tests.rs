@@ -44,7 +44,7 @@ impl crate::auth::S3Auth for NeverGetSecretKeyAuth {
 // }
 
 fn get_object_microbench_body() -> crate::dto::StreamingBlob {
-    crate::dto::StreamingBlob::new(crate::http::Body::from(bytes::Bytes::from_static(&[b'a'; 1024])))
+    crate::dto::StreamingBlob::from_bytes(bytes::Bytes::from_static(&[b'a'; 1024]))
 }
 
 fn get_object_microbench_last_modified() -> crate::dto::Timestamp {
