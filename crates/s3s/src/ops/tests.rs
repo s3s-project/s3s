@@ -473,6 +473,160 @@ async fn vh_region_fallback_for_anonymous_request() {
     );
 }
 
+/// With an `S3Host` configured, an unrecognized host carrying a port
+/// (e.g. `localhost:8014`) can never be a CNAME bucket and must fall back
+/// to path-style parsing; a portless host that is a valid bucket name keeps
+/// the CNAME fallback. See
+/// [s3s-project/s3s#643](https://github.com/s3s-project/s3s/issues/643).
+#[tokio::test]
+async fn host_fallback_path_style_and_cname() {
+    use crate::config::{S3ConfigProvider, StaticConfigProvider};
+    use crate::host::MultiDomain;
+    use crate::http::{Body, Request};
+    use crate::path::S3Path;
+    use std::sync::Arc;
+
+    struct NoOpS3;
+    #[async_trait::async_trait]
+    impl crate::s3_trait::S3 for NoOpS3 {}
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(NoOpS3);
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+    let host = MultiDomain::new(["s3.example.com"]).unwrap();
+    let ccx = CallContext {
+        s3: &s3,
+        config: &config,
+        host: Some(&host),
+        auth: None,
+        access: None,
+        route: None,
+        validation: None,
+    };
+
+    // `localhost:8014` can never be a CNAME bucket -> path-style: `GET /`
+    // parses as the root path (ListBuckets), not as a bucket named
+    // "localhost:8014".
+    let mut req = Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri("http://localhost:8014/")
+            .header(crate::header::HOST, "localhost:8014")
+            .body(Body::empty())
+            .unwrap(),
+    );
+    let _ = super::prepare(&mut req, &ccx).await;
+    assert!(
+        matches!(req.s3ext.s3_path, Some(S3Path::Root)),
+        "host with port must fall back to path-style"
+    );
+
+    // `localhost` is a valid bucket name -> CNAME fallback keeps the bucket.
+    let mut req = Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri("http://localhost/")
+            .header(crate::header::HOST, "localhost")
+            .body(Body::empty())
+            .unwrap(),
+    );
+    let _ = super::prepare(&mut req, &ccx).await;
+    assert!(
+        matches!(req.s3ext.s3_path, Some(S3Path::Bucket { ref bucket }) if bucket.as_ref() == "localhost"),
+        "portless valid-bucket host must keep the CNAME fallback"
+    );
+}
+
+/// With a path-style host rule configured, an unrecognized host matching it
+/// is parsed as path-style even when it is a valid bucket name. See
+/// [s3s-project/s3s#643](https://github.com/s3s-project/s3s/issues/643).
+#[tokio::test]
+async fn host_path_style_rule_is_path_style() {
+    use crate::config::{S3ConfigProvider, StaticConfigProvider};
+    use crate::host::MultiDomain;
+    use crate::http::{Body, Request};
+    use crate::path::S3Path;
+    use regex::RegexSet;
+    use std::sync::Arc;
+
+    struct NoOpS3;
+    #[async_trait::async_trait]
+    impl crate::s3_trait::S3 for NoOpS3 {}
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(NoOpS3);
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+    let host = MultiDomain::new(["s3.example.com"])
+        .unwrap()
+        .with_path_style_hosts(RegexSet::new([r"^localhost$"]).unwrap());
+    let ccx = CallContext {
+        s3: &s3,
+        config: &config,
+        host: Some(&host),
+        auth: None,
+        access: None,
+        route: None,
+        validation: None,
+    };
+
+    // `localhost` would be a valid CNAME bucket, but the path-style rule
+    // matches, so `GET /` parses as the root path (ListBuckets).
+    let mut req = Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri("http://localhost/")
+            .header(crate::header::HOST, "localhost")
+            .body(Body::empty())
+            .unwrap(),
+    );
+    let _ = super::prepare(&mut req, &ccx).await;
+    assert!(
+        matches!(req.s3ext.s3_path, Some(S3Path::Root)),
+        "path-style host rule must parse matching hosts as path-style"
+    );
+}
+
+/// With the CNAME-style fallback disabled on `SingleDomain`, an
+/// unrecognized portless host is parsed as path-style. See
+/// [s3s-project/s3s#643](https://github.com/s3s-project/s3s/issues/643).
+#[tokio::test]
+async fn single_domain_fallback_disabled_is_path_style() {
+    use crate::config::{S3ConfigProvider, StaticConfigProvider};
+    use crate::host::SingleDomain;
+    use crate::http::{Body, Request};
+    use crate::path::S3Path;
+    use std::sync::Arc;
+
+    struct NoOpS3;
+    #[async_trait::async_trait]
+    impl crate::s3_trait::S3 for NoOpS3 {}
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(NoOpS3);
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+    let host = SingleDomain::new("s3.example.com").unwrap().with_cname_fallback(false);
+    let ccx = CallContext {
+        s3: &s3,
+        config: &config,
+        host: Some(&host),
+        auth: None,
+        access: None,
+        route: None,
+        validation: None,
+    };
+
+    let mut req = Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri("http://localhost/")
+            .header(crate::header::HOST, "localhost")
+            .body(Body::empty())
+            .unwrap(),
+    );
+    let _ = super::prepare(&mut req, &ccx).await;
+    assert!(
+        matches!(req.s3ext.s3_path, Some(S3Path::Root)),
+        "disabled CNAME fallback must parse unrecognized hosts as path-style"
+    );
+}
+
 #[test]
 fn error_custom_headers() {
     fn redirect307(location: &str) -> S3Error {
