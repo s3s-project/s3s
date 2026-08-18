@@ -79,6 +79,12 @@ fn get_object_microbench_http_request() -> crate::HttpRequest {
         .unwrap()
 }
 
+fn get_object_microbench_prepared_request() -> crate::http::Request {
+    let mut req = crate::http::Request::from(get_object_microbench_http_request());
+    req.s3ext.s3_path = Some(crate::path::S3Path::object("bench-bucket", "bench-key"));
+    req
+}
+
 fn get_object_microbench_hundredths(numerator: u128, denominator: u128) -> String {
     let scaled = numerator.saturating_mul(100) / denominator;
     format!("{}.{:02}", scaled / 100, scaled % 100)
@@ -213,6 +219,91 @@ impl crate::s3_trait::S3 for GetObjectOutputPathMicrobenchS3 {
     }
 }
 
+fn get_object_microbench_call_context<'a>(
+    s3: &'a std::sync::Arc<dyn crate::s3_trait::S3>,
+    config: &'a std::sync::Arc<dyn crate::config::S3ConfigProvider>,
+) -> CallContext<'a> {
+    CallContext {
+        s3,
+        config,
+        host: None,
+        auth: None,
+        access: None,
+        route: None,
+        validation: None,
+    }
+}
+
+async fn run_get_object_operation_attribution_microbench_cases(
+    iterations: u64,
+    s3: &std::sync::Arc<dyn crate::s3_trait::S3>,
+    ccx: &CallContext<'_>,
+) {
+    use std::hint::black_box;
+
+    run_get_object_async_microbench_case("request_from_http", iterations, || async {
+        let req = crate::http::Request::from(get_object_microbench_http_request());
+        let value = req.uri.path().len();
+        black_box(req);
+        value
+    })
+    .await;
+    run_get_object_async_microbench_case("prepare_path_style_get", iterations, || async {
+        let mut req = crate::http::Request::from(get_object_microbench_http_request());
+        let prep = super::prepare(&mut req, ccx).await.unwrap();
+        let value = match prep {
+            Prepare::S3(op) => op.name().len(),
+            Prepare::CustomRoute => 0,
+        };
+        black_box(req);
+        value
+    })
+    .await;
+    run_get_object_async_microbench_case("get_object_deserialize_http", iterations, || async {
+        let mut req = get_object_microbench_prepared_request();
+        let input = generated::GetObject::deserialize_http(&mut req).unwrap();
+        let value = input.bucket.len() + input.key.len();
+        black_box((req, input));
+        value
+    })
+    .await;
+    run_get_object_async_microbench_case("s3_trait_get_object_direct", iterations, || async {
+        let req = crate::S3Request {
+            input: crate::dto::GetObjectInput::default(),
+            method: hyper::Method::GET,
+            uri: hyper::Uri::from_static("http://localhost/bench-bucket/bench-key"),
+            headers: hyper::HeaderMap::default(),
+            extensions: ::http::Extensions::default(),
+            credentials: None,
+            region: None,
+            service: None,
+            trailing_headers: None,
+        };
+        let resp = s3.get_object(req).await.unwrap();
+        let value = usize::try_from(resp.output.content_length.unwrap_or_default()).unwrap_or_default();
+        black_box(resp);
+        value
+    })
+    .await;
+    run_get_object_async_microbench_case("generated_get_object_operation_call", iterations, || async {
+        let mut req = crate::http::Request::from(get_object_microbench_http_request());
+        req.s3ext.s3_path = Some(crate::path::S3Path::object("bench-bucket", "bench-key"));
+        let resp = generated::GetObject.call(ccx, &mut req).await.unwrap();
+        let value = resp.headers.len();
+        black_box(resp);
+        value
+    })
+    .await;
+    run_get_object_async_microbench_case("ops_call_path_style_get", iterations, || async {
+        let mut req = crate::http::Request::from(get_object_microbench_http_request());
+        let resp = super::call(&mut req, ccx).await.unwrap();
+        let value = resp.headers.len();
+        black_box(resp);
+        value
+    })
+    .await;
+}
+
 #[tokio::test(flavor = "current_thread")]
 #[ignore = "focused microbenchmark for GET output path attribution"]
 async fn get_object_output_path_microbench() {
@@ -253,24 +344,8 @@ async fn get_object_output_path_microbench() {
     let s3: std::sync::Arc<dyn crate::s3_trait::S3> = std::sync::Arc::new(GetObjectOutputPathMicrobenchS3);
     let config: std::sync::Arc<dyn crate::config::S3ConfigProvider> =
         std::sync::Arc::new(crate::config::StaticConfigProvider::default());
-    let ccx = CallContext {
-        s3: &s3,
-        config: &config,
-        host: None,
-        auth: None,
-        access: None,
-        route: None,
-        validation: None,
-    };
-    run_get_object_async_microbench_case("generated_get_object_operation_call", iterations, || async {
-        let mut req = crate::http::Request::from(get_object_microbench_http_request());
-        req.s3ext.s3_path = Some(crate::path::S3Path::object("bench-bucket", "bench-key"));
-        let resp = generated::GetObject.call(&ccx, &mut req).await.unwrap();
-        let value = resp.headers.len();
-        black_box(resp);
-        value
-    })
-    .await;
+    let ccx = get_object_microbench_call_context(&s3, &config);
+    run_get_object_operation_attribution_microbench_cases(iterations, &s3, &ccx).await;
 
     let service = crate::service::S3ServiceBuilder::new(GetObjectOutputPathMicrobenchS3).build();
     run_get_object_async_microbench_case("s3service_call_path_style_get", iterations, || {
