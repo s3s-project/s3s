@@ -437,15 +437,17 @@ mod tests {
         let sd = result.unwrap();
         assert_eq!(sd.base_domain, domain);
 
-        let domain = "example.com.";
-        let result = SingleDomain::new(domain);
-        let err = result.unwrap_err();
-        assert!(matches!(err, DomainError::InvalidDomain));
-
-        let domain = "example.com:";
-        let result = SingleDomain::new(domain);
-        let err = result.unwrap_err();
-        assert!(matches!(err, DomainError::InvalidDomain));
+        for domain in [
+            "",                  // empty input
+            "example.com.",      // empty label
+            "example.com:",      // empty port
+            "example.com:http",  // non-numeric port
+            "example.com:65536", // port above u16::MAX
+            "exa_mple.com",      // character outside [a-zA-Z0-9-]
+        ] {
+            let err = SingleDomain::new(domain).unwrap_err();
+            assert_eq!(err, DomainError::InvalidDomain, "{domain:?}");
+        }
 
         let domain = "example.com:80";
         let result = SingleDomain::new(domain);
@@ -460,9 +462,8 @@ mod tests {
         assert_eq!(md.base_domains, domains);
 
         let domains = ["example.com", "example.com"];
-        let result = MultiDomain::new(&domains);
-        let err = result.unwrap_err();
-        assert!(matches!(err, DomainError::OverlappingSubdomains));
+        let err = MultiDomain::new(&domains).unwrap_err();
+        assert_eq!(err, DomainError::OverlappingSubdomains);
 
         let domains = ["example.com", "example.com.org"];
         let result = MultiDomain::new(&domains);
@@ -489,10 +490,15 @@ mod tests {
             assert_eq!(md.base_domains, domains, "{domains:?}");
         }
 
+        // an invalid domain is rejected wherever it appears in the list
+        for domains in [["", "example.com"], ["example.com", "exa_mple.com"]] {
+            let err = MultiDomain::new(&domains).unwrap_err();
+            assert_eq!(err, DomainError::InvalidDomain, "{domains:?}");
+        }
+
         let domains: [&str; 0] = [];
-        let result = MultiDomain::new(&domains);
-        let err = result.unwrap_err();
-        assert!(matches!(err, DomainError::ZeroDomains));
+        let err = MultiDomain::new(&domains).unwrap_err();
+        assert_eq!(err, DomainError::ZeroDomains);
     }
 
     #[test]
@@ -538,7 +544,7 @@ mod tests {
         let host = "example.com.org.";
         let result = md.parse_host_header(host);
         let err = result.unwrap_err();
-        assert!(matches!(err.code(), S3ErrorCode::InvalidRequest));
+        assert_eq!(err.code(), &S3ErrorCode::InvalidRequest);
 
         let host = "example.com.org.example.com";
         let result = md.parse_host_header(host);
