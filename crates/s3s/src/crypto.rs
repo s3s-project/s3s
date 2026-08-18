@@ -6,19 +6,32 @@
 //! cryptographic hash functions: [`Sha1`], [`Sha256`], [`Sha512`], and [`Md5`];
 //! xxHash algorithms: [`XxHash64`], [`XxHash3`], [`XxHash128`].
 
+#![deny(missing_docs)]
+
 use numeric_cast::TruncatingCast;
 
+/// A checksum or hash algorithm.
+///
+/// Implementors provide incremental hashing: create a new instance with
+/// [`new`](Self::new), feed data with [`update`](Self::update), and obtain the
+/// digest with [`finalize`](Self::finalize). [`checksum`](Self::checksum)
+/// computes the digest of a buffer in one shot.
 pub trait Checksum {
+    /// The digest output type.
     type Output: AsRef<[u8]>;
 
+    /// Creates a new hasher.
     #[must_use]
     fn new() -> Self;
 
+    /// Feeds `data` into the hasher.
     fn update(&mut self, data: &[u8]);
 
+    /// Finalizes the hasher and returns the digest.
     #[must_use]
     fn finalize(self) -> Self::Output;
 
+    /// Computes the digest of `data` in one shot.
     #[must_use]
     fn checksum(data: &[u8]) -> Self::Output
     where
@@ -30,6 +43,9 @@ pub trait Checksum {
     }
 }
 
+/// CRC-32 (ISO-HDLC) checksum, used for `x-amz-checksum-crc32`.
+///
+/// Produces a 4-byte big-endian digest.
 pub struct Crc32(crc_fast::Digest);
 
 impl Default for Crc32 {
@@ -39,6 +55,7 @@ impl Default for Crc32 {
 }
 
 impl Crc32 {
+    /// Computes the CRC-32 checksum of `data` and returns it as a `u32`.
     #[must_use]
     pub fn checksum_u32(data: &[u8]) -> u32 {
         let mut hasher = Self::new();
@@ -63,6 +80,9 @@ impl Checksum for Crc32 {
     }
 }
 
+/// CRC-32C (Castagnoli / iSCSI) checksum, used for `x-amz-checksum-crc32c`.
+///
+/// Produces a 4-byte big-endian digest.
 pub struct Crc32c(crc_fast::Digest);
 
 impl Default for Crc32c {
@@ -87,6 +107,9 @@ impl Checksum for Crc32c {
     }
 }
 
+/// CRC-64/NVMe checksum, used for `x-amz-checksum-crc64nvme`.
+///
+/// Produces an 8-byte big-endian digest.
 pub struct Crc64Nvme(crc_fast::Digest);
 
 impl Default for Crc64Nvme {
@@ -111,6 +134,9 @@ impl Checksum for Crc64Nvme {
     }
 }
 
+/// SHA-1 hash, used for `x-amz-checksum-sha1`.
+///
+/// Produces a 20-byte digest.
 #[derive(Default)]
 pub struct Sha1(sha1::Sha1);
 
@@ -132,6 +158,9 @@ impl Checksum for Sha1 {
     }
 }
 
+/// SHA-256 hash, used for `x-amz-checksum-sha256`.
+///
+/// Produces a 32-byte digest.
 #[derive(Default)]
 pub struct Sha256(sha2::Sha256);
 
@@ -153,6 +182,9 @@ impl Checksum for Sha256 {
     }
 }
 
+/// MD5 hash, used for `x-amz-checksum-md5`.
+///
+/// Produces a 16-byte digest.
 #[derive(Default)]
 pub struct Md5(md5::Md5);
 
@@ -174,6 +206,9 @@ impl Checksum for Md5 {
     }
 }
 
+/// SHA-512 hash, used for `x-amz-checksum-sha512`.
+///
+/// Produces a 64-byte digest.
 #[derive(Default)]
 pub struct Sha512(sha2::Sha512);
 
@@ -195,6 +230,9 @@ impl Checksum for Sha512 {
     }
 }
 
+/// XXHASH64 checksum, used for `x-amz-checksum-xxhash64`.
+///
+/// Produces an 8-byte big-endian digest.
 pub struct XxHash64(xxhash_rust::xxh64::Xxh64);
 
 // Amazon S3 checksum names map to upstream xxHash variants as follows:
@@ -227,6 +265,9 @@ impl Checksum for XxHash64 {
     }
 }
 
+/// XXHASH3 checksum, used for `x-amz-checksum-xxhash3`.
+///
+/// Produces an 8-byte big-endian digest.
 pub struct XxHash3(xxhash_rust::xxh3::Xxh3);
 
 impl Default for XxHash3 {
@@ -251,6 +292,9 @@ impl Checksum for XxHash3 {
     }
 }
 
+/// XXHASH128 checksum, used for `x-amz-checksum-xxhash128`.
+///
+/// Produces a 16-byte big-endian digest.
 pub struct XxHash128(xxhash_rust::xxh3::Xxh3);
 
 impl Default for XxHash128 {
