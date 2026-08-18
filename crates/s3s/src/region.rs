@@ -34,6 +34,7 @@ pub struct InvalidRegion(Box<str>);
 /// assert!(err.is_err());
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "facet", derive(facet::Facet))]
 pub struct Region(Box<str>);
 
 impl Region {

@@ -92,6 +92,7 @@ pub trait S3ConfigProvider: Send + Sync + 'static {
 /// assert_eq!(snapshot.xml_max_body_size, 10 * 1024 * 1024);
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "facet", derive(facet::Facet))]
 #[serde(default)]
 #[non_exhaustive]
 pub struct S3Config {
@@ -444,5 +445,61 @@ mod tests {
         // New requests should see updated config
         let new_snapshot = provider.snapshot();
         assert_eq!(new_snapshot.xml_max_body_size, 30 * 1024 * 1024);
+    }
+
+    #[cfg(feature = "facet")]
+    mod facet_tests {
+        use facet::Facet;
+
+        use super::*;
+
+        #[test]
+        fn test_s3config_has_facet_shape() {
+            let shape = S3Config::SHAPE;
+            assert!(!shape.type_identifier.is_empty());
+        }
+
+        #[test]
+        fn test_s3config_field_names_via_facet() {
+            let shape = S3Config::SHAPE;
+            let facet::Shape {
+                ty: facet::Type::User(facet::UserType::Struct(s)),
+                ..
+            } = shape
+            else {
+                panic!("S3Config shape should be a struct");
+            };
+            let names: Vec<&str> = s.fields.iter().map(|f| f.name).collect();
+            assert!(names.contains(&"xml_max_body_size"));
+            assert!(names.contains(&"post_object_max_file_size"));
+            assert!(names.contains(&"form_max_field_size"));
+            assert!(names.contains(&"form_max_fields_size"));
+            assert!(names.contains(&"form_max_parts"));
+            assert!(names.contains(&"presigned_url_max_skew_time_secs"));
+            assert!(names.contains(&"expected_region"));
+            assert!(names.contains(&"presigned_url_max_expires_secs"));
+            assert!(names.contains(&"normalize_forward_slash_path"));
+        }
+
+        #[test]
+        fn test_s3config_field_count_via_facet() {
+            let shape = S3Config::SHAPE;
+            let facet::Shape {
+                ty: facet::Type::User(facet::UserType::Struct(s)),
+                ..
+            } = shape
+            else {
+                panic!("S3Config shape should be a struct");
+            };
+            assert_eq!(s.fields.len(), 9);
+        }
+
+        #[test]
+        fn test_region_has_facet_shape() {
+            use crate::region::Region;
+
+            let shape = Region::SHAPE;
+            assert!(!shape.type_identifier.is_empty());
+        }
     }
 }
