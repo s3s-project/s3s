@@ -1,3 +1,5 @@
+#![deny(missing_docs)]
+
 use crate::error::StdError;
 use crate::stream::ByteStream;
 use crate::stream::DynByteStream;
@@ -19,6 +21,11 @@ type BoxBody = http_body_util::combinators::BoxBody<Bytes, StdError>;
 type UnsyncBoxBody = http_body_util::combinators::UnsyncBoxBody<Bytes, StdError>;
 
 pin_project_lite::pin_project! {
+    /// A flexible HTTP body type for S3 requests and responses.
+    ///
+    /// Supports empty bodies, in-memory [`Bytes`], hyper bodies, boxed
+    /// [`http_body::Body`] implementations (both `Send + Sync` and unsync),
+    /// and [`DynByteStream`].
     #[derive(Default)]
     pub struct Body {
         #[pin]
@@ -55,6 +62,7 @@ pin_project_lite::pin_project! {
 }
 
 impl Body {
+    /// Creates an empty body.
     #[must_use]
     pub fn empty() -> Self {
         Self::default()
@@ -78,6 +86,9 @@ impl Body {
         }
     }
 
+    /// Wraps any [`http_body::Body`] with `Bytes` data.
+    ///
+    /// The wrapped body must be `Send + Sync`.
     #[must_use]
     pub fn http_body<B>(body: B) -> Self
     where
@@ -91,6 +102,10 @@ impl Body {
         }
     }
 
+    /// Wraps any [`http_body::Body`] with `Bytes` data.
+    ///
+    /// The wrapped body does not need to be `Sync`; access is serialized
+    /// through a mutex.
     #[must_use]
     pub fn http_body_unsync<B>(body: B) -> Self
     where
@@ -288,6 +303,9 @@ impl Body {
         Ok(bytes)
     }
 
+    /// Returns the buffered bytes if the body is already fully held in memory,
+    /// without consuming them.
+    #[must_use]
     pub fn bytes(&self) -> Option<Bytes> {
         match &self.kind {
             Kind::Empty => Some(Bytes::new()),
@@ -296,6 +314,8 @@ impl Body {
         }
     }
 
+    /// Takes the buffered bytes if the body is already fully held in memory.
+    #[must_use]
     pub fn take_bytes(&mut self) -> Option<Bytes> {
         match mem::take(&mut self.kind) {
             Kind::Empty => Some(Bytes::new()),
