@@ -70,6 +70,8 @@
 //! - Rotate credentials regularly
 //! - Use [`SimpleAuth`] only for testing, not production
 
+#![deny(missing_docs)]
+
 mod secret_key;
 pub use self::secret_key::{Credentials, SecretKey};
 

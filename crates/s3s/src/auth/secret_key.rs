@@ -5,12 +5,21 @@ use serde::Serialize;
 use subtle::ConstantTimeEq;
 use zeroize::Zeroize;
 
+/// Authenticated S3 credentials.
+///
+/// Contains the access key ID and the corresponding [`SecretKey`].
 #[derive(Debug, Clone)]
 pub struct Credentials {
+    /// The access key ID.
     pub access_key: String,
+    /// The secret key associated with the access key.
     pub secret_key: SecretKey,
 }
 
+/// An S3 secret key.
+///
+/// The secret value is zeroized on drop, and its [`Debug`](std::fmt::Debug)
+/// implementation hides the actual value.
 #[derive(Clone)]
 pub struct SecretKey(Box<str>);
 
@@ -19,6 +28,9 @@ impl SecretKey {
         Self(s.into())
     }
 
+    /// Exposes the secret key value.
+    ///
+    /// This is the only way to read the secret. Use it with care.
     #[must_use]
     pub fn expose(&self) -> &str {
         &self.0

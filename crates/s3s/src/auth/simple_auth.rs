@@ -19,6 +19,7 @@ impl SimpleAuth {
         Self { map: HashMap::new() }
     }
 
+    /// Constructs a new `SimpleAuth` with a single registered access key pair.
     #[must_use]
     pub fn from_single(access_key: impl Into<String>, secret_key: impl Into<SecretKey>) -> Self {
         let access_key = access_key.into();
