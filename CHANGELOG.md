@@ -9,17 +9,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 MSRV of this minor version: 1.96.0
 
-### Dependencies
+### s3s
 
-+ Upgrade workspace Rust dependencies and refresh `Cargo.lock` in [#637](https://github.com/s3s-project/s3s/pull/637)
+**Signature & auth:**
++ Add `enable_sig_v2` option to reject SigV2 requests when disabled ([#673](https://github.com/s3s-project/s3s/pull/673))
++ Enforce constant-time signature comparison via typed `Signature` ([#659](https://github.com/s3s-project/s3s/pull/659))
++ Limit presigned URL expiry to seven days ([#645](https://github.com/s3s-project/s3s/pull/645))
++ Make the presigned `expires` maximum configurable ([#658](https://github.com/s3s-project/s3s/pull/658))
++ Validate the configured SigV4 region ([#650](https://github.com/s3s-project/s3s/pull/650))
++ Accept base64 REST payload checksums ([#631](https://github.com/s3s-project/s3s/pull/631))
+
+**Host:**
++ Restrict and configure the CNAME-style fallback ([#667](https://github.com/s3s-project/s3s/pull/667)) (fixes [#643](https://github.com/s3s-project/s3s/issues/643))
++ Require a label boundary in the `MultiDomain` overlap check ([#649](https://github.com/s3s-project/s3s/pull/649)) (fixes [#648](https://github.com/s3s-project/s3s/issues/648))
+
+**Checksums:**
++ Support additional checksum algorithms (SHA512, MD5, XXHASH64, XXHASH3, XXHASH128) ([#640](https://github.com/s3s-project/s3s/pull/640))
+
+**XML & DTO:**
++ Serialize ETag without quotes in `GetObjectAttributesOutput` XML body ([#632](https://github.com/s3s-project/s3s/pull/632)) (fixes [#629](https://github.com/s3s-project/s3s/issues/629))
++ Preserve single-chunk streaming blobs ([#677](https://github.com/s3s-project/s3s/pull/677))
+
+**Performance:**
++ Avoid path decode allocation in request preparation ([#668](https://github.com/s3s-project/s3s/pull/668))
+
+**Error handling:**
++ Propagate `source()` from stream error wrappers ([#653](https://github.com/s3s-project/s3s/pull/653)) (fixes [#652](https://github.com/s3s-project/s3s/issues/652))
+
+**Style:**
++ Fix mut_mut lint error in `keep_alive_body.rs` ([#634](https://github.com/s3s-project/s3s/pull/634))
++ Fix nightly clippy lints ([#656](https://github.com/s3s-project/s3s/pull/656))
+
+**Testing:**
++ Improve helper coverage ([#641](https://github.com/s3s-project/s3s/pull/641))
++ Add GET object response serialization microbench ([#661](https://github.com/s3s-project/s3s/pull/661))
++ Add GET output path attribution microbench ([#663](https://github.com/s3s-project/s3s/pull/663))
++ Split GET output path attribution ([#664](https://github.com/s3s-project/s3s/pull/664))
++ Expand GET serialization attribution bench ([#669](https://github.com/s3s-project/s3s/pull/669))
++ Close the remaining coverage gaps in `host.rs` ([#675](https://github.com/s3s-project/s3s/pull/675))
+
+### s3s-fs
+
+**Testing:**
++ Recover `opendal` integration tests by updating to `opendal` 0.58, which drops the vulnerable `rsa` transitive dependency chain removed in [#624](https://github.com/s3s-project/s3s/pull/624) ([#665](https://github.com/s3s-project/s3s/pull/665)) (fixes [#627](https://github.com/s3s-project/s3s/issues/627))
+
+### Documentation
+
++ Document public API and deny missing docs in core modules ([#670](https://github.com/s3s-project/s3s/pull/670))
++ Consolidate agent guidance into `AGENTS.md` ([#671](https://github.com/s3s-project/s3s/pull/671))
 
 ### CI
 
 + Update CI MSRV toolchain to 1.96.0 in [#637](https://github.com/s3s-project/s3s/pull/637)
++ Update dependabot schedule from monthly to weekly ([#638](https://github.com/s3s-project/s3s/pull/638))
++ Drop stale audit ignores and document the `lru` advisory ([#660](https://github.com/s3s-project/s3s/pull/660))
 
-### Testing
+### Data
 
-+ (s3s-fs) Recover `opendal` integration tests by updating to `opendal` 0.58, which drops the vulnerable `rsa` transitive dependency chain removed in [#624](https://github.com/s3s-project/s3s/pull/624) ([#665](https://github.com/s3s-project/s3s/pull/665)) (fixes [#627](https://github.com/s3s-project/s3s/issues/627))
++ Resolve ruff 0.16.0 lint failures across scripts and tests ([#644](https://github.com/s3s-project/s3s/pull/644))
+
+### Dependencies
+
++ Update `h2` to 0.4.16, fixing [RUSTSEC-2026-0258] (unbounded empty DATA frames) in [#678](https://github.com/s3s-project/s3s/pull/678)
++ Upgrade workspace Rust dependencies and refresh `Cargo.lock` in [#637](https://github.com/s3s-project/s3s/pull/637)
++ Multiple dependabot dependency group updates ([#639](https://github.com/s3s-project/s3s/pull/639), [#647](https://github.com/s3s-project/s3s/pull/647), [#657](https://github.com/s3s-project/s3s/pull/657), [#672](https://github.com/s3s-project/s3s/pull/672))
++ Bump `soupsieve` from 2.6 to 2.8.4 in [#630](https://github.com/s3s-project/s3s/pull/630)
 
 [Unreleased]: https://github.com/s3s-project/s3s/compare/v0.14.1...HEAD
 
