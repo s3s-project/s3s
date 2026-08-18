@@ -173,6 +173,19 @@ impl SignatureVerificationContext<'_> {
 }
 
 impl SignatureContext<'_> {
+    /// Rejects `SigV2` requests when the `enable_sig_v2` configuration is off.
+    ///
+    /// `SigV2` is enabled by default. When disabled, a recognized `SigV2` request
+    /// is rejected with `AccessDenied` (fail-closed) rather than being treated
+    /// as anonymous.
+    fn ensure_v2_enabled(&self) -> S3Result<()> {
+        let config = self.config.snapshot();
+        if !config.enable_sig_v2 {
+            return Err(s3_error!(AccessDenied, "Signature Version 2 is disabled by server configuration"));
+        }
+        Ok(())
+    }
+
     pub async fn check(&mut self) -> S3Result<Option<CredentialsExt>> {
         if self.req_method == Method::POST
             && let Some(ref mime) = self.mime
@@ -681,6 +694,8 @@ impl SignatureContext<'_> {
     }
 
     pub async fn v2_check_header_auth(&mut self, auth_v2: AuthorizationV2<'_>) -> S3Result<CredentialsExt> {
+        self.ensure_v2_enabled()?;
+
         let method = &self.req_method;
 
         let date = self.hs.get_unique("date").or_else(|| self.hs.get_unique("x-amz-date"));
@@ -719,6 +734,8 @@ impl SignatureContext<'_> {
     }
 
     pub async fn v2_check_post_signature(&mut self, multipart: Multipart) -> S3Result<CredentialsExt> {
+        self.ensure_v2_enabled()?;
+
         let auth = require_auth(self.auth)?;
 
         let info = PostSignatureV2::extract(&multipart).ok_or_else(|| invalid_request!("missing required multipart fields"))?;
@@ -750,6 +767,8 @@ impl SignatureContext<'_> {
     }
 
     pub async fn v2_check_presigned_url(&mut self) -> S3Result<CredentialsExt> {
+        self.ensure_v2_enabled()?;
+
         let qs = self.qs.unwrap(); // assume: qs has "Signature"
         let presigned_url = PresignedUrlV2::parse(qs).map_err(|err| invalid_request!(err, "missing presigned url v2 fields"))?;
 
@@ -1136,6 +1155,163 @@ file content\r\n\
         let multipart = cx.multipart.expect("multipart should be stored");
         assert_eq!(multipart.find_field_value("key"), Some("foo.txt"));
         assert_eq!(multipart.file.name, "file.txt");
+    }
+
+    fn sig_v2_test_config(enable_sig_v2: bool) -> Arc<dyn S3ConfigProvider> {
+        use crate::config::{S3Config, StaticConfigProvider};
+
+        let config = S3Config {
+            enable_sig_v2,
+            ..Default::default()
+        };
+        Arc::new(StaticConfigProvider::new(Arc::new(config)))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn sig_v2_test_context<'a>(
+        config: &'a Arc<dyn S3ConfigProvider>,
+        method: &'a Method,
+        uri: &'a Uri,
+        body: &'a mut Body,
+        qs: Option<&'a OrderedQs>,
+        hs: OrderedHeaders<'a>,
+        mime: Option<Mime>,
+    ) -> SignatureContext<'a> {
+        SignatureContext {
+            auth: None,
+            config,
+            req_version: ::http::Version::HTTP_11,
+            req_method: method,
+            req_uri: uri,
+            req_body: body,
+            qs,
+            hs,
+            decoded_uri_path: "/test.txt",
+            raw_uri_path: "/test.txt",
+            vh_bucket: None,
+            content_length: None,
+            mime,
+            decoded_content_length: None,
+            transformed_body: None,
+            multipart: None,
+            trailing_headers: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn sig_v2_header_auth_rejected_when_disabled() {
+        let config = sig_v2_test_config(false);
+        let method = Method::GET;
+        let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+        let mut body = Body::empty();
+        let mut cx = sig_v2_test_context(
+            &config,
+            &method,
+            &uri,
+            &mut body,
+            None,
+            OrderedHeaders::from_slice_unchecked(&[("authorization", "AWS AKIAIOSFODNN7EXAMPLE:qgk2+6Sv9/oM7G3qLEjTH1a1l1g=")]),
+            None,
+        );
+
+        let err = cx
+            .v2_check()
+            .await
+            .expect("v2 header auth must be detected")
+            .expect_err("SigV2 must be rejected when disabled");
+        assert_eq!(err.code(), &S3ErrorCode::AccessDenied);
+    }
+
+    #[tokio::test]
+    async fn sig_v2_presigned_url_rejected_when_disabled() {
+        let config = sig_v2_test_config(false);
+        let method = Method::GET;
+        let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+        let qs = OrderedQs::parse("AWSAccessKeyId=AKIAIOSFODNN7EXAMPLE&Signature=abc&Expires=1175139620").unwrap();
+        let mut body = Body::empty();
+        let mut cx = sig_v2_test_context(
+            &config,
+            &method,
+            &uri,
+            &mut body,
+            Some(&qs),
+            OrderedHeaders::from_slice_unchecked(&[]),
+            None,
+        );
+
+        let err = cx
+            .v2_check()
+            .await
+            .expect("v2 presigned url must be detected")
+            .expect_err("SigV2 must be rejected when disabled");
+        assert_eq!(err.code(), &S3ErrorCode::AccessDenied);
+    }
+
+    #[tokio::test]
+    async fn sig_v2_post_rejected_when_disabled() {
+        let boundary = "boundary123";
+        let body = format!(
+            "\r\n--{boundary}\r\n\
+Content-Disposition: form-data; name=\"signature\"\r\n\r\n\
+abc\r\n\
+--{boundary}\r\n\
+Content-Disposition: form-data; name=\"key\"; filename=\"key\"\r\n\r\n\
+foo.txt\r\n\
+--{boundary}\r\n\
+Content-Disposition: form-data; name=\"file\"; filename=\"file.txt\"\r\n\
+Content-Type: text/plain\r\n\r\n\
+file content\r\n\
+--{boundary}--\r\n"
+        );
+        let mut body = Body::from(body);
+        let mime: Mime = format!("multipart/form-data; boundary={boundary}").parse().unwrap();
+
+        let config = sig_v2_test_config(false);
+        let method = Method::POST;
+        let uri = Uri::from_static("http://localhost/test-bucket");
+        let mut cx = sig_v2_test_context(
+            &config,
+            &method,
+            &uri,
+            &mut body,
+            None,
+            OrderedHeaders::from_slice_unchecked(&[]),
+            Some(mime),
+        );
+
+        let err = cx.check().await.expect_err("SigV2 POST must be rejected when disabled");
+        assert_eq!(err.code(), &S3ErrorCode::AccessDenied);
+    }
+
+    #[tokio::test]
+    async fn sig_v2_enabled_by_default_passes_gate() {
+        let config = sig_v2_test_config(true);
+        let method = Method::GET;
+        let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+
+        // With the default config SigV2 is enabled, so the gate passes and the
+        // request proceeds to signature verification; without an auth provider
+        // it fails at the auth lookup with NotImplemented, not AccessDenied.
+        let mut body = Body::empty();
+        let mut cx = sig_v2_test_context(
+            &config,
+            &method,
+            &uri,
+            &mut body,
+            None,
+            OrderedHeaders::from_slice_unchecked(&[
+                ("authorization", "AWS AKIAIOSFODNN7EXAMPLE:qgk2+6Sv9/oM7G3qLEjTH1a1l1g="),
+                ("date", "Mon, 26 Nov 2024 00:00:00 GMT"),
+            ]),
+            None,
+        );
+
+        let err = cx
+            .v2_check()
+            .await
+            .expect("v2 header auth must be detected")
+            .expect_err("header auth without provider should fail at auth lookup");
+        assert_eq!(err.code(), &S3ErrorCode::NotImplemented);
     }
 
     #[tokio::test]

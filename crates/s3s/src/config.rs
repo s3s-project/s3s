@@ -148,6 +148,15 @@ pub struct S3Config {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expected_region: Option<Region>,
 
+    /// Whether Signature Version 2 (`SigV2`) verification is enabled.
+    ///
+    /// `SigV2` is deprecated by AWS and does not bind the signature to a region
+    /// or service. When disabled, requests carrying a `SigV2` signature (header
+    /// auth, presigned URL, or POST form) are rejected with `AccessDenied`.
+    ///
+    /// Default: true (backwards compatible)
+    pub enable_sig_v2: bool,
+
     /// Maximum allowed `X-Amz-Expires` value for `SigV4` presigned URLs in seconds.
     ///
     /// Default: 604800 (7 days, matching AWS S3 behavior)
@@ -187,6 +196,7 @@ impl Default for S3Config {
             form_max_parts: 1000,
             presigned_url_max_skew_time_secs: 900, // 15 minutes
             expected_region: None,
+            enable_sig_v2: true,
             presigned_url_max_expires_secs: DEFAULT_PRESIGNED_URL_MAX_EXPIRES_SECS,
             normalize_forward_slash_path: false,
         }
@@ -397,6 +407,7 @@ mod tests {
             form_max_parts: 500,
             presigned_url_max_skew_time_secs: 600,
             expected_region: Some("us-west-2".parse().expect("valid test region")),
+            enable_sig_v2: true,
             presigned_url_max_expires_secs: 86_400,
             normalize_forward_slash_path: false,
         };
