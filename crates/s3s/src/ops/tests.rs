@@ -85,14 +85,6 @@ fn get_object_microbench_prepared_request() -> crate::http::Request {
     req
 }
 
-fn get_object_microbench_input() -> crate::dto::GetObjectInput {
-    crate::dto::GetObjectInput {
-        bucket: "bench-bucket".to_owned(),
-        key: "bench-key".to_owned(),
-        ..Default::default()
-    }
-}
-
 fn get_object_microbench_hundredths(numerator: u128, denominator: u128) -> String {
     let scaled = numerator.saturating_mul(100) / denominator;
     format!("{}.{:02}", scaled / 100, scaled % 100)
@@ -277,9 +269,9 @@ async fn run_get_object_operation_attribution_microbench_cases(
     .await;
     run_get_object_async_microbench_case("s3_trait_get_object_direct", iterations, || async {
         let req = crate::S3Request {
-            input: get_object_microbench_input(),
+            input: crate::dto::GetObjectInput::default(),
             method: hyper::Method::GET,
-            uri: "http://localhost/bench-bucket/bench-key".parse().unwrap(),
+            uri: hyper::Uri::from_static("http://localhost/bench-bucket/bench-key"),
             headers: hyper::HeaderMap::default(),
             extensions: ::http::Extensions::default(),
             credentials: None,
@@ -302,7 +294,7 @@ async fn run_get_object_operation_attribution_microbench_cases(
         value
     })
     .await;
-    run_get_object_async_microbench_case("ops_call_prepared_service_core", iterations, || async {
+    run_get_object_async_microbench_case("ops_call_path_style_get", iterations, || async {
         let mut req = crate::http::Request::from(get_object_microbench_http_request());
         let resp = super::call(&mut req, ccx).await.unwrap();
         let value = resp.headers.len();
