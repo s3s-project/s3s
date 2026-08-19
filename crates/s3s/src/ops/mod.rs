@@ -247,6 +247,32 @@ async fn extract_full_body(content_length: Option<u64>, body: &mut Body, max_bod
     Ok(bytes)
 }
 
+/// Prepares the POST object file stream for the operation.
+///
+/// Aggregates the file stream with a size limit to obtain its exact length,
+/// which downstream handlers (like s3s-proxy) need to set `content-length`.
+///
+/// # Errors
+/// Returns an error if the file exceeds `max_file_size` or the file stream
+/// cannot be read.
+async fn prepare_post_object_stream(
+    file_stream: http::FileStream,
+    max_file_size: u64,
+) -> S3Result<(crate::stream::DynByteStream, u64)> {
+    let vec_bytes = http::aggregate_file_stream_limited(file_stream, max_file_size)
+        .await
+        .map_err(|e| match e {
+            http::MultipartError::FileTooLarge(..) => {
+                s3_error!(EntityTooLarge, "Your proposed upload exceeds the maximum allowed object size.")
+            }
+            other => invalid_request!(other, "failed to read file stream"),
+        })?;
+    // Use saturating_add to prevent overflow in release builds (security-relevant for content-length-range validation)
+    let file_size = vec_bytes.iter().map(|b| b.len() as u64).fold(0u64, u64::saturating_add);
+    let vec_stream = crate::stream::VecByteStream::new(vec_bytes);
+    Ok((crate::stream::into_dyn(vec_stream), file_size))
+}
+
 #[allow(clippy::declare_interior_mutable_const)]
 fn fmt_content_length(len: usize) -> http::HeaderValue {
     const ZERO: http::HeaderValue = http::HeaderValue::from_static("0");
@@ -534,21 +560,10 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                         config.post_object_max_file_size
                     };
 
-                    // Aggregate file stream with size limit to get known length
-                    // This is required because downstream handlers (like s3s-proxy) need content-length
+                    // Prepare the file stream for the operation.
                     let file_stream = multipart.take_file_stream().expect("missing file stream");
-                    let vec_bytes = http::aggregate_file_stream_limited(file_stream, max_file_size)
-                        .await
-                        .map_err(|e| match e {
-                            http::MultipartError::FileTooLarge(..) => {
-                                s3_error!(EntityTooLarge, "Your proposed upload exceeds the maximum allowed object size.")
-                            }
-                            other => invalid_request!(other, "failed to read file stream"),
-                        })?;
-                    // Use saturating_add to prevent overflow in release builds (security-relevant for content-length-range validation)
-                    let file_size: u64 = vec_bytes.iter().map(|b| b.len() as u64).fold(0u64, u64::saturating_add);
-                    let vec_stream = crate::stream::VecByteStream::new(vec_bytes);
-                    req.s3ext.post_object_stream = Some(crate::stream::into_dyn(vec_stream));
+                    let (post_stream, file_size) = prepare_post_object_stream(file_stream, max_file_size).await?;
+                    req.s3ext.post_object_stream = Some(post_stream);
 
                     // Validate the policy conditions (if policy exists)
                     // Note: expiration was already checked above before reading the file
