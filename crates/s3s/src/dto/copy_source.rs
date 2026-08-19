@@ -60,7 +60,7 @@ pub enum CopySource {
 }
 
 /// [`CopySource`]
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ParseCopySourceError {
     /// pattern mismatch
     #[error("ParseAmzCopySourceError: PatternMismatch")]
@@ -425,7 +425,7 @@ mod tests {
     fn bucket_no_key() {
         let header = "awsexamplebucket";
         let err = CopySource::parse(header).unwrap_err();
-        assert!(matches!(err, ParseCopySourceError::PatternMismatch));
+        assert_eq!(err, ParseCopySourceError::PatternMismatch);
     }
 
     // ── Access Point ARN tests ──
@@ -698,70 +698,70 @@ mod tests {
     fn invalid_arn_missing_parts() {
         let header = "arn:aws:s3";
         let err = CopySource::parse(header).unwrap_err();
-        assert!(matches!(err, ParseCopySourceError::InvalidArn));
+        assert_eq!(err, ParseCopySourceError::InvalidArn);
     }
 
     #[test]
     fn invalid_arn_bad_partition() {
         let header = "arn:invalid:s3:us-west-2:123456789012:accesspoint/ap/object/key";
         let err = CopySource::parse(header).unwrap_err();
-        assert!(matches!(err, ParseCopySourceError::InvalidArn));
+        assert_eq!(err, ParseCopySourceError::InvalidArn);
     }
 
     #[test]
     fn invalid_arn_bad_service() {
         let header = "arn:aws:ec2:us-west-2:123456789012:accesspoint/ap/object/key";
         let err = CopySource::parse(header).unwrap_err();
-        assert!(matches!(err, ParseCopySourceError::InvalidArn));
+        assert_eq!(err, ParseCopySourceError::InvalidArn);
     }
 
     #[test]
     fn invalid_arn_empty_region() {
         let header = "arn:aws:s3::123456789012:accesspoint/ap/object/key";
         let err = CopySource::parse(header).unwrap_err();
-        assert!(matches!(err, ParseCopySourceError::InvalidArn));
+        assert_eq!(err, ParseCopySourceError::InvalidArn);
     }
 
     #[test]
     fn invalid_arn_empty_account_id() {
         let header = "arn:aws:s3:us-west-2::accesspoint/ap/object/key";
         let err = CopySource::parse(header).unwrap_err();
-        assert!(matches!(err, ParseCopySourceError::InvalidAccountId));
+        assert_eq!(err, ParseCopySourceError::InvalidAccountId);
     }
 
     #[test]
     fn invalid_arn_missing_object_delimiter() {
         let header = "arn:aws:s3:us-west-2:123456789012:accesspoint/my-ap/key";
         let err = CopySource::parse(header).unwrap_err();
-        assert!(matches!(err, ParseCopySourceError::InvalidArn));
+        assert_eq!(err, ParseCopySourceError::InvalidArn);
     }
 
     #[test]
     fn invalid_arn_empty_access_point_name() {
         let header = "arn:aws:s3:us-west-2:123456789012:accesspoint//object/key";
         let err = CopySource::parse(header).unwrap_err();
-        assert!(matches!(err, ParseCopySourceError::InvalidAccessPointName));
+        assert_eq!(err, ParseCopySourceError::InvalidAccessPointName);
     }
 
     #[test]
     fn invalid_arn_empty_key() {
         let header = "arn:aws:s3:us-west-2:123456789012:accesspoint/my-ap/object/";
         let err = CopySource::parse(header).unwrap_err();
-        assert!(matches!(err, ParseCopySourceError::InvalidKey));
+        assert_eq!(err, ParseCopySourceError::InvalidKey);
     }
 
     #[test]
     fn invalid_arn_empty_outpost_id() {
         let header = "arn:aws:s3-outposts:us-west-2:123456789012:outpost//object/key";
         let err = CopySource::parse(header).unwrap_err();
-        assert!(matches!(err, ParseCopySourceError::InvalidArn));
+        assert_eq!(err, ParseCopySourceError::InvalidArn);
     }
 
     #[test]
     fn invalid_outpost_missing_object_delimiter() {
         let header = "arn:aws:s3-outposts:us-west-2:123456789012:outpost/my-outpost/key";
         let err = CopySource::parse(header).unwrap_err();
-        assert!(matches!(err, ParseCopySourceError::InvalidArn));
+        assert_eq!(err, ParseCopySourceError::InvalidArn);
     }
 
     #[test]
@@ -769,7 +769,7 @@ mod tests {
         // s3 service but resource doesn't start with "accesspoint/"
         let header = "arn:aws:s3:us-west-2:123456789012:bucket/mybucket/object/key";
         let err = CopySource::parse(header).unwrap_err();
-        assert!(matches!(err, ParseCopySourceError::InvalidArn));
+        assert_eq!(err, ParseCopySourceError::InvalidArn);
     }
 
     #[test]
@@ -777,7 +777,7 @@ mod tests {
         // %80 is an invalid UTF-8 start byte, which causes urlencoding::decode to fail
         let header = "awsexamplebucket/reports/%80";
         let err = CopySource::parse(header).unwrap_err();
-        assert!(matches!(err, ParseCopySourceError::InvalidEncoding));
+        assert_eq!(err, ParseCopySourceError::InvalidEncoding);
     }
 
     // ── Key with special characters in ARN ──
@@ -860,17 +860,17 @@ mod tests {
         // Name with uppercase
         let header = "arn:aws:s3:us-west-2:123456789012:accesspoint/MyAP/object/key";
         let err = CopySource::parse(header).unwrap_err();
-        assert!(matches!(err, ParseCopySourceError::InvalidAccessPointName));
+        assert_eq!(err, ParseCopySourceError::InvalidAccessPointName);
 
         // Name too short (2 chars)
         let header = "arn:aws:s3:us-west-2:123456789012:accesspoint/ab/object/key";
         let err = CopySource::parse(header).unwrap_err();
-        assert!(matches!(err, ParseCopySourceError::InvalidAccessPointName));
+        assert_eq!(err, ParseCopySourceError::InvalidAccessPointName);
 
         // Name with consecutive hyphens
         let header = "arn:aws:s3:us-west-2:123456789012:accesspoint/my--ap/object/key";
         let err = CopySource::parse(header).unwrap_err();
-        assert!(matches!(err, ParseCopySourceError::InvalidAccessPointName));
+        assert_eq!(err, ParseCopySourceError::InvalidAccessPointName);
     }
 
     // ── Account ID validation tests ──
@@ -900,17 +900,17 @@ mod tests {
         // Too short
         let header = "arn:aws:s3:us-west-2:12345:accesspoint/my-ap/object/key";
         let err = CopySource::parse(header).unwrap_err();
-        assert!(matches!(err, ParseCopySourceError::InvalidAccountId));
+        assert_eq!(err, ParseCopySourceError::InvalidAccountId);
 
         // Contains letters
         let header = "arn:aws:s3:us-west-2:12345678901a:accesspoint/my-ap/object/key";
         let err = CopySource::parse(header).unwrap_err();
-        assert!(matches!(err, ParseCopySourceError::InvalidAccountId));
+        assert_eq!(err, ParseCopySourceError::InvalidAccountId);
 
         // Too long
         let header = "arn:aws:s3:us-west-2:1234567890123:accesspoint/my-ap/object/key";
         let err = CopySource::parse(header).unwrap_err();
-        assert!(matches!(err, ParseCopySourceError::InvalidAccountId));
+        assert_eq!(err, ParseCopySourceError::InvalidAccountId);
     }
 
     // ── Partition roundtrip tests ──
@@ -943,7 +943,7 @@ mod tests {
         // Bucket name too short (1 char)
         let header = "a/some-key";
         let err = CopySource::parse(header).unwrap_err();
-        assert!(matches!(err, ParseCopySourceError::InvalidBucketName));
+        assert_eq!(err, ParseCopySourceError::InvalidBucketName);
     }
 
     #[test]
@@ -951,14 +951,14 @@ mod tests {
         let long_key = "a".repeat(1025);
         let header = format!("my-bucket/{long_key}");
         let err = CopySource::parse(&header).unwrap_err();
-        assert!(matches!(err, ParseCopySourceError::InvalidKey));
+        assert_eq!(err, ParseCopySourceError::InvalidKey);
     }
 
     #[test]
     fn invalid_outpost_empty_key() {
         let header = "arn:aws:s3-outposts:us-west-2:123456789012:outpost/my-outpost/object/";
         let err = CopySource::parse(header).unwrap_err();
-        assert!(matches!(err, ParseCopySourceError::InvalidKey));
+        assert_eq!(err, ParseCopySourceError::InvalidKey);
     }
 
     #[test]
@@ -966,7 +966,7 @@ mod tests {
         // %80 in versionId triggers InvalidEncoding from extract_version_id
         let header = "my-bucket/key?versionId=%80";
         let err = CopySource::parse(header).unwrap_err();
-        assert!(matches!(err, ParseCopySourceError::InvalidEncoding));
+        assert_eq!(err, ParseCopySourceError::InvalidEncoding);
     }
 
     #[test]
@@ -974,7 +974,7 @@ mod tests {
         // s3-outposts service but resource doesn't start with "outpost/"
         let header = "arn:aws:s3-outposts:us-west-2:123456789012:accesspoint/my-ap/object/key";
         let err = CopySource::parse(header).unwrap_err();
-        assert!(matches!(err, ParseCopySourceError::InvalidArn));
+        assert_eq!(err, ParseCopySourceError::InvalidArn);
     }
 
     // ── Encoded roundtrip tests ──

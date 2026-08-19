@@ -583,7 +583,7 @@ mod tests {
         };
 
         let e = PostPolicy::validate_condition(&condition, &multipart, 0, None).unwrap_err();
-        assert!(matches!(e.code(), S3ErrorCode::InvalidPolicyDocument));
+        assert_eq!(e.code(), &S3ErrorCode::InvalidPolicyDocument);
     }
 
     #[test]
@@ -619,7 +619,7 @@ mod tests {
         };
 
         let e = PostPolicy::validate_condition(&condition, &multipart, 0, None).unwrap_err();
-        assert!(matches!(e.code(), S3ErrorCode::InvalidPolicyDocument));
+        assert_eq!(e.code(), &S3ErrorCode::InvalidPolicyDocument);
     }
 
     #[test]
@@ -655,7 +655,7 @@ mod tests {
         let condition = PostPolicyCondition::ContentLengthRange { min: 100, max: 1000 };
 
         let e = PostPolicy::validate_condition(&condition, &multipart, 99, None).unwrap_err();
-        assert!(matches!(e.code(), S3ErrorCode::EntityTooSmall));
+        assert_eq!(e.code(), &S3ErrorCode::EntityTooSmall);
     }
 
     #[test]
@@ -664,7 +664,7 @@ mod tests {
         let condition = PostPolicyCondition::ContentLengthRange { min: 100, max: 1000 };
 
         let e = PostPolicy::validate_condition(&condition, &multipart, 1001, None).unwrap_err();
-        assert!(matches!(e.code(), S3ErrorCode::EntityTooLarge));
+        assert_eq!(e.code(), &S3ErrorCode::EntityTooLarge);
     }
 
     #[test]
@@ -676,7 +676,7 @@ mod tests {
         };
 
         let e = PostPolicy::validate_condition(&condition, &multipart, 0, None).unwrap_err();
-        assert!(matches!(e.code(), S3ErrorCode::InvalidPolicyDocument));
+        assert_eq!(e.code(), &S3ErrorCode::InvalidPolicyDocument);
     }
 
     #[test]
@@ -688,7 +688,7 @@ mod tests {
         };
 
         let e = PostPolicy::validate_condition(&condition, &multipart, 0, None).unwrap_err();
-        assert!(matches!(e.code(), S3ErrorCode::InvalidPolicyDocument));
+        assert_eq!(e.code(), &S3ErrorCode::InvalidPolicyDocument);
     }
 
     #[test]
@@ -712,7 +712,7 @@ mod tests {
         };
 
         let e = PostPolicy::validate_condition(&condition, &multipart, 0, None).unwrap_err();
-        assert!(matches!(e.code(), S3ErrorCode::InvalidPolicyDocument));
+        assert_eq!(e.code(), &S3ErrorCode::InvalidPolicyDocument);
     }
 
     /// Regression test for <https://github.com/rustfs/rustfs/issues/1785>
@@ -743,7 +743,7 @@ mod tests {
 
         // With mismatching url_bucket -> should fail
         let e = PostPolicy::validate_condition(&condition, &multipart, 0, Some("wrongbucket")).unwrap_err();
-        assert!(matches!(e.code(), S3ErrorCode::InvalidPolicyDocument));
+        assert_eq!(e.code(), &S3ErrorCode::InvalidPolicyDocument);
     }
 
     /// When both a `bucket` form field and `url_bucket` are present but conflict,
@@ -759,7 +759,7 @@ mod tests {
 
         // Conflict between form field and url_bucket must be rejected outright
         let e = PostPolicy::validate_condition(&condition, &multipart, 0, Some("url-bucket")).unwrap_err();
-        assert!(matches!(e.code(), S3ErrorCode::InvalidPolicyDocument));
+        assert_eq!(e.code(), &S3ErrorCode::InvalidPolicyDocument);
     }
 
     /// Regression test for <https://github.com/rustfs/rustfs/issues/1785>
@@ -905,7 +905,7 @@ mod tests {
         // "success_action_status" is NOT in the policy but IS in form fields
         let multipart = create_test_multipart(vec![("key", "mykey"), ("success_action_status", "200")], None);
         let err = policy.validate_conditions_only(&multipart, 0, Some("mybucket")).unwrap_err();
-        assert!(matches!(err.code(), S3ErrorCode::AccessDenied));
+        assert_eq!(err.code(), &S3ErrorCode::AccessDenied);
         assert!(
             err.message().unwrap_or("").contains("success_action_status"),
             "error message should mention the undeclared field"

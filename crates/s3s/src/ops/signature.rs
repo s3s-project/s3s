@@ -854,7 +854,7 @@ mod tests {
         ]);
         let result = extract_amz_content_sha256(&headers).unwrap();
         assert!(result.is_some());
-        assert!(matches!(result.unwrap(), AmzContentSha256::UnsignedPayload));
+        assert_eq!(result.unwrap(), AmzContentSha256::UnsignedPayload);
     }
 
     #[test]
