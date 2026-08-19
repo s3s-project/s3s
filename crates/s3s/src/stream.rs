@@ -9,6 +9,7 @@
 use crate::error::StdError;
 
 use std::collections::VecDeque;
+use std::convert::Infallible;
 use std::fmt;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -171,14 +172,10 @@ impl VecByteStream {
             remaining_bytes: total,
         }
     }
-
-    pub fn exact_remaining_length(&self) -> usize {
-        self.remaining_bytes
-    }
 }
 
 impl Stream for VecByteStream {
-    type Item = Result<Bytes, StdError>;
+    type Item = Result<Bytes, Infallible>;
 
     fn poll_next(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = Pin::into_inner(self);
@@ -275,7 +272,6 @@ mod tests {
     #[tokio::test]
     async fn vec_byte_stream_empty() {
         let mut s = VecByteStream::new(vec![]);
-        assert_eq!(s.exact_remaining_length(), 0);
         assert_eq!(s.remaining_length().exact(), Some(0));
         let (lo, hi) = s.size_hint();
         assert_eq!(lo, 0);
@@ -287,10 +283,10 @@ mod tests {
     async fn vec_byte_stream_single_chunk() {
         let data = Bytes::from_static(b"hello");
         let mut s = VecByteStream::new(vec![data.clone()]);
-        assert_eq!(s.exact_remaining_length(), 5);
+        assert_eq!(s.remaining_length().exact(), Some(5));
         let item = s.next().await.unwrap().unwrap();
         assert_eq!(item, data);
-        assert_eq!(s.exact_remaining_length(), 0);
+        assert_eq!(s.remaining_length().exact(), Some(0));
         assert!(s.next().await.is_none());
     }
 
@@ -299,7 +295,7 @@ mod tests {
         let c1 = Bytes::from_static(b"ab");
         let c2 = Bytes::from_static(b"cde");
         let mut s = VecByteStream::new(vec![c1.clone(), c2.clone()]);
-        assert_eq!(s.exact_remaining_length(), 5);
+        assert_eq!(s.remaining_length().exact(), Some(5));
 
         let (lo, hi) = s.size_hint();
         assert_eq!(lo, 2);
@@ -307,11 +303,11 @@ mod tests {
 
         let item1 = s.next().await.unwrap().unwrap();
         assert_eq!(item1, c1);
-        assert_eq!(s.exact_remaining_length(), 3);
+        assert_eq!(s.remaining_length().exact(), Some(3));
 
         let item2 = s.next().await.unwrap().unwrap();
         assert_eq!(item2, c2);
-        assert_eq!(s.exact_remaining_length(), 0);
+        assert_eq!(s.remaining_length().exact(), Some(0));
 
         assert!(s.next().await.is_none());
     }

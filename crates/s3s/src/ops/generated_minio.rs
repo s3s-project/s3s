@@ -5628,13 +5628,17 @@ impl PutObject {
         let bucket = http::unwrap_bucket(req);
         let key = http::parse_field_value(&m, "key")?.ok_or_else(|| invalid_request!("missing key"))?;
 
-        let vec_stream = req.s3ext.vec_stream.take().expect("missing vec stream");
+        let body_stream = req.s3ext.post_object_stream.take().expect("missing body stream");
 
-        let content_length = i64::try_from(vec_stream.exact_remaining_length())
+        let content_length = body_stream
+            .remaining_length()
+            .exact()
+            .map(i64::try_from)
+            .transpose()
             .map_err(|e| s3_error!(e, InvalidArgument, "content-length overflow"))?;
-        let content_length = (content_length != 0).then_some(content_length);
+        let content_length = content_length.filter(|&n| n != 0);
 
-        let body: Option<StreamingBlob> = Some(StreamingBlob::new(vec_stream));
+        let body: Option<StreamingBlob> = Some(body_stream.into());
 
         let acl: Option<ObjectCannedACL> = http::parse_field_value(&m, "x-amz-acl")?;
 

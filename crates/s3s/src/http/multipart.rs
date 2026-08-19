@@ -141,16 +141,23 @@ pub async fn aggregate_file_stream_limited(mut stream: FileStream, max_size: u64
 }
 
 /// transform multipart
+///
+/// `total_len` is the request's `Content-Length`, if known. It is not used by
+/// the parser yet but may inform later length derivations.
+///
 /// # Errors
 /// Returns an `Err` if the format is invalid
 pub async fn transform_multipart<S>(
     body_stream: S,
     boundary: &'_ [u8],
     limits: MultipartLimits,
+    total_len: Option<u64>,
 ) -> Result<Multipart, MultipartError>
 where
     S: Stream<Item = Result<Bytes, StdError>> + Send + Sync + 'static,
 {
+    tracing::debug!(?total_len, "parsing multipart form data");
+
     let mut buf = Vec::new();
 
     let mut body = Box::pin(body_stream);
@@ -703,7 +710,7 @@ mod tests {
 
         let body_stream = futures::stream::iter(body_bytes);
 
-        let ans = transform_multipart(body_stream, boundary.as_bytes(), MultipartLimits::default())
+        let ans = transform_multipart(body_stream, boundary.as_bytes(), MultipartLimits::default(), None)
             .await
             .unwrap();
 
@@ -752,7 +759,7 @@ mod tests {
         let body_stream = futures::stream::iter(body_bytes);
         let boundary = "------------------------c634190ccaebbc34";
 
-        let ans = transform_multipart(body_stream, boundary.as_bytes(), MultipartLimits::default())
+        let ans = transform_multipart(body_stream, boundary.as_bytes(), MultipartLimits::default(), None)
             .await
             .unwrap();
 
@@ -813,7 +820,7 @@ mod tests {
 
         let body_stream = futures::stream::iter(body_bytes.into_iter().map(|s| Ok::<_, StdError>(Bytes::from(s))));
 
-        let ans = transform_multipart(body_stream, boundary.as_bytes(), MultipartLimits::default())
+        let ans = transform_multipart(body_stream, boundary.as_bytes(), MultipartLimits::default(), None)
             .await
             .unwrap();
 
@@ -843,7 +850,7 @@ mod tests {
 
         let body_stream = futures::stream::iter(body_bytes.into_iter().map(Ok::<_, StdError>));
 
-        let result = transform_multipart(body_stream, boundary.as_bytes(), limits).await;
+        let result = transform_multipart(body_stream, boundary.as_bytes(), limits, None).await;
         // Either error is acceptable - both indicate the field/buffer is too large
         assert!(result.is_err(), "Should fail when field exceeds limits");
     }
@@ -869,7 +876,7 @@ mod tests {
 
         let body_stream = futures::stream::iter(body_bytes.into_iter().map(|s| Ok::<_, StdError>(Bytes::from(s))));
 
-        let result = transform_multipart(body_stream, boundary.as_bytes(), limits).await;
+        let result = transform_multipart(body_stream, boundary.as_bytes(), limits, None).await;
         match result {
             Err(MultipartError::TotalSizeTooLarge(size, limit)) => {
                 assert_eq!(limit, limits.max_fields_size);
@@ -899,7 +906,7 @@ mod tests {
 
         let body_stream = futures::stream::iter(body_bytes.into_iter().map(|s| Ok::<_, StdError>(Bytes::from(s))));
 
-        let result = transform_multipart(body_stream, boundary.as_bytes(), limits).await;
+        let result = transform_multipart(body_stream, boundary.as_bytes(), limits, None).await;
         match result {
             Err(MultipartError::TooManyParts(count, limit)) => {
                 assert_eq!(limit, limits.max_parts);
@@ -935,7 +942,7 @@ mod tests {
 
         let body_stream = futures::stream::iter(body_bytes.into_iter().map(|s| Ok::<_, StdError>(Bytes::from(s))));
 
-        let result = transform_multipart(body_stream, boundary.as_bytes(), MultipartLimits::default()).await;
+        let result = transform_multipart(body_stream, boundary.as_bytes(), MultipartLimits::default(), None).await;
         assert!(result.is_ok(), "Should succeed when within limits");
 
         let multipart = result.unwrap();
@@ -975,7 +982,7 @@ mod tests {
 
         let body_stream = futures::stream::iter(body_bytes.into_iter().map(Ok::<_, StdError>));
 
-        let result = transform_multipart(body_stream, boundary, MultipartLimits::default()).await;
+        let result = transform_multipart(body_stream, boundary, MultipartLimits::default(), None).await;
 
         // The multipart parsing will succeed, but when we try to read the file stream,
         // it should error with BoundaryBufferTooLarge

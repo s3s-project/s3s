@@ -548,7 +548,7 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                     // Use saturating_add to prevent overflow in release builds (security-relevant for content-length-range validation)
                     let file_size: u64 = vec_bytes.iter().map(|b| b.len() as u64).fold(0u64, u64::saturating_add);
                     let vec_stream = crate::stream::VecByteStream::new(vec_bytes);
-                    req.s3ext.vec_stream = Some(vec_stream);
+                    req.s3ext.post_object_stream = Some(crate::stream::into_dyn(vec_stream));
 
                     // Validate the policy conditions (if policy exists)
                     // Note: expiration was already checked above before reading the file
