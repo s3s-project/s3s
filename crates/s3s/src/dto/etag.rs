@@ -21,7 +21,7 @@ pub enum ETag {
 }
 
 /// Errors returned when parsing an `ETag` header.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ParseETagError {
     /// The bytes do not match the `ETag` syntax.
     #[error("ParseETagError: InvalidFormat")]
@@ -316,30 +316,30 @@ mod tests {
     fn parse_invalid_format_cases() {
         // Empty string should return InvalidFormat
         let err = ETag::parse_http_header(b"").unwrap_err();
-        assert!(matches!(err, ParseETagError::InvalidFormat));
+        assert_eq!(err, ParseETagError::InvalidFormat);
 
         // Malformed quoted values should return InvalidFormat
         let err = ETag::parse_http_header(b"\"unclosed").unwrap_err();
-        assert!(matches!(err, ParseETagError::InvalidFormat));
+        assert_eq!(err, ParseETagError::InvalidFormat);
 
         let err = ETag::parse_http_header(b"W/\"unclosed").unwrap_err();
-        assert!(matches!(err, ParseETagError::InvalidFormat));
+        assert_eq!(err, ParseETagError::InvalidFormat);
 
         let err = ETag::parse_http_header(b"W/xyz").unwrap_err();
-        assert!(matches!(err, ParseETagError::InvalidFormat));
+        assert_eq!(err, ParseETagError::InvalidFormat);
 
         let err = ETag::parse_http_header(b"\"abc\"x").unwrap_err();
-        assert!(matches!(err, ParseETagError::InvalidFormat));
+        assert_eq!(err, ParseETagError::InvalidFormat);
 
         let err = ETag::parse_http_header(b"W/\"abc\"x").unwrap_err();
-        assert!(matches!(err, ParseETagError::InvalidFormat));
+        assert_eq!(err, ParseETagError::InvalidFormat);
 
         // Special characters not allowed in unquoted values
         let err = ETag::parse_http_header(b"**").unwrap_err();
-        assert!(matches!(err, ParseETagError::InvalidFormat));
+        assert_eq!(err, ParseETagError::InvalidFormat);
 
         let err = ETag::parse_http_header(b"* ").unwrap_err();
-        assert!(matches!(err, ParseETagError::InvalidFormat));
+        assert_eq!(err, ParseETagError::InvalidFormat);
     }
 
     #[test]
@@ -364,35 +364,35 @@ mod tests {
     fn parse_invalid_char_cases() {
         // Contains newline/carriage return (quoted)
         let err = ETag::parse_http_header(b"\"a\nb\"").unwrap_err();
-        assert!(matches!(err, ParseETagError::InvalidChar));
+        assert_eq!(err, ParseETagError::InvalidChar);
 
         let err = ETag::parse_http_header(b"W/\"a\rb\"").unwrap_err();
-        assert!(matches!(err, ParseETagError::InvalidChar));
+        assert_eq!(err, ParseETagError::InvalidChar);
 
         // Contains DEL (0x7f) (quoted)
         let err = ETag::parse_http_header(b"\"a\x7fb\"").unwrap_err();
-        assert!(matches!(err, ParseETagError::InvalidChar));
+        assert_eq!(err, ParseETagError::InvalidChar);
 
         let err = ETag::parse_http_header(b"W/\"a\x7fb\"").unwrap_err();
-        assert!(matches!(err, ParseETagError::InvalidChar));
+        assert_eq!(err, ParseETagError::InvalidChar);
 
         // Contains non-ASCII (triggers from_ascii_simd error) (quoted)
         let err = ETag::parse_http_header(b"\"a\xc2\xb5b\"").unwrap_err(); // µ
-        assert!(matches!(err, ParseETagError::InvalidChar));
+        assert_eq!(err, ParseETagError::InvalidChar);
 
         // Invalid chars in unquoted values result in InvalidFormat
         // (since they don't match alphanumeric pattern)
         let err = ETag::parse_http_header(b"a\nb").unwrap_err();
-        assert!(matches!(err, ParseETagError::InvalidFormat));
+        assert_eq!(err, ParseETagError::InvalidFormat);
 
         let err = ETag::parse_http_header(b"a\rb").unwrap_err();
-        assert!(matches!(err, ParseETagError::InvalidFormat));
+        assert_eq!(err, ParseETagError::InvalidFormat);
 
         let err = ETag::parse_http_header(b"a\x7fb").unwrap_err();
-        assert!(matches!(err, ParseETagError::InvalidFormat));
+        assert_eq!(err, ParseETagError::InvalidFormat);
 
         let err = ETag::parse_http_header(b"a\xc2\xb5b").unwrap_err(); // µ
-        assert!(matches!(err, ParseETagError::InvalidFormat));
+        assert_eq!(err, ParseETagError::InvalidFormat);
     }
 
     #[test]
