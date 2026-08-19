@@ -226,7 +226,7 @@ impl SignatureContext<'_> {
                 max_fields_size: config.form_max_fields_size,
                 max_parts: config.form_max_parts,
             };
-            http::transform_multipart(body, boundary.as_str().as_bytes(), limits)
+            http::transform_multipart(body, boundary.as_str().as_bytes(), limits, self.content_length)
                 .await
                 .map_err(|e| s3_error!(e, MalformedPOSTRequest))?
         };

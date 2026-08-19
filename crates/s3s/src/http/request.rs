@@ -8,7 +8,7 @@ use crate::path::S3Path;
 use crate::post_policy::PostPolicy;
 use crate::protocol::TrailingHeaders;
 use crate::region::Region;
-use crate::stream::VecByteStream;
+use crate::stream::DynByteStream;
 
 use hyper::HeaderMap;
 use hyper::Method;
@@ -31,7 +31,7 @@ pub(crate) struct S3Extensions {
     pub qs: Option<OrderedQs>,
 
     pub multipart: Option<Multipart>,
-    pub vec_stream: Option<VecByteStream>,
+    pub post_object_stream: Option<DynByteStream>,
 
     pub credentials: Option<Credentials>,
     pub region: Option<Region>,
