@@ -542,6 +542,9 @@ impl S3 for FileSystem {
         }
 
         let file_metadata = try_!(fs::metadata(path).await);
+        if file_metadata.is_dir() {
+            return Err(s3_error!(NoSuchKey));
+        }
         let last_modified = Timestamp::from(try_!(file_metadata.modified()));
         let file_len = file_metadata.len();
 

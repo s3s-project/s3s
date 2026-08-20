@@ -3649,6 +3649,33 @@ async fn test_head_object_no_such_key() -> Result<()> {
 
 #[tokio::test]
 #[tracing::instrument]
+async fn test_head_object_directory_prefix_returns_no_such_key() -> Result<()> {
+    let _guard = serial().await;
+
+    let c = Client::new(config());
+    let bucket = format!("test-head-directory-prefix-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    let key = "prefix/object.txt";
+    create_bucket(&c, bucket).await?;
+    c.put_object()
+        .bucket(bucket)
+        .key(key)
+        .body(ByteStream::from_static(b"content"))
+        .send()
+        .await?;
+
+    let result = c.head_object().bucket(bucket).key("prefix").send().await;
+    let err = result.expect_err("Expected NoSuchKey for a directory-like prefix");
+    let service_err = err.into_service_error();
+    assert_eq!(service_err.code(), Some("NoSuchKey"), "Expected NoSuchKey, got: {:?}", service_err.code());
+
+    delete_object(&c, bucket, key).await?;
+    delete_bucket(&c, bucket).await?;
+    Ok(())
+}
+
+#[tokio::test]
+#[tracing::instrument]
 async fn test_head_object_no_such_bucket() -> Result<()> {
     let _guard = serial().await;
 
