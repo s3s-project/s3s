@@ -123,6 +123,22 @@ This script has additional prerequisites:
 - Docker must be installed and a local Docker daemon running (used to start MinIO).
 - Network access is required on first run so the script can clone the `ceph/s3-tests` repository.
 
+### Run the rclone S3 integration test
+
+The rclone test covers real client workflows including recursive transfers,
+content verification, object listing and deletion, ranged reads,
+remote-to-remote copy, and a forced multipart upload. Install `s3s-fs`, ensure
+Docker is running, then run:
+
+```bash
+just install s3s-fs
+./scripts/e2e-rclone-fs.sh
+```
+
+The underlying runner can also validate another S3-compatible endpoint. See
+[`tests/rclone/README.md`](./tests/rclone/README.md) for configuration and
+coverage details.
+
 ## Git
 
 ### Commit Message
