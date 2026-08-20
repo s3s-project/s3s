@@ -7,7 +7,9 @@ MinIO MinT and Ceph s3-tests.
 The runner creates a uniquely named temporary bucket and verifies:
 
 - recursive upload, listing, download, and byte-for-byte content checks;
-- empty objects, nested keys, spaces, Unicode, and small-object fan-out;
+- non-recursive `lsf` output at the root, intermediate, and eighth directory
+  levels, including `name/` directory entries;
+- empty objects, deeply nested keys, spaces, Unicode, and small-object fan-out;
 - a forced three-part multipart upload for a 12 MiB object;
 - a ranged read from the multipart object;
 - remote-to-remote object copy and single-object deletion; and

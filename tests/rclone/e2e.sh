@@ -52,6 +52,15 @@ rclone_cmd() {
         "$@"
 }
 
+assert_lsf_level() {
+    remote_path="$1"
+    shift
+
+    printf '%s\n' "$@" | LC_ALL=C sort > "$EXPECTED_LIST"
+    rclone_cmd lsf "$remote_path" | LC_ALL=C sort > "$ACTUAL_LIST"
+    diff -u "$EXPECTED_LIST" "$ACTUAL_LIST"
+}
+
 cleanup() {
     status=$?
     trap - EXIT
@@ -101,6 +110,7 @@ EOF
 echo "==> Preparing small-object and multipart fixtures"
 mkdir -p \
     "$SOURCE_ROOT/nested/deeper" \
+    "$SOURCE_ROOT/deep/l1/l2/l3/l4/l5/l6/l7/l8" \
     "$SOURCE_ROOT/special" \
     "$SOURCE_ROOT/fanout/group-0" \
     "$SOURCE_ROOT/fanout/group-1" \
@@ -110,6 +120,7 @@ mkdir -p \
 printf 'root object\n' > "$SOURCE_ROOT/root.txt"
 printf 'nested child object\n' > "$SOURCE_ROOT/nested/child.txt"
 printf 'deep object\n' > "$SOURCE_ROOT/nested/deeper/grandchild.txt"
+printf 'eight-level deep object\n' > "$SOURCE_ROOT/deep/l1/l2/l3/l4/l5/l6/l7/l8/final.txt"
 printf 'space in object key\n' > "$SOURCE_ROOT/special/space name.txt"
 printf 'unicode object key\n' > "$SOURCE_ROOT/special/你好.txt"
 : > "$SOURCE_ROOT/empty.bin"
@@ -149,6 +160,27 @@ echo "==> Verifying recursive listing and object keys"
 ) > "$EXPECTED_LIST"
 rclone_cmd lsf -R --files-only "$REMOTE_ROOT/fixture" | LC_ALL=C sort > "$ACTUAL_LIST"
 diff -u "$EXPECTED_LIST" "$ACTUAL_LIST"
+
+echo "==> Verifying non-recursive listings at multiple directory levels"
+assert_lsf_level \
+    "$REMOTE_ROOT/fixture" \
+    'blobs/' \
+    'deep/' \
+    'empty.bin' \
+    'fanout/' \
+    'nested/' \
+    'root.txt' \
+    'special/'
+assert_lsf_level \
+    "$REMOTE_ROOT/fixture/nested" \
+    'child.txt' \
+    'deeper/'
+assert_lsf_level \
+    "$REMOTE_ROOT/fixture/deep/l1/l2/l3/l4" \
+    'l5/'
+assert_lsf_level \
+    "$REMOTE_ROOT/fixture/deep/l1/l2/l3/l4/l5/l6/l7/l8" \
+    'final.txt'
 
 echo "==> Checking remote content by downloading every object"
 rclone_cmd check "$SOURCE_ROOT" "$REMOTE_ROOT/fixture" --download
