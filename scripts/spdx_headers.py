@@ -14,6 +14,7 @@ Usage:
 """
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -40,13 +41,12 @@ ROOT = Path(__file__).parent.parent
 
 
 def iter_targets():
-    for path in sorted(ROOT.rglob("*")):
-        if not path.is_file() or path.suffix not in EXTENSIONS:
-            continue
-        parts = set(path.relative_to(ROOT).parts[:-1])
-        if parts & EXCLUDED_DIRS:
-            continue
-        yield path
+    for root, dirs, files in os.walk(ROOT):
+        dirs[:] = [d for d in dirs if d not in EXCLUDED_DIRS]
+        for name in sorted(files):
+            path = Path(root) / name
+            if path.suffix in EXTENSIONS:
+                yield path
 
 
 def header_lines(suffix: str):
