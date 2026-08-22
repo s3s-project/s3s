@@ -653,21 +653,18 @@ impl Stream for FileStream {
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        if self.content_len.is_some() {
-            let remaining = usize::try_from(self.remaining).unwrap_or(usize::MAX);
-            (remaining, Some(remaining))
-        } else {
-            (0, None)
-        }
+        // `Stream::size_hint` bounds the number of remaining *chunks*, which
+        // is unknowable here; byte-level length information is exposed via
+        // `ByteStream::remaining_length` instead.
+        (0, None)
     }
 }
 
 impl ByteStream for FileStream {
     fn remaining_length(&self) -> crate::stream::RemainingLength {
-        if self.content_len.is_some() {
-            crate::stream::RemainingLength::new_exact(usize::try_from(self.remaining).unwrap_or(usize::MAX))
-        } else {
-            crate::stream::RemainingLength::unknown()
+        match usize::try_from(self.remaining) {
+            Ok(remaining) if self.content_len.is_some() => crate::stream::RemainingLength::new_exact(remaining),
+            _ => crate::stream::RemainingLength::unknown(),
         }
     }
 }
