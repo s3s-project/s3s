@@ -47,7 +47,11 @@ jobs:
         toolchain:
           - 1.96.0 # MSRV
           - stable
-          - nightly
+          # FIXME: unpin once https://github.com/rust-lang/rust/issues/161495
+          # is resolved ("unexpected rigid alias" ICE in layout_of on our
+          # async-fn opaque types; regression introduced between the
+          # 2026-08-20 and 2026-08-21 nightly builds)
+          - nightly-2026-08-20
     steps:
       - uses: actions/checkout@v7
       - uses: taiki-e/install-action@just
