@@ -40,6 +40,7 @@ jobs:
     needs: skip-check
     if: needs.skip-check.outputs.should_skip != 'true'
     runs-on: ubuntu-latest
+    continue-on-error: ${{ contains(matrix.toolchain, 'nightly') }}
     strategy:
       fail-fast: false
       matrix:
