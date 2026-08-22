@@ -33,14 +33,14 @@ fi
 "$S3S_FS_BIN" \
     --access-key AKEXAMPLES3S \
     --secret-key SKEXAMPLES3S \
-    --host localhost \
+    --host 127.0.0.1 \
     --port "$S3S_RCLONE_PORT" \
     --domain "localhost:$S3S_RCLONE_PORT" \
     --domain localhost \
     "$DATA_DIR" > "$SERVER_LOG" 2>&1 &
 S3S_FS_PID=$!
 
-endpoint="http://localhost:$S3S_RCLONE_PORT"
+endpoint="http://127.0.0.1:$S3S_RCLONE_PORT"
 ready=0
 for _ in {1..60}; do
     if ! kill -0 "$S3S_FS_PID" >/dev/null 2>&1; then
