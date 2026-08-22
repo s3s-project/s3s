@@ -1,0 +1,21 @@
+s3s
+Copyright 2023-2026 Nugine
+
+This product includes software developed by the s3s project,
+licensed under the Apache License, Version 2.0.
+
+--------------------------------------------------------------------------------
+
+This product redistributes portions of the AWS SDK for Rust
+(https://github.com/awslabs/aws-sdk-rust), licensed under the
+Apache License, Version 2.0.
+
+Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+  - data/s3.json
+  - data/sts.json
+
+This product includes data derived from the AWS S3 API documentation
+(https://docs.aws.amazon.com/AmazonS3/latest/API/API_Error.html):
+
+  - data/s3_error_codes.json
