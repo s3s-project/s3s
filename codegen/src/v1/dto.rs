@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 The s3s Authors
+
 use super::o;
 use super::ops::{Operations, SKIPPED_OPS, is_op_input};
 use super::order;

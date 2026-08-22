@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 The s3s Authors
+
 //! multipart/form-data encoding for POST Object
 //!
 //! See <https://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectPOST.html>

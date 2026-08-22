@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 The s3s Authors
+
 macro_rules! wrap_sdk_error {
     ($e:expr) => {{
         use aws_sdk_s3::error::SdkError;

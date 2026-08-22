@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 The s3s Authors
+
 //! S3 Service Adapter
 //!
 //! `s3s` is an ergonomic adapter for building S3-compatible services. It implements the

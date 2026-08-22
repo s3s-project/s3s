@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 The s3s Authors
+
 use super::*;
 
 use crate::body::{s3s_body_into_sdk_body, sdk_body_into_s3s_body};

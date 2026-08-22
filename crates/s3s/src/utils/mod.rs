@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 The s3s Authors
+
 //! Internal utility types and helpers shared across the `s3s` crate.
 
 pub mod crypto;

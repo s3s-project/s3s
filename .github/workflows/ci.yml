@@ -35,6 +35,7 @@ jobs:
       - uses: taiki-e/install-action@just
       - uses: astral-sh/setup-uv@v7
       - run: just ci-python
+      - run: just spdx-check
 
   rust:
     needs: skip-check

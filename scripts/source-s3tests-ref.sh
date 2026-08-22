@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2023-2026 The s3s Authors
+
 S3TESTS_REF_SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 S3TESTS_REF_FILE="${S3TESTS_REF_FILE:-$S3TESTS_REF_SCRIPT_DIR/s3tests.env}"
 

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 The s3s Authors
+
 pub use s3s_model::smithy::*;
 
 pub trait SmithyTraitsExt {

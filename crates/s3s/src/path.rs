@@ -1,5 +1,7 @@
-#![deny(missing_docs)]
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
+#![deny(missing_docs)]
 //! A path in the S3 storage.
 //!
 //! + [Request styles](https://docs.aws.amazon.com/AmazonS3/latest/dev/RESTAPI.html#virtual-hosted-path-style-requests)

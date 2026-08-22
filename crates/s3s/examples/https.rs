@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 The s3s Authors
+
 //! HTTPS server example for s3s
 //!
 //! This example demonstrates how to run an S3 service over HTTPS using TLS.

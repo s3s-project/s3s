@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 The s3s Authors
+
 //! x-amz-copy-source
 //!
 //! The `x-amz-copy-source` header specifies the source object for copy operations.

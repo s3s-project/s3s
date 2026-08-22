@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 The s3s Authors
+
 //! Virtual-host parsing for S3 request routing.
 //!
 //! This module provides the [`S3Host`] trait together with the built-in

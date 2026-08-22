@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 The s3s Authors
+
 //! Multi-algorithm checksum computation for S3 objects.
 //!
 //! This module provides [`ChecksumHasher`], which can compute one or more
