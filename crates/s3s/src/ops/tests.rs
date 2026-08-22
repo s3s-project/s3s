@@ -1615,6 +1615,93 @@ async fn post_object_with_content_length_streams_file() {
         "the stream must report the exact file length"
     );
 
+    // Partial consumption decrements the reported remaining length.
+    let first = stream.next().await.unwrap().expect("stream should not error");
+    assert_eq!(
+        stream.remaining_length().exact(),
+        Some(file_content.len() - first.len()),
+        "remaining length must track consumption"
+    );
+
+    let mut collected = first.to_vec();
+    while let Some(chunk) = stream.next().await {
+        collected.extend_from_slice(&chunk.expect("stream should not error"));
+    }
+    assert_eq!(collected, file_content.as_bytes());
+}
+
+/// An empty file part streams as a zero-length object: the derived claim is
+/// zero and the stream ends cleanly without yielding anything.
+#[tokio::test]
+async fn post_object_empty_file_streams_zero_length() {
+    use crate::auth::SecretKey;
+    use futures::StreamExt;
+    use std::sync::Arc;
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+
+    let config = post_policy_test_helpers::create_test_config(1024 * 1024);
+    let auth = post_policy_test_helpers::create_test_auth();
+    let ccx = post_policy_test_helpers::create_test_context(&s3, &config, &auth);
+
+    let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+    let policy_json = &format!(
+        r#"{{"expiration":"2030-01-01T00:00:00.000Z","conditions":[{}]}}"#,
+        post_policy_test_helpers::BASE_CONDITIONS,
+    );
+    let mut req = post_policy_test_helpers::build_post_object_request(policy_json, "", &secret_key, false);
+
+    let result = super::prepare(&mut req, &ccx).await;
+    assert!(result.is_ok(), "expected prepare to succeed");
+
+    let mut stream = req
+        .s3ext
+        .post_object_stream
+        .take()
+        .expect("post object stream should be present");
+    assert_eq!(stream.remaining_length().exact(), Some(0));
+
+    while let Some(chunk) = stream.next().await {
+        let bytes = chunk.expect("stream should not error");
+        assert!(bytes.is_empty(), "zero-length file must yield no content");
+    }
+}
+
+/// File content containing CRLF runs and a near-miss boundary prefix (one
+/// character short of the real boundary) is delivered byte-exactly under the
+/// strict streaming path instead of being cut at the near miss.
+#[tokio::test]
+async fn post_object_content_with_near_miss_boundary_streams_exactly() {
+    use crate::auth::SecretKey;
+    use futures::StreamExt;
+    use std::sync::Arc;
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+
+    let config = post_policy_test_helpers::create_test_config(1024 * 1024);
+    let auth = post_policy_test_helpers::create_test_auth();
+    let ccx = post_policy_test_helpers::create_test_context(&s3, &config, &auth);
+
+    let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+    let policy_json = &format!(
+        r#"{{"expiration":"2030-01-01T00:00:00.000Z","conditions":[{}]}}"#,
+        post_policy_test_helpers::BASE_CONDITIONS,
+    );
+    // The helper's boundary is "------------------------test12345678"; the
+    // content embeds CRLFs and a truncated copy of it (missing the final 8).
+    let file_content = "alpha\r\nbeta\r\n\r\n--------------------------test1234567X tail\r\nmore content\r\n";
+    let mut req = post_policy_test_helpers::build_post_object_request(policy_json, file_content, &secret_key, false);
+
+    let result = super::prepare(&mut req, &ccx).await;
+    assert!(result.is_ok(), "expected prepare to succeed");
+
+    let mut stream = req
+        .s3ext
+        .post_object_stream
+        .take()
+        .expect("post object stream should be present");
+    assert_eq!(stream.remaining_length().exact(), Some(file_content.len()));
+
     let mut collected = Vec::new();
     while let Some(chunk) = stream.next().await {
         collected.extend_from_slice(&chunk.expect("stream should not error"));
