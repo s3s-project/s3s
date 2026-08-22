@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-# SPDX-FileCopyrightText: 2023-2026 Nugine
+# SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
 """
 Test PutObject behavior when Content-Length is NOT specified.

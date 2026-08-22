@@ -1,6 +1,6 @@
 #!/bin/bash -ex
 # SPDX-License-Identifier: Apache-2.0
-# SPDX-FileCopyrightText: 2023-2026 Nugine
+# SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
 DATA_DIR="/tmp/s3s-e2e"
 mkdir -p "$DATA_DIR"

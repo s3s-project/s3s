@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-# SPDX-FileCopyrightText: 2023-2026 Nugine
+# SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
 """Check or add SPDX license headers to original source files.
 
@@ -19,7 +19,7 @@ from pathlib import Path
 
 SPDX_LINES = [
     "SPDX-License-Identifier: Apache-2.0",
-    "SPDX-FileCopyrightText: 2023-2026 Nugine",
+    "SPDX-FileCopyrightText: 2023-2026 The s3s Authors",
 ]
 
 COMMENT_PREFIX = {".rs": "//", ".py": "#", ".sh": "#"}

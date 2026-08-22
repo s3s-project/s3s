@@ -1,6 +1,6 @@
 #!/bin/bash -ex
 # SPDX-License-Identifier: Apache-2.0
-# SPDX-FileCopyrightText: 2023-2026 Nugine
+# SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
 mkdir -p /tmp/minio-boto3
 docker stop boto3-minio 2>/dev/null || true

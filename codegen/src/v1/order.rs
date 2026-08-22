@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// SPDX-FileCopyrightText: 2023-2026 Nugine
+// SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
 /// Returns the desired order of struct members for specific shapes.
 /// See <https://github.com/s3s-project/s3s/pull/480>
