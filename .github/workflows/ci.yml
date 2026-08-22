@@ -176,6 +176,28 @@ jobs:
       - run: docker pull minio/minio:latest
       - run: ./scripts/e2e-boto3-minio.sh
 
+  e2e-rclone-fs:
+    name: e2e (rclone, s3s-fs)
+    needs: skip-check
+    if: github.event_name != 'pull_request' && needs.skip-check.outputs.should_skip != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - name: Pull pinned rclone image
+        run: |
+          . scripts/rclone.env
+          docker pull "$RCLONE_IMAGE_REF"
+      - run: just install s3s-fs
+      - run: ./scripts/e2e-rclone-fs.sh
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: e2e-rclone-fs.logs
+          path: |
+            ./target/rclone.log
+            ./target/s3s-fs-rclone.log
+
   e2e-minio:
     name: e2e (s3s-e2e, minio)
     needs: skip-check
@@ -239,6 +261,7 @@ jobs:
       - e2e-fs
       - e2e-boto3-fs
       - e2e-boto3-minio
+      - e2e-rclone-fs
       - e2e-minio
       - mint-proxy-minio
       - s3tests-proxy-minio
