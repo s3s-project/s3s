@@ -13,6 +13,7 @@ use crate::utils::SyncBoxFuture;
 use std::fmt::{self, Debug};
 use std::mem;
 use std::pin::Pin;
+use std::task::Poll;
 
 use futures::stream::{Stream, StreamExt};
 use hyper::body::Bytes;
@@ -145,8 +146,9 @@ pub async fn aggregate_file_stream_limited(mut stream: FileStream, max_size: u64
 
 /// transform multipart
 ///
-/// `total_len` is the request's `Content-Length`, if known. It is not used by
-/// the parser yet but may inform later length derivations.
+/// When `total_len` is known (the request's `Content-Length`), the parser
+/// derives the exact file content length and the file stream validates the
+/// canonical `--\r\n` closing trailer. See [`derive_file_len`].
 ///
 /// # Errors
 /// Returns an `Err` if the format is invalid
@@ -159,8 +161,6 @@ pub async fn transform_multipart<S>(
 where
     S: Stream<Item = Result<Bytes, StdError>> + Send + Sync + 'static,
 {
-    tracing::debug!(?total_len, "parsing multipart form data");
-
     let mut buf = Vec::new();
 
     let mut body = Box::pin(body_stream);
@@ -195,7 +195,17 @@ where
         }
 
         // try to parse
-        match try_parse(body, pat, &buf, &mut fields, boundary, &mut total_fields_size, &mut parts_count, limits) {
+        match try_parse(
+            body,
+            pat,
+            &buf,
+            &mut fields,
+            boundary,
+            &mut total_fields_size,
+            &mut parts_count,
+            limits,
+            total_len,
+        ) {
             Err((b, p)) => {
                 body = b;
                 pat = p;
@@ -205,9 +215,29 @@ where
     }
 }
 
+/// Derives the exact file content length from the request's total body length.
+///
+/// The canonical multipart layout guarantees:
+/// `total = pre_file + file + CRLF + "--" + boundary + "--" + CRLF`
+/// where `pre_file` is everything before the file content. At the moment the
+/// file part is detected, the parser's accumulated buffer contains every byte
+/// polled so far: `buf_len = pre_file + prev_len` (the `prev_len` content
+/// bytes of the final chunk).
+///
+/// Returns `None` when the total length is unknown (chunked request) or any
+/// arithmetic overflows; the caller then falls back to aggregating the file.
+fn derive_file_len(total_len: Option<u64>, boundary: &[u8], buf_len: u64, prev_len: usize) -> Option<u64> {
+    let trailer_len = u64::try_from(boundary.len()).ok()?.checked_add(8)?;
+    total_len?
+        .checked_sub(buf_len)?
+        .checked_add(u64::try_from(prev_len).ok()?)?
+        .checked_sub(trailer_len)
+}
+
 /// try to parse data buffer, pat: b"--{boundary}\r\n"
 #[allow(clippy::type_complexity)]
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_lines)]
 fn try_parse<S>(
     body: Pin<Box<S>>,
     pat: Box<[u8]>,
@@ -217,6 +247,7 @@ fn try_parse<S>(
     total_fields_size: &'_ mut usize,
     parts_count: &'_ mut usize,
     limits: MultipartLimits,
+    total_len: Option<u64>,
 ) -> Result<Result<Multipart, MultipartError>, (Pin<Box<S>>, Box<[u8]>)>
 where
     S: Stream<Item = Result<Bytes, StdError>> + Send + Sync + 'static,
@@ -295,7 +326,11 @@ where
             } else {
                 Some(Bytes::copy_from_slice(lines.slice))
             };
-            let file_stream = FileStream::new(body, boundary, remaining_bytes);
+            let prev_len = remaining_bytes.as_ref().map_or(0, Bytes::len);
+            let content_len = u64::try_from(buf.len())
+                .ok()
+                .and_then(|buf_len| derive_file_len(total_len, boundary, buf_len, prev_len));
+            let file_stream = FileStream::new(body, boundary, remaining_bytes, content_len);
             let file_name = content_disposition.filename.unwrap_or(content_disposition.name);
             let file = File {
                 name: file_name.to_owned(),
@@ -352,32 +387,52 @@ pub enum FileStreamError {
     /// Boundary buffer too large
     #[error("FileStreamError: BoundaryBufferTooLarge: size {0} exceeds limit {1}")]
     BoundaryBufferTooLarge(usize, usize),
+    /// Bytes after the file do not match the canonical `--\r\n` closing
+    /// delimiter (e.g., the file is not the last part or an epilogue exists)
+    #[error("FileStreamError: InvalidTrailer")]
+    InvalidTrailer,
+    /// The yielded byte count disagrees with the declared content length
+    #[error("FileStreamError: LengthMismatch: {remaining} bytes remaining")]
+    LengthMismatch { remaining: u64 },
 }
 
 /// File stream
 pub struct FileStream {
     /// inner stream
     inner: AsyncTryStream<Bytes, FileStreamError, SyncBoxFuture<'static, Result<(), FileStreamError>>>,
+    /// exact content length derived from the request's `Content-Length`, if known
+    content_len: Option<u64>,
+    /// remaining content bytes; counts down as bytes are yielded
+    remaining: u64,
+    /// set once a length mismatch has been reported, so the terminal error is
+    /// yielded at most once
+    ended: bool,
 }
 
 impl Debug for FileStream {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "FileStream {{...}}")
+        f.debug_struct("FileStream")
+            .field("content_len", &self.content_len)
+            .field("remaining", &self.remaining)
+            .finish_non_exhaustive()
     }
 }
 
 impl FileStream {
     /// Constructs a `FileStream`
-    fn new<S>(body: Pin<Box<S>>, boundary: &'_ [u8], prev_bytes: Option<Bytes>) -> Self
+    #[allow(clippy::too_many_lines)]
+    fn new<S>(body: Pin<Box<S>>, boundary: &'_ [u8], prev_bytes: Option<Bytes>, content_len: Option<u64>) -> Self
     where
         S: Stream<Item = Result<Bytes, StdError>> + Send + Sync + 'static,
     {
         /// internal async generator
+        #[allow(clippy::too_many_lines)]
         async fn generate<S>(
             mut y: Yielder<Result<Bytes, FileStreamError>>,
             mut body: Pin<Box<S>>,
             crlf_pat: Box<[u8]>,
             prev_bytes: Option<Bytes>,
+            strict: bool,
         ) -> Result<(), FileStreamError>
         where
             S: Stream<Item = Result<Bytes, StdError>> + Send + Sync + 'static,
@@ -413,9 +468,18 @@ impl FileStream {
 
                             if remaining.len() >= crlf_pat.len() {
                                 if remaining.starts_with(&crlf_pat) {
-                                    bytes.truncate(idx);
+                                    // File content ends here. Keep whatever follows the
+                                    // boundary pattern for trailer validation.
+                                    let mut rest = bytes.split_off(idx);
                                     y.yield_ok(bytes).await;
-                                    return Ok(());
+                                    if strict {
+                                        rest = rest.slice(crlf_pat.len()..);
+                                        bytes = rest;
+                                        state = 4;
+                                    } else {
+                                        return Ok(());
+                                    }
+                                    continue 'dfa;
                                 }
                                 continue;
                             }
@@ -454,6 +518,61 @@ impl FileStream {
                         state = 2;
                         continue 'dfa;
                     }
+                    4 => {
+                        // expect the closing "--"
+                        while bytes.len() < 2 {
+                            let chunk = match body.as_mut().next().await {
+                                None => return Err(FileStreamError::Incomplete),
+                                Some(Err(e)) => return Err(FileStreamError::Underlying(e)),
+                                Some(Ok(b)) => b,
+                            };
+                            buf.extend_from_slice(&bytes);
+                            buf.extend_from_slice(&chunk);
+                            if buf.len() > MAX_BOUNDARY_BUFFER_SIZE {
+                                return Err(FileStreamError::BoundaryBufferTooLarge(buf.len(), MAX_BOUNDARY_BUFFER_SIZE));
+                            }
+                            bytes = Bytes::from(mem::take(&mut buf));
+                        }
+                        if !bytes.starts_with(b"--") {
+                            return Err(FileStreamError::InvalidTrailer);
+                        }
+                        bytes = bytes.slice(2..);
+                        state = 5;
+                        continue 'dfa;
+                    }
+                    5 => {
+                        // expect the final CRLF
+                        while bytes.len() < 2 {
+                            let chunk = match body.as_mut().next().await {
+                                None => return Err(FileStreamError::Incomplete),
+                                Some(Err(e)) => return Err(FileStreamError::Underlying(e)),
+                                Some(Ok(b)) => b,
+                            };
+                            buf.extend_from_slice(&bytes);
+                            buf.extend_from_slice(&chunk);
+                            if buf.len() > MAX_BOUNDARY_BUFFER_SIZE {
+                                return Err(FileStreamError::BoundaryBufferTooLarge(buf.len(), MAX_BOUNDARY_BUFFER_SIZE));
+                            }
+                            bytes = Bytes::from(mem::take(&mut buf));
+                        }
+                        if !bytes.starts_with(b"\r\n") {
+                            return Err(FileStreamError::InvalidTrailer);
+                        }
+                        bytes = bytes.slice(2..);
+                        state = 6;
+                        continue 'dfa;
+                    }
+                    6 => {
+                        // nothing may follow the closing delimiter
+                        if !bytes.is_empty() {
+                            return Err(FileStreamError::InvalidTrailer);
+                        }
+                        match body.as_mut().next().await {
+                            None => return Ok(()),
+                            Some(Err(e)) => return Err(FileStreamError::Underlying(e)),
+                            Some(Ok(_)) => return Err(FileStreamError::InvalidTrailer),
+                        }
+                    }
                     #[allow(clippy::unreachable)]
                     _ => unreachable!(),
                 }
@@ -468,29 +587,88 @@ impl FileStream {
             v.into()
         };
 
+        let strict = content_len.is_some();
+
         Self {
             inner: AsyncTryStream::new(|y| -> SyncBoxFuture<'static, Result<(), FileStreamError>> {
-                Box::pin(generate(y, body, crlf_pat, prev_bytes))
+                Box::pin(generate(y, body, crlf_pat, prev_bytes, strict))
             }),
+            content_len,
+            remaining: content_len.unwrap_or(0),
+            ended: false,
         }
+    }
+
+    /// Returns the exact content length derived from the request's
+    /// `Content-Length` header, if it is known.
+    pub fn content_len(&self) -> Option<u64> {
+        self.content_len
     }
 }
 
 impl Stream for FileStream {
     type Item = Result<Bytes, FileStreamError>;
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Option<Self::Item>> {
-        Pin::new(&mut self.inner).poll_next(cx)
+    fn poll_next(self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Option<Self::Item>> {
+        let this = self.get_mut();
+        if this.ended {
+            return Poll::Ready(None);
+        }
+        match Pin::new(&mut this.inner).poll_next(cx) {
+            Poll::Ready(Some(Ok(bytes))) => {
+                // Enforce the declared length: never deliver content beyond
+                // the claim. The canonical trailer validation in the generator
+                // guarantees the counter reaches zero on clean completion.
+                if this.content_len.is_some() {
+                    let len = bytes.len() as u64;
+                    if len > this.remaining {
+                        this.ended = true;
+                        return Poll::Ready(Some(Err(FileStreamError::LengthMismatch {
+                            remaining: this.remaining,
+                        })));
+                    }
+                    this.remaining -= len;
+                }
+                Poll::Ready(Some(Ok(bytes)))
+            }
+            // The stream ended cleanly but delivered fewer bytes than claimed.
+            // Hyper guarantees consistency between `Content-Length` and the
+            // body in production, so this should be unreachable there; surface
+            // it as an error instead of a silent truncation regardless.
+            Poll::Ready(None) if this.content_len.is_some() && this.remaining > 0 => {
+                this.ended = true;
+                Poll::Ready(Some(Err(FileStreamError::LengthMismatch {
+                    remaining: this.remaining,
+                })))
+            }
+            // An error surfaced by the generator is terminal for this stream:
+            // mark it ended so the terminal length check does not emit a
+            // second, redundant error.
+            Poll::Ready(Some(Err(e))) => {
+                this.ended = true;
+                Poll::Ready(Some(Err(e)))
+            }
+            other => other,
+        }
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (0, None)
+        if self.content_len.is_some() {
+            let remaining = usize::try_from(self.remaining).unwrap_or(usize::MAX);
+            (remaining, Some(remaining))
+        } else {
+            (0, None)
+        }
     }
 }
 
 impl ByteStream for FileStream {
     fn remaining_length(&self) -> crate::stream::RemainingLength {
-        crate::stream::RemainingLength::unknown()
+        if self.content_len.is_some() {
+            crate::stream::RemainingLength::new_exact(usize::try_from(self.remaining).unwrap_or(usize::MAX))
+        } else {
+            crate::stream::RemainingLength::unknown()
+        }
     }
 }
 
@@ -651,12 +829,46 @@ mod tests {
 
         let boundary = b"--an-invalid-\r\n--boundary--";
 
-        let file_stream = FileStream::new(Box::pin(body_stream), boundary, Some(Bytes::copy_from_slice(b"\r")));
+        let file_stream = FileStream::new(Box::pin(body_stream), boundary, Some(Bytes::copy_from_slice(b"\r")), None);
 
         {
             let file_bytes = aggregate_file_stream(file_stream).await.unwrap();
             assert_eq!(file_bytes, file_content);
         }
+    }
+
+    /// A yielded chunk crossing the declared length must surface a
+    /// `LengthMismatch` error exactly once instead of delivering extra bytes.
+    #[tokio::test]
+    async fn file_stream_length_mismatch_over() {
+        let body = futures::stream::iter(vec![Ok::<Bytes, StdError>(Bytes::from_static(b"hello world\r\n--boundary--\r\n"))]);
+
+        let mut file_stream = FileStream::new(Box::pin(body), b"boundary", None, Some(5));
+
+        {
+            let err = file_stream.next().await.unwrap().unwrap_err();
+            assert!(matches!(err, FileStreamError::LengthMismatch { remaining: 5 }));
+        }
+        assert!(file_stream.next().await.is_none());
+    }
+
+    /// A stream ending cleanly with fewer bytes than claimed must surface a
+    /// `LengthMismatch` error instead of ending like a successful EOF.
+    #[tokio::test]
+    async fn file_stream_length_mismatch_under() {
+        let body = futures::stream::iter(vec![Ok::<Bytes, StdError>(Bytes::from_static(b"hi\r\n--boundary--\r\n"))]);
+
+        let mut file_stream = FileStream::new(Box::pin(body), b"boundary", None, Some(10));
+
+        {
+            let bytes = file_stream.next().await.unwrap().unwrap();
+            assert_eq!(&bytes[..], b"hi");
+        }
+        {
+            let err = file_stream.next().await.unwrap().unwrap_err();
+            assert!(matches!(err, FileStreamError::LengthMismatch { remaining: 8 }));
+        }
+        assert!(file_stream.next().await.is_none());
     }
 
     #[tokio::test]
@@ -801,6 +1013,121 @@ mod tests {
             let file_bytes = aggregate_file_stream(ans.file.stream.unwrap()).await.unwrap();
             assert_eq!(file_bytes, file_content);
         }
+    }
+
+    /// With a known total length, the parser derives the exact file length so
+    /// that the file can be forwarded as a stream without aggregation.
+    #[tokio::test]
+    async fn multipart_derives_file_len() {
+        use std::fmt::Write as _;
+
+        let boundary = "boundary123";
+        let file_content = "file content";
+        let fields = [("key", "test-key"), ("policy", "policy-data")];
+
+        let mut body = String::new();
+        for (name, value) in fields {
+            let _ = write!(body, "--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n{value}\r\n");
+        }
+        let _ = write!(
+            body,
+            "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"f.txt\"\r\nContent-Type: text/plain\r\n\r\n{file_content}\r\n--{boundary}--\r\n"
+        );
+
+        let total_len = body.len() as u64;
+        let body_stream = futures::stream::iter(vec![Ok::<_, StdError>(Bytes::from(body))]);
+        let ans = transform_multipart(body_stream, boundary.as_bytes(), MultipartLimits::default(), Some(total_len))
+            .await
+            .unwrap();
+
+        let file_stream = ans.file.stream.unwrap();
+        assert_eq!(file_stream.content_len(), Some(file_content.len() as u64));
+        assert_eq!(file_stream.remaining_length().exact(), Some(file_content.len()));
+
+        let file_bytes = aggregate_file_stream(file_stream).await.unwrap();
+        assert_eq!(file_bytes, file_content);
+    }
+
+    /// When the file is not the last part, the derived length cannot be
+    /// trusted; the stream must reject the request instead of silently
+    /// dropping the trailing fields.
+    #[tokio::test]
+    async fn multipart_rejects_trailing_part_with_file_len() {
+        let boundary = "boundary123";
+        let file_content = "file content";
+        let body = format!(
+            "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"f.txt\"\r\nContent-Type: text/plain\r\n\r\n{file_content}\r\n--{boundary}\r\nContent-Disposition: form-data; name=\"late\"\r\n\r\nvalue\r\n--{boundary}--\r\n"
+        );
+
+        let total_len = body.len() as u64;
+        let body_stream = futures::stream::iter(vec![Ok::<_, StdError>(Bytes::from(body))]);
+        let mut ans = transform_multipart(body_stream, boundary.as_bytes(), MultipartLimits::default(), Some(total_len))
+            .await
+            .unwrap();
+
+        let mut file_stream = ans.take_file_stream().unwrap();
+
+        let mut chunks = Vec::new();
+        while let Some(chunk) = file_stream.next().await {
+            chunks.push(chunk);
+        }
+        assert_eq!(chunks.len(), 2, "content chunk followed by trailer error");
+        assert_eq!(chunks[0].as_ref().unwrap(), file_content);
+        assert!(matches!(chunks[1], Err(FileStreamError::InvalidTrailer)));
+    }
+
+    /// Extra bytes after the canonical closing delimiter (an epilogue) make
+    /// the derived length incorrect; the stream must reject them.
+    #[tokio::test]
+    async fn multipart_rejects_epilogue_with_file_len() {
+        let boundary = "boundary123";
+        let file_content = "file content";
+        let body = format!(
+            "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"f.txt\"\r\nContent-Type: text/plain\r\n\r\n{file_content}\r\n--{boundary}--\r\nepilogue"
+        );
+
+        let total_len = body.len() as u64;
+        let body_stream = futures::stream::iter(vec![Ok::<_, StdError>(Bytes::from(body))]);
+        let mut ans = transform_multipart(body_stream, boundary.as_bytes(), MultipartLimits::default(), Some(total_len))
+            .await
+            .unwrap();
+
+        let mut file_stream = ans.take_file_stream().unwrap();
+
+        let mut chunks = Vec::new();
+        while let Some(chunk) = file_stream.next().await {
+            chunks.push(chunk);
+        }
+        assert_eq!(chunks.len(), 2, "content chunk followed by trailer error");
+        assert_eq!(chunks[0].as_ref().unwrap(), file_content);
+        assert!(matches!(chunks[1], Err(FileStreamError::InvalidTrailer)));
+    }
+
+    /// A missing final CRLF after the closing delimiter makes the content
+    /// longer than the derived length; the built-in length check must reject
+    /// it before any content is emitted.
+    #[tokio::test]
+    async fn multipart_rejects_missing_final_crlf_with_file_len() {
+        let boundary = "boundary123";
+        let file_content = "file content";
+        let body = format!(
+            "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"f.txt\"\r\nContent-Type: text/plain\r\n\r\n{file_content}\r\n--{boundary}--"
+        );
+
+        let total_len = body.len() as u64;
+        let body_stream = futures::stream::iter(vec![Ok::<_, StdError>(Bytes::from(body))]);
+        let mut ans = transform_multipart(body_stream, boundary.as_bytes(), MultipartLimits::default(), Some(total_len))
+            .await
+            .unwrap();
+
+        let mut file_stream = ans.take_file_stream().unwrap();
+
+        let mut chunks = Vec::new();
+        while let Some(chunk) = file_stream.next().await {
+            chunks.push(chunk);
+        }
+        assert_eq!(chunks.len(), 1, "length check rejects before emitting content");
+        assert!(matches!(chunks[0], Err(FileStreamError::LengthMismatch { remaining: 10 })));
     }
 
     #[tokio::test]

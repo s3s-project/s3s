@@ -1267,6 +1267,7 @@ mod post_policy_test_helpers {
                     crate::header::CONTENT_TYPE,
                     HeaderValue::from_str(&format!("multipart/form-data; boundary={boundary}")).unwrap(),
                 )
+                .header(hyper::header::CONTENT_LENGTH, body.len())
                 .body(Body::from(Bytes::from(body)))
                 .unwrap(),
         )
@@ -1578,6 +1579,142 @@ async fn post_object_content_length_range_rejects_oversized_file() {
         "expected EntityTooLarge error, got {:?}",
         err.code()
     );
+}
+
+/// POST Object with `Content-Length` forwards the file as a stream with an
+/// exact known length, without aggregating the file into memory.
+#[tokio::test]
+async fn post_object_with_content_length_streams_file() {
+    use crate::auth::SecretKey;
+    use futures::StreamExt;
+    use std::sync::Arc;
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+
+    let config = post_policy_test_helpers::create_test_config(1024 * 1024);
+    let auth = post_policy_test_helpers::create_test_auth();
+    let ccx = post_policy_test_helpers::create_test_context(&s3, &config, &auth);
+
+    let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+    let policy_json = &format!(
+        r#"{{"expiration":"2030-01-01T00:00:00.000Z","conditions":[{}]}}"#,
+        post_policy_test_helpers::BASE_CONDITIONS,
+    );
+    let file_content = "file content for streaming";
+    let mut req = post_policy_test_helpers::build_post_object_request(policy_json, file_content, &secret_key, false);
+
+    let result = super::prepare(&mut req, &ccx).await;
+    assert!(result.is_ok(), "expected prepare to succeed");
+
+    let mut stream = req
+        .s3ext
+        .post_object_stream
+        .take()
+        .expect("post object stream should be present");
+    assert_eq!(
+        stream.remaining_length().exact(),
+        Some(file_content.len()),
+        "the stream must report the exact file length"
+    );
+
+    let mut collected = Vec::new();
+    while let Some(chunk) = stream.next().await {
+        collected.extend_from_slice(&chunk.expect("stream should not error"));
+    }
+    assert_eq!(collected, file_content.as_bytes());
+}
+
+/// POST Object without `Content-Length` (chunked body) falls back to
+/// aggregating the file; the operation still receives an exact length.
+#[tokio::test]
+async fn post_object_chunked_aggregates_file() {
+    use crate::auth::SecretKey;
+    use futures::StreamExt;
+    use std::sync::Arc;
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+
+    let config = post_policy_test_helpers::create_test_config(1024 * 1024);
+    let auth = post_policy_test_helpers::create_test_auth();
+    let ccx = post_policy_test_helpers::create_test_context(&s3, &config, &auth);
+
+    let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+    let policy_json = &format!(
+        r#"{{"expiration":"2030-01-01T00:00:00.000Z","conditions":[{}]}}"#,
+        post_policy_test_helpers::BASE_CONDITIONS,
+    );
+    let file_content = "file content for chunked upload";
+    let mut req = post_policy_test_helpers::build_post_object_request_chunked(policy_json, file_content, &secret_key, 1024);
+
+    let result = super::prepare(&mut req, &ccx).await;
+    if let Err(err) = &result {
+        panic!("expected prepare to succeed, got {err:?}");
+    }
+
+    let mut stream = req
+        .s3ext
+        .post_object_stream
+        .take()
+        .expect("post object stream should be present");
+    assert_eq!(stream.remaining_length().exact(), Some(file_content.len()),);
+
+    let mut collected = Vec::new();
+    while let Some(chunk) = stream.next().await {
+        collected.extend_from_slice(&chunk.expect("stream should not error"));
+    }
+    assert_eq!(collected, file_content.as_bytes());
+}
+
+/// A `Content-Length` request whose multipart trailer is not canonical must
+/// fail while the file stream is consumed, instead of silently truncating or
+/// hanging.
+#[tokio::test]
+async fn post_object_with_content_length_rejects_bad_trailer() {
+    use crate::auth::SecretKey;
+    use futures::StreamExt;
+    use std::sync::Arc;
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+
+    let config = post_policy_test_helpers::create_test_config(1024 * 1024);
+    let auth = post_policy_test_helpers::create_test_auth();
+    let ccx = post_policy_test_helpers::create_test_context(&s3, &config, &auth);
+
+    let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+    let policy_json = &format!(
+        r#"{{"expiration":"2030-01-01T00:00:00.000Z","conditions":[{}]}}"#,
+        post_policy_test_helpers::BASE_CONDITIONS,
+    );
+    let mut req = post_policy_test_helpers::build_post_object_request(policy_json, "content", &secret_key, false);
+
+    // Strip the final CRLF from the multipart body to produce a non-canonical
+    // trailer (`--{boundary}--` directly followed by EOF).
+    let mut full = req.body.bytes().expect("body should be buffered").to_vec();
+    assert!(full.ends_with(b"--\r\n"));
+    full.pop();
+    full.pop();
+    req.body = crate::http::Body::from(bytes::Bytes::from(full.clone()));
+    req.headers
+        .insert(hyper::header::CONTENT_LENGTH, hyper::header::HeaderValue::from(full.len()));
+
+    let result = super::prepare(&mut req, &ccx).await;
+    assert!(result.is_ok(), "dispatch is not affected");
+
+    let mut stream = req
+        .s3ext
+        .post_object_stream
+        .take()
+        .expect("post object stream should be present");
+
+    // The stream must report an error instead of yielding a truncated body.
+    let mut errored = false;
+    while let Some(chunk) = stream.next().await {
+        match chunk {
+            Ok(_) => {}
+            Err(_) => errored = true,
+        }
+    }
+    assert!(errored, "stream must reject the non-canonical trailer");
 }
 
 // ========================================
