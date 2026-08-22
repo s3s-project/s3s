@@ -868,6 +868,197 @@ mod tests {
         assert!(file_stream.next().await.is_none());
     }
 
+    /// Delivering the canonical trailer one byte per poll forces the strict
+    /// states to buffer across chunks instead of validating in a single step.
+    #[tokio::test]
+    async fn file_stream_strict_handles_split_chunks() {
+        let data = b"hello\r\n--boundary--\r\n";
+        let body = futures::stream::iter(
+            data.iter()
+                .map(|b| Ok::<Bytes, StdError>(Bytes::copy_from_slice(slice::from_ref(b)))),
+        );
+
+        let file_stream = FileStream::new(Box::pin(body), b"boundary", None, Some(5));
+
+        let collected = aggregate_file_stream(file_stream).await.unwrap();
+        assert_eq!(collected, "hello");
+    }
+
+    /// A body ending mid-trailer (closing delimiter without the final CRLF)
+    /// must surface `Incomplete` rather than a clean end of stream.
+    #[tokio::test]
+    async fn file_stream_truncated_trailer_reports_incomplete() {
+        let body = futures::stream::iter(vec![Ok::<Bytes, StdError>(Bytes::from_static(b"hi\r\n--boundary--"))]);
+
+        let mut file_stream = FileStream::new(Box::pin(body), b"boundary", None, Some(2));
+
+        {
+            let bytes = file_stream.next().await.unwrap().unwrap();
+            assert_eq!(&bytes[..], b"hi");
+        }
+        assert!(matches!(file_stream.next().await, Some(Err(FileStreamError::Incomplete))));
+    }
+
+    /// An underlying transport error while buffering the closing `--` is
+    /// surfaced as `Underlying`.
+    #[tokio::test]
+    async fn file_stream_underlying_error_in_state4_pull() {
+        let body = futures::stream::iter(vec![
+            Ok::<Bytes, StdError>(Bytes::from_static(b"hi\r\n--boundary")),
+            Err(io::Error::other("boom").into()),
+        ]);
+
+        let mut file_stream = FileStream::new(Box::pin(body), b"boundary", None, Some(2));
+
+        {
+            let bytes = file_stream.next().await.unwrap().unwrap();
+            assert_eq!(&bytes[..], b"hi");
+        }
+        assert!(matches!(file_stream.next().await, Some(Err(FileStreamError::Underlying(_)))));
+    }
+
+    /// Same as above, but the failure happens while waiting for the final
+    /// CRLF after the closing delimiter.
+    #[tokio::test]
+    async fn file_stream_underlying_error_in_state5_pull() {
+        let body = futures::stream::iter(vec![
+            Ok::<Bytes, StdError>(Bytes::from_static(b"hi\r\n--boundary--x")),
+            Err(io::Error::other("boom").into()),
+        ]);
+
+        let mut file_stream = FileStream::new(Box::pin(body), b"boundary", None, Some(2));
+
+        {
+            let bytes = file_stream.next().await.unwrap().unwrap();
+            assert_eq!(&bytes[..], b"hi");
+        }
+        assert!(matches!(file_stream.next().await, Some(Err(FileStreamError::Underlying(_)))));
+    }
+
+    #[test]
+    fn file_stream_debug_contains_fields() {
+        let body = futures::stream::iter(Vec::<Result<Bytes, StdError>>::new());
+        let file_stream = FileStream::new(Box::pin(body), b"boundary", None, Some(7));
+
+        let text = format!("{file_stream:?}");
+        assert!(text.contains("content_len"), "{text}");
+        assert!(text.contains("remaining"), "{text}");
+    }
+
+    /// A body ending right after the closing boundary pattern (no `--` at
+    /// all) leaves state 4 waiting for bytes that never arrive.
+    #[tokio::test]
+    async fn file_stream_truncated_after_boundary_reports_incomplete() {
+        let body = futures::stream::iter(vec![Ok::<Bytes, StdError>(Bytes::from_static(b"hi\r\n--boundary"))]);
+
+        let mut file_stream = FileStream::new(Box::pin(body), b"boundary", None, Some(2));
+
+        {
+            let bytes = file_stream.next().await.unwrap().unwrap();
+            assert_eq!(&bytes[..], b"hi");
+        }
+        assert!(matches!(file_stream.next().await, Some(Err(FileStreamError::Incomplete))));
+    }
+
+    /// A single trailing chunk larger than the boundary buffer trips the
+    /// buffer-size guard while state 4 waits for the closing `--`.
+    #[tokio::test]
+    async fn file_stream_buffer_overflow_in_state4_pull() {
+        let huge = Bytes::from(vec![b'q'; MAX_BOUNDARY_BUFFER_SIZE + 1]);
+        let body = futures::stream::iter(vec![Ok::<Bytes, StdError>(Bytes::from_static(b"hi\r\n--boundaryx")), Ok(huge)]);
+
+        let mut file_stream = FileStream::new(Box::pin(body), b"boundary", None, Some(2));
+
+        {
+            let bytes = file_stream.next().await.unwrap().unwrap();
+            assert_eq!(&bytes[..], b"hi");
+        }
+        assert!(matches!(
+            file_stream.next().await,
+            Some(Err(FileStreamError::BoundaryBufferTooLarge(_, _)))
+        ));
+    }
+
+    /// Same as above, but the overflow happens while waiting for the final
+    /// CRLF in state 5.
+    #[tokio::test]
+    async fn file_stream_buffer_overflow_in_state5_pull() {
+        let huge = Bytes::from(vec![b'q'; MAX_BOUNDARY_BUFFER_SIZE + 1]);
+        let body = futures::stream::iter(vec![Ok::<Bytes, StdError>(Bytes::from_static(b"hi\r\n--boundary--x")), Ok(huge)]);
+
+        let mut file_stream = FileStream::new(Box::pin(body), b"boundary", None, Some(2));
+
+        {
+            let bytes = file_stream.next().await.unwrap().unwrap();
+            assert_eq!(&bytes[..], b"hi");
+        }
+        assert!(matches!(
+            file_stream.next().await,
+            Some(Err(FileStreamError::BoundaryBufferTooLarge(_, _)))
+        ));
+    }
+
+    /// Trailing garbage that does not start with CRLF right after the closing
+    /// `--` is rejected while buffering in state 5.
+    #[tokio::test]
+    async fn file_stream_rejects_garbage_in_state5_after_close() {
+        let body = futures::stream::iter(vec![Ok::<Bytes, StdError>(Bytes::from_static(b"hi\r\n--boundary--zz\r\n"))]);
+
+        let mut file_stream = FileStream::new(Box::pin(body), b"boundary", None, Some(2));
+
+        {
+            let bytes = file_stream.next().await.unwrap().unwrap();
+            assert_eq!(&bytes[..], b"hi");
+        }
+        assert!(matches!(file_stream.next().await, Some(Err(FileStreamError::InvalidTrailer))));
+    }
+
+    /// An underlying transport error while checking for an epilogue in
+    /// state 6 is surfaced as `Underlying`.
+    #[tokio::test]
+    async fn file_stream_underlying_error_at_state6() {
+        let body = futures::stream::iter(vec![
+            Ok::<Bytes, StdError>(Bytes::from_static(b"hi\r\n--boundary--\r\n")),
+            Err(io::Error::other("boom").into()),
+        ]);
+
+        let mut file_stream = FileStream::new(Box::pin(body), b"boundary", None, Some(2));
+
+        {
+            let bytes = file_stream.next().await.unwrap().unwrap();
+            assert_eq!(&bytes[..], b"hi");
+        }
+        assert!(matches!(file_stream.next().await, Some(Err(FileStreamError::Underlying(_)))));
+    }
+
+    /// An epilogue delivered as a separate poll after the canonical close is
+    /// rejected instead of being ignored.
+    #[tokio::test]
+    async fn file_stream_rejects_epilogue_in_separate_chunk() {
+        let body = futures::stream::iter(vec![
+            Ok::<Bytes, StdError>(Bytes::from_static(b"hi\r\n--boundary--\r\n")),
+            Ok(Bytes::from_static(b"epilogue")),
+        ]);
+
+        let mut file_stream = FileStream::new(Box::pin(body), b"boundary", None, Some(2));
+
+        {
+            let bytes = file_stream.next().await.unwrap().unwrap();
+            assert_eq!(&bytes[..], b"hi");
+        }
+        assert!(matches!(file_stream.next().await, Some(Err(FileStreamError::InvalidTrailer))));
+    }
+
+    /// Without a derived length claim the byte stream reports an unknown
+    /// remaining length.
+    #[test]
+    fn file_stream_remaining_length_unknown_without_claim() {
+        let body = futures::stream::iter(Vec::<Result<Bytes, StdError>>::new());
+        let file_stream = FileStream::new(Box::pin(body), b"boundary", None, None);
+
+        assert!(file_stream.remaining_length().exact().is_none());
+    }
+
     #[tokio::test]
     async fn multipart() {
         let fields = [

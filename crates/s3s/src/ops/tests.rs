@@ -956,7 +956,6 @@ async fn post_multipart_bucket_routes_to_post_object() {
     use crate::sig_v4;
     use bytes::Bytes;
     use hyper::Method;
-    use hyper::header::HeaderValue;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -1021,7 +1020,7 @@ async fn post_multipart_bucket_routes_to_post_object() {
     let credential = "AKIAIOSFODNN7EXAMPLE/20200926/us-east-1/s3/aws4_request";
     let region = "us-east-1";
     let service = "s3";
-    let signature = sig_v4::calculate_signature(policy_b64, &secret_key, &amz_date, region, service);
+    let signature = crate::sig_v4::calculate_signature(policy_b64, &secret_key, &amz_date, region, service);
 
     let body = format!(
         concat!(
@@ -1069,7 +1068,7 @@ async fn post_multipart_bucket_routes_to_post_object() {
             .header(crate::header::HOST, "localhost")
             .header(
                 crate::header::CONTENT_TYPE,
-                HeaderValue::from_str(&format!("multipart/form-data; boundary={boundary}")).unwrap(),
+                hyper::header::HeaderValue::from_str(&format!("multipart/form-data; boundary={boundary}")).unwrap(),
             )
             .body(Body::from(Bytes::from(body)))
             .unwrap(),
@@ -1098,7 +1097,6 @@ mod post_policy_test_helpers {
     use crate::sig_v4;
     use bytes::Bytes;
     use hyper::Method;
-    use hyper::header::HeaderValue;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -1202,7 +1200,7 @@ mod post_policy_test_helpers {
     /// Augment a test POST policy JSON with the required `SigV4` eq conditions
     /// (`x-amz-date`, `x-amz-credential`, `x-amz-algorithm`) so the request
     /// passes the verifier's policy-field-matching checks.
-    fn augment_post_policy_for_test(policy_json: &str, amz_date: &str, credential: &str, algorithm: &str) -> String {
+    pub fn augment_post_policy_for_test(policy_json: &str, amz_date: &str, credential: &str, algorithm: &str) -> String {
         let mut policy: serde_json::Value = serde_json::from_str(policy_json).expect("invalid test policy JSON");
         let conditions = policy["conditions"]
             .as_array_mut()
@@ -1237,7 +1235,7 @@ mod post_policy_test_helpers {
 
         let policy_json = augment_post_policy_for_test(policy_json, amz_date_str.as_str(), credential, algorithm);
         let policy_b64 = base64_simd::STANDARD.encode_to_string(&policy_json);
-        let signature = sig_v4::calculate_signature(&policy_b64, secret_key, &amz_date, region, service);
+        let signature = crate::sig_v4::calculate_signature(&policy_b64, secret_key, &amz_date, region, service);
 
         let fields = {
             let mut f = vec![
@@ -1265,7 +1263,7 @@ mod post_policy_test_helpers {
                 .header(crate::header::HOST, "localhost")
                 .header(
                     crate::header::CONTENT_TYPE,
-                    HeaderValue::from_str(&format!("multipart/form-data; boundary={boundary}")).unwrap(),
+                    hyper::header::HeaderValue::from_str(&format!("multipart/form-data; boundary={boundary}")).unwrap(),
                 )
                 .header(hyper::header::CONTENT_LENGTH, body.len())
                 .body(Body::from(Bytes::from(body)))
@@ -1300,7 +1298,7 @@ mod post_policy_test_helpers {
 
         let policy_json = augment_post_policy_for_test(policy_json, amz_date_str.as_str(), credential, algorithm);
         let policy_b64 = base64_simd::STANDARD.encode_to_string(&policy_json);
-        let signature = sig_v4::calculate_signature(&policy_b64, secret_key, &amz_date, region, service);
+        let signature = crate::sig_v4::calculate_signature(&policy_b64, secret_key, &amz_date, region, service);
 
         let body = build_multipart_fields(
             &[
@@ -1331,7 +1329,7 @@ mod post_policy_test_helpers {
                 .header(crate::header::HOST, "localhost")
                 .header(
                     crate::header::CONTENT_TYPE,
-                    HeaderValue::from_str(&format!("multipart/form-data; boundary={boundary}")).unwrap(),
+                    hyper::header::HeaderValue::from_str(&format!("multipart/form-data; boundary={boundary}")).unwrap(),
                 )
                 .body(Body::http_body(stream_body))
                 .unwrap(),
@@ -1663,6 +1661,124 @@ async fn post_object_chunked_aggregates_file() {
         collected.extend_from_slice(&chunk.expect("stream should not error"));
     }
     assert_eq!(collected, file_content.as_bytes());
+}
+
+/// A chunked POST Object whose file exceeds the configured maximum must be
+/// rejected with `EntityTooLarge` while aggregating on the fallback path.
+#[tokio::test]
+async fn post_object_chunked_rejects_oversized_file() {
+    use crate::auth::SecretKey;
+    use std::sync::Arc;
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+
+    let config = post_policy_test_helpers::create_test_config(1024 * 1024);
+    let auth = post_policy_test_helpers::create_test_auth();
+    let ccx = post_policy_test_helpers::create_test_context(&s3, &config, &auth);
+
+    let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+    let policy_json = &format!(
+        r#"{{"expiration":"2030-01-01T00:00:00.000Z","conditions":[{}]}}"#,
+        post_policy_test_helpers::BASE_CONDITIONS,
+    );
+    // No content-length-range condition in the policy: the config maximum
+    // (1 MiB) applies. The file is twice that size.
+    let file_content = "x".repeat(2 * 1024 * 1024);
+
+    let mut req = post_policy_test_helpers::build_post_object_request_chunked(policy_json, &file_content, &secret_key, 1024);
+
+    let result = super::prepare(&mut req, &ccx).await;
+    let Err(err) = result else {
+        panic!("expected prepare to fail for an oversized chunked upload");
+    };
+    assert_eq!(
+        *err.code(),
+        crate::error::S3ErrorCode::EntityTooLarge,
+        "expected EntityTooLarge error, got {:?}",
+        err.code()
+    );
+}
+
+/// A chunked POST Object whose body stream errors mid-file must be rejected
+/// with `InvalidRequest` while aggregating on the fallback path.
+#[tokio::test]
+async fn post_object_chunked_rejects_broken_body() {
+    use crate::auth::SecretKey;
+    use std::sync::Arc;
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+
+    let config = post_policy_test_helpers::create_test_config(1024 * 1024);
+    let auth = post_policy_test_helpers::create_test_auth();
+    let ccx = post_policy_test_helpers::create_test_context(&s3, &config, &auth);
+
+    let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+    let policy_json = &format!(
+        r#"{{"expiration":"2030-01-01T00:00:00.000Z","conditions":[{}]}}"#,
+        post_policy_test_helpers::BASE_CONDITIONS,
+    );
+
+    // Mirror the helper's request construction, but end the body stream with
+    // an error right after the file part headers: aggregation hits a
+    // non-FileTooLarge underlying error.
+    let boundary = "------------------------test12345678";
+    let bucket = "test-bucket";
+    let key = "test-key";
+    let amz_date = crate::sig_v4::AmzDate::parse("20250101T000000Z").unwrap();
+    let amz_date_str = amz_date.fmt_iso8601();
+    let credential = "AKIAIOSFODNN7EXAMPLE/20250101/us-east-1/s3/aws4_request";
+    let algorithm = "AWS4-HMAC-SHA256";
+
+    let augmented = post_policy_test_helpers::augment_post_policy_for_test(policy_json, &amz_date_str, credential, algorithm);
+    let policy_b64 = base64_simd::STANDARD.encode_to_string(&augmented);
+    let signature = crate::sig_v4::calculate_signature(&policy_b64, &secret_key, &amz_date, "us-east-1", "s3");
+
+    let fields = post_policy_test_helpers::build_multipart_fields(
+        &[
+            ("x-amz-signature", signature.as_str()),
+            ("bucket", bucket),
+            ("policy", policy_b64.as_str()),
+            ("x-amz-algorithm", algorithm),
+            ("x-amz-credential", credential),
+            ("x-amz-date", amz_date_str.as_str()),
+            ("key", key),
+        ],
+        boundary,
+    );
+    let file_field_header = format!(
+        "\r\n--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"test.txt\"\r\nContent-Type: text/plain\r\n\r\n"
+    );
+
+    let frames: Vec<Result<http_body::Frame<Bytes>, crate::error::StdError>> = vec![
+        Ok(http_body::Frame::data(Bytes::from(fields + &file_field_header))),
+        Ok(http_body::Frame::data(Bytes::from_static(b"partial content"))),
+        Err("boom".into()),
+    ];
+    let stream_body = http_body_util::StreamBody::new(futures::stream::iter(frames));
+
+    let mut req = Request::from(
+        hyper::Request::builder()
+            .method(Method::POST)
+            .uri(format!("http://localhost/{bucket}"))
+            .header(crate::header::HOST, "localhost")
+            .header(
+                crate::header::CONTENT_TYPE,
+                hyper::header::HeaderValue::from_str(&format!("multipart/form-data; boundary={boundary}")).unwrap(),
+            )
+            .body(Body::http_body_unsync(stream_body))
+            .unwrap(),
+    );
+
+    let result = super::prepare(&mut req, &ccx).await;
+    let Err(err) = result else {
+        panic!("expected prepare to fail for a broken body stream");
+    };
+    assert_eq!(
+        *err.code(),
+        crate::error::S3ErrorCode::InvalidRequest,
+        "expected InvalidRequest error, got {:?}",
+        err.code()
+    );
 }
 
 /// A `Content-Length` request whose multipart trailer is not canonical must
