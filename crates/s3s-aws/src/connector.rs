@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 Nugine
+
 use crate::body::{s3s_body_into_sdk_body, sdk_body_into_s3s_body};
 
 use s3s::service::S3Service;

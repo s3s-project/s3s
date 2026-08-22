@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 Nugine
+
 use s3s::auth::SimpleAuth;
 use s3s::header::CONTENT_TYPE;
 use s3s::host::SingleDomain;

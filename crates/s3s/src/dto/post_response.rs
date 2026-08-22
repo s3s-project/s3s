@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 Nugine
+
 //! POST Object response DTO for `success_action_status=201`
 //!
 //! See: <https://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectPOST.html>

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 Nugine
+
 //! XML serialization and deserialization for S3 request and response bodies.
 //!
 //! This module provides the [`Serialize`] / [`SerializeContent`] traits and

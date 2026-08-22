@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 Nugine
+
 //! AWS Signature Version 2 (legacy).
 //!
 //! Parses and verifies the older HMAC-SHA1-based request authentication scheme

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 Nugine
+
 /// Returns the desired order of struct members for specific shapes.
 /// See <https://github.com/s3s-project/s3s/pull/480>
 pub fn struct_member_order(shape_name: &str) -> Option<&'static [&'static str]> {

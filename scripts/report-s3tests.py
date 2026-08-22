@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2023-2026 Nugine
+
 import re
 import sys
 from collections import defaultdict

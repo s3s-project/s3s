@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 Nugine
+
 //! Checksum and hash primitives used by S3 signature verification and checksum computation.
 //!
 //! This module defines the [`Checksum`] trait and provides concrete implementations

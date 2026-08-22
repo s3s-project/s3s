@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 Nugine
+
 //! Access control and authorization
 //!
 //! This module provides the [`S3Access`] trait for implementing fine-grained access control

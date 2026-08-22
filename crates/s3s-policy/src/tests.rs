@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 Nugine
+
 /// <https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html#access_policies-json>
 pub(crate) fn example1_json() -> &'static str {
     r#"

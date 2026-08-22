@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 Nugine
+
 use super::dto::RustTypes;
 use super::ops::Operations;
 use super::rust;

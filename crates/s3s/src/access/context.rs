@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 Nugine
+
 use crate::S3Operation;
 use crate::auth::Credentials;
 use crate::path::S3Path;

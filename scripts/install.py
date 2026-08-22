@@ -1,4 +1,7 @@
 #!/usr/bin/env python
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2023-2026 Nugine
+
 import argparse
 import subprocess
 from dataclasses import dataclass

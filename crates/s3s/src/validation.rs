@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 Nugine
+
 //! Validation API for S3 bucket names.
 //!
 //! The [`NameValidation`] trait lets users plug in a custom bucket name validator.

@@ -1,4 +1,6 @@
 #!/bin/bash -ex
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2023-2026 Nugine
 
 mkdir -p /tmp/minio
 docker stop e2e-minio || echo

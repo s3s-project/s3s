@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 Nugine
+
 //! Internal S3 operation dispatch, HTTP serialization, and deserialization.
 //!
 //! This module converts incoming HTTP requests into typed operation inputs,

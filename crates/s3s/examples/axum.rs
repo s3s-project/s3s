@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 Nugine
+
 //! Axum integration example for s3s
 //!
 //! This example demonstrates how to use `S3Service` directly with Axum.

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 Nugine
+
 //! POST Object policy parsing and validation.
 //!
 //! A POST policy is a base64-encoded JSON document attached to a browser-based

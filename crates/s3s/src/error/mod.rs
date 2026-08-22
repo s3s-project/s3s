@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 Nugine
+
 //! S3 error types.
 //!
 //! This module provides [`S3Error`] and [`S3Result`] for representing and

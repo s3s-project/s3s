@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 Nugine
+
 use aws_smithy_types::body::SdkBody;
 
 pub fn s3s_body_into_sdk_body(body: s3s::Body) -> SdkBody {

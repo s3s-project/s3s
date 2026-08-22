@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 Nugine
+
 //! S3 region handling
 //!
 //! This module provides a strongly-typed [`Region`] type that ensures the

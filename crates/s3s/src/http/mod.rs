@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 Nugine
+
 //! HTTP layer types and utilities used internally by the S3 service.
 //!
 //! Contains request and response wrappers, body types, query-string and header

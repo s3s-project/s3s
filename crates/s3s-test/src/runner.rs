@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 Nugine
+
 #![allow(clippy::wildcard_imports)]
 #![allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
 
