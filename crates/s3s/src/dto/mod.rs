@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 The s3s Authors
+
 //! S3 data transfer objects (DTOs).
 //!
 //! This module re-exports all S3 operation input and output types together with

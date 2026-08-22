@@ -1,5 +1,7 @@
-#![deny(missing_docs)]
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
+#![deny(missing_docs)]
 use crate::Body;
 use crate::StdError;
 use crate::auth::Credentials;

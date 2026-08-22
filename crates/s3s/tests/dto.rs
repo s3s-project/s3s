@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 The s3s Authors
+
 use s3s::dto::{
     AnalyticsConfiguration, BucketLifecycleConfiguration, GetObjectInput, IntelligentTieringConfiguration,
     InventoryConfiguration, LambdaFunctionConfiguration, ListObjectsV2Input, ListObjectsV2Output, MetadataTableConfiguration,

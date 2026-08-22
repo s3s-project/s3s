@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 The s3s Authors
+
 use crate::crypto::Checksum as _;
 use crate::crypto::Sha256;
 use crate::error::StdError;

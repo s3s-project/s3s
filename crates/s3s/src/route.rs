@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 The s3s Authors
+
 //! Custom route support
 //!
 //! This module provides the [`S3Route`] trait for implementing custom routes that can

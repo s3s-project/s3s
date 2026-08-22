@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 The s3s Authors
+
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
 pub struct BuildError {

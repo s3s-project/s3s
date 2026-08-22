@@ -29,6 +29,9 @@ doc:
 crawl:
     uv run data/crawl.py update
 
+spdx-check:
+    uv run scripts/spdx_headers.py --check
+
 codegen:
     cargo run -p s3s-codegen
     cargo fmt --all

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 The s3s Authors
+
 //! S3 Authentication
 //!
 //! This module provides authentication support for S3 services, including AWS Signature

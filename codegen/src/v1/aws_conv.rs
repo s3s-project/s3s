@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 The s3s Authors
+
 use super::dto::RustTypes;
 use super::ops::Operations;
 use super::ops::is_op_input;

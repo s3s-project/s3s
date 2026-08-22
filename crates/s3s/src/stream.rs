@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 The s3s Authors
+
 //! Byte-stream types for S3 request and response bodies.
 //!
 //! This module defines the [`ByteStream`] trait, the [`DynByteStream`] type
