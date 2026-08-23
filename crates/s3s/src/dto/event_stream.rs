@@ -158,6 +158,10 @@ struct Header {
     value: Bytes,
 }
 
+const PRELUDE_BYTE_LENGTH: usize = 12;
+const MESSAGE_CRC_BYTE_LENGTH: usize = 4;
+const MESSAGE_OVERHEAD_BYTE_LENGTH: usize = PRELUDE_BYTE_LENGTH + MESSAGE_CRC_BYTE_LENGTH;
+
 #[derive(Debug, thiserror::Error)]
 enum SerError {
     #[error("Message Serialization: LengthOverflow")]
@@ -198,7 +202,7 @@ impl Message {
             let payload_len = self.payload.as_ref().map_or(0, Bytes::len);
 
             let total_len = headers_len
-                .and_then(|acc| acc.checked_add(4 + 4 + 4 + 4))
+                .and_then(|acc| acc.checked_add(MESSAGE_OVERHEAD_BYTE_LENGTH))
                 .and_then(|acc| acc.checked_add(payload_len));
 
             total_byte_length = u32::try_from(total_len.ok_or(SerError::LengthOverflow)?)?;
@@ -206,7 +210,11 @@ impl Message {
         }
 
         let payload = self.payload.filter(|payload| !payload.is_empty());
-        let frame_overhead = if payload.is_some() { 12 } else { 16 };
+        let frame_overhead = if payload.is_some() {
+            PRELUDE_BYTE_LENGTH
+        } else {
+            MESSAGE_OVERHEAD_BYTE_LENGTH
+        };
         let mut buf: Vec<u8> = Vec::with_capacity(frame_overhead + headers_byte_length as usize);
         buf.put_u32(total_byte_length);
         buf.put_u32(headers_byte_length);
