@@ -27,6 +27,9 @@ mod multipart;
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+mod route_bench;
+
 use crate::access::{S3Access, S3AccessContext};
 use crate::auth::{Credentials, S3Auth};
 use crate::config::S3ConfigProvider;
