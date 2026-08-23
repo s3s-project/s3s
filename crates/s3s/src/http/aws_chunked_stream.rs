@@ -12,6 +12,7 @@ use crate::sig_v4::AmzDate;
 use crate::sig_v4::create_trailer_string_to_sign;
 use crate::stream::{ByteStream, DynByteStream, RemainingLength};
 use crate::utils::SyncBoxFuture;
+use crate::utils::crypto::{Sha256Sum, hex_bytes32};
 
 use hyper::HeaderMap;
 use hyper::http::{HeaderName, HeaderValue};
@@ -72,7 +73,7 @@ struct SignatureCtx {
     secret_key: SecretKey,
 
     /// previous chunk's signature
-    prev_signature: Signature,
+    prev_signature: Sha256Sum,
 }
 
 /// [`AwsChunkedStream`]
@@ -142,15 +143,16 @@ fn parse_chunk_meta(mut input: &[u8]) -> nom::IResult<&[u8], ChunkMeta<'_>> {
 }
 
 /// check signature
-fn check_signature(ctx: &SignatureCtx, expected_signature: &[u8], chunk_data: &[Bytes]) -> Option<Signature> {
-    let expected_signature = Signature::from_hex(std::str::from_utf8(expected_signature).ok()?)?;
+fn check_signature(ctx: &SignatureCtx, expected_signature: &[u8], chunk_data: &[Bytes]) -> Option<Sha256Sum> {
+    let expected = Sha256Sum::from_hex(std::str::from_utf8(expected_signature).ok()?)?;
 
-    let string_to_sign =
-        sig_v4::create_chunk_string_to_sign(&ctx.amz_date, &ctx.region, &ctx.service, ctx.prev_signature.as_str(), chunk_data);
+    let string_to_sign = hex_bytes32(ctx.prev_signature.as_bytes(), |prev_signature| {
+        sig_v4::create_chunk_string_to_sign(&ctx.amz_date, &ctx.region, &ctx.service, prev_signature, chunk_data)
+    });
 
-    let chunk_signature = sig_v4::calculate_signature(&string_to_sign, &ctx.secret_key, &ctx.amz_date, &ctx.region, &ctx.service);
+    let signature = sig_v4::calculate_signature_raw(&string_to_sign, &ctx.secret_key, &ctx.amz_date, &ctx.region, &ctx.service);
 
-    Signature::compare(&chunk_signature, &expected_signature).then_some(chunk_signature)
+    (expected == signature).then_some(signature)
 }
 
 impl AwsChunkedStream {
@@ -177,12 +179,15 @@ impl AwsChunkedStream {
                 pin_mut!(body);
                 let mut prev_bytes = Bytes::new();
                 let mut buf: Vec<u8> = Vec::new();
+                let Some(prev_signature) = Sha256Sum::from_hex(seed_signature.as_str()) else {
+                    unreachable!("invariant: Signature holds canonical lowercase hex");
+                };
                 let mut ctx = SignatureCtx {
                     amz_date,
                     region,
                     service,
                     secret_key,
-                    prev_signature: seed_signature,
+                    prev_signature,
                 };
 
                 loop {
@@ -327,20 +332,16 @@ impl AwsChunkedStream {
 
         // Verify the trailer signature if present, or require it when unsigned=false
         if let Some(provided) = provided_signature.as_ref() {
-            let Some(provided) = std::str::from_utf8(provided).ok().and_then(Signature::from_hex) else {
+            let Some(provided) = std::str::from_utf8(provided).ok().and_then(Sha256Sum::from_hex) else {
                 return Some(Err(AwsChunkedStreamError::SignatureMismatch));
             };
 
-            let string_to_sign = create_trailer_string_to_sign(
-                &ctx.amz_date,
-                &ctx.region,
-                &ctx.service,
-                ctx.prev_signature.as_str(),
-                &canonical_trailers,
-            );
-            let trailer_signature =
-                sig_v4::calculate_signature(&string_to_sign, &ctx.secret_key, &ctx.amz_date, &ctx.region, &ctx.service);
-            if !Signature::compare(&trailer_signature, &provided) {
+            let string_to_sign = hex_bytes32(ctx.prev_signature.as_bytes(), |prev_signature| {
+                create_trailer_string_to_sign(&ctx.amz_date, &ctx.region, &ctx.service, prev_signature, &canonical_trailers)
+            });
+            let signature =
+                sig_v4::calculate_signature_raw(&string_to_sign, &ctx.secret_key, &ctx.amz_date, &ctx.region, &ctx.service);
+            if provided != signature {
                 return Some(Err(AwsChunkedStreamError::SignatureMismatch));
             }
         } else if !unsigned {

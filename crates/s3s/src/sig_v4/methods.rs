@@ -8,7 +8,7 @@ use super::AmzDate;
 use crate::auth::SecretKey;
 use crate::auth::signature::Signature;
 use crate::http::OrderedHeaders;
-use crate::utils::crypto::{hex, hex_sha256, hex_sha256_chunk, hmac_sha256};
+use crate::utils::crypto::{Sha256Sum, hex, hex_sha256, hex_sha256_chunk, hmac_sha256};
 use crate::utils::stable_sort_by_first;
 
 use hyper::Method;
@@ -390,15 +390,11 @@ pub fn create_trailer_string_to_sign(
     ans
 }
 
-/// calculate signature
+/// derive the `SigV4` signing key
+///
+/// `kSigning = HMAC(HMAC(HMAC(HMAC("AWS4" + secret, date), region), service), "aws4_request")`
 #[must_use]
-pub fn calculate_signature(
-    string_to_sign: &str,
-    secret_key: &SecretKey,
-    amz_date: &AmzDate,
-    region: &str,
-    service: &str,
-) -> Signature {
+pub(crate) fn derive_signing_key(secret_key: &SecretKey, amz_date: &AmzDate, region: &str, service: &str) -> [u8; 32] {
     let mut secret = {
         let secret_key = secret_key.expose();
         let mut buf = <SmallVec<[u8; 128]>>::with_capacity(secret_key.len().saturating_add(4));
@@ -421,10 +417,33 @@ pub fn calculate_signature(
     let date_region_service_key = hmac_sha256(date_region_key, service);
 
     // SigningKey
-    let signing_key = hmac_sha256(date_region_service_key, "aws4_request");
+    hmac_sha256(date_region_service_key, "aws4_request")
+}
 
-    // Signature
+/// calculate signature
+#[must_use]
+pub fn calculate_signature(
+    string_to_sign: &str,
+    secret_key: &SecretKey,
+    amz_date: &AmzDate,
+    region: &str,
+    service: &str,
+) -> Signature {
+    let signing_key = derive_signing_key(secret_key, amz_date, region, service);
     Signature::from_computed(hex(hmac_sha256(signing_key, string_to_sign)))
+}
+
+/// calculate signature as raw bytes
+#[must_use]
+pub(crate) fn calculate_signature_raw(
+    string_to_sign: &str,
+    secret_key: &SecretKey,
+    amz_date: &AmzDate,
+    region: &str,
+    service: &str,
+) -> Sha256Sum {
+    let signing_key = derive_signing_key(secret_key, amz_date, region, service);
+    Sha256Sum::from_bytes(hmac_sha256(signing_key, string_to_sign))
 }
 
 fn create_presigned_canonical_request_with_uri_mode(
@@ -814,6 +833,27 @@ mod tests {
             chunk3_signature.as_str(),
             "b6c6ea8a5354eaf15b3cb7646744f4275b71ea724fed81ceb9323e279d449df9"
         );
+    }
+
+    #[test]
+    fn calculate_signature_raw_matches_calculate_signature() {
+        use crate::utils::crypto::Sha256Sum;
+
+        let secret_access_key = SecretKey::from("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
+        let timestamp = "20130524T000000Z";
+        let region = "us-east-1";
+        let service = "s3";
+        let date = AmzDate::parse(timestamp).unwrap();
+
+        let seed_signature = "4f232c4386841ef735655705268965c44a0e4690baa4adea153f7db9fa80a0a9";
+        let string_to_sign =
+            create_chunk_string_to_sign(&date, region, service, seed_signature, &[Bytes::from(vec![b'a'; 64 * 1024])]);
+
+        let signature = calculate_signature(&string_to_sign, &secret_access_key, &date, region, service);
+        let raw = calculate_signature_raw(&string_to_sign, &secret_access_key, &date, region, service);
+
+        let expected = Sha256Sum::from_hex(signature.as_str()).unwrap();
+        assert_eq!(expected, raw);
     }
 
     #[test]

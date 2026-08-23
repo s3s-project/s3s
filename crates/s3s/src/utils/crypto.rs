@@ -7,8 +7,18 @@ use hex_simd::{AsOut, AsciiCase};
 use hyper::body::Bytes;
 
 /// A normalized SHA-256 digest.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// [`PartialEq`] compares in constant time.
+#[derive(Debug, Clone, Copy)]
 pub struct Sha256Sum([u8; 32]);
+
+impl PartialEq for Sha256Sum {
+    fn eq(&self, other: &Self) -> bool {
+        self.ct_equal(other)
+    }
+}
+
+impl Eq for Sha256Sum {}
 
 impl Sha256Sum {
     /// Parses a lowercase hexadecimal SHA-256 digest.
@@ -44,6 +54,21 @@ impl Sha256Sum {
     pub fn to_hex_string(self) -> String {
         hex(self.0)
     }
+
+    /// Returns the raw digest bytes.
+    #[must_use]
+    pub(crate) const fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+
+    /// Returns whether the digest equals `other` in constant time.
+    ///
+    /// [`PartialEq`] is implemented in constant time through this method.
+    #[must_use]
+    pub fn ct_equal(&self, other: &Sha256Sum) -> bool {
+        use subtle::ConstantTimeEq;
+        bool::from(self.0.ct_eq(&other.0))
+    }
 }
 
 /// verify sha256 checksum string
@@ -78,7 +103,7 @@ pub fn hex(data: impl AsRef<[u8]>) -> String {
 }
 
 /// `f(hex(src))`
-fn hex_bytes32<R>(src: impl AsRef<[u8]>, f: impl FnOnce(&str) -> R) -> R {
+pub(crate) fn hex_bytes32<R>(src: impl AsRef<[u8]>, f: impl FnOnce(&str) -> R) -> R {
     let buf: &mut [_] = &mut [MaybeUninit::uninit(); 64];
     let ans = hex_simd::encode_as_str(src.as_ref(), buf.as_out(), AsciiCase::Lower);
     f(ans)
