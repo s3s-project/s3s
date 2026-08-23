@@ -1630,6 +1630,7 @@ impl AwsConversion for s3s::dto::DeleteBucketIntelligentTieringConfigurationInpu
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
         Ok(Self {
             bucket: unwrap_from_aws(x.bucket, "bucket")?,
+            expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
             id: unwrap_from_aws(x.id, "id")?,
         })
     }
@@ -1637,6 +1638,7 @@ impl AwsConversion for s3s::dto::DeleteBucketIntelligentTieringConfigurationInpu
     fn try_into_aws(x: Self) -> S3Result<Self::Target> {
         let mut y = Self::Target::builder();
         y = y.set_bucket(Some(try_into_aws(x.bucket)?));
+        y = y.set_expected_bucket_owner(try_into_aws(x.expected_bucket_owner)?);
         y = y.set_id(Some(try_into_aws(x.id)?));
         y.build().map_err(S3Error::internal_error)
     }
@@ -2764,6 +2766,7 @@ impl AwsConversion for s3s::dto::GetBucketIntelligentTieringConfigurationInput {
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
         Ok(Self {
             bucket: unwrap_from_aws(x.bucket, "bucket")?,
+            expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
             id: unwrap_from_aws(x.id, "id")?,
         })
     }
@@ -2771,6 +2774,7 @@ impl AwsConversion for s3s::dto::GetBucketIntelligentTieringConfigurationInput {
     fn try_into_aws(x: Self) -> S3Result<Self::Target> {
         let mut y = Self::Target::builder();
         y = y.set_bucket(Some(try_into_aws(x.bucket)?));
+        y = y.set_expected_bucket_owner(try_into_aws(x.expected_bucket_owner)?);
         y = y.set_id(Some(try_into_aws(x.id)?));
         y.build().map_err(S3Error::internal_error)
     }
@@ -4839,6 +4843,7 @@ impl AwsConversion for s3s::dto::ListBucketIntelligentTieringConfigurationsInput
         Ok(Self {
             bucket: unwrap_from_aws(x.bucket, "bucket")?,
             continuation_token: try_from_aws(x.continuation_token)?,
+            expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
         })
     }
 
@@ -4846,6 +4851,7 @@ impl AwsConversion for s3s::dto::ListBucketIntelligentTieringConfigurationsInput
         let mut y = Self::Target::builder();
         y = y.set_bucket(Some(try_into_aws(x.bucket)?));
         y = y.set_continuation_token(try_into_aws(x.continuation_token)?);
+        y = y.set_expected_bucket_owner(try_into_aws(x.expected_bucket_owner)?);
         y.build().map_err(S3Error::internal_error)
     }
 }
@@ -6846,6 +6852,7 @@ impl AwsConversion for s3s::dto::PutBucketIntelligentTieringConfigurationInput {
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
         Ok(Self {
             bucket: unwrap_from_aws(x.bucket, "bucket")?,
+            expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
             id: unwrap_from_aws(x.id, "id")?,
             intelligent_tiering_configuration: unwrap_from_aws(
                 x.intelligent_tiering_configuration,
@@ -6857,6 +6864,7 @@ impl AwsConversion for s3s::dto::PutBucketIntelligentTieringConfigurationInput {
     fn try_into_aws(x: Self) -> S3Result<Self::Target> {
         let mut y = Self::Target::builder();
         y = y.set_bucket(Some(try_into_aws(x.bucket)?));
+        y = y.set_expected_bucket_owner(try_into_aws(x.expected_bucket_owner)?);
         y = y.set_id(Some(try_into_aws(x.id)?));
         y = y.set_intelligent_tiering_configuration(Some(try_into_aws(x.intelligent_tiering_configuration)?));
         y.build().map_err(S3Error::internal_error)

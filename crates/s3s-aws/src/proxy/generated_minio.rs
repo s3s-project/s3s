@@ -373,6 +373,7 @@ impl S3 for Proxy {
         debug!(?input);
         let mut b = self.0.delete_bucket_intelligent_tiering_configuration();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
+        b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         b = b.set_id(Some(try_into_aws(input.id)?));
         let result = b.send().await;
         match result {
@@ -810,6 +811,7 @@ impl S3 for Proxy {
         debug!(?input);
         let mut b = self.0.get_bucket_intelligent_tiering_configuration();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
+        b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         b = b.set_id(Some(try_into_aws(input.id)?));
         let result = b.send().await;
         match result {
@@ -1482,6 +1484,7 @@ impl S3 for Proxy {
         let mut b = self.0.list_bucket_intelligent_tiering_configurations();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_continuation_token(try_into_aws(input.continuation_token)?);
+        b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
         match result {
             Ok(output) => {
@@ -1870,6 +1873,7 @@ impl S3 for Proxy {
         debug!(?input);
         let mut b = self.0.put_bucket_intelligent_tiering_configuration();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
+        b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         b = b.set_id(Some(try_into_aws(input.id)?));
         b = b.set_intelligent_tiering_configuration(Some(try_into_aws(input.intelligent_tiering_configuration)?));
         let result = b.send().await;
