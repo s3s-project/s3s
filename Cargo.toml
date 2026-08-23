@@ -119,7 +119,7 @@ opendal = { version = "0.58.0", default-features = false }
 # AWS SDK
 aws-config = { version = "1.9.0", default-features = false }
 aws-credential-types = "1.3.0"
-aws-sdk-s3 = { version = "1.138.0", default-features = false, features = ["default-https-client", "http-1x", "rt-tokio", "sigv4a"] }
+aws-sdk-s3 = { version = "1.143.0", default-features = false, features = ["default-https-client", "http-1x", "rt-tokio", "sigv4a"] }
 aws-sdk-sts = { version = "1.108.0", default-features = false, features = ["default-https-client", "rt-tokio"] }
 aws-smithy-runtime-api = "1.13.0"
 aws-smithy-types = "1.6.1"
