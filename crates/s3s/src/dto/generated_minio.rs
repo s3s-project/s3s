@@ -17505,13 +17505,23 @@ impl fmt::Debug for PutBucketNotificationConfigurationOutput {
 pub struct PutBucketOwnershipControlsInput {
     /// <p>The name of the Amazon S3 bucket whose <code>OwnershipControls</code> you want to set.</p>
     pub bucket: BucketName,
+    /// <p> Indicates the algorithm used to create the checksum for the object when you use the SDK. This
+    /// header will not provide any additional functionality if you don't use the SDK. When you send this
+    /// header, there must be a corresponding <code>x-amz-checksum-<i>algorithm</i>
+    /// </code> header
+    /// sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more
+    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    /// <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code>
+    /// parameter. </p>
+    pub checksum_algorithm: Option<ChecksumAlgorithm>,
     /// <p>The MD5 hash of the <code>OwnershipControls</code> request body. </p>
     /// <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
     pub content_md5: Option<ContentMD5>,
     /// <p>The account ID of the expected bucket owner. If the account ID that you provide does not match the actual owner of the bucket, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).</p>
     pub expected_bucket_owner: Option<AccountId>,
-    /// <p>The <code>OwnershipControls</code> (BucketOwnerEnforced, BucketOwnerPreferred, or
-    /// ObjectWriter) that you want to apply to this Amazon S3 bucket.</p>
+    /// <p>The <code>OwnershipControls</code> (BucketOwnerEnforced, BucketOwnerPreferred, or ObjectWriter) that
+    /// you want to apply to this Amazon S3 bucket.</p>
     pub ownership_controls: OwnershipControls,
 }
 
@@ -17519,6 +17529,9 @@ impl fmt::Debug for PutBucketOwnershipControlsInput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut d = f.debug_struct("PutBucketOwnershipControlsInput");
         d.field("bucket", &self.bucket);
+        if let Some(ref val) = self.checksum_algorithm {
+            d.field("checksum_algorithm", val);
+        }
         if let Some(ref val) = self.content_md5 {
             d.field("content_md5", val);
         }
@@ -31234,6 +31247,8 @@ pub mod builders {
     pub struct PutBucketOwnershipControlsInputBuilder {
         bucket: Option<BucketName>,
 
+        checksum_algorithm: Option<ChecksumAlgorithm>,
+
         content_md5: Option<ContentMD5>,
 
         expected_bucket_owner: Option<AccountId>,
@@ -31244,6 +31259,11 @@ pub mod builders {
     impl PutBucketOwnershipControlsInputBuilder {
         pub fn set_bucket(&mut self, field: BucketName) -> &mut Self {
             self.bucket = Some(field);
+            self
+        }
+
+        pub fn set_checksum_algorithm(&mut self, field: Option<ChecksumAlgorithm>) -> &mut Self {
+            self.checksum_algorithm = field;
             self
         }
 
@@ -31269,6 +31289,12 @@ pub mod builders {
         }
 
         #[must_use]
+        pub fn checksum_algorithm(mut self, field: Option<ChecksumAlgorithm>) -> Self {
+            self.checksum_algorithm = field;
+            self
+        }
+
+        #[must_use]
         pub fn content_md5(mut self, field: Option<ContentMD5>) -> Self {
             self.content_md5 = field;
             self
@@ -31288,6 +31314,7 @@ pub mod builders {
 
         pub fn build(self) -> Result<PutBucketOwnershipControlsInput, BuildError> {
             let bucket = self.bucket.ok_or_else(|| BuildError::missing_field("bucket"))?;
+            let checksum_algorithm = self.checksum_algorithm;
             let content_md5 = self.content_md5;
             let expected_bucket_owner = self.expected_bucket_owner;
             let ownership_controls = self
@@ -31295,6 +31322,7 @@ pub mod builders {
                 .ok_or_else(|| BuildError::missing_field("ownership_controls"))?;
             Ok(PutBucketOwnershipControlsInput {
                 bucket,
+                checksum_algorithm,
                 content_md5,
                 expected_bucket_owner,
                 ownership_controls,
@@ -38367,6 +38395,11 @@ impl DtoExt for PutBucketNotificationConfigurationInput {
 }
 impl DtoExt for PutBucketOwnershipControlsInput {
     fn ignore_empty_strings(&mut self) {
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
+        }
         if self.content_md5.as_deref() == Some("") {
             self.content_md5 = None;
         }

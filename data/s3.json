@@ -32451,9 +32451,10 @@
             },
             "traits": {
                 "aws.protocols#httpChecksum": {
+                    "requestAlgorithmMember": "ChecksumAlgorithm",
                     "requestChecksumRequired": true
                 },
-                "smithy.api#documentation": "<note>\n            <p>This operation is not supported for directory buckets.</p>\n         </note>\n         <p>Creates or modifies <code>OwnershipControls</code> for an Amazon S3 bucket. To use this\n         operation, you must have the <code>s3:PutBucketOwnershipControls</code> permission. For\n         more information about Amazon S3 permissions, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/user-guide/using-with-s3-actions.html\">Specifying permissions in a\n            policy</a>. </p>\n         <p>For information about Amazon S3 Object Ownership, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/user-guide/about-object-ownership.html\">Using object\n            ownership</a>. </p>\n         <p>The following operations are related to <code>PutBucketOwnershipControls</code>:</p>\n         <ul>\n            <li>\n               <p>\n                  <a>GetBucketOwnershipControls</a>\n               </p>\n            </li>\n            <li>\n               <p>\n                  <a>DeleteBucketOwnershipControls</a>\n               </p>\n            </li>\n         </ul>",
+                "smithy.api#documentation": "<note>\n            <p>This operation is not supported for directory buckets.</p>\n         </note>\n         <p>Creates or modifies <code>OwnershipControls</code> for an Amazon S3 bucket. To use this operation, you\n      must have the <code>s3:PutBucketOwnershipControls</code> permission. For more information about Amazon S3\n      permissions, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/user-guide/using-with-s3-actions.html\">Specifying permissions in a policy</a>. </p>\n         <p>For information about Amazon S3 Object Ownership, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/user-guide/about-object-ownership.html\">Using object ownership</a>. </p>\n         <p>The following operations are related to <code>PutBucketOwnershipControls</code>:</p>\n         <ul>\n            <li>\n               <p>\n                  <a>GetBucketOwnershipControls</a>\n               </p>\n            </li>\n            <li>\n               <p>\n                  <a>DeleteBucketOwnershipControls</a>\n               </p>\n            </li>\n         </ul>\n         <important>\n            <p>You must URL encode any signed header values that contain spaces. For example, if your header value is <code>my  file.txt</code>, containing two spaces after <code>my</code>, you must URL encode this value to <code>my%20%20file.txt</code>.</p>\n         </important>",
                 "smithy.api#http": {
                     "method": "PUT",
                     "uri": "/{Bucket}?ownershipControls",
@@ -32497,10 +32498,17 @@
                 "OwnershipControls": {
                     "target": "com.amazonaws.s3#OwnershipControls",
                     "traits": {
-                        "smithy.api#documentation": "<p>The <code>OwnershipControls</code> (BucketOwnerEnforced, BucketOwnerPreferred, or\n         ObjectWriter) that you want to apply to this Amazon S3 bucket.</p>",
+                        "smithy.api#documentation": "<p>The <code>OwnershipControls</code> (BucketOwnerEnforced, BucketOwnerPreferred, or ObjectWriter) that\n      you want to apply to this Amazon S3 bucket.</p>",
                         "smithy.api#httpPayload": {},
                         "smithy.api#required": {},
                         "smithy.api#xmlName": "OwnershipControls"
+                    }
+                },
+                "ChecksumAlgorithm": {
+                    "target": "com.amazonaws.s3#ChecksumAlgorithm",
+                    "traits": {
+                        "smithy.api#documentation": "<p> Indicates the algorithm used to create the checksum for the object when you use the SDK. This\n      header will not provide any additional functionality if you don't use the SDK. When you send this\n      header, there must be a corresponding <code>x-amz-checksum-<i>algorithm</i>\n            </code> header\n      sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more\n      information, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html\">Checking object integrity</a> in\n      the <i>Amazon S3 User Guide</i>.</p>\n         <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code>\n      parameter. </p>",
+                        "smithy.api#httpHeader": "x-amz-sdk-checksum-algorithm"
                     }
                 }
             },

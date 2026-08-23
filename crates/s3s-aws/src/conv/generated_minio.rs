@@ -7094,6 +7094,7 @@ impl AwsConversion for s3s::dto::PutBucketOwnershipControlsInput {
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
         Ok(Self {
             bucket: unwrap_from_aws(x.bucket, "bucket")?,
+            checksum_algorithm: try_from_aws(x.checksum_algorithm)?,
             content_md5: try_from_aws(x.content_md5)?,
             expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
             ownership_controls: unwrap_from_aws(x.ownership_controls, "ownership_controls")?,
@@ -7103,6 +7104,7 @@ impl AwsConversion for s3s::dto::PutBucketOwnershipControlsInput {
     fn try_into_aws(x: Self) -> S3Result<Self::Target> {
         let mut y = Self::Target::builder();
         y = y.set_bucket(Some(try_into_aws(x.bucket)?));
+        y = y.set_checksum_algorithm(try_into_aws(x.checksum_algorithm)?);
         y = y.set_content_md5(try_into_aws(x.content_md5)?);
         y = y.set_expected_bucket_owner(try_into_aws(x.expected_bucket_owner)?);
         y = y.set_ownership_controls(Some(try_into_aws(x.ownership_controls)?));

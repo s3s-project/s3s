@@ -5087,6 +5087,8 @@ impl PutBucketOwnershipControls {
     pub fn deserialize_http(req: &mut http::Request) -> S3Result<PutBucketOwnershipControlsInput> {
         let bucket = http::unwrap_bucket(req);
 
+        let checksum_algorithm: Option<ChecksumAlgorithm> = http::parse_checksum_algorithm_header(req)?;
+
         let content_md5: Option<ContentMD5> = http::parse_opt_header(req, &CONTENT_MD5)?;
 
         let expected_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_EXPECTED_BUCKET_OWNER)?;
@@ -5095,6 +5097,7 @@ impl PutBucketOwnershipControls {
 
         Ok(PutBucketOwnershipControlsInput {
             bucket,
+            checksum_algorithm,
             content_md5,
             expected_bucket_owner,
             ownership_controls,

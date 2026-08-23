@@ -2015,6 +2015,7 @@ impl S3 for Proxy {
         debug!(?input);
         let mut b = self.0.put_bucket_ownership_controls();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
+        b = b.set_checksum_algorithm(try_into_aws(input.checksum_algorithm)?);
         b = b.set_content_md5(try_into_aws(input.content_md5)?);
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         b = b.set_ownership_controls(Some(try_into_aws(input.ownership_controls)?));
