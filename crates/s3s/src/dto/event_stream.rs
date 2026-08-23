@@ -104,6 +104,7 @@ impl Stream for Wrapper {
 
 impl ByteStream for Wrapper {}
 
+#[cfg(test)]
 fn event_into_bytes(ev: S3Result<SelectObjectContentEvent>) -> Result<Bytes, SerError> {
     let chunks = event_into_chunks(ev)?;
     if chunks.len() == 1 {
@@ -149,6 +150,7 @@ enum SerError {
 
 impl Message {
     /// <https://docs.aws.amazon.com/AmazonS3/latest/API/RESTSelectObjectAppendix.html>
+    #[cfg(test)]
     fn serialize(self) -> Result<Bytes, SerError> {
         let chunks = self.serialize_chunks()?;
         if chunks.len() == 1 {
