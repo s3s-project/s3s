@@ -70,11 +70,9 @@ pub trait Operation: Send + Sync + 'static {
     /// Whether this operation requires the request body to be fully read
     /// before being dispatched to the user-implemented [`S3`] handler.
     ///
-    /// Overridden by XML-payload operations (e.g. `DeleteObjects`,
+    /// `true` for XML-payload operations (e.g. `DeleteObjects`,
     /// `CompleteMultipartUpload`) and PUT configuration operations.
-    fn needs_full_body(&self) -> bool {
-        false
-    }
+    fn needs_full_body(&self) -> bool;
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut Request) -> S3Result<Response>;
 }

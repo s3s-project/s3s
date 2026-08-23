@@ -325,6 +325,7 @@ fn codegen_post_object_fork_op(rust_types: &RustTypes) {
 
     g(["#[async_trait::async_trait]", "impl super::Operation for PostObject {"]);
     g(["    fn name(&self) -> &'static str {", "        \"PostObject\"", "    }", ""]);
+    g(["    fn needs_full_body(&self) -> bool {", "        false", "    }", ""]);
 
     g([
         "    async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {",
@@ -912,12 +913,10 @@ fn codegen_op_http_call(op: &Operation, rust_types: &RustTypes) {
     g!("}}");
     g!();
 
-    if needs_full_body(op, rust_types) {
-        g!("fn needs_full_body(&self) -> bool {{");
-        g!("true");
-        g!("}}");
-        g!();
-    }
+    g!("fn needs_full_body(&self) -> bool {{");
+    g!("{}", needs_full_body(op, rust_types));
+    g!("}}");
+    g!();
 
     g!("async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {{");
 
