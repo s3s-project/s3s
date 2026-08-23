@@ -685,6 +685,8 @@ impl BucketLocationConstraint {
 
     pub const AP_EAST_1: &'static str = "ap-east-1";
 
+    pub const AP_EAST_2: &'static str = "ap-east-2";
+
     pub const AP_NORTHEAST_1: &'static str = "ap-northeast-1";
 
     pub const AP_NORTHEAST_2: &'static str = "ap-northeast-2";
@@ -705,7 +707,13 @@ impl BucketLocationConstraint {
 
     pub const AP_SOUTHEAST_5: &'static str = "ap-southeast-5";
 
+    pub const AP_SOUTHEAST_6: &'static str = "ap-southeast-6";
+
+    pub const AP_SOUTHEAST_7: &'static str = "ap-southeast-7";
+
     pub const CA_CENTRAL_1: &'static str = "ca-central-1";
+
+    pub const CA_WEST_1: &'static str = "ca-west-1";
 
     pub const CN_NORTH_1: &'static str = "cn-north-1";
 
@@ -732,6 +740,8 @@ impl BucketLocationConstraint {
     pub const ME_CENTRAL_1: &'static str = "me-central-1";
 
     pub const ME_SOUTH_1: &'static str = "me-south-1";
+
+    pub const MX_CENTRAL_1: &'static str = "mx-central-1";
 
     pub const SA_EAST_1: &'static str = "sa-east-1";
 
@@ -4397,6 +4407,8 @@ impl DeleteBucketInput {
 pub struct DeleteBucketIntelligentTieringConfigurationInput {
     /// <p>The name of the Amazon S3 bucket whose configuration you want to modify or retrieve.</p>
     pub bucket: BucketName,
+    /// <p>The account ID of the expected bucket owner. If the account ID that you provide does not match the actual owner of the bucket, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).</p>
+    pub expected_bucket_owner: Option<AccountId>,
     /// <p>The ID used to identify the S3 Intelligent-Tiering configuration.</p>
     pub id: IntelligentTieringId,
 }
@@ -4405,6 +4417,9 @@ impl fmt::Debug for DeleteBucketIntelligentTieringConfigurationInput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut d = f.debug_struct("DeleteBucketIntelligentTieringConfigurationInput");
         d.field("bucket", &self.bucket);
+        if let Some(ref val) = self.expected_bucket_owner {
+            d.field("expected_bucket_owner", val);
+        }
         d.field("id", &self.id);
         d.finish_non_exhaustive()
     }
@@ -8132,6 +8147,8 @@ impl fmt::Debug for GetBucketEncryptionOutput {
 pub struct GetBucketIntelligentTieringConfigurationInput {
     /// <p>The name of the Amazon S3 bucket whose configuration you want to modify or retrieve.</p>
     pub bucket: BucketName,
+    /// <p>The account ID of the expected bucket owner. If the account ID that you provide does not match the actual owner of the bucket, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).</p>
+    pub expected_bucket_owner: Option<AccountId>,
     /// <p>The ID used to identify the S3 Intelligent-Tiering configuration.</p>
     pub id: IntelligentTieringId,
 }
@@ -8140,6 +8157,9 @@ impl fmt::Debug for GetBucketIntelligentTieringConfigurationInput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut d = f.debug_struct("GetBucketIntelligentTieringConfigurationInput");
         d.field("bucket", &self.bucket);
+        if let Some(ref val) = self.expected_bucket_owner {
+            d.field("expected_bucket_owner", val);
+        }
         d.field("id", &self.id);
         d.finish_non_exhaustive()
     }
@@ -11630,6 +11650,8 @@ impl InventoryOptionalField {
 
     pub const LAST_MODIFIED_DATE: &'static str = "LastModifiedDate";
 
+    pub const LIFECYCLE_EXPIRATION_DATE: &'static str = "LifecycleExpirationDate";
+
     pub const OBJECT_ACCESS_CONTROL_LIST: &'static str = "ObjectAccessControlList";
 
     pub const OBJECT_LOCK_LEGAL_HOLD_STATUS: &'static str = "ObjectLockLegalHoldStatus";
@@ -12165,9 +12187,11 @@ impl fmt::Debug for ListBucketAnalyticsConfigurationsOutput {
 pub struct ListBucketIntelligentTieringConfigurationsInput {
     /// <p>The name of the Amazon S3 bucket whose configuration you want to modify or retrieve.</p>
     pub bucket: BucketName,
-    /// <p>The <code>ContinuationToken</code> that represents a placeholder from where this request
-    /// should begin.</p>
+    /// <p>The <code>ContinuationToken</code> that represents a placeholder from where this request should
+    /// begin.</p>
     pub continuation_token: Option<Token>,
+    /// <p>The account ID of the expected bucket owner. If the account ID that you provide does not match the actual owner of the bucket, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).</p>
+    pub expected_bucket_owner: Option<AccountId>,
 }
 
 impl fmt::Debug for ListBucketIntelligentTieringConfigurationsInput {
@@ -12176,6 +12200,9 @@ impl fmt::Debug for ListBucketIntelligentTieringConfigurationsInput {
         d.field("bucket", &self.bucket);
         if let Some(ref val) = self.continuation_token {
             d.field("continuation_token", val);
+        }
+        if let Some(ref val) = self.expected_bucket_owner {
+            d.field("expected_bucket_owner", val);
         }
         d.finish_non_exhaustive()
     }
@@ -15081,9 +15108,17 @@ pub type ObjectSizeLessThanBytes = i64;
 pub struct ObjectStorageClass(Cow<'static, str>);
 
 impl ObjectStorageClass {
+    pub const AWS_BACKUP_LOW_COST_WARM: &'static str = "AWS_BACKUP_LOW_COST_WARM";
+
+    pub const AWS_BACKUP_WARM: &'static str = "AWS_BACKUP_WARM";
+
     pub const DEEP_ARCHIVE: &'static str = "DEEP_ARCHIVE";
 
     pub const EXPRESS_ONEZONE: &'static str = "EXPRESS_ONEZONE";
+
+    pub const FSX_ONTAP: &'static str = "FSX_ONTAP";
+
+    pub const FSX_OPENZFS: &'static str = "FSX_OPENZFS";
 
     pub const GLACIER: &'static str = "GLACIER";
 
@@ -16997,6 +17032,8 @@ impl fmt::Debug for PutBucketEncryptionOutput {
 pub struct PutBucketIntelligentTieringConfigurationInput {
     /// <p>The name of the Amazon S3 bucket whose configuration you want to modify or retrieve.</p>
     pub bucket: BucketName,
+    /// <p>The account ID of the expected bucket owner. If the account ID that you provide does not match the actual owner of the bucket, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).</p>
+    pub expected_bucket_owner: Option<AccountId>,
     /// <p>The ID used to identify the S3 Intelligent-Tiering configuration.</p>
     pub id: IntelligentTieringId,
     /// <p>Container for S3 Intelligent-Tiering configuration.</p>
@@ -17007,6 +17044,9 @@ impl fmt::Debug for PutBucketIntelligentTieringConfigurationInput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut d = f.debug_struct("PutBucketIntelligentTieringConfigurationInput");
         d.field("bucket", &self.bucket);
+        if let Some(ref val) = self.expected_bucket_owner {
+            d.field("expected_bucket_owner", val);
+        }
         d.field("id", &self.id);
         d.field("intelligent_tiering_configuration", &self.intelligent_tiering_configuration);
         d.finish_non_exhaustive()
@@ -17332,13 +17372,23 @@ impl fmt::Debug for PutBucketNotificationConfigurationOutput {
 pub struct PutBucketOwnershipControlsInput {
     /// <p>The name of the Amazon S3 bucket whose <code>OwnershipControls</code> you want to set.</p>
     pub bucket: BucketName,
+    /// <p> Indicates the algorithm used to create the checksum for the object when you use the SDK. This
+    /// header will not provide any additional functionality if you don't use the SDK. When you send this
+    /// header, there must be a corresponding <code>x-amz-checksum-<i>algorithm</i>
+    /// </code> header
+    /// sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more
+    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
+    /// the <i>Amazon S3 User Guide</i>.</p>
+    /// <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code>
+    /// parameter. </p>
+    pub checksum_algorithm: Option<ChecksumAlgorithm>,
     /// <p>The MD5 hash of the <code>OwnershipControls</code> request body. </p>
     /// <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
     pub content_md5: Option<ContentMD5>,
     /// <p>The account ID of the expected bucket owner. If the account ID that you provide does not match the actual owner of the bucket, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).</p>
     pub expected_bucket_owner: Option<AccountId>,
-    /// <p>The <code>OwnershipControls</code> (BucketOwnerEnforced, BucketOwnerPreferred, or
-    /// ObjectWriter) that you want to apply to this Amazon S3 bucket.</p>
+    /// <p>The <code>OwnershipControls</code> (BucketOwnerEnforced, BucketOwnerPreferred, or ObjectWriter) that
+    /// you want to apply to this Amazon S3 bucket.</p>
     pub ownership_controls: OwnershipControls,
 }
 
@@ -17346,6 +17396,9 @@ impl fmt::Debug for PutBucketOwnershipControlsInput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut d = f.debug_struct("PutBucketOwnershipControlsInput");
         d.field("bucket", &self.bucket);
+        if let Some(ref val) = self.checksum_algorithm {
+            d.field("checksum_algorithm", val);
+        }
         if let Some(ref val) = self.content_md5 {
             d.field("content_md5", val);
         }
@@ -20953,9 +21006,17 @@ impl fmt::Debug for StatsEvent {
 pub struct StorageClass(Cow<'static, str>);
 
 impl StorageClass {
+    pub const AWS_BACKUP_LOW_COST_WARM: &'static str = "AWS_BACKUP_LOW_COST_WARM";
+
+    pub const AWS_BACKUP_WARM: &'static str = "AWS_BACKUP_WARM";
+
     pub const DEEP_ARCHIVE: &'static str = "DEEP_ARCHIVE";
 
     pub const EXPRESS_ONEZONE: &'static str = "EXPRESS_ONEZONE";
+
+    pub const FSX_ONTAP: &'static str = "FSX_ONTAP";
+
+    pub const FSX_OPENZFS: &'static str = "FSX_OPENZFS";
 
     pub const GLACIER: &'static str = "GLACIER";
 
@@ -25030,12 +25091,19 @@ pub mod builders {
     pub struct DeleteBucketIntelligentTieringConfigurationInputBuilder {
         bucket: Option<BucketName>,
 
+        expected_bucket_owner: Option<AccountId>,
+
         id: Option<IntelligentTieringId>,
     }
 
     impl DeleteBucketIntelligentTieringConfigurationInputBuilder {
         pub fn set_bucket(&mut self, field: BucketName) -> &mut Self {
             self.bucket = Some(field);
+            self
+        }
+
+        pub fn set_expected_bucket_owner(&mut self, field: Option<AccountId>) -> &mut Self {
+            self.expected_bucket_owner = field;
             self
         }
 
@@ -25051,6 +25119,12 @@ pub mod builders {
         }
 
         #[must_use]
+        pub fn expected_bucket_owner(mut self, field: Option<AccountId>) -> Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        #[must_use]
         pub fn id(mut self, field: IntelligentTieringId) -> Self {
             self.id = Some(field);
             self
@@ -25058,8 +25132,13 @@ pub mod builders {
 
         pub fn build(self) -> Result<DeleteBucketIntelligentTieringConfigurationInput, BuildError> {
             let bucket = self.bucket.ok_or_else(|| BuildError::missing_field("bucket"))?;
+            let expected_bucket_owner = self.expected_bucket_owner;
             let id = self.id.ok_or_else(|| BuildError::missing_field("id"))?;
-            Ok(DeleteBucketIntelligentTieringConfigurationInput { bucket, id })
+            Ok(DeleteBucketIntelligentTieringConfigurationInput {
+                bucket,
+                expected_bucket_owner,
+                id,
+            })
         }
     }
 
@@ -26091,12 +26170,19 @@ pub mod builders {
     pub struct GetBucketIntelligentTieringConfigurationInputBuilder {
         bucket: Option<BucketName>,
 
+        expected_bucket_owner: Option<AccountId>,
+
         id: Option<IntelligentTieringId>,
     }
 
     impl GetBucketIntelligentTieringConfigurationInputBuilder {
         pub fn set_bucket(&mut self, field: BucketName) -> &mut Self {
             self.bucket = Some(field);
+            self
+        }
+
+        pub fn set_expected_bucket_owner(&mut self, field: Option<AccountId>) -> &mut Self {
+            self.expected_bucket_owner = field;
             self
         }
 
@@ -26112,6 +26198,12 @@ pub mod builders {
         }
 
         #[must_use]
+        pub fn expected_bucket_owner(mut self, field: Option<AccountId>) -> Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        #[must_use]
         pub fn id(mut self, field: IntelligentTieringId) -> Self {
             self.id = Some(field);
             self
@@ -26119,8 +26211,13 @@ pub mod builders {
 
         pub fn build(self) -> Result<GetBucketIntelligentTieringConfigurationInput, BuildError> {
             let bucket = self.bucket.ok_or_else(|| BuildError::missing_field("bucket"))?;
+            let expected_bucket_owner = self.expected_bucket_owner;
             let id = self.id.ok_or_else(|| BuildError::missing_field("id"))?;
-            Ok(GetBucketIntelligentTieringConfigurationInput { bucket, id })
+            Ok(GetBucketIntelligentTieringConfigurationInput {
+                bucket,
+                expected_bucket_owner,
+                id,
+            })
         }
     }
 
@@ -28197,6 +28294,8 @@ pub mod builders {
         bucket: Option<BucketName>,
 
         continuation_token: Option<Token>,
+
+        expected_bucket_owner: Option<AccountId>,
     }
 
     impl ListBucketIntelligentTieringConfigurationsInputBuilder {
@@ -28207,6 +28306,11 @@ pub mod builders {
 
         pub fn set_continuation_token(&mut self, field: Option<Token>) -> &mut Self {
             self.continuation_token = field;
+            self
+        }
+
+        pub fn set_expected_bucket_owner(&mut self, field: Option<AccountId>) -> &mut Self {
+            self.expected_bucket_owner = field;
             self
         }
 
@@ -28222,12 +28326,20 @@ pub mod builders {
             self
         }
 
+        #[must_use]
+        pub fn expected_bucket_owner(mut self, field: Option<AccountId>) -> Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
         pub fn build(self) -> Result<ListBucketIntelligentTieringConfigurationsInput, BuildError> {
             let bucket = self.bucket.ok_or_else(|| BuildError::missing_field("bucket"))?;
             let continuation_token = self.continuation_token;
+            let expected_bucket_owner = self.expected_bucket_owner;
             Ok(ListBucketIntelligentTieringConfigurationsInput {
                 bucket,
                 continuation_token,
+                expected_bucket_owner,
             })
         }
     }
@@ -30495,6 +30607,8 @@ pub mod builders {
     pub struct PutBucketIntelligentTieringConfigurationInputBuilder {
         bucket: Option<BucketName>,
 
+        expected_bucket_owner: Option<AccountId>,
+
         id: Option<IntelligentTieringId>,
 
         intelligent_tiering_configuration: Option<IntelligentTieringConfiguration>,
@@ -30503,6 +30617,11 @@ pub mod builders {
     impl PutBucketIntelligentTieringConfigurationInputBuilder {
         pub fn set_bucket(&mut self, field: BucketName) -> &mut Self {
             self.bucket = Some(field);
+            self
+        }
+
+        pub fn set_expected_bucket_owner(&mut self, field: Option<AccountId>) -> &mut Self {
+            self.expected_bucket_owner = field;
             self
         }
 
@@ -30523,6 +30642,12 @@ pub mod builders {
         }
 
         #[must_use]
+        pub fn expected_bucket_owner(mut self, field: Option<AccountId>) -> Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        #[must_use]
         pub fn id(mut self, field: IntelligentTieringId) -> Self {
             self.id = Some(field);
             self
@@ -30536,12 +30661,14 @@ pub mod builders {
 
         pub fn build(self) -> Result<PutBucketIntelligentTieringConfigurationInput, BuildError> {
             let bucket = self.bucket.ok_or_else(|| BuildError::missing_field("bucket"))?;
+            let expected_bucket_owner = self.expected_bucket_owner;
             let id = self.id.ok_or_else(|| BuildError::missing_field("id"))?;
             let intelligent_tiering_configuration = self
                 .intelligent_tiering_configuration
                 .ok_or_else(|| BuildError::missing_field("intelligent_tiering_configuration"))?;
             Ok(PutBucketIntelligentTieringConfigurationInput {
                 bucket,
+                expected_bucket_owner,
                 id,
                 intelligent_tiering_configuration,
             })
@@ -30949,6 +31076,8 @@ pub mod builders {
     pub struct PutBucketOwnershipControlsInputBuilder {
         bucket: Option<BucketName>,
 
+        checksum_algorithm: Option<ChecksumAlgorithm>,
+
         content_md5: Option<ContentMD5>,
 
         expected_bucket_owner: Option<AccountId>,
@@ -30959,6 +31088,11 @@ pub mod builders {
     impl PutBucketOwnershipControlsInputBuilder {
         pub fn set_bucket(&mut self, field: BucketName) -> &mut Self {
             self.bucket = Some(field);
+            self
+        }
+
+        pub fn set_checksum_algorithm(&mut self, field: Option<ChecksumAlgorithm>) -> &mut Self {
+            self.checksum_algorithm = field;
             self
         }
 
@@ -30984,6 +31118,12 @@ pub mod builders {
         }
 
         #[must_use]
+        pub fn checksum_algorithm(mut self, field: Option<ChecksumAlgorithm>) -> Self {
+            self.checksum_algorithm = field;
+            self
+        }
+
+        #[must_use]
         pub fn content_md5(mut self, field: Option<ContentMD5>) -> Self {
             self.content_md5 = field;
             self
@@ -31003,6 +31143,7 @@ pub mod builders {
 
         pub fn build(self) -> Result<PutBucketOwnershipControlsInput, BuildError> {
             let bucket = self.bucket.ok_or_else(|| BuildError::missing_field("bucket"))?;
+            let checksum_algorithm = self.checksum_algorithm;
             let content_md5 = self.content_md5;
             let expected_bucket_owner = self.expected_bucket_owner;
             let ownership_controls = self
@@ -31010,6 +31151,7 @@ pub mod builders {
                 .ok_or_else(|| BuildError::missing_field("ownership_controls"))?;
             Ok(PutBucketOwnershipControlsInput {
                 bucket,
+                checksum_algorithm,
                 content_md5,
                 expected_bucket_owner,
                 ownership_controls,
@@ -35613,7 +35755,11 @@ impl DtoExt for DeleteBucketInput {
     }
 }
 impl DtoExt for DeleteBucketIntelligentTieringConfigurationInput {
-    fn ignore_empty_strings(&mut self) {}
+    fn ignore_empty_strings(&mut self) {
+        if self.expected_bucket_owner.as_deref() == Some("") {
+            self.expected_bucket_owner = None;
+        }
+    }
 }
 impl DtoExt for DeleteBucketInventoryConfigurationInput {
     fn ignore_empty_strings(&mut self) {
@@ -35961,7 +36107,11 @@ impl DtoExt for GetBucketEncryptionOutput {
     }
 }
 impl DtoExt for GetBucketIntelligentTieringConfigurationInput {
-    fn ignore_empty_strings(&mut self) {}
+    fn ignore_empty_strings(&mut self) {
+        if self.expected_bucket_owner.as_deref() == Some("") {
+            self.expected_bucket_owner = None;
+        }
+    }
 }
 impl DtoExt for GetBucketIntelligentTieringConfigurationOutput {
     fn ignore_empty_strings(&mut self) {
@@ -36957,6 +37107,9 @@ impl DtoExt for ListBucketIntelligentTieringConfigurationsInput {
     fn ignore_empty_strings(&mut self) {
         if self.continuation_token.as_deref() == Some("") {
             self.continuation_token = None;
+        }
+        if self.expected_bucket_owner.as_deref() == Some("") {
+            self.expected_bucket_owner = None;
         }
     }
 }
@@ -37968,6 +38121,9 @@ impl DtoExt for PutBucketEncryptionInput {
 }
 impl DtoExt for PutBucketIntelligentTieringConfigurationInput {
     fn ignore_empty_strings(&mut self) {
+        if self.expected_bucket_owner.as_deref() == Some("") {
+            self.expected_bucket_owner = None;
+        }
         self.intelligent_tiering_configuration.ignore_empty_strings();
     }
 }
@@ -38042,6 +38198,11 @@ impl DtoExt for PutBucketNotificationConfigurationInput {
 }
 impl DtoExt for PutBucketOwnershipControlsInput {
     fn ignore_empty_strings(&mut self) {
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
+        }
         if self.content_md5.as_deref() == Some("") {
             self.content_md5 = None;
         }

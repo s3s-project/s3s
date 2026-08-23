@@ -3868,28 +3868,56 @@ pub trait S3: Send + Sync + 'static {
         Err(s3_error!(NotImplemented, "ListBucketInventoryConfigurations is not implemented yet"))
     }
 
+    /// <p>Lists the metrics configurations for the bucket. The metrics configurations are only for the request
+    /// metrics of the bucket and do not provide information on daily storage metrics. You can have up to 1,000
+    /// configurations per bucket.</p>
     /// <note>
-    /// <p>This operation is not supported for directory buckets.</p>
+    /// <p>
+    /// <b>Directory buckets </b> - For directory buckets, you must make requests for this API operation to the Regional endpoint. These endpoints support path-style requests in the format <code>https://s3express-control.<i>region-code</i>.amazonaws.com/<i>bucket-name</i>
+    /// </code>. Virtual-hosted-style requests aren't supported.
+    /// For more information about endpoints in Availability Zones, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/endpoint-directory-buckets-AZ.html">Regional and Zonal endpoints for directory buckets in Availability Zones</a> in the
+    /// <i>Amazon S3 User Guide</i>. For more information about endpoints in Local Zones, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-lzs-for-directory-buckets.html">Concepts for directory buckets in Local Zones</a> in the
+    /// <i>Amazon S3 User Guide</i>.</p>
     /// </note>
-    /// <p>Lists the metrics configurations for the bucket. The metrics configurations are only for
-    /// the request metrics of the bucket and do not provide information on daily storage metrics.
-    /// You can have up to 1,000 configurations per bucket.</p>
-    /// <p>This action supports list pagination and does not return more than 100 configurations at
-    /// a time. Always check the <code>IsTruncated</code> element in the response. If there are no
-    /// more configurations to list, <code>IsTruncated</code> is set to false. If there are more
-    /// configurations to list, <code>IsTruncated</code> is set to true, and there is a value in
-    /// <code>NextContinuationToken</code>. You use the <code>NextContinuationToken</code> value
-    /// to continue the pagination of the list by passing the value in
-    /// <code>continuation-token</code> in the request to <code>GET</code> the next page.</p>
+    /// <p>This action supports list pagination and does not return more than 100 configurations at a time.
+    /// Always check the <code>IsTruncated</code> element in the response. If there are no more configurations
+    /// to list, <code>IsTruncated</code> is set to false. If there are more configurations to list,
+    /// <code>IsTruncated</code> is set to true, and there is a value in <code>NextContinuationToken</code>.
+    /// You use the <code>NextContinuationToken</code> value to continue the pagination of the list by passing
+    /// the value in <code>continuation-token</code> in the request to <code>GET</code> the next page.</p>
+    /// <dl>
+    /// <dt>Permissions</dt>
+    /// <dd>
     /// <p>To use this operation, you must have permissions to perform the
-    /// <code>s3:GetMetricsConfiguration</code> action. The bucket owner has this permission by
-    /// default. The bucket owner can grant this permission to others. For more information about
-    /// permissions, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-actions.html#using-with-s3-actions-related-to-bucket-subresources">Permissions Related to Bucket Subresource Operations</a> and <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html">Managing
-    /// Access Permissions to Your Amazon S3 Resources</a>.</p>
-    /// <p>For more information about metrics configurations and CloudWatch request metrics, see
-    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/cloudwatch-monitoring.html">Monitoring Metrics with Amazon CloudWatch</a>.</p>
-    /// <p>The following operations are related to
-    /// <code>ListBucketMetricsConfigurations</code>:</p>
+    /// <code>s3:GetMetricsConfiguration</code> action. The bucket owner has this permission by default. The
+    /// bucket owner can grant this permission to others. For more information about permissions, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-actions.html#using-with-s3-actions-related-to-bucket-subresources">Permissions Related to Bucket Subresource Operations</a> and <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html">Managing Access Permissions to Your Amazon S3
+    /// Resources</a>.</p>
+    /// <ul>
+    /// <li>
+    /// <p>
+    /// <b>General purpose bucket permissions</b> - The
+    /// <code>s3:GetMetricsConfiguration</code> permission is required in a policy. For more information
+    /// about general purpose buckets permissions, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/using-iam-policies.html">Using Bucket Policies and User
+    /// Policies</a> in the <i>Amazon S3 User Guide</i>.</p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <b>Directory bucket permissions</b> - To grant access to
+    /// this API operation, you must have the <code>s3express:GetMetricsConfiguration</code> permission in
+    /// an IAM identity-based policy instead of a bucket policy. Cross-account access to this API operation isn't supported. This operation can only be performed by the Amazon Web Services account that owns the resource.
+    /// For more information about directory bucket policies and permissions, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-express-security-iam.html">Amazon Web Services Identity and Access Management (IAM) for S3 Express One Zone</a> in the <i>Amazon S3 User Guide</i>.</p>
+    /// </li>
+    /// </ul>
+    /// </dd>
+    /// <dt>HTTP Host header syntax</dt>
+    /// <dd>
+    /// <p>
+    /// <b>Directory buckets </b> - The HTTP Host header syntax is <code>s3express-control.<i>region-code</i>.amazonaws.com</code>.</p>
+    /// </dd>
+    /// </dl>
+    /// <p>For more information about metrics configurations and CloudWatch request metrics, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/cloudwatch-monitoring.html">Monitoring Metrics with
+    /// Amazon CloudWatch</a>.</p>
+    /// <p>The following operations are related to <code>ListBucketMetricsConfigurations</code>:</p>
     /// <ul>
     /// <li>
     /// <p>
@@ -3907,6 +3935,9 @@ pub trait S3: Send + Sync + 'static {
     /// </p>
     /// </li>
     /// </ul>
+    /// <important>
+    /// <p>You must URL encode any signed header values that contain spaces. For example, if your header value is <code>my  file.txt</code>, containing two spaces after <code>my</code>, you must URL encode this value to <code>my%20%20file.txt</code>.</p>
+    /// </important>
     async fn list_bucket_metrics_configurations(
         &self,
         _req: S3Request<ListBucketMetricsConfigurationsInput>,
@@ -5487,12 +5518,10 @@ pub trait S3: Send + Sync + 'static {
     /// <note>
     /// <p>This operation is not supported for directory buckets.</p>
     /// </note>
-    /// <p>Creates or modifies <code>OwnershipControls</code> for an Amazon S3 bucket. To use this
-    /// operation, you must have the <code>s3:PutBucketOwnershipControls</code> permission. For
-    /// more information about Amazon S3 permissions, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/user-guide/using-with-s3-actions.html">Specifying permissions in a
-    /// policy</a>. </p>
-    /// <p>For information about Amazon S3 Object Ownership, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/user-guide/about-object-ownership.html">Using object
-    /// ownership</a>. </p>
+    /// <p>Creates or modifies <code>OwnershipControls</code> for an Amazon S3 bucket. To use this operation, you
+    /// must have the <code>s3:PutBucketOwnershipControls</code> permission. For more information about Amazon S3
+    /// permissions, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/user-guide/using-with-s3-actions.html">Specifying permissions in a policy</a>. </p>
+    /// <p>For information about Amazon S3 Object Ownership, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/user-guide/about-object-ownership.html">Using object ownership</a>. </p>
     /// <p>The following operations are related to <code>PutBucketOwnershipControls</code>:</p>
     /// <ul>
     /// <li>
@@ -5506,6 +5535,9 @@ pub trait S3: Send + Sync + 'static {
     /// </p>
     /// </li>
     /// </ul>
+    /// <important>
+    /// <p>You must URL encode any signed header values that contain spaces. For example, if your header value is <code>my  file.txt</code>, containing two spaces after <code>my</code>, you must URL encode this value to <code>my%20%20file.txt</code>.</p>
+    /// </important>
     async fn put_bucket_ownership_controls(
         &self,
         _req: S3Request<PutBucketOwnershipControlsInput>,

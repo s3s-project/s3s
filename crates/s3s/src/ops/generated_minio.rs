@@ -1424,9 +1424,15 @@ impl DeleteBucketIntelligentTieringConfiguration {
     pub fn deserialize_http(req: &mut http::Request) -> S3Result<DeleteBucketIntelligentTieringConfigurationInput> {
         let bucket = http::unwrap_bucket(req);
 
+        let expected_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_EXPECTED_BUCKET_OWNER)?;
+
         let id: IntelligentTieringId = http::parse_query(req, "id")?;
 
-        Ok(DeleteBucketIntelligentTieringConfigurationInput { bucket, id })
+        Ok(DeleteBucketIntelligentTieringConfigurationInput {
+            bucket,
+            expected_bucket_owner,
+            id,
+        })
     }
 
     pub fn serialize_http(_: DeleteBucketIntelligentTieringConfigurationOutput) -> S3Result<http::Response> {
@@ -2413,9 +2419,15 @@ impl GetBucketIntelligentTieringConfiguration {
     pub fn deserialize_http(req: &mut http::Request) -> S3Result<GetBucketIntelligentTieringConfigurationInput> {
         let bucket = http::unwrap_bucket(req);
 
+        let expected_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_EXPECTED_BUCKET_OWNER)?;
+
         let id: IntelligentTieringId = http::parse_query(req, "id")?;
 
-        Ok(GetBucketIntelligentTieringConfigurationInput { bucket, id })
+        Ok(GetBucketIntelligentTieringConfigurationInput {
+            bucket,
+            expected_bucket_owner,
+            id,
+        })
     }
 
     pub fn serialize_http(x: GetBucketIntelligentTieringConfigurationOutput) -> S3Result<http::Response> {
@@ -4143,9 +4155,12 @@ impl ListBucketIntelligentTieringConfigurations {
 
         let continuation_token: Option<Token> = http::parse_opt_query(req, "continuation-token")?;
 
+        let expected_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_EXPECTED_BUCKET_OWNER)?;
+
         Ok(ListBucketIntelligentTieringConfigurationsInput {
             bucket,
             continuation_token,
+            expected_bucket_owner,
         })
     }
 
@@ -5077,12 +5092,15 @@ impl PutBucketIntelligentTieringConfiguration {
     pub fn deserialize_http(req: &mut http::Request) -> S3Result<PutBucketIntelligentTieringConfigurationInput> {
         let bucket = http::unwrap_bucket(req);
 
+        let expected_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_EXPECTED_BUCKET_OWNER)?;
+
         let id: IntelligentTieringId = http::parse_query(req, "id")?;
 
         let intelligent_tiering_configuration: IntelligentTieringConfiguration = http::take_xml_body(req)?;
 
         Ok(PutBucketIntelligentTieringConfigurationInput {
             bucket,
+            expected_bucket_owner,
             id,
             intelligent_tiering_configuration,
         })
@@ -5412,6 +5430,8 @@ impl PutBucketOwnershipControls {
     pub fn deserialize_http(req: &mut http::Request) -> S3Result<PutBucketOwnershipControlsInput> {
         let bucket = http::unwrap_bucket(req);
 
+        let checksum_algorithm: Option<ChecksumAlgorithm> = http::parse_checksum_algorithm_header(req)?;
+
         let content_md5: Option<ContentMD5> = http::parse_opt_header(req, &CONTENT_MD5)?;
 
         let expected_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_EXPECTED_BUCKET_OWNER)?;
@@ -5420,6 +5440,7 @@ impl PutBucketOwnershipControls {
 
         Ok(PutBucketOwnershipControlsInput {
             bucket,
+            checksum_algorithm,
             content_md5,
             expected_bucket_owner,
             ownership_controls,

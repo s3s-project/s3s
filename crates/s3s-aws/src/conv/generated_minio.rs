@@ -390,6 +390,7 @@ impl AwsConversion for s3s::dto::BucketLocationConstraint {
             aws_sdk_s3::types::BucketLocationConstraint::Eu => Self::from_static(Self::EU),
             aws_sdk_s3::types::BucketLocationConstraint::AfSouth1 => Self::from_static(Self::AF_SOUTH_1),
             aws_sdk_s3::types::BucketLocationConstraint::ApEast1 => Self::from_static(Self::AP_EAST_1),
+            aws_sdk_s3::types::BucketLocationConstraint::ApEast2 => Self::from_static(Self::AP_EAST_2),
             aws_sdk_s3::types::BucketLocationConstraint::ApNortheast1 => Self::from_static(Self::AP_NORTHEAST_1),
             aws_sdk_s3::types::BucketLocationConstraint::ApNortheast2 => Self::from_static(Self::AP_NORTHEAST_2),
             aws_sdk_s3::types::BucketLocationConstraint::ApNortheast3 => Self::from_static(Self::AP_NORTHEAST_3),
@@ -400,7 +401,10 @@ impl AwsConversion for s3s::dto::BucketLocationConstraint {
             aws_sdk_s3::types::BucketLocationConstraint::ApSoutheast3 => Self::from_static(Self::AP_SOUTHEAST_3),
             aws_sdk_s3::types::BucketLocationConstraint::ApSoutheast4 => Self::from_static(Self::AP_SOUTHEAST_4),
             aws_sdk_s3::types::BucketLocationConstraint::ApSoutheast5 => Self::from_static(Self::AP_SOUTHEAST_5),
+            aws_sdk_s3::types::BucketLocationConstraint::ApSoutheast6 => Self::from_static(Self::AP_SOUTHEAST_6),
+            aws_sdk_s3::types::BucketLocationConstraint::ApSoutheast7 => Self::from_static(Self::AP_SOUTHEAST_7),
             aws_sdk_s3::types::BucketLocationConstraint::CaCentral1 => Self::from_static(Self::CA_CENTRAL_1),
+            aws_sdk_s3::types::BucketLocationConstraint::CaWest1 => Self::from_static(Self::CA_WEST_1),
             aws_sdk_s3::types::BucketLocationConstraint::CnNorth1 => Self::from_static(Self::CN_NORTH_1),
             aws_sdk_s3::types::BucketLocationConstraint::CnNorthwest1 => Self::from_static(Self::CN_NORTHWEST_1),
             aws_sdk_s3::types::BucketLocationConstraint::EuCentral1 => Self::from_static(Self::EU_CENTRAL_1),
@@ -414,6 +418,7 @@ impl AwsConversion for s3s::dto::BucketLocationConstraint {
             aws_sdk_s3::types::BucketLocationConstraint::IlCentral1 => Self::from_static(Self::IL_CENTRAL_1),
             aws_sdk_s3::types::BucketLocationConstraint::MeCentral1 => Self::from_static(Self::ME_CENTRAL_1),
             aws_sdk_s3::types::BucketLocationConstraint::MeSouth1 => Self::from_static(Self::ME_SOUTH_1),
+            aws_sdk_s3::types::BucketLocationConstraint::MxCentral1 => Self::from_static(Self::MX_CENTRAL_1),
             aws_sdk_s3::types::BucketLocationConstraint::SaEast1 => Self::from_static(Self::SA_EAST_1),
             aws_sdk_s3::types::BucketLocationConstraint::UsEast2 => Self::from_static(Self::US_EAST_2),
             aws_sdk_s3::types::BucketLocationConstraint::UsGovEast1 => Self::from_static(Self::US_GOV_EAST_1),
@@ -1629,6 +1634,7 @@ impl AwsConversion for s3s::dto::DeleteBucketIntelligentTieringConfigurationInpu
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
         Ok(Self {
             bucket: unwrap_from_aws(x.bucket, "bucket")?,
+            expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
             id: unwrap_from_aws(x.id, "id")?,
         })
     }
@@ -1636,6 +1642,7 @@ impl AwsConversion for s3s::dto::DeleteBucketIntelligentTieringConfigurationInpu
     fn try_into_aws(x: Self) -> S3Result<Self::Target> {
         let mut y = Self::Target::builder();
         y = y.set_bucket(Some(try_into_aws(x.bucket)?));
+        y = y.set_expected_bucket_owner(try_into_aws(x.expected_bucket_owner)?);
         y = y.set_id(Some(try_into_aws(x.id)?));
         y.build().map_err(S3Error::internal_error)
     }
@@ -2763,6 +2770,7 @@ impl AwsConversion for s3s::dto::GetBucketIntelligentTieringConfigurationInput {
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
         Ok(Self {
             bucket: unwrap_from_aws(x.bucket, "bucket")?,
+            expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
             id: unwrap_from_aws(x.id, "id")?,
         })
     }
@@ -2770,6 +2778,7 @@ impl AwsConversion for s3s::dto::GetBucketIntelligentTieringConfigurationInput {
     fn try_into_aws(x: Self) -> S3Result<Self::Target> {
         let mut y = Self::Target::builder();
         y = y.set_bucket(Some(try_into_aws(x.bucket)?));
+        y = y.set_expected_bucket_owner(try_into_aws(x.expected_bucket_owner)?);
         y = y.set_id(Some(try_into_aws(x.id)?));
         y.build().map_err(S3Error::internal_error)
     }
@@ -4539,6 +4548,9 @@ impl AwsConversion for s3s::dto::InventoryOptionalField {
             }
             aws_sdk_s3::types::InventoryOptionalField::IsMultipartUploaded => Self::from_static(Self::IS_MULTIPART_UPLOADED),
             aws_sdk_s3::types::InventoryOptionalField::LastModifiedDate => Self::from_static(Self::LAST_MODIFIED_DATE),
+            aws_sdk_s3::types::InventoryOptionalField::LifecycleExpirationDate => {
+                Self::from_static(Self::LIFECYCLE_EXPIRATION_DATE)
+            }
             aws_sdk_s3::types::InventoryOptionalField::ObjectAccessControlList => {
                 Self::from_static(Self::OBJECT_ACCESS_CONTROL_LIST)
             }
@@ -4838,6 +4850,7 @@ impl AwsConversion for s3s::dto::ListBucketIntelligentTieringConfigurationsInput
         Ok(Self {
             bucket: unwrap_from_aws(x.bucket, "bucket")?,
             continuation_token: try_from_aws(x.continuation_token)?,
+            expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
         })
     }
 
@@ -4845,6 +4858,7 @@ impl AwsConversion for s3s::dto::ListBucketIntelligentTieringConfigurationsInput
         let mut y = Self::Target::builder();
         y = y.set_bucket(Some(try_into_aws(x.bucket)?));
         y = y.set_continuation_token(try_into_aws(x.continuation_token)?);
+        y = y.set_expected_bucket_owner(try_into_aws(x.expected_bucket_owner)?);
         y.build().map_err(S3Error::internal_error)
     }
 }
@@ -6200,8 +6214,12 @@ impl AwsConversion for s3s::dto::ObjectStorageClass {
 
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
         Ok(match x {
+            aws_sdk_s3::types::ObjectStorageClass::AwsBackupLowCostWarm => Self::from_static(Self::AWS_BACKUP_LOW_COST_WARM),
+            aws_sdk_s3::types::ObjectStorageClass::AwsBackupWarm => Self::from_static(Self::AWS_BACKUP_WARM),
             aws_sdk_s3::types::ObjectStorageClass::DeepArchive => Self::from_static(Self::DEEP_ARCHIVE),
             aws_sdk_s3::types::ObjectStorageClass::ExpressOnezone => Self::from_static(Self::EXPRESS_ONEZONE),
+            aws_sdk_s3::types::ObjectStorageClass::FsxOntap => Self::from_static(Self::FSX_ONTAP),
+            aws_sdk_s3::types::ObjectStorageClass::FsxOpenzfs => Self::from_static(Self::FSX_OPENZFS),
             aws_sdk_s3::types::ObjectStorageClass::Glacier => Self::from_static(Self::GLACIER),
             aws_sdk_s3::types::ObjectStorageClass::GlacierIr => Self::from_static(Self::GLACIER_IR),
             aws_sdk_s3::types::ObjectStorageClass::IntelligentTiering => Self::from_static(Self::INTELLIGENT_TIERING),
@@ -6841,6 +6859,7 @@ impl AwsConversion for s3s::dto::PutBucketIntelligentTieringConfigurationInput {
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
         Ok(Self {
             bucket: unwrap_from_aws(x.bucket, "bucket")?,
+            expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
             id: unwrap_from_aws(x.id, "id")?,
             intelligent_tiering_configuration: unwrap_from_aws(
                 x.intelligent_tiering_configuration,
@@ -6852,6 +6871,7 @@ impl AwsConversion for s3s::dto::PutBucketIntelligentTieringConfigurationInput {
     fn try_into_aws(x: Self) -> S3Result<Self::Target> {
         let mut y = Self::Target::builder();
         y = y.set_bucket(Some(try_into_aws(x.bucket)?));
+        y = y.set_expected_bucket_owner(try_into_aws(x.expected_bucket_owner)?);
         y = y.set_id(Some(try_into_aws(x.id)?));
         y = y.set_intelligent_tiering_configuration(Some(try_into_aws(x.intelligent_tiering_configuration)?));
         y.build().map_err(S3Error::internal_error)
@@ -7082,6 +7102,7 @@ impl AwsConversion for s3s::dto::PutBucketOwnershipControlsInput {
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
         Ok(Self {
             bucket: unwrap_from_aws(x.bucket, "bucket")?,
+            checksum_algorithm: try_from_aws(x.checksum_algorithm)?,
             content_md5: try_from_aws(x.content_md5)?,
             expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
             ownership_controls: unwrap_from_aws(x.ownership_controls, "ownership_controls")?,
@@ -7091,6 +7112,7 @@ impl AwsConversion for s3s::dto::PutBucketOwnershipControlsInput {
     fn try_into_aws(x: Self) -> S3Result<Self::Target> {
         let mut y = Self::Target::builder();
         y = y.set_bucket(Some(try_into_aws(x.bucket)?));
+        y = y.set_checksum_algorithm(try_into_aws(x.checksum_algorithm)?);
         y = y.set_content_md5(try_into_aws(x.content_md5)?);
         y = y.set_expected_bucket_owner(try_into_aws(x.expected_bucket_owner)?);
         y = y.set_ownership_controls(Some(try_into_aws(x.ownership_controls)?));
@@ -8781,8 +8803,12 @@ impl AwsConversion for s3s::dto::StorageClass {
 
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
         Ok(match x {
+            aws_sdk_s3::types::StorageClass::AwsBackupLowCostWarm => Self::from_static(Self::AWS_BACKUP_LOW_COST_WARM),
+            aws_sdk_s3::types::StorageClass::AwsBackupWarm => Self::from_static(Self::AWS_BACKUP_WARM),
             aws_sdk_s3::types::StorageClass::DeepArchive => Self::from_static(Self::DEEP_ARCHIVE),
             aws_sdk_s3::types::StorageClass::ExpressOnezone => Self::from_static(Self::EXPRESS_ONEZONE),
+            aws_sdk_s3::types::StorageClass::FsxOntap => Self::from_static(Self::FSX_ONTAP),
+            aws_sdk_s3::types::StorageClass::FsxOpenzfs => Self::from_static(Self::FSX_OPENZFS),
             aws_sdk_s3::types::StorageClass::Glacier => Self::from_static(Self::GLACIER),
             aws_sdk_s3::types::StorageClass::GlacierIr => Self::from_static(Self::GLACIER_IR),
             aws_sdk_s3::types::StorageClass::IntelligentTiering => Self::from_static(Self::INTELLIGENT_TIERING),
