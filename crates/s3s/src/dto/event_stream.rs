@@ -106,17 +106,13 @@ impl ByteStream for Wrapper {}
 
 #[cfg(test)]
 fn event_into_bytes(ev: S3Result<SelectObjectContentEvent>) -> Result<Bytes, SerError> {
-    let chunks = event_into_chunks(ev)?;
-    if chunks.len() == 1 {
-        return Ok(chunks.into_iter().next().expect("one chunk"));
+    match ev {
+        Ok(event) => event.into_message().serialize(),
+        Err(err) => {
+            debug!(?err, "SelectObjectContentEventStream: Request Level Error");
+            request_level_error(&err).serialize()
+        }
     }
-
-    let total_len = chunks.iter().map(Bytes::len).sum();
-    let mut buf = Vec::with_capacity(total_len);
-    for chunk in chunks {
-        buf.put(chunk.as_ref());
-    }
-    Ok(buf.into())
 }
 
 fn event_into_chunks(ev: S3Result<SelectObjectContentEvent>) -> Result<SmallVec<[Bytes; 3]>, SerError> {
