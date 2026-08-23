@@ -14,6 +14,7 @@ use crate::stream::DynByteStream;
 use crate::{S3ErrorCode, xml};
 
 use std::fmt;
+use std::mem;
 use std::num::TryFromIntError;
 use std::pin::Pin;
 use std::task::ready;
@@ -42,6 +43,7 @@ impl SelectObjectContentEventStream {
         Box::pin(Wrapper {
             inner: self,
             pending: SmallVec::new(),
+            pending_idx: 0,
         })
     }
 }
@@ -69,6 +71,7 @@ impl fmt::Debug for SelectObjectContentEventStream {
 struct Wrapper {
     inner: SelectObjectContentEventStream,
     pending: SmallVec<[Bytes; 3]>,
+    pending_idx: usize,
 }
 
 impl Stream for Wrapper {
@@ -76,7 +79,7 @@ impl Stream for Wrapper {
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
-            if let Some(bytes) = self.pending.pop() {
+            if let Some(bytes) = self.next_pending() {
                 return Poll::Ready(Some(Ok(bytes)));
             }
 
@@ -86,9 +89,9 @@ impl Stream for Wrapper {
                 Some(ev) => {
                     let result = event_into_chunks(ev);
                     match result {
-                        Ok(mut chunks) => {
-                            chunks.reverse();
+                        Ok(chunks) => {
                             self.pending = chunks;
+                            self.pending_idx = 0;
                         }
                         Err(err) => {
                             debug!("SelectObjectContentEventStream: Error: {}", err);
@@ -103,6 +106,26 @@ impl Stream for Wrapper {
 }
 
 impl ByteStream for Wrapper {}
+
+impl Wrapper {
+    fn next_pending(&mut self) -> Option<Bytes> {
+        if self.pending_idx == self.pending.len() {
+            self.pending.clear();
+            self.pending_idx = 0;
+            return None;
+        }
+
+        let bytes = mem::take(&mut self.pending[self.pending_idx]);
+        self.pending_idx += 1;
+
+        if self.pending_idx == self.pending.len() {
+            self.pending.clear();
+            self.pending_idx = 0;
+        }
+
+        Some(bytes)
+    }
+}
 
 #[cfg(test)]
 fn event_into_bytes(ev: S3Result<SelectObjectContentEvent>) -> Result<Bytes, SerError> {
@@ -396,6 +419,7 @@ mod tests {
         Wrapper {
             inner: stream,
             pending: SmallVec::new(),
+            pending_idx: 0,
         }
     }
 
