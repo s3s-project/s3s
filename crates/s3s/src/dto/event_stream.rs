@@ -7,6 +7,7 @@ use super::{ContinuationEvent, EndEvent, ProgressEvent, RecordsEvent, StatsEvent
 use crate::S3Error;
 use crate::S3Result;
 use crate::StdError;
+use crate::crypto::Checksum;
 use crate::crypto::Crc32;
 use crate::stream::ByteStream;
 use crate::stream::DynByteStream;
@@ -38,7 +39,10 @@ impl SelectObjectContentEventStream {
 
     #[must_use]
     pub fn into_byte_stream(self) -> DynByteStream {
-        Box::pin(Wrapper(self))
+        Box::pin(Wrapper {
+            inner: self,
+            pending: SmallVec::new(),
+        })
     }
 }
 
@@ -62,23 +66,38 @@ impl fmt::Debug for SelectObjectContentEventStream {
     }
 }
 
-struct Wrapper(SelectObjectContentEventStream);
+struct Wrapper {
+    inner: SelectObjectContentEventStream,
+    pending: SmallVec<[Bytes; 3]>,
+}
 
 impl Stream for Wrapper {
     type Item = Result<Bytes, StdError>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let item = ready!(Pin::new(&mut self.0).poll_next(cx));
-        debug!(?item, "SelectObjectContentEventStream");
-        match item {
-            Some(ev) => {
-                let result = event_into_bytes(ev);
-                if let Err(ref err) = result {
-                    debug!("SelectObjectContentEventStream: Error: {}", err);
-                }
-                Poll::Ready(Some(result.map_err(|e| Box::new(e) as StdError)))
+        loop {
+            if let Some(bytes) = self.pending.pop() {
+                return Poll::Ready(Some(Ok(bytes)));
             }
-            None => Poll::Ready(None),
+
+            let item = ready!(Pin::new(&mut self.inner).poll_next(cx));
+            debug!(?item, "SelectObjectContentEventStream");
+            match item {
+                Some(ev) => {
+                    let result = event_into_chunks(ev);
+                    match result {
+                        Ok(mut chunks) => {
+                            chunks.reverse();
+                            self.pending = chunks;
+                        }
+                        Err(err) => {
+                            debug!("SelectObjectContentEventStream: Error: {}", err);
+                            return Poll::Ready(Some(Err(Box::new(err) as StdError)));
+                        }
+                    }
+                }
+                None => return Poll::Ready(None),
+            }
         }
     }
 }
@@ -86,11 +105,25 @@ impl Stream for Wrapper {
 impl ByteStream for Wrapper {}
 
 fn event_into_bytes(ev: S3Result<SelectObjectContentEvent>) -> Result<Bytes, SerError> {
+    let chunks = event_into_chunks(ev)?;
+    if chunks.len() == 1 {
+        return Ok(chunks.into_iter().next().expect("one chunk"));
+    }
+
+    let total_len = chunks.iter().map(Bytes::len).sum();
+    let mut buf = Vec::with_capacity(total_len);
+    for chunk in chunks {
+        buf.put(chunk.as_ref());
+    }
+    Ok(buf.into())
+}
+
+fn event_into_chunks(ev: S3Result<SelectObjectContentEvent>) -> Result<SmallVec<[Bytes; 3]>, SerError> {
     match ev {
-        Ok(event) => event.into_message().serialize(),
+        Ok(event) => event.into_message().serialize_chunks(),
         Err(err) => {
             debug!(?err, "SelectObjectContentEventStream: Request Level Error");
-            request_level_error(&err).serialize()
+            request_level_error(&err).serialize_chunks()
         }
     }
 }
@@ -117,6 +150,20 @@ enum SerError {
 impl Message {
     /// <https://docs.aws.amazon.com/AmazonS3/latest/API/RESTSelectObjectAppendix.html>
     fn serialize(self) -> Result<Bytes, SerError> {
+        let chunks = self.serialize_chunks()?;
+        if chunks.len() == 1 {
+            return Ok(chunks.into_iter().next().expect("one chunk"));
+        }
+
+        let total_len = chunks.iter().map(Bytes::len).sum();
+        let mut buf = Vec::with_capacity(total_len);
+        for chunk in chunks {
+            buf.put(chunk.as_ref());
+        }
+        Ok(buf.into())
+    }
+
+    fn serialize_chunks(self) -> Result<SmallVec<[Bytes; 3]>, SerError> {
         let total_byte_length: u32;
         let headers_byte_length: u32;
         {
@@ -137,7 +184,8 @@ impl Message {
             headers_byte_length = u32::try_from(headers_len.ok_or(SerError::LengthOverflow)?)?;
         }
 
-        let mut buf: Vec<u8> = Vec::with_capacity(total_byte_length as usize);
+        let payload = self.payload.filter(|payload| !payload.is_empty());
+        let mut buf: Vec<u8> = Vec::with_capacity(12 + headers_byte_length as usize);
         buf.put_u32(total_byte_length);
         buf.put_u32(headers_byte_length);
 
@@ -156,14 +204,23 @@ impl Message {
             buf.put(&*h.value);
         }
 
-        if let Some(payload) = self.payload.as_deref() {
-            buf.put(payload);
+        let mut chunks = SmallVec::new();
+
+        if let Some(payload) = payload {
+            let mut message_crc = Crc32::new();
+            message_crc.update(&buf);
+            message_crc.update(&payload);
+
+            chunks.push(buf.into());
+            chunks.push(payload);
+            chunks.push(Bytes::copy_from_slice(&message_crc.finalize()));
+        } else {
+            let message_crc = Crc32::checksum_u32(&buf);
+            buf.put_u32(message_crc);
+            chunks.push(buf.into());
         }
 
-        let message_crc = Crc32::checksum_u32(&buf);
-        buf.put_u32(message_crc);
-
-        Ok(buf.into())
+        Ok(chunks)
     }
 }
 
@@ -336,6 +393,13 @@ mod tests {
         (headers, payload)
     }
 
+    fn wrapper(stream: SelectObjectContentEventStream) -> Wrapper {
+        Wrapper {
+            inner: stream,
+            pending: SmallVec::new(),
+        }
+    }
+
     #[test]
     fn continuation_event_message() {
         let event = SelectObjectContentEvent::Cont(ContinuationEvent {});
@@ -501,6 +565,28 @@ mod tests {
     }
 
     #[test]
+    fn message_serialize_chunks_reuses_payload() {
+        let payload = Bytes::from(vec![1, 2, 3, 4]);
+        let payload_ptr = payload.as_ptr();
+        let msg = Message {
+            headers: const_headers(&[(":event-type", "Records")]),
+            payload: Some(payload.clone()),
+        };
+
+        let chunks = msg.serialize_chunks().unwrap();
+        assert_eq!(chunks.len(), 3);
+        assert_eq!(chunks[1], payload);
+        assert_eq!(chunks[1].as_ptr(), payload_ptr);
+
+        let mut bytes = Vec::new();
+        for chunk in chunks {
+            bytes.put(chunk.as_ref());
+        }
+        let (_, parsed_payload) = parse_message(&bytes);
+        assert_eq!(parsed_payload.unwrap(), [1, 2, 3, 4]);
+    }
+
+    #[test]
     fn stream_debug() {
         let stream = SelectObjectContentEventStream::new(futures::stream::empty());
         let debug = format!("{stream:?}");
@@ -541,7 +627,7 @@ mod tests {
             Ok(SelectObjectContentEvent::End(EndEvent {})),
         ];
         let stream = SelectObjectContentEventStream::new(futures::stream::iter(events));
-        let mut wrapper = Wrapper(stream);
+        let mut wrapper = wrapper(stream);
         let first = wrapper.next().await;
         assert!(first.is_some());
         assert!(first.unwrap().is_ok());
@@ -557,7 +643,7 @@ mod tests {
     async fn wrapper_stream_handles_errors() {
         let events: Vec<S3Result<SelectObjectContentEvent>> = vec![Err(S3Error::new(S3ErrorCode::InternalError))];
         let stream = SelectObjectContentEventStream::new(futures::stream::iter(events));
-        let mut wrapper = Wrapper(stream);
+        let mut wrapper = wrapper(stream);
         let result = wrapper.next().await.unwrap();
         assert!(result.is_ok()); // errors are serialized as messages, not stream errors
     }
@@ -570,6 +656,32 @@ mod tests {
         let chunk = byte_stream.next().await;
         assert!(chunk.is_some());
         assert!(chunk.unwrap().is_ok());
+    }
+
+    #[tokio::test]
+    async fn into_byte_stream_reuses_records_payload_chunk() {
+        let payload = Bytes::from(vec![1, 2, 3, 4]);
+        let payload_ptr = payload.as_ptr();
+        let events: Vec<S3Result<SelectObjectContentEvent>> = vec![Ok(SelectObjectContentEvent::Records(RecordsEvent {
+            payload: Some(payload.clone()),
+        }))];
+        let stream = SelectObjectContentEventStream::new(futures::stream::iter(events));
+        let mut byte_stream = stream.into_byte_stream();
+
+        let head = byte_stream.next().await.unwrap().unwrap();
+        let payload_chunk = byte_stream.next().await.unwrap().unwrap();
+        let trailer = byte_stream.next().await.unwrap().unwrap();
+        assert!(byte_stream.next().await.is_none());
+
+        assert_eq!(payload_chunk, payload);
+        assert_eq!(payload_chunk.as_ptr(), payload_ptr);
+
+        let mut bytes = Vec::new();
+        bytes.put(head.as_ref());
+        bytes.put(payload_chunk.as_ref());
+        bytes.put(trailer.as_ref());
+        let (_, parsed_payload) = parse_message(&bytes);
+        assert_eq!(parsed_payload.unwrap(), [1, 2, 3, 4]);
     }
 
     #[test]
