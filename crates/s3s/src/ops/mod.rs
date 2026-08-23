@@ -67,6 +67,13 @@ use tracing::{debug, error, warn};
 pub trait Operation: Send + Sync + 'static {
     fn name(&self) -> &'static str;
 
+    /// Whether this operation requires the request body to be fully read
+    /// before being dispatched to the user-implemented [`S3`] handler.
+    ///
+    /// `true` for XML-payload operations (e.g. `DeleteObjects`,
+    /// `CompleteMultipartUpload`) and PUT configuration operations.
+    fn needs_full_body(&self) -> bool;
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut Request) -> S3Result<Response>;
 }
 
@@ -546,7 +553,7 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
         return Ok(Prepare::CustomRoute);
     }
 
-    let (op, needs_full_body) = 'resolve: {
+    let op = 'resolve: {
         if let Some(multipart) = &mut req.s3ext.multipart
             && req.method == Method::POST
         {
@@ -604,7 +611,7 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                         req.s3ext.post_policy = Some(policy);
                     }
 
-                    break 'resolve (&PostObject as &'static dyn Operation, false);
+                    break 'resolve &PostObject as &'static dyn Operation;
                 }
                 // FIXME: POST /bucket/key hits this branch
                 S3Path::Object { .. } => return Err(s3_error!(MethodNotAllowed)),
@@ -666,7 +673,7 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
 
     debug!(op = %op.name(), ?s3_path, "checked access");
 
-    if needs_full_body {
+    if op.needs_full_body() {
         let config = ccx.config.snapshot();
         extract_full_body(content_length, &mut req.body, config.xml_max_body_size).await?;
     }

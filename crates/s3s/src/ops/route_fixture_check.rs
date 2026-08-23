@@ -4,9 +4,10 @@
 //! Equivalence fixtures for [`crate::ops::generated::resolve_route`].
 //!
 //! `route_fixtures.json` records, for each request sample, the operation the
-//! router must return together with its `needs_full_body` flag. The data was
-//! captured from the current generated router and must keep passing against
-//! any future router implementation.
+//! router must return together with the operation's
+//! [`Operation::needs_full_body`](super::Operation::needs_full_body) flag. The
+//! data was captured from the current generated router and must keep passing
+//! against any future router implementation.
 //!
 //! # Data format
 //!
@@ -119,7 +120,7 @@ fn make_request(method: &str, headers: &std::collections::HashMap<String, String
     Request::from(builder.body(crate::http::Body::empty()).unwrap())
 }
 
-fn resolve_current(fx: &Fixture) -> S3Result<(&'static dyn super::Operation, bool)> {
+fn resolve_current(fx: &Fixture) -> S3Result<&'static dyn super::Operation> {
     let req = make_request(&fx.method, &fx.headers);
     let path = s3_path(&fx.path);
     let qs = fx.qs.as_ref().map(|pairs| OrderedQs::from_vec_unchecked(pairs.clone()));
@@ -135,7 +136,7 @@ fn route_fixtures_match() {
 
     for (idx, fx) in fixtures.iter().enumerate() {
         let (got_op, got_nfb) = match resolve_current(fx) {
-            Ok((op, nfb)) => (op.name().to_string(), nfb),
+            Ok(op) => (op.name().to_string(), op.needs_full_body()),
             Err(_) => ("__NOT_IMPLEMENTED__".to_string(), false),
         };
 

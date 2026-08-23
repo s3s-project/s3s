@@ -211,7 +211,7 @@ fn codegen_http(ops: &Operations, rust_types: &RustTypes) {
         g!("}}");
         g!();
 
-        codegen_op_http_call(op);
+        codegen_op_http_call(op, rust_types);
         g!();
     }
 
@@ -325,6 +325,7 @@ fn codegen_post_object_fork_op(rust_types: &RustTypes) {
 
     g(["#[async_trait::async_trait]", "impl super::Operation for PostObject {"]);
     g(["    fn name(&self) -> &'static str {", "        \"PostObject\"", "    }", ""]);
+    g(["    fn needs_full_body(&self) -> bool {", "        false", "    }", ""]);
 
     g([
         "    async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {",
@@ -903,12 +904,17 @@ fn codegen_op_http_de_multipart(op: &Operation, rust_types: &RustTypes) {
     g!("}}");
 }
 
-fn codegen_op_http_call(op: &Operation) {
+fn codegen_op_http_call(op: &Operation, rust_types: &RustTypes) {
     g!("#[async_trait::async_trait]");
     g!("impl super::Operation for {} {{", op.name);
 
     g!("fn name(&self) -> &'static str {{");
     g!("\"{}\"", op.name);
+    g!("}}");
+    g!();
+
+    g!("fn needs_full_body(&self) -> bool {{");
+    g!("{}", needs_full_body(op, rust_types));
     g!("}}");
     g!();
 
@@ -1011,7 +1017,6 @@ struct Route<'a> {
     x_id: Option<String>,
     required_headers: Vec<&'a str>,
     required_query_strings: Vec<&'a str>,
-    needs_full_body: bool,
 }
 
 fn collect_routes<'a>(ops: &'a Operations, rust_types: &'a RustTypes) -> HashMap<String, HashMap<PathPattern, Vec<Route<'a>>>> {
@@ -1034,8 +1039,6 @@ fn collect_routes<'a>(ops: &'a Operations, rust_types: &'a RustTypes) -> HashMap
 
             required_headers: required_headers(op, rust_types),
             required_query_strings: required_query_strings(op, rust_types),
-
-            needs_full_body: needs_full_body(op, rust_types),
         });
     }
     for map in ans.values_mut() {
@@ -1124,17 +1127,13 @@ fn codegen_router(ops: &Operations, rust_types: &RustTypes) {
         req: &http::Request, \
         s3_path: &S3Path, \
         qs: Option<&http::OrderedQs>)\
-         -> S3Result<(&'static dyn super::Operation, bool)> {{");
+         -> S3Result<&'static dyn super::Operation> {{");
 
     let succ = |route: &Route, return_: bool| {
         if return_ {
-            g!(
-                "return Ok((&{} as &'static dyn super::Operation, {}));",
-                route.op.name,
-                route.needs_full_body
-            );
+            g!("return Ok(&{} as &'static dyn super::Operation);", route.op.name);
         } else {
-            g!("Ok((&{} as &'static dyn super::Operation, {}))", route.op.name, route.needs_full_body);
+            g!("Ok(&{} as &'static dyn super::Operation)", route.op.name);
         }
     };
 
@@ -1178,7 +1177,6 @@ fn codegen_router(ops: &Operations, rust_types: &RustTypes) {
                         assert!(route.query_tag.is_none());
                         assert_eq!(route.required_headers, Vec::<&str>::new());
                         assert_eq!(route.required_query_strings, Vec::<&str>::new());
-                        assert!(route.needs_full_body.not());
                         succ(route, false);
                     } else {
                         let is_final_op = |route: &Route| {
