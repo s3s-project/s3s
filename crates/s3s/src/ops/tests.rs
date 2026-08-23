@@ -2679,10 +2679,10 @@ fn create_session_route_resolved() {
         bucket: "my-bucket".into(),
     };
     let qs = OrderedQs::parse("session").unwrap();
-    let (op, needs_full_body) = generated::resolve_route(&req, &s3_path, Some(&qs)).unwrap();
+    let op = generated::resolve_route(&req, &s3_path, Some(&qs)).unwrap();
 
     assert_eq!(op.name(), "CreateSession");
-    assert!(!needs_full_body);
+    assert!(!op.needs_full_body());
 }
 
 #[test]
@@ -2748,10 +2748,10 @@ fn list_directory_buckets_route_resolved() {
 
     let s3_path = S3Path::Root;
     let qs = OrderedQs::parse("x-id=ListDirectoryBuckets").unwrap();
-    let (op, needs_full_body) = generated::resolve_route(&req, &s3_path, Some(&qs)).unwrap();
+    let op = generated::resolve_route(&req, &s3_path, Some(&qs)).unwrap();
 
     assert_eq!(op.name(), "ListDirectoryBuckets");
-    assert!(!needs_full_body);
+    assert!(!op.needs_full_body());
 }
 
 #[test]
@@ -2770,7 +2770,7 @@ fn list_buckets_route_still_default() {
 
     let s3_path = S3Path::Root;
     let qs = OrderedQs::parse("x-id=ListBuckets").unwrap();
-    let (op, _) = generated::resolve_route(&req, &s3_path, Some(&qs)).unwrap();
+    let op = generated::resolve_route(&req, &s3_path, Some(&qs)).unwrap();
     assert_eq!(op.name(), "ListBuckets");
 
     // Without any query string
@@ -2781,7 +2781,7 @@ fn list_buckets_route_still_default() {
             .body(Body::empty())
             .unwrap(),
     );
-    let (op2, _) = generated::resolve_route(&req2, &s3_path, None).unwrap();
+    let op2 = generated::resolve_route(&req2, &s3_path, None).unwrap();
     assert_eq!(op2.name(), "ListBuckets");
 }
 

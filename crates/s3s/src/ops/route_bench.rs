@@ -162,7 +162,7 @@ fn route_bench() {
 
         // Sanity check: routing must match the expected operation.
         {
-            let (op, _) = resolve_route(black_box(&req), black_box(path), Some(black_box(&qs))).unwrap();
+            let op = resolve_route(black_box(&req), black_box(path), Some(black_box(&qs))).unwrap();
             assert_eq!(op.name(), c.expect_op, "case `{}` routed to wrong op", c.name);
         }
 

@@ -644,6 +644,10 @@ impl super::Operation for CompleteMultipartUpload {
         "CompleteMultipartUpload"
     }
 
+    fn needs_full_body(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -901,6 +905,10 @@ impl super::Operation for CreateBucket {
         "CreateBucket"
     }
 
+    fn needs_full_body(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -952,6 +960,10 @@ impl CreateBucketMetadataTableConfiguration {
 impl super::Operation for CreateBucketMetadataTableConfiguration {
     fn name(&self) -> &'static str {
         "CreateBucketMetadataTableConfiguration"
+    }
+
+    fn needs_full_body(&self) -> bool {
+        true
     }
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
@@ -1972,6 +1984,10 @@ impl DeleteObjects {
 impl super::Operation for DeleteObjects {
     fn name(&self) -> &'static str {
         "DeleteObjects"
+    }
+
+    fn needs_full_body(&self) -> bool {
+        true
     }
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
@@ -4524,6 +4540,10 @@ impl super::Operation for PutBucketAccelerateConfiguration {
         "PutBucketAccelerateConfiguration"
     }
 
+    fn needs_full_body(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -4595,6 +4615,10 @@ impl super::Operation for PutBucketAcl {
         "PutBucketAcl"
     }
 
+    fn needs_full_body(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -4643,6 +4667,10 @@ impl PutBucketAnalyticsConfiguration {
 impl super::Operation for PutBucketAnalyticsConfiguration {
     fn name(&self) -> &'static str {
         "PutBucketAnalyticsConfiguration"
+    }
+
+    fn needs_full_body(&self) -> bool {
+        true
     }
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
@@ -4698,6 +4726,10 @@ impl super::Operation for PutBucketCors {
         "PutBucketCors"
     }
 
+    fn needs_full_body(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -4751,6 +4783,10 @@ impl super::Operation for PutBucketEncryption {
         "PutBucketEncryption"
     }
 
+    fn needs_full_body(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -4796,6 +4832,10 @@ impl PutBucketIntelligentTieringConfiguration {
 impl super::Operation for PutBucketIntelligentTieringConfiguration {
     fn name(&self) -> &'static str {
         "PutBucketIntelligentTieringConfiguration"
+    }
+
+    fn needs_full_body(&self) -> bool {
+        true
     }
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
@@ -4846,6 +4886,10 @@ impl PutBucketInventoryConfiguration {
 impl super::Operation for PutBucketInventoryConfiguration {
     fn name(&self) -> &'static str {
         "PutBucketInventoryConfiguration"
+    }
+
+    fn needs_full_body(&self) -> bool {
+        true
     }
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
@@ -4908,6 +4952,10 @@ impl super::Operation for PutBucketLifecycleConfiguration {
         "PutBucketLifecycleConfiguration"
     }
 
+    fn needs_full_body(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -4961,6 +5009,10 @@ impl super::Operation for PutBucketLogging {
         "PutBucketLogging"
     }
 
+    fn needs_full_body(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -5009,6 +5061,10 @@ impl PutBucketMetricsConfiguration {
 impl super::Operation for PutBucketMetricsConfiguration {
     fn name(&self) -> &'static str {
         "PutBucketMetricsConfiguration"
+    }
+
+    fn needs_full_body(&self) -> bool {
+        true
     }
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
@@ -5062,6 +5118,10 @@ impl super::Operation for PutBucketNotificationConfiguration {
         "PutBucketNotificationConfiguration"
     }
 
+    fn needs_full_body(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -5110,6 +5170,10 @@ impl PutBucketOwnershipControls {
 impl super::Operation for PutBucketOwnershipControls {
     fn name(&self) -> &'static str {
         "PutBucketOwnershipControls"
+    }
+
+    fn needs_full_body(&self) -> bool {
+        true
     }
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
@@ -5169,6 +5233,10 @@ impl super::Operation for PutBucketPolicy {
         "PutBucketPolicy"
     }
 
+    fn needs_full_body(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -5225,6 +5293,10 @@ impl super::Operation for PutBucketReplication {
         "PutBucketReplication"
     }
 
+    fn needs_full_body(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -5278,6 +5350,10 @@ impl super::Operation for PutBucketRequestPayment {
         "PutBucketRequestPayment"
     }
 
+    fn needs_full_body(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -5329,6 +5405,10 @@ impl PutBucketTagging {
 impl super::Operation for PutBucketTagging {
     fn name(&self) -> &'static str {
         "PutBucketTagging"
+    }
+
+    fn needs_full_body(&self) -> bool {
+        true
     }
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
@@ -5387,6 +5467,10 @@ impl super::Operation for PutBucketVersioning {
         "PutBucketVersioning"
     }
 
+    fn needs_full_body(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -5438,6 +5522,10 @@ impl PutBucketWebsite {
 impl super::Operation for PutBucketWebsite {
     fn name(&self) -> &'static str {
         "PutBucketWebsite"
+    }
+
+    fn needs_full_body(&self) -> bool {
+        true
     }
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
@@ -5896,6 +5984,10 @@ impl super::Operation for PutObjectAcl {
         "PutObjectAcl"
     }
 
+    fn needs_full_body(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -5964,6 +6056,10 @@ impl super::Operation for PutObjectLegalHold {
         "PutObjectLegalHold"
     }
 
+    fn needs_full_body(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -6023,6 +6119,10 @@ impl PutObjectLockConfiguration {
 impl super::Operation for PutObjectLockConfiguration {
     fn name(&self) -> &'static str {
         "PutObjectLockConfiguration"
+    }
+
+    fn needs_full_body(&self) -> bool {
+        true
     }
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
@@ -6097,6 +6197,10 @@ impl super::Operation for PutObjectRetention {
         "PutObjectRetention"
     }
 
+    fn needs_full_body(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -6159,6 +6263,10 @@ impl super::Operation for PutObjectTagging {
         "PutObjectTagging"
     }
 
+    fn needs_full_body(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -6210,6 +6318,10 @@ impl PutPublicAccessBlock {
 impl super::Operation for PutPublicAccessBlock {
     fn name(&self) -> &'static str {
         "PutPublicAccessBlock"
+    }
+
+    fn needs_full_body(&self) -> bool {
+        true
     }
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
@@ -6270,6 +6382,10 @@ impl RestoreObject {
 impl super::Operation for RestoreObject {
     fn name(&self) -> &'static str {
         "RestoreObject"
+    }
+
+    fn needs_full_body(&self) -> bool {
+        true
     }
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
@@ -6333,6 +6449,10 @@ impl SelectObjectContent {
 impl super::Operation for SelectObjectContent {
     fn name(&self) -> &'static str {
         "SelectObjectContent"
+    }
+
+    fn needs_full_body(&self) -> bool {
+        true
     }
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
@@ -6913,147 +7033,147 @@ pub fn resolve_route(
     req: &http::Request,
     s3_path: &S3Path,
     qs: Option<&http::OrderedQs>,
-) -> S3Result<(&'static dyn super::Operation, bool)> {
+) -> S3Result<&'static dyn super::Operation> {
     match req.method {
         hyper::Method::HEAD => match s3_path {
             S3Path::Root => Err(super::unknown_operation()),
-            S3Path::Bucket { .. } => Ok((&HeadBucket as &'static dyn super::Operation, false)),
-            S3Path::Object { .. } => Ok((&HeadObject as &'static dyn super::Operation, false)),
+            S3Path::Bucket { .. } => Ok(&HeadBucket as &'static dyn super::Operation),
+            S3Path::Object { .. } => Ok(&HeadObject as &'static dyn super::Operation),
         },
         hyper::Method::GET => match s3_path {
             S3Path::Root => {
                 if let Some(qs) = qs {
                     if super::check_query_pattern(qs, "x-id", "ListDirectoryBuckets") {
-                        return Ok((&ListDirectoryBuckets as &'static dyn super::Operation, false));
+                        return Ok(&ListDirectoryBuckets as &'static dyn super::Operation);
                     }
                 }
-                Ok((&ListBuckets as &'static dyn super::Operation, false))
+                Ok(&ListBuckets as &'static dyn super::Operation)
             }
             S3Path::Bucket { .. } => {
                 if let Some(qs) = qs {
                     if qs.has("analytics") && qs.has("id") {
-                        return Ok((&GetBucketAnalyticsConfiguration as &'static dyn super::Operation, false));
+                        return Ok(&GetBucketAnalyticsConfiguration as &'static dyn super::Operation);
                     }
                     if qs.has("intelligent-tiering") && qs.has("id") {
-                        return Ok((&GetBucketIntelligentTieringConfiguration as &'static dyn super::Operation, false));
+                        return Ok(&GetBucketIntelligentTieringConfiguration as &'static dyn super::Operation);
                     }
                     if qs.has("inventory") && qs.has("id") {
-                        return Ok((&GetBucketInventoryConfiguration as &'static dyn super::Operation, false));
+                        return Ok(&GetBucketInventoryConfiguration as &'static dyn super::Operation);
                     }
                     if qs.has("metrics") && qs.has("id") {
-                        return Ok((&GetBucketMetricsConfiguration as &'static dyn super::Operation, false));
+                        return Ok(&GetBucketMetricsConfiguration as &'static dyn super::Operation);
                     }
                     if qs.has("session") {
-                        return Ok((&CreateSession as &'static dyn super::Operation, false));
+                        return Ok(&CreateSession as &'static dyn super::Operation);
                     }
                     if qs.has("accelerate") {
-                        return Ok((&GetBucketAccelerateConfiguration as &'static dyn super::Operation, false));
+                        return Ok(&GetBucketAccelerateConfiguration as &'static dyn super::Operation);
                     }
                     if qs.has("acl") {
-                        return Ok((&GetBucketAcl as &'static dyn super::Operation, false));
+                        return Ok(&GetBucketAcl as &'static dyn super::Operation);
                     }
                     if qs.has("cors") {
-                        return Ok((&GetBucketCors as &'static dyn super::Operation, false));
+                        return Ok(&GetBucketCors as &'static dyn super::Operation);
                     }
                     if qs.has("encryption") {
-                        return Ok((&GetBucketEncryption as &'static dyn super::Operation, false));
+                        return Ok(&GetBucketEncryption as &'static dyn super::Operation);
                     }
                     if qs.has("lifecycle") {
-                        return Ok((&GetBucketLifecycleConfiguration as &'static dyn super::Operation, false));
+                        return Ok(&GetBucketLifecycleConfiguration as &'static dyn super::Operation);
                     }
                     if qs.has("location") {
-                        return Ok((&GetBucketLocation as &'static dyn super::Operation, false));
+                        return Ok(&GetBucketLocation as &'static dyn super::Operation);
                     }
                     if qs.has("logging") {
-                        return Ok((&GetBucketLogging as &'static dyn super::Operation, false));
+                        return Ok(&GetBucketLogging as &'static dyn super::Operation);
                     }
                     if qs.has("metadataTable") {
-                        return Ok((&GetBucketMetadataTableConfiguration as &'static dyn super::Operation, false));
+                        return Ok(&GetBucketMetadataTableConfiguration as &'static dyn super::Operation);
                     }
                     if qs.has("notification") {
-                        return Ok((&GetBucketNotificationConfiguration as &'static dyn super::Operation, false));
+                        return Ok(&GetBucketNotificationConfiguration as &'static dyn super::Operation);
                     }
                     if qs.has("ownershipControls") {
-                        return Ok((&GetBucketOwnershipControls as &'static dyn super::Operation, false));
+                        return Ok(&GetBucketOwnershipControls as &'static dyn super::Operation);
                     }
                     if qs.has("policy") {
-                        return Ok((&GetBucketPolicy as &'static dyn super::Operation, false));
+                        return Ok(&GetBucketPolicy as &'static dyn super::Operation);
                     }
                     if qs.has("policyStatus") {
-                        return Ok((&GetBucketPolicyStatus as &'static dyn super::Operation, false));
+                        return Ok(&GetBucketPolicyStatus as &'static dyn super::Operation);
                     }
                     if qs.has("replication") {
-                        return Ok((&GetBucketReplication as &'static dyn super::Operation, false));
+                        return Ok(&GetBucketReplication as &'static dyn super::Operation);
                     }
                     if qs.has("requestPayment") {
-                        return Ok((&GetBucketRequestPayment as &'static dyn super::Operation, false));
+                        return Ok(&GetBucketRequestPayment as &'static dyn super::Operation);
                     }
                     if qs.has("tagging") {
-                        return Ok((&GetBucketTagging as &'static dyn super::Operation, false));
+                        return Ok(&GetBucketTagging as &'static dyn super::Operation);
                     }
                     if qs.has("versioning") {
-                        return Ok((&GetBucketVersioning as &'static dyn super::Operation, false));
+                        return Ok(&GetBucketVersioning as &'static dyn super::Operation);
                     }
                     if qs.has("website") {
-                        return Ok((&GetBucketWebsite as &'static dyn super::Operation, false));
+                        return Ok(&GetBucketWebsite as &'static dyn super::Operation);
                     }
                     if qs.has("object-lock") {
-                        return Ok((&GetObjectLockConfiguration as &'static dyn super::Operation, false));
+                        return Ok(&GetObjectLockConfiguration as &'static dyn super::Operation);
                     }
                     if qs.has("publicAccessBlock") {
-                        return Ok((&GetPublicAccessBlock as &'static dyn super::Operation, false));
+                        return Ok(&GetPublicAccessBlock as &'static dyn super::Operation);
                     }
                     if qs.has("analytics") && !qs.has("id") {
-                        return Ok((&ListBucketAnalyticsConfigurations as &'static dyn super::Operation, false));
+                        return Ok(&ListBucketAnalyticsConfigurations as &'static dyn super::Operation);
                     }
                     if qs.has("intelligent-tiering") && !qs.has("id") {
-                        return Ok((&ListBucketIntelligentTieringConfigurations as &'static dyn super::Operation, false));
+                        return Ok(&ListBucketIntelligentTieringConfigurations as &'static dyn super::Operation);
                     }
                     if qs.has("inventory") && !qs.has("id") {
-                        return Ok((&ListBucketInventoryConfigurations as &'static dyn super::Operation, false));
+                        return Ok(&ListBucketInventoryConfigurations as &'static dyn super::Operation);
                     }
                     if qs.has("metrics") && !qs.has("id") {
-                        return Ok((&ListBucketMetricsConfigurations as &'static dyn super::Operation, false));
+                        return Ok(&ListBucketMetricsConfigurations as &'static dyn super::Operation);
                     }
                     if qs.has("uploads") {
-                        return Ok((&ListMultipartUploads as &'static dyn super::Operation, false));
+                        return Ok(&ListMultipartUploads as &'static dyn super::Operation);
                     }
                     if qs.has("versions") {
-                        return Ok((&ListObjectVersions as &'static dyn super::Operation, false));
+                        return Ok(&ListObjectVersions as &'static dyn super::Operation);
                     }
                     if super::check_query_pattern(qs, "list-type", "2") {
-                        return Ok((&ListObjectsV2 as &'static dyn super::Operation, false));
+                        return Ok(&ListObjectsV2 as &'static dyn super::Operation);
                     }
                 }
-                Ok((&ListObjects as &'static dyn super::Operation, false))
+                Ok(&ListObjects as &'static dyn super::Operation)
             }
             S3Path::Object { .. } => {
                 if let Some(qs) = qs {
                     if qs.has("attributes") {
-                        return Ok((&GetObjectAttributes as &'static dyn super::Operation, false));
+                        return Ok(&GetObjectAttributes as &'static dyn super::Operation);
                     }
                     if qs.has("acl") {
-                        return Ok((&GetObjectAcl as &'static dyn super::Operation, false));
+                        return Ok(&GetObjectAcl as &'static dyn super::Operation);
                     }
                     if qs.has("legal-hold") {
-                        return Ok((&GetObjectLegalHold as &'static dyn super::Operation, false));
+                        return Ok(&GetObjectLegalHold as &'static dyn super::Operation);
                     }
                     if qs.has("retention") {
-                        return Ok((&GetObjectRetention as &'static dyn super::Operation, false));
+                        return Ok(&GetObjectRetention as &'static dyn super::Operation);
                     }
                     if qs.has("tagging") {
-                        return Ok((&GetObjectTagging as &'static dyn super::Operation, false));
+                        return Ok(&GetObjectTagging as &'static dyn super::Operation);
                     }
                     if qs.has("torrent") {
-                        return Ok((&GetObjectTorrent as &'static dyn super::Operation, false));
+                        return Ok(&GetObjectTorrent as &'static dyn super::Operation);
                     }
                 }
                 if let Some(qs) = qs
                     && qs.has("uploadId")
                 {
-                    return Ok((&ListParts as &'static dyn super::Operation, false));
+                    return Ok(&ListParts as &'static dyn super::Operation);
                 }
-                Ok((&GetObject as &'static dyn super::Operation, false))
+                Ok(&GetObject as &'static dyn super::Operation)
             }
         },
         hyper::Method::POST => match s3_path {
@@ -7061,33 +7181,33 @@ pub fn resolve_route(
             S3Path::Bucket { .. } => {
                 if let Some(qs) = qs {
                     if qs.has("metadataTable") {
-                        return Ok((&CreateBucketMetadataTableConfiguration as &'static dyn super::Operation, true));
+                        return Ok(&CreateBucketMetadataTableConfiguration as &'static dyn super::Operation);
                     }
                     if qs.has("delete") {
-                        return Ok((&DeleteObjects as &'static dyn super::Operation, true));
+                        return Ok(&DeleteObjects as &'static dyn super::Operation);
                     }
                 }
                 if req.headers.contains_key("x-amz-request-route") && req.headers.contains_key("x-amz-request-token") {
-                    return Ok((&WriteGetObjectResponse as &'static dyn super::Operation, false));
+                    return Ok(&WriteGetObjectResponse as &'static dyn super::Operation);
                 }
                 Err(super::unknown_operation())
             }
             S3Path::Object { .. } => {
                 if let Some(qs) = qs {
                     if qs.has("select") && super::check_query_pattern(qs, "select-type", "2") {
-                        return Ok((&SelectObjectContent as &'static dyn super::Operation, true));
+                        return Ok(&SelectObjectContent as &'static dyn super::Operation);
                     }
                     if qs.has("uploads") {
-                        return Ok((&CreateMultipartUpload as &'static dyn super::Operation, false));
+                        return Ok(&CreateMultipartUpload as &'static dyn super::Operation);
                     }
                     if qs.has("restore") {
-                        return Ok((&RestoreObject as &'static dyn super::Operation, true));
+                        return Ok(&RestoreObject as &'static dyn super::Operation);
                     }
                 }
                 if let Some(qs) = qs
                     && qs.has("uploadId")
                 {
-                    return Ok((&CompleteMultipartUpload as &'static dyn super::Operation, true));
+                    return Ok(&CompleteMultipartUpload as &'static dyn super::Operation);
                 }
                 Err(super::unknown_operation())
             }
@@ -7097,81 +7217,81 @@ pub fn resolve_route(
             S3Path::Bucket { .. } => {
                 if let Some(qs) = qs {
                     if qs.has("analytics") {
-                        return Ok((&PutBucketAnalyticsConfiguration as &'static dyn super::Operation, true));
+                        return Ok(&PutBucketAnalyticsConfiguration as &'static dyn super::Operation);
                     }
                     if qs.has("intelligent-tiering") {
-                        return Ok((&PutBucketIntelligentTieringConfiguration as &'static dyn super::Operation, true));
+                        return Ok(&PutBucketIntelligentTieringConfiguration as &'static dyn super::Operation);
                     }
                     if qs.has("inventory") {
-                        return Ok((&PutBucketInventoryConfiguration as &'static dyn super::Operation, true));
+                        return Ok(&PutBucketInventoryConfiguration as &'static dyn super::Operation);
                     }
                     if qs.has("metrics") {
-                        return Ok((&PutBucketMetricsConfiguration as &'static dyn super::Operation, true));
+                        return Ok(&PutBucketMetricsConfiguration as &'static dyn super::Operation);
                     }
                     if qs.has("accelerate") {
-                        return Ok((&PutBucketAccelerateConfiguration as &'static dyn super::Operation, true));
+                        return Ok(&PutBucketAccelerateConfiguration as &'static dyn super::Operation);
                     }
                     if qs.has("acl") {
-                        return Ok((&PutBucketAcl as &'static dyn super::Operation, true));
+                        return Ok(&PutBucketAcl as &'static dyn super::Operation);
                     }
                     if qs.has("cors") {
-                        return Ok((&PutBucketCors as &'static dyn super::Operation, true));
+                        return Ok(&PutBucketCors as &'static dyn super::Operation);
                     }
                     if qs.has("encryption") {
-                        return Ok((&PutBucketEncryption as &'static dyn super::Operation, true));
+                        return Ok(&PutBucketEncryption as &'static dyn super::Operation);
                     }
                     if qs.has("lifecycle") {
-                        return Ok((&PutBucketLifecycleConfiguration as &'static dyn super::Operation, true));
+                        return Ok(&PutBucketLifecycleConfiguration as &'static dyn super::Operation);
                     }
                     if qs.has("logging") {
-                        return Ok((&PutBucketLogging as &'static dyn super::Operation, true));
+                        return Ok(&PutBucketLogging as &'static dyn super::Operation);
                     }
                     if qs.has("notification") {
-                        return Ok((&PutBucketNotificationConfiguration as &'static dyn super::Operation, true));
+                        return Ok(&PutBucketNotificationConfiguration as &'static dyn super::Operation);
                     }
                     if qs.has("ownershipControls") {
-                        return Ok((&PutBucketOwnershipControls as &'static dyn super::Operation, true));
+                        return Ok(&PutBucketOwnershipControls as &'static dyn super::Operation);
                     }
                     if qs.has("policy") {
-                        return Ok((&PutBucketPolicy as &'static dyn super::Operation, true));
+                        return Ok(&PutBucketPolicy as &'static dyn super::Operation);
                     }
                     if qs.has("replication") {
-                        return Ok((&PutBucketReplication as &'static dyn super::Operation, true));
+                        return Ok(&PutBucketReplication as &'static dyn super::Operation);
                     }
                     if qs.has("requestPayment") {
-                        return Ok((&PutBucketRequestPayment as &'static dyn super::Operation, true));
+                        return Ok(&PutBucketRequestPayment as &'static dyn super::Operation);
                     }
                     if qs.has("tagging") {
-                        return Ok((&PutBucketTagging as &'static dyn super::Operation, true));
+                        return Ok(&PutBucketTagging as &'static dyn super::Operation);
                     }
                     if qs.has("versioning") {
-                        return Ok((&PutBucketVersioning as &'static dyn super::Operation, true));
+                        return Ok(&PutBucketVersioning as &'static dyn super::Operation);
                     }
                     if qs.has("website") {
-                        return Ok((&PutBucketWebsite as &'static dyn super::Operation, true));
+                        return Ok(&PutBucketWebsite as &'static dyn super::Operation);
                     }
                     if qs.has("object-lock") {
-                        return Ok((&PutObjectLockConfiguration as &'static dyn super::Operation, true));
+                        return Ok(&PutObjectLockConfiguration as &'static dyn super::Operation);
                     }
                     if qs.has("publicAccessBlock") {
-                        return Ok((&PutPublicAccessBlock as &'static dyn super::Operation, true));
+                        return Ok(&PutPublicAccessBlock as &'static dyn super::Operation);
                     }
                 }
-                Ok((&CreateBucket as &'static dyn super::Operation, true))
+                Ok(&CreateBucket as &'static dyn super::Operation)
             }
             S3Path::Object { .. } => {
                 if let Some(qs) = qs {
                     if qs.has("acl") {
-                        return Ok((&PutObjectAcl as &'static dyn super::Operation, true));
+                        return Ok(&PutObjectAcl as &'static dyn super::Operation);
                     }
                     if qs.has("legal-hold") {
-                        return Ok((&PutObjectLegalHold as &'static dyn super::Operation, true));
+                        return Ok(&PutObjectLegalHold as &'static dyn super::Operation);
                     }
                     if qs.has("retention") {
-                        return Ok((&PutObjectRetention as &'static dyn super::Operation, true));
+                        return Ok(&PutObjectRetention as &'static dyn super::Operation);
                     }
                     if qs.has("tagging") {
-                        return Ok((&PutObjectTagging as &'static dyn super::Operation, true));
+                        return Ok(&PutObjectTagging as &'static dyn super::Operation);
                     }
                 }
                 if let Some(qs) = qs
@@ -7179,18 +7299,18 @@ pub fn resolve_route(
                     && qs.has("uploadId")
                     && req.headers.contains_key("x-amz-copy-source")
                 {
-                    return Ok((&UploadPartCopy as &'static dyn super::Operation, false));
+                    return Ok(&UploadPartCopy as &'static dyn super::Operation);
                 }
                 if let Some(qs) = qs
                     && qs.has("partNumber")
                     && qs.has("uploadId")
                 {
-                    return Ok((&UploadPart as &'static dyn super::Operation, false));
+                    return Ok(&UploadPart as &'static dyn super::Operation);
                 }
                 if req.headers.contains_key("x-amz-copy-source") {
-                    return Ok((&CopyObject as &'static dyn super::Operation, false));
+                    return Ok(&CopyObject as &'static dyn super::Operation);
                 }
-                Ok((&PutObject as &'static dyn super::Operation, false))
+                Ok(&PutObject as &'static dyn super::Operation)
             }
         },
         hyper::Method::DELETE => match s3_path {
@@ -7198,62 +7318,62 @@ pub fn resolve_route(
             S3Path::Bucket { .. } => {
                 if let Some(qs) = qs {
                     if qs.has("analytics") {
-                        return Ok((&DeleteBucketAnalyticsConfiguration as &'static dyn super::Operation, false));
+                        return Ok(&DeleteBucketAnalyticsConfiguration as &'static dyn super::Operation);
                     }
                     if qs.has("intelligent-tiering") {
-                        return Ok((&DeleteBucketIntelligentTieringConfiguration as &'static dyn super::Operation, false));
+                        return Ok(&DeleteBucketIntelligentTieringConfiguration as &'static dyn super::Operation);
                     }
                     if qs.has("inventory") {
-                        return Ok((&DeleteBucketInventoryConfiguration as &'static dyn super::Operation, false));
+                        return Ok(&DeleteBucketInventoryConfiguration as &'static dyn super::Operation);
                     }
                     if qs.has("metrics") {
-                        return Ok((&DeleteBucketMetricsConfiguration as &'static dyn super::Operation, false));
+                        return Ok(&DeleteBucketMetricsConfiguration as &'static dyn super::Operation);
                     }
                     if qs.has("cors") {
-                        return Ok((&DeleteBucketCors as &'static dyn super::Operation, false));
+                        return Ok(&DeleteBucketCors as &'static dyn super::Operation);
                     }
                     if qs.has("encryption") {
-                        return Ok((&DeleteBucketEncryption as &'static dyn super::Operation, false));
+                        return Ok(&DeleteBucketEncryption as &'static dyn super::Operation);
                     }
                     if qs.has("lifecycle") {
-                        return Ok((&DeleteBucketLifecycle as &'static dyn super::Operation, false));
+                        return Ok(&DeleteBucketLifecycle as &'static dyn super::Operation);
                     }
                     if qs.has("metadataTable") {
-                        return Ok((&DeleteBucketMetadataTableConfiguration as &'static dyn super::Operation, false));
+                        return Ok(&DeleteBucketMetadataTableConfiguration as &'static dyn super::Operation);
                     }
                     if qs.has("ownershipControls") {
-                        return Ok((&DeleteBucketOwnershipControls as &'static dyn super::Operation, false));
+                        return Ok(&DeleteBucketOwnershipControls as &'static dyn super::Operation);
                     }
                     if qs.has("policy") {
-                        return Ok((&DeleteBucketPolicy as &'static dyn super::Operation, false));
+                        return Ok(&DeleteBucketPolicy as &'static dyn super::Operation);
                     }
                     if qs.has("replication") {
-                        return Ok((&DeleteBucketReplication as &'static dyn super::Operation, false));
+                        return Ok(&DeleteBucketReplication as &'static dyn super::Operation);
                     }
                     if qs.has("tagging") {
-                        return Ok((&DeleteBucketTagging as &'static dyn super::Operation, false));
+                        return Ok(&DeleteBucketTagging as &'static dyn super::Operation);
                     }
                     if qs.has("website") {
-                        return Ok((&DeleteBucketWebsite as &'static dyn super::Operation, false));
+                        return Ok(&DeleteBucketWebsite as &'static dyn super::Operation);
                     }
                     if qs.has("publicAccessBlock") {
-                        return Ok((&DeletePublicAccessBlock as &'static dyn super::Operation, false));
+                        return Ok(&DeletePublicAccessBlock as &'static dyn super::Operation);
                     }
                 }
-                Ok((&DeleteBucket as &'static dyn super::Operation, false))
+                Ok(&DeleteBucket as &'static dyn super::Operation)
             }
             S3Path::Object { .. } => {
                 if let Some(qs) = qs {
                     if qs.has("tagging") {
-                        return Ok((&DeleteObjectTagging as &'static dyn super::Operation, false));
+                        return Ok(&DeleteObjectTagging as &'static dyn super::Operation);
                     }
                 }
                 if let Some(qs) = qs
                     && qs.has("uploadId")
                 {
-                    return Ok((&AbortMultipartUpload as &'static dyn super::Operation, false));
+                    return Ok(&AbortMultipartUpload as &'static dyn super::Operation);
                 }
-                Ok((&DeleteObject as &'static dyn super::Operation, false))
+                Ok(&DeleteObject as &'static dyn super::Operation)
             }
         },
         _ => Err(super::unknown_operation()),
