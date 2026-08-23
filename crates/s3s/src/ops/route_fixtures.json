@@ -1,0 +1,3395 @@
+[
+ {
+  "expect": "__NOT_IMPLEMENTED__",
+  "headers": {},
+  "method": "HEAD",
+  "nfb": false,
+  "note": "fallback-empty-qs",
+  "path": "Root",
+  "qs": []
+ },
+ {
+  "expect": "HeadBucket",
+  "headers": {},
+  "method": "HEAD",
+  "nfb": false,
+  "note": "tail:",
+  "path": "Bucket",
+  "qs": []
+ },
+ {
+  "expect": "HeadBucket",
+  "headers": {},
+  "method": "HEAD",
+  "nfb": false,
+  "note": "fallback-empty-qs",
+  "path": "Bucket",
+  "qs": []
+ },
+ {
+  "expect": "HeadObject",
+  "headers": {},
+  "method": "HEAD",
+  "nfb": false,
+  "note": "tail:",
+  "path": "Object",
+  "qs": []
+ },
+ {
+  "expect": "HeadObject",
+  "headers": {},
+  "method": "HEAD",
+  "nfb": false,
+  "note": "fallback-empty-qs",
+  "path": "Object",
+  "qs": []
+ },
+ {
+  "expect": "ListDirectoryBuckets",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:super::check_query_pattern(qs, \"x-id\", \"ListDirectoryBuckets\")",
+  "path": "Root",
+  "qs": [
+   [
+    "x-id",
+    "ListDirectoryBuckets"
+   ]
+  ]
+ },
+ {
+  "expect": "ListBuckets",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "wrong-pattern:x-id",
+  "path": "Root",
+  "qs": [
+   [
+    "x-id",
+    "ListDirectoryBucketsX"
+   ]
+  ]
+ },
+ {
+  "expect": "ListBuckets",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "duplicate:x-id",
+  "path": "Root",
+  "qs": [
+   [
+    "x-id",
+    "ListDirectoryBuckets"
+   ],
+   [
+    "x-id",
+    "ListDirectoryBuckets"
+   ],
+   [
+    "x-id",
+    "ListDirectoryBucketsX"
+   ]
+  ]
+ },
+ {
+  "expect": "ListDirectoryBuckets",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:super::check_query_pattern(qs, \"x-id\", \"ListDirectoryBuckets\")",
+  "path": "Root",
+  "qs": [
+   [
+    "x-id",
+    "ListDirectoryBuckets"
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "ListBuckets",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "fallback-empty-qs",
+  "path": "Root",
+  "qs": []
+ },
+ {
+  "expect": "GetBucketAnalyticsConfiguration",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"analytics\") && qs.has(\"id\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "analytics",
+    ""
+   ],
+   [
+    "id",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketAnalyticsConfiguration",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"analytics\") && qs.has(\"id\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "analytics",
+    ""
+   ],
+   [
+    "id",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketIntelligentTieringConfiguration",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"intelligent-tiering\") && qs.has(\"id\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "intelligent-tiering",
+    ""
+   ],
+   [
+    "id",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketIntelligentTieringConfiguration",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"intelligent-tiering\") && qs.has(\"id\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "intelligent-tiering",
+    ""
+   ],
+   [
+    "id",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketInventoryConfiguration",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"inventory\") && qs.has(\"id\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "inventory",
+    ""
+   ],
+   [
+    "id",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketInventoryConfiguration",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"inventory\") && qs.has(\"id\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "inventory",
+    ""
+   ],
+   [
+    "id",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketMetricsConfiguration",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"metrics\") && qs.has(\"id\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "metrics",
+    ""
+   ],
+   [
+    "id",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketMetricsConfiguration",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"metrics\") && qs.has(\"id\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "metrics",
+    ""
+   ],
+   [
+    "id",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "CreateSession",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"session\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "session",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "CreateSession",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"session\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "session",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketAccelerateConfiguration",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"accelerate\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "accelerate",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketAccelerateConfiguration",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"accelerate\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "accelerate",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketAcl",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"acl\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "acl",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketAcl",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"acl\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "acl",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketCors",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"cors\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "cors",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketCors",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"cors\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "cors",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketEncryption",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"encryption\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "encryption",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketEncryption",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"encryption\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "encryption",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketLifecycleConfiguration",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"lifecycle\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "lifecycle",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketLifecycleConfiguration",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"lifecycle\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "lifecycle",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketLocation",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"location\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "location",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketLocation",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"location\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "location",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketLogging",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"logging\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "logging",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketLogging",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"logging\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "logging",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketMetadataTableConfiguration",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"metadataTable\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "metadataTable",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketMetadataTableConfiguration",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"metadataTable\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "metadataTable",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketNotificationConfiguration",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"notification\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "notification",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketNotificationConfiguration",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"notification\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "notification",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketOwnershipControls",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"ownershipControls\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "ownershipControls",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketOwnershipControls",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"ownershipControls\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "ownershipControls",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketPolicy",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"policy\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "policy",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketPolicy",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"policy\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "policy",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketPolicyStatus",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"policyStatus\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "policyStatus",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketPolicyStatus",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"policyStatus\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "policyStatus",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketReplication",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"replication\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "replication",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketReplication",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"replication\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "replication",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketRequestPayment",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"requestPayment\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "requestPayment",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketRequestPayment",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"requestPayment\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "requestPayment",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketTagging",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"tagging\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "tagging",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketTagging",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"tagging\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "tagging",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketVersioning",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"versioning\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "versioning",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketVersioning",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"versioning\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "versioning",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketWebsite",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"website\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "website",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketWebsite",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"website\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "website",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "GetObjectLockConfiguration",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"object-lock\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "object-lock",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "GetObjectLockConfiguration",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"object-lock\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "object-lock",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "GetPublicAccessBlock",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"publicAccessBlock\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "publicAccessBlock",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "GetPublicAccessBlock",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"publicAccessBlock\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "publicAccessBlock",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "ListBucketAnalyticsConfigurations",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"analytics\") && !qs.has(\"id\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "analytics",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketAnalyticsConfiguration",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "neg-hit:qs.has(\"analytics\") && !qs.has(\"id\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "analytics",
+    ""
+   ],
+   [
+    "id",
+    "x"
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketAnalyticsConfiguration",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"analytics\") && !qs.has(\"id\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "analytics",
+    ""
+   ],
+   [
+    "id",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "ListBucketIntelligentTieringConfigurations",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"intelligent-tiering\") && !qs.has(\"id\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "intelligent-tiering",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketIntelligentTieringConfiguration",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "neg-hit:qs.has(\"intelligent-tiering\") && !qs.has(\"id\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "intelligent-tiering",
+    ""
+   ],
+   [
+    "id",
+    "x"
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketIntelligentTieringConfiguration",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"intelligent-tiering\") && !qs.has(\"id\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "intelligent-tiering",
+    ""
+   ],
+   [
+    "id",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "ListBucketInventoryConfigurations",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"inventory\") && !qs.has(\"id\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "inventory",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketInventoryConfiguration",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "neg-hit:qs.has(\"inventory\") && !qs.has(\"id\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "inventory",
+    ""
+   ],
+   [
+    "id",
+    "x"
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketInventoryConfiguration",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"inventory\") && !qs.has(\"id\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "inventory",
+    ""
+   ],
+   [
+    "id",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "ListBucketMetricsConfigurations",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"metrics\") && !qs.has(\"id\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "metrics",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketMetricsConfiguration",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "neg-hit:qs.has(\"metrics\") && !qs.has(\"id\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "metrics",
+    ""
+   ],
+   [
+    "id",
+    "x"
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketMetricsConfiguration",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"metrics\") && !qs.has(\"id\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "metrics",
+    ""
+   ],
+   [
+    "id",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "ListMultipartUploads",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"uploads\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "uploads",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "ListMultipartUploads",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"uploads\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "uploads",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "ListObjectVersions",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"versions\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "versions",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "ListObjectVersions",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"versions\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "versions",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "ListObjectsV2",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:super::check_query_pattern(qs, \"list-type\", \"2\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "list-type",
+    "2"
+   ]
+  ]
+ },
+ {
+  "expect": "ListObjects",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "wrong-pattern:list-type",
+  "path": "Bucket",
+  "qs": [
+   [
+    "list-type",
+    "2X"
+   ]
+  ]
+ },
+ {
+  "expect": "ListObjects",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "duplicate:list-type",
+  "path": "Bucket",
+  "qs": [
+   [
+    "list-type",
+    "2"
+   ],
+   [
+    "list-type",
+    "2"
+   ],
+   [
+    "list-type",
+    "2X"
+   ]
+  ]
+ },
+ {
+  "expect": "ListObjectsV2",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:super::check_query_pattern(qs, \"list-type\", \"2\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "list-type",
+    "2"
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "ListObjects",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "fallback-empty-qs",
+  "path": "Bucket",
+  "qs": []
+ },
+ {
+  "expect": "GetObjectAttributes",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"attributes\")",
+  "path": "Object",
+  "qs": [
+   [
+    "attributes",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "GetObjectAttributes",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"attributes\")",
+  "path": "Object",
+  "qs": [
+   [
+    "attributes",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "GetObjectAcl",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"acl\")",
+  "path": "Object",
+  "qs": [
+   [
+    "acl",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "GetObjectAcl",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"acl\")",
+  "path": "Object",
+  "qs": [
+   [
+    "acl",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "GetObjectLegalHold",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"legal-hold\")",
+  "path": "Object",
+  "qs": [
+   [
+    "legal-hold",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "GetObjectLegalHold",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"legal-hold\")",
+  "path": "Object",
+  "qs": [
+   [
+    "legal-hold",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "GetObjectRetention",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"retention\")",
+  "path": "Object",
+  "qs": [
+   [
+    "retention",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "GetObjectRetention",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"retention\")",
+  "path": "Object",
+  "qs": [
+   [
+    "retention",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "GetObjectTagging",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"tagging\")",
+  "path": "Object",
+  "qs": [
+   [
+    "tagging",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "GetObjectTagging",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"tagging\")",
+  "path": "Object",
+  "qs": [
+   [
+    "tagging",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "GetObjectTorrent",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"torrent\")",
+  "path": "Object",
+  "qs": [
+   [
+    "torrent",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "GetObjectTorrent",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"torrent\")",
+  "path": "Object",
+  "qs": [
+   [
+    "torrent",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "ListParts",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:let Some(qs) = qs && qs.has(\"uploadId\")",
+  "path": "Object",
+  "qs": [
+   [
+    "uploadId",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "ListParts",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:let Some(qs) = qs && qs.has(\"uploadId\")",
+  "path": "Object",
+  "qs": [
+   [
+    "uploadId",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "GetObject",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "fallback-empty-qs",
+  "path": "Object",
+  "qs": []
+ },
+ {
+  "expect": "__NOT_IMPLEMENTED__",
+  "headers": {},
+  "method": "POST",
+  "nfb": false,
+  "note": "fallback-empty-qs",
+  "path": "Root",
+  "qs": []
+ },
+ {
+  "expect": "CreateBucketMetadataTableConfiguration",
+  "headers": {},
+  "method": "POST",
+  "nfb": true,
+  "note": "if:qs.has(\"metadataTable\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "metadataTable",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "CreateBucketMetadataTableConfiguration",
+  "headers": {},
+  "method": "POST",
+  "nfb": true,
+  "note": "noise:qs.has(\"metadataTable\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "metadataTable",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "DeleteObjects",
+  "headers": {},
+  "method": "POST",
+  "nfb": true,
+  "note": "if:qs.has(\"delete\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "delete",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "DeleteObjects",
+  "headers": {},
+  "method": "POST",
+  "nfb": true,
+  "note": "noise:qs.has(\"delete\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "delete",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "WriteGetObjectResponse",
+  "headers": {
+   "x-amz-request-route": "1",
+   "x-amz-request-token": "1"
+  },
+  "method": "POST",
+  "nfb": false,
+  "note": "if:req.headers.contains_key(\"x-amz-request-route\") && req.headers.contains_key(\"x-amz-request-token\")",
+  "path": "Bucket",
+  "qs": []
+ },
+ {
+  "expect": "WriteGetObjectResponse",
+  "headers": {
+   "x-amz-request-route": "1",
+   "x-amz-request-token": "1"
+  },
+  "method": "POST",
+  "nfb": false,
+  "note": "noise:req.headers.contains_key(\"x-amz-request-route\") && req.headers.contains_key(\"x-amz-request-token\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "__NOT_IMPLEMENTED__",
+  "headers": {},
+  "method": "POST",
+  "nfb": false,
+  "note": "fallback-empty-qs",
+  "path": "Bucket",
+  "qs": []
+ },
+ {
+  "expect": "SelectObjectContent",
+  "headers": {},
+  "method": "POST",
+  "nfb": true,
+  "note": "if:qs.has(\"select\") && super::check_query_pattern(qs, \"select-type\", \"2\")",
+  "path": "Object",
+  "qs": [
+   [
+    "select",
+    ""
+   ],
+   [
+    "select-type",
+    "2"
+   ]
+  ]
+ },
+ {
+  "expect": "__NOT_IMPLEMENTED__",
+  "headers": {},
+  "method": "POST",
+  "nfb": false,
+  "note": "wrong-pattern:select-type",
+  "path": "Object",
+  "qs": [
+   [
+    "select-type",
+    "2X"
+   ]
+  ]
+ },
+ {
+  "expect": "__NOT_IMPLEMENTED__",
+  "headers": {},
+  "method": "POST",
+  "nfb": false,
+  "note": "duplicate:select-type",
+  "path": "Object",
+  "qs": [
+   [
+    "select",
+    ""
+   ],
+   [
+    "select-type",
+    "2"
+   ],
+   [
+    "select-type",
+    "2"
+   ],
+   [
+    "select-type",
+    "2X"
+   ]
+  ]
+ },
+ {
+  "expect": "SelectObjectContent",
+  "headers": {},
+  "method": "POST",
+  "nfb": true,
+  "note": "noise:qs.has(\"select\") && super::check_query_pattern(qs, \"select-type\", \"2\")",
+  "path": "Object",
+  "qs": [
+   [
+    "select",
+    ""
+   ],
+   [
+    "select-type",
+    "2"
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "CreateMultipartUpload",
+  "headers": {},
+  "method": "POST",
+  "nfb": false,
+  "note": "if:qs.has(\"uploads\")",
+  "path": "Object",
+  "qs": [
+   [
+    "uploads",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "CreateMultipartUpload",
+  "headers": {},
+  "method": "POST",
+  "nfb": false,
+  "note": "noise:qs.has(\"uploads\")",
+  "path": "Object",
+  "qs": [
+   [
+    "uploads",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "RestoreObject",
+  "headers": {},
+  "method": "POST",
+  "nfb": true,
+  "note": "if:qs.has(\"restore\")",
+  "path": "Object",
+  "qs": [
+   [
+    "restore",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "RestoreObject",
+  "headers": {},
+  "method": "POST",
+  "nfb": true,
+  "note": "noise:qs.has(\"restore\")",
+  "path": "Object",
+  "qs": [
+   [
+    "restore",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "CompleteMultipartUpload",
+  "headers": {},
+  "method": "POST",
+  "nfb": true,
+  "note": "if:let Some(qs) = qs && qs.has(\"uploadId\")",
+  "path": "Object",
+  "qs": [
+   [
+    "uploadId",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "CompleteMultipartUpload",
+  "headers": {},
+  "method": "POST",
+  "nfb": true,
+  "note": "noise:let Some(qs) = qs && qs.has(\"uploadId\")",
+  "path": "Object",
+  "qs": [
+   [
+    "uploadId",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "__NOT_IMPLEMENTED__",
+  "headers": {},
+  "method": "POST",
+  "nfb": false,
+  "note": "fallback-empty-qs",
+  "path": "Object",
+  "qs": []
+ },
+ {
+  "expect": "__NOT_IMPLEMENTED__",
+  "headers": {},
+  "method": "PUT",
+  "nfb": false,
+  "note": "fallback-empty-qs",
+  "path": "Root",
+  "qs": []
+ },
+ {
+  "expect": "PutBucketAnalyticsConfiguration",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "if:qs.has(\"analytics\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "analytics",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "PutBucketAnalyticsConfiguration",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "noise:qs.has(\"analytics\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "analytics",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "PutBucketIntelligentTieringConfiguration",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "if:qs.has(\"intelligent-tiering\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "intelligent-tiering",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "PutBucketIntelligentTieringConfiguration",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "noise:qs.has(\"intelligent-tiering\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "intelligent-tiering",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "PutBucketInventoryConfiguration",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "if:qs.has(\"inventory\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "inventory",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "PutBucketInventoryConfiguration",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "noise:qs.has(\"inventory\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "inventory",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "PutBucketMetricsConfiguration",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "if:qs.has(\"metrics\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "metrics",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "PutBucketMetricsConfiguration",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "noise:qs.has(\"metrics\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "metrics",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "PutBucketAccelerateConfiguration",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "if:qs.has(\"accelerate\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "accelerate",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "PutBucketAccelerateConfiguration",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "noise:qs.has(\"accelerate\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "accelerate",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "PutBucketAcl",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "if:qs.has(\"acl\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "acl",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "PutBucketAcl",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "noise:qs.has(\"acl\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "acl",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "PutBucketCors",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "if:qs.has(\"cors\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "cors",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "PutBucketCors",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "noise:qs.has(\"cors\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "cors",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "PutBucketEncryption",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "if:qs.has(\"encryption\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "encryption",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "PutBucketEncryption",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "noise:qs.has(\"encryption\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "encryption",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "PutBucketLifecycleConfiguration",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "if:qs.has(\"lifecycle\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "lifecycle",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "PutBucketLifecycleConfiguration",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "noise:qs.has(\"lifecycle\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "lifecycle",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "PutBucketLogging",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "if:qs.has(\"logging\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "logging",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "PutBucketLogging",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "noise:qs.has(\"logging\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "logging",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "PutBucketNotificationConfiguration",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "if:qs.has(\"notification\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "notification",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "PutBucketNotificationConfiguration",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "noise:qs.has(\"notification\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "notification",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "PutBucketOwnershipControls",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "if:qs.has(\"ownershipControls\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "ownershipControls",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "PutBucketOwnershipControls",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "noise:qs.has(\"ownershipControls\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "ownershipControls",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "PutBucketPolicy",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "if:qs.has(\"policy\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "policy",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "PutBucketPolicy",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "noise:qs.has(\"policy\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "policy",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "PutBucketReplication",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "if:qs.has(\"replication\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "replication",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "PutBucketReplication",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "noise:qs.has(\"replication\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "replication",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "PutBucketRequestPayment",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "if:qs.has(\"requestPayment\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "requestPayment",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "PutBucketRequestPayment",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "noise:qs.has(\"requestPayment\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "requestPayment",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "PutBucketTagging",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "if:qs.has(\"tagging\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "tagging",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "PutBucketTagging",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "noise:qs.has(\"tagging\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "tagging",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "PutBucketVersioning",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "if:qs.has(\"versioning\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "versioning",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "PutBucketVersioning",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "noise:qs.has(\"versioning\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "versioning",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "PutBucketWebsite",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "if:qs.has(\"website\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "website",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "PutBucketWebsite",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "noise:qs.has(\"website\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "website",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "PutObjectLockConfiguration",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "if:qs.has(\"object-lock\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "object-lock",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "PutObjectLockConfiguration",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "noise:qs.has(\"object-lock\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "object-lock",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "PutPublicAccessBlock",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "if:qs.has(\"publicAccessBlock\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "publicAccessBlock",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "PutPublicAccessBlock",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "noise:qs.has(\"publicAccessBlock\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "publicAccessBlock",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "CreateBucket",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "fallback-empty-qs",
+  "path": "Bucket",
+  "qs": []
+ },
+ {
+  "expect": "PutObjectAcl",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "if:qs.has(\"acl\")",
+  "path": "Object",
+  "qs": [
+   [
+    "acl",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "PutObjectAcl",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "noise:qs.has(\"acl\")",
+  "path": "Object",
+  "qs": [
+   [
+    "acl",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "PutObjectLegalHold",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "if:qs.has(\"legal-hold\")",
+  "path": "Object",
+  "qs": [
+   [
+    "legal-hold",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "PutObjectLegalHold",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "noise:qs.has(\"legal-hold\")",
+  "path": "Object",
+  "qs": [
+   [
+    "legal-hold",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "PutObjectRetention",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "if:qs.has(\"retention\")",
+  "path": "Object",
+  "qs": [
+   [
+    "retention",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "PutObjectRetention",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "noise:qs.has(\"retention\")",
+  "path": "Object",
+  "qs": [
+   [
+    "retention",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "PutObjectTagging",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "if:qs.has(\"tagging\")",
+  "path": "Object",
+  "qs": [
+   [
+    "tagging",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "PutObjectTagging",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "noise:qs.has(\"tagging\")",
+  "path": "Object",
+  "qs": [
+   [
+    "tagging",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "UploadPartCopy",
+  "headers": {
+   "x-amz-copy-source": "1"
+  },
+  "method": "PUT",
+  "nfb": false,
+  "note": "if:let Some(qs) = qs && qs.has(\"partNumber\") && qs.has(\"uploadId\") && req.headers.contains_key(\"x-amz-copy-source\")",
+  "path": "Object",
+  "qs": [
+   [
+    "partNumber",
+    ""
+   ],
+   [
+    "uploadId",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "UploadPartCopy",
+  "headers": {
+   "x-amz-copy-source": "1"
+  },
+  "method": "PUT",
+  "nfb": false,
+  "note": "noise:let Some(qs) = qs && qs.has(\"partNumber\") && qs.has(\"uploadId\") && req.headers.contains_key(\"x-amz-copy-source\")",
+  "path": "Object",
+  "qs": [
+   [
+    "partNumber",
+    ""
+   ],
+   [
+    "uploadId",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "UploadPart",
+  "headers": {},
+  "method": "PUT",
+  "nfb": false,
+  "note": "if:let Some(qs) = qs && qs.has(\"partNumber\") && qs.has(\"uploadId\")",
+  "path": "Object",
+  "qs": [
+   [
+    "partNumber",
+    ""
+   ],
+   [
+    "uploadId",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "UploadPart",
+  "headers": {},
+  "method": "PUT",
+  "nfb": false,
+  "note": "noise:let Some(qs) = qs && qs.has(\"partNumber\") && qs.has(\"uploadId\")",
+  "path": "Object",
+  "qs": [
+   [
+    "partNumber",
+    ""
+   ],
+   [
+    "uploadId",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "CopyObject",
+  "headers": {
+   "x-amz-copy-source": "1"
+  },
+  "method": "PUT",
+  "nfb": false,
+  "note": "if:req.headers.contains_key(\"x-amz-copy-source\")",
+  "path": "Object",
+  "qs": []
+ },
+ {
+  "expect": "CopyObject",
+  "headers": {
+   "x-amz-copy-source": "1"
+  },
+  "method": "PUT",
+  "nfb": false,
+  "note": "noise:req.headers.contains_key(\"x-amz-copy-source\")",
+  "path": "Object",
+  "qs": [
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "PutObject",
+  "headers": {},
+  "method": "PUT",
+  "nfb": false,
+  "note": "fallback-empty-qs",
+  "path": "Object",
+  "qs": []
+ },
+ {
+  "expect": "__NOT_IMPLEMENTED__",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "fallback-empty-qs",
+  "path": "Root",
+  "qs": []
+ },
+ {
+  "expect": "DeleteBucketAnalyticsConfiguration",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "if:qs.has(\"analytics\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "analytics",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "DeleteBucketAnalyticsConfiguration",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "noise:qs.has(\"analytics\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "analytics",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "DeleteBucketIntelligentTieringConfiguration",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "if:qs.has(\"intelligent-tiering\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "intelligent-tiering",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "DeleteBucketIntelligentTieringConfiguration",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "noise:qs.has(\"intelligent-tiering\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "intelligent-tiering",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "DeleteBucketInventoryConfiguration",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "if:qs.has(\"inventory\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "inventory",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "DeleteBucketInventoryConfiguration",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "noise:qs.has(\"inventory\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "inventory",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "DeleteBucketMetricsConfiguration",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "if:qs.has(\"metrics\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "metrics",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "DeleteBucketMetricsConfiguration",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "noise:qs.has(\"metrics\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "metrics",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "DeleteBucketCors",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "if:qs.has(\"cors\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "cors",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "DeleteBucketCors",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "noise:qs.has(\"cors\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "cors",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "DeleteBucketEncryption",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "if:qs.has(\"encryption\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "encryption",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "DeleteBucketEncryption",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "noise:qs.has(\"encryption\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "encryption",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "DeleteBucketLifecycle",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "if:qs.has(\"lifecycle\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "lifecycle",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "DeleteBucketLifecycle",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "noise:qs.has(\"lifecycle\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "lifecycle",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "DeleteBucketMetadataTableConfiguration",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "if:qs.has(\"metadataTable\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "metadataTable",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "DeleteBucketMetadataTableConfiguration",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "noise:qs.has(\"metadataTable\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "metadataTable",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "DeleteBucketOwnershipControls",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "if:qs.has(\"ownershipControls\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "ownershipControls",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "DeleteBucketOwnershipControls",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "noise:qs.has(\"ownershipControls\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "ownershipControls",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "DeleteBucketPolicy",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "if:qs.has(\"policy\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "policy",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "DeleteBucketPolicy",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "noise:qs.has(\"policy\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "policy",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "DeleteBucketReplication",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "if:qs.has(\"replication\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "replication",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "DeleteBucketReplication",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "noise:qs.has(\"replication\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "replication",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "DeleteBucketTagging",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "if:qs.has(\"tagging\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "tagging",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "DeleteBucketTagging",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "noise:qs.has(\"tagging\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "tagging",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "DeleteBucketWebsite",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "if:qs.has(\"website\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "website",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "DeleteBucketWebsite",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "noise:qs.has(\"website\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "website",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "DeletePublicAccessBlock",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "if:qs.has(\"publicAccessBlock\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "publicAccessBlock",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "DeletePublicAccessBlock",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "noise:qs.has(\"publicAccessBlock\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "publicAccessBlock",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "DeleteBucket",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "fallback-empty-qs",
+  "path": "Bucket",
+  "qs": []
+ },
+ {
+  "expect": "DeleteObjectTagging",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "if:qs.has(\"tagging\")",
+  "path": "Object",
+  "qs": [
+   [
+    "tagging",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "DeleteObjectTagging",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "noise:qs.has(\"tagging\")",
+  "path": "Object",
+  "qs": [
+   [
+    "tagging",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "AbortMultipartUpload",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "if:let Some(qs) = qs && qs.has(\"uploadId\")",
+  "path": "Object",
+  "qs": [
+   [
+    "uploadId",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "AbortMultipartUpload",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "noise:let Some(qs) = qs && qs.has(\"uploadId\")",
+  "path": "Object",
+  "qs": [
+   [
+    "uploadId",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "DeleteObject",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "fallback-empty-qs",
+  "path": "Object",
+  "qs": []
+ },
+ {
+  "expect": "__NOT_IMPLEMENTED__",
+  "headers": {},
+  "method": "HEAD",
+  "nfb": false,
+  "note": "fallback-empty-qs|null-qs",
+  "path": "Root",
+  "qs": null
+ },
+ {
+  "expect": "HeadBucket",
+  "headers": {},
+  "method": "HEAD",
+  "nfb": false,
+  "note": "tail:|null-qs",
+  "path": "Bucket",
+  "qs": null
+ },
+ {
+  "expect": "HeadObject",
+  "headers": {},
+  "method": "HEAD",
+  "nfb": false,
+  "note": "tail:|null-qs",
+  "path": "Object",
+  "qs": null
+ },
+ {
+  "expect": "ListBuckets",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "fallback-empty-qs|null-qs",
+  "path": "Root",
+  "qs": null
+ },
+ {
+  "expect": "ListObjects",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "fallback-empty-qs|null-qs",
+  "path": "Bucket",
+  "qs": null
+ },
+ {
+  "expect": "GetObject",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "fallback-empty-qs|null-qs",
+  "path": "Object",
+  "qs": null
+ },
+ {
+  "expect": "__NOT_IMPLEMENTED__",
+  "headers": {},
+  "method": "POST",
+  "nfb": false,
+  "note": "fallback-empty-qs|null-qs",
+  "path": "Root",
+  "qs": null
+ },
+ {
+  "expect": "WriteGetObjectResponse",
+  "headers": {
+   "x-amz-request-route": "1",
+   "x-amz-request-token": "1"
+  },
+  "method": "POST",
+  "nfb": false,
+  "note": "if:req.headers.contains_key(\"x-amz-request-route\") && req.headers.contains_key(\"x-amz-request-token\")|null-qs",
+  "path": "Bucket",
+  "qs": null
+ },
+ {
+  "expect": "__NOT_IMPLEMENTED__",
+  "headers": {},
+  "method": "POST",
+  "nfb": false,
+  "note": "fallback-empty-qs|null-qs",
+  "path": "Object",
+  "qs": null
+ },
+ {
+  "expect": "__NOT_IMPLEMENTED__",
+  "headers": {},
+  "method": "PUT",
+  "nfb": false,
+  "note": "fallback-empty-qs|null-qs",
+  "path": "Root",
+  "qs": null
+ },
+ {
+  "expect": "CreateBucket",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "fallback-empty-qs|null-qs",
+  "path": "Bucket",
+  "qs": null
+ },
+ {
+  "expect": "CopyObject",
+  "headers": {
+   "x-amz-copy-source": "1"
+  },
+  "method": "PUT",
+  "nfb": false,
+  "note": "if:req.headers.contains_key(\"x-amz-copy-source\")|null-qs",
+  "path": "Object",
+  "qs": null
+ },
+ {
+  "expect": "__NOT_IMPLEMENTED__",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "fallback-empty-qs|null-qs",
+  "path": "Root",
+  "qs": null
+ },
+ {
+  "expect": "DeleteBucket",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "fallback-empty-qs|null-qs",
+  "path": "Bucket",
+  "qs": null
+ },
+ {
+  "expect": "DeleteObject",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "fallback-empty-qs|null-qs",
+  "path": "Object",
+  "qs": null
+ }
+]
