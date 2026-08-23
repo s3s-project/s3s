@@ -187,7 +187,8 @@ impl Message {
         }
 
         let payload = self.payload.filter(|payload| !payload.is_empty());
-        let mut buf: Vec<u8> = Vec::with_capacity(12 + headers_byte_length as usize);
+        let frame_overhead = if payload.is_some() { 12 } else { 16 };
+        let mut buf: Vec<u8> = Vec::with_capacity(frame_overhead + headers_byte_length as usize);
         buf.put_u32(total_byte_length);
         buf.put_u32(headers_byte_length);
 
