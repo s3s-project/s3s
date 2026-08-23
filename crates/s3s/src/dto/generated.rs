@@ -685,6 +685,8 @@ impl BucketLocationConstraint {
 
     pub const AP_EAST_1: &'static str = "ap-east-1";
 
+    pub const AP_EAST_2: &'static str = "ap-east-2";
+
     pub const AP_NORTHEAST_1: &'static str = "ap-northeast-1";
 
     pub const AP_NORTHEAST_2: &'static str = "ap-northeast-2";
@@ -705,7 +707,13 @@ impl BucketLocationConstraint {
 
     pub const AP_SOUTHEAST_5: &'static str = "ap-southeast-5";
 
+    pub const AP_SOUTHEAST_6: &'static str = "ap-southeast-6";
+
+    pub const AP_SOUTHEAST_7: &'static str = "ap-southeast-7";
+
     pub const CA_CENTRAL_1: &'static str = "ca-central-1";
+
+    pub const CA_WEST_1: &'static str = "ca-west-1";
 
     pub const CN_NORTH_1: &'static str = "cn-north-1";
 
@@ -732,6 +740,8 @@ impl BucketLocationConstraint {
     pub const ME_CENTRAL_1: &'static str = "me-central-1";
 
     pub const ME_SOUTH_1: &'static str = "me-south-1";
+
+    pub const MX_CENTRAL_1: &'static str = "mx-central-1";
 
     pub const SA_EAST_1: &'static str = "sa-east-1";
 
@@ -15081,9 +15091,17 @@ pub type ObjectSizeLessThanBytes = i64;
 pub struct ObjectStorageClass(Cow<'static, str>);
 
 impl ObjectStorageClass {
+    pub const AWS_BACKUP_LOW_COST_WARM: &'static str = "AWS_BACKUP_LOW_COST_WARM";
+
+    pub const AWS_BACKUP_WARM: &'static str = "AWS_BACKUP_WARM";
+
     pub const DEEP_ARCHIVE: &'static str = "DEEP_ARCHIVE";
 
     pub const EXPRESS_ONEZONE: &'static str = "EXPRESS_ONEZONE";
+
+    pub const FSX_ONTAP: &'static str = "FSX_ONTAP";
+
+    pub const FSX_OPENZFS: &'static str = "FSX_OPENZFS";
 
     pub const GLACIER: &'static str = "GLACIER";
 
@@ -20953,9 +20971,17 @@ impl fmt::Debug for StatsEvent {
 pub struct StorageClass(Cow<'static, str>);
 
 impl StorageClass {
+    pub const AWS_BACKUP_LOW_COST_WARM: &'static str = "AWS_BACKUP_LOW_COST_WARM";
+
+    pub const AWS_BACKUP_WARM: &'static str = "AWS_BACKUP_WARM";
+
     pub const DEEP_ARCHIVE: &'static str = "DEEP_ARCHIVE";
 
     pub const EXPRESS_ONEZONE: &'static str = "EXPRESS_ONEZONE";
+
+    pub const FSX_ONTAP: &'static str = "FSX_ONTAP";
+
+    pub const FSX_OPENZFS: &'static str = "FSX_OPENZFS";
 
     pub const GLACIER: &'static str = "GLACIER";
 

@@ -389,6 +389,7 @@ impl AwsConversion for s3s::dto::BucketLocationConstraint {
             aws_sdk_s3::types::BucketLocationConstraint::Eu => Self::from_static(Self::EU),
             aws_sdk_s3::types::BucketLocationConstraint::AfSouth1 => Self::from_static(Self::AF_SOUTH_1),
             aws_sdk_s3::types::BucketLocationConstraint::ApEast1 => Self::from_static(Self::AP_EAST_1),
+            aws_sdk_s3::types::BucketLocationConstraint::ApEast2 => Self::from_static(Self::AP_EAST_2),
             aws_sdk_s3::types::BucketLocationConstraint::ApNortheast1 => Self::from_static(Self::AP_NORTHEAST_1),
             aws_sdk_s3::types::BucketLocationConstraint::ApNortheast2 => Self::from_static(Self::AP_NORTHEAST_2),
             aws_sdk_s3::types::BucketLocationConstraint::ApNortheast3 => Self::from_static(Self::AP_NORTHEAST_3),
@@ -399,7 +400,10 @@ impl AwsConversion for s3s::dto::BucketLocationConstraint {
             aws_sdk_s3::types::BucketLocationConstraint::ApSoutheast3 => Self::from_static(Self::AP_SOUTHEAST_3),
             aws_sdk_s3::types::BucketLocationConstraint::ApSoutheast4 => Self::from_static(Self::AP_SOUTHEAST_4),
             aws_sdk_s3::types::BucketLocationConstraint::ApSoutheast5 => Self::from_static(Self::AP_SOUTHEAST_5),
+            aws_sdk_s3::types::BucketLocationConstraint::ApSoutheast6 => Self::from_static(Self::AP_SOUTHEAST_6),
+            aws_sdk_s3::types::BucketLocationConstraint::ApSoutheast7 => Self::from_static(Self::AP_SOUTHEAST_7),
             aws_sdk_s3::types::BucketLocationConstraint::CaCentral1 => Self::from_static(Self::CA_CENTRAL_1),
+            aws_sdk_s3::types::BucketLocationConstraint::CaWest1 => Self::from_static(Self::CA_WEST_1),
             aws_sdk_s3::types::BucketLocationConstraint::CnNorth1 => Self::from_static(Self::CN_NORTH_1),
             aws_sdk_s3::types::BucketLocationConstraint::CnNorthwest1 => Self::from_static(Self::CN_NORTHWEST_1),
             aws_sdk_s3::types::BucketLocationConstraint::EuCentral1 => Self::from_static(Self::EU_CENTRAL_1),
@@ -413,6 +417,7 @@ impl AwsConversion for s3s::dto::BucketLocationConstraint {
             aws_sdk_s3::types::BucketLocationConstraint::IlCentral1 => Self::from_static(Self::IL_CENTRAL_1),
             aws_sdk_s3::types::BucketLocationConstraint::MeCentral1 => Self::from_static(Self::ME_CENTRAL_1),
             aws_sdk_s3::types::BucketLocationConstraint::MeSouth1 => Self::from_static(Self::ME_SOUTH_1),
+            aws_sdk_s3::types::BucketLocationConstraint::MxCentral1 => Self::from_static(Self::MX_CENTRAL_1),
             aws_sdk_s3::types::BucketLocationConstraint::SaEast1 => Self::from_static(Self::SA_EAST_1),
             aws_sdk_s3::types::BucketLocationConstraint::UsEast2 => Self::from_static(Self::US_EAST_2),
             aws_sdk_s3::types::BucketLocationConstraint::UsGovEast1 => Self::from_static(Self::US_GOV_EAST_1),
@@ -6193,8 +6198,12 @@ impl AwsConversion for s3s::dto::ObjectStorageClass {
 
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
         Ok(match x {
+            aws_sdk_s3::types::ObjectStorageClass::AwsBackupLowCostWarm => Self::from_static(Self::AWS_BACKUP_LOW_COST_WARM),
+            aws_sdk_s3::types::ObjectStorageClass::AwsBackupWarm => Self::from_static(Self::AWS_BACKUP_WARM),
             aws_sdk_s3::types::ObjectStorageClass::DeepArchive => Self::from_static(Self::DEEP_ARCHIVE),
             aws_sdk_s3::types::ObjectStorageClass::ExpressOnezone => Self::from_static(Self::EXPRESS_ONEZONE),
+            aws_sdk_s3::types::ObjectStorageClass::FsxOntap => Self::from_static(Self::FSX_ONTAP),
+            aws_sdk_s3::types::ObjectStorageClass::FsxOpenzfs => Self::from_static(Self::FSX_OPENZFS),
             aws_sdk_s3::types::ObjectStorageClass::Glacier => Self::from_static(Self::GLACIER),
             aws_sdk_s3::types::ObjectStorageClass::GlacierIr => Self::from_static(Self::GLACIER_IR),
             aws_sdk_s3::types::ObjectStorageClass::IntelligentTiering => Self::from_static(Self::INTELLIGENT_TIERING),
@@ -8771,8 +8780,12 @@ impl AwsConversion for s3s::dto::StorageClass {
 
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
         Ok(match x {
+            aws_sdk_s3::types::StorageClass::AwsBackupLowCostWarm => Self::from_static(Self::AWS_BACKUP_LOW_COST_WARM),
+            aws_sdk_s3::types::StorageClass::AwsBackupWarm => Self::from_static(Self::AWS_BACKUP_WARM),
             aws_sdk_s3::types::StorageClass::DeepArchive => Self::from_static(Self::DEEP_ARCHIVE),
             aws_sdk_s3::types::StorageClass::ExpressOnezone => Self::from_static(Self::EXPRESS_ONEZONE),
+            aws_sdk_s3::types::StorageClass::FsxOntap => Self::from_static(Self::FSX_ONTAP),
+            aws_sdk_s3::types::StorageClass::FsxOpenzfs => Self::from_static(Self::FSX_OPENZFS),
             aws_sdk_s3::types::StorageClass::Glacier => Self::from_static(Self::GLACIER),
             aws_sdk_s3::types::StorageClass::GlacierIr => Self::from_static(Self::GLACIER_IR),
             aws_sdk_s3::types::StorageClass::IntelligentTiering => Self::from_static(Self::INTELLIGENT_TIERING),

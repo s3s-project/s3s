@@ -2064,6 +2064,7 @@ impl<'xml> DeserializeContent<'xml> for BucketLocationConstraint {
             "EU" => Ok(Self::from_static(BucketLocationConstraint::EU)),
             "af-south-1" => Ok(Self::from_static(BucketLocationConstraint::AF_SOUTH_1)),
             "ap-east-1" => Ok(Self::from_static(BucketLocationConstraint::AP_EAST_1)),
+            "ap-east-2" => Ok(Self::from_static(BucketLocationConstraint::AP_EAST_2)),
             "ap-northeast-1" => Ok(Self::from_static(BucketLocationConstraint::AP_NORTHEAST_1)),
             "ap-northeast-2" => Ok(Self::from_static(BucketLocationConstraint::AP_NORTHEAST_2)),
             "ap-northeast-3" => Ok(Self::from_static(BucketLocationConstraint::AP_NORTHEAST_3)),
@@ -2074,7 +2075,10 @@ impl<'xml> DeserializeContent<'xml> for BucketLocationConstraint {
             "ap-southeast-3" => Ok(Self::from_static(BucketLocationConstraint::AP_SOUTHEAST_3)),
             "ap-southeast-4" => Ok(Self::from_static(BucketLocationConstraint::AP_SOUTHEAST_4)),
             "ap-southeast-5" => Ok(Self::from_static(BucketLocationConstraint::AP_SOUTHEAST_5)),
+            "ap-southeast-6" => Ok(Self::from_static(BucketLocationConstraint::AP_SOUTHEAST_6)),
+            "ap-southeast-7" => Ok(Self::from_static(BucketLocationConstraint::AP_SOUTHEAST_7)),
             "ca-central-1" => Ok(Self::from_static(BucketLocationConstraint::CA_CENTRAL_1)),
+            "ca-west-1" => Ok(Self::from_static(BucketLocationConstraint::CA_WEST_1)),
             "cn-north-1" => Ok(Self::from_static(BucketLocationConstraint::CN_NORTH_1)),
             "cn-northwest-1" => Ok(Self::from_static(BucketLocationConstraint::CN_NORTHWEST_1)),
             "eu-central-1" => Ok(Self::from_static(BucketLocationConstraint::EU_CENTRAL_1)),
@@ -2088,6 +2092,7 @@ impl<'xml> DeserializeContent<'xml> for BucketLocationConstraint {
             "il-central-1" => Ok(Self::from_static(BucketLocationConstraint::IL_CENTRAL_1)),
             "me-central-1" => Ok(Self::from_static(BucketLocationConstraint::ME_CENTRAL_1)),
             "me-south-1" => Ok(Self::from_static(BucketLocationConstraint::ME_SOUTH_1)),
+            "mx-central-1" => Ok(Self::from_static(BucketLocationConstraint::MX_CENTRAL_1)),
             "sa-east-1" => Ok(Self::from_static(BucketLocationConstraint::SA_EAST_1)),
             "us-east-2" => Ok(Self::from_static(BucketLocationConstraint::US_EAST_2)),
             "us-gov-east-1" => Ok(Self::from_static(BucketLocationConstraint::US_GOV_EAST_1)),
@@ -7781,8 +7786,12 @@ impl SerializeContent for ObjectStorageClass {
 impl<'xml> DeserializeContent<'xml> for ObjectStorageClass {
     fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
         d.text(|s| match s {
+            "AWS_BACKUP_LOW_COST_WARM" => Ok(Self::from_static(ObjectStorageClass::AWS_BACKUP_LOW_COST_WARM)),
+            "AWS_BACKUP_WARM" => Ok(Self::from_static(ObjectStorageClass::AWS_BACKUP_WARM)),
             "DEEP_ARCHIVE" => Ok(Self::from_static(ObjectStorageClass::DEEP_ARCHIVE)),
             "EXPRESS_ONEZONE" => Ok(Self::from_static(ObjectStorageClass::EXPRESS_ONEZONE)),
+            "FSX_ONTAP" => Ok(Self::from_static(ObjectStorageClass::FSX_ONTAP)),
+            "FSX_OPENZFS" => Ok(Self::from_static(ObjectStorageClass::FSX_OPENZFS)),
             "GLACIER" => Ok(Self::from_static(ObjectStorageClass::GLACIER)),
             "GLACIER_IR" => Ok(Self::from_static(ObjectStorageClass::GLACIER_IR)),
             "INTELLIGENT_TIERING" => Ok(Self::from_static(ObjectStorageClass::INTELLIGENT_TIERING)),
@@ -10103,8 +10112,12 @@ impl SerializeContent for StorageClass {
 impl<'xml> DeserializeContent<'xml> for StorageClass {
     fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
         d.text(|s| match s {
+            "AWS_BACKUP_LOW_COST_WARM" => Ok(Self::from_static(StorageClass::AWS_BACKUP_LOW_COST_WARM)),
+            "AWS_BACKUP_WARM" => Ok(Self::from_static(StorageClass::AWS_BACKUP_WARM)),
             "DEEP_ARCHIVE" => Ok(Self::from_static(StorageClass::DEEP_ARCHIVE)),
             "EXPRESS_ONEZONE" => Ok(Self::from_static(StorageClass::EXPRESS_ONEZONE)),
+            "FSX_ONTAP" => Ok(Self::from_static(StorageClass::FSX_ONTAP)),
+            "FSX_OPENZFS" => Ok(Self::from_static(StorageClass::FSX_OPENZFS)),
             "GLACIER" => Ok(Self::from_static(StorageClass::GLACIER)),
             "GLACIER_IR" => Ok(Self::from_static(StorageClass::GLACIER_IR)),
             "INTELLIGENT_TIERING" => Ok(Self::from_static(StorageClass::INTELLIGENT_TIERING)),

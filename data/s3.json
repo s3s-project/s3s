@@ -18739,6 +18739,12 @@
                         "smithy.api#enumValue": "ap-east-1"
                     }
                 },
+                "ap_east_2": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "ap-east-2"
+                    }
+                },
                 "ap_northeast_1": {
                     "target": "smithy.api#Unit",
                     "traits": {
@@ -18799,10 +18805,28 @@
                         "smithy.api#enumValue": "ap-southeast-5"
                     }
                 },
+                "ap_southeast_6": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "ap-southeast-6"
+                    }
+                },
+                "ap_southeast_7": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "ap-southeast-7"
+                    }
+                },
                 "ca_central_1": {
                     "target": "smithy.api#Unit",
                     "traits": {
                         "smithy.api#enumValue": "ca-central-1"
+                    }
+                },
+                "ca_west_1": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "ca-west-1"
                     }
                 },
                 "cn_north_1": {
@@ -18887,6 +18911,12 @@
                     "target": "smithy.api#Unit",
                     "traits": {
                         "smithy.api#enumValue": "me-south-1"
+                    }
+                },
+                "mx_central_1": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "mx-central-1"
                     }
                 },
                 "sa_east_1": {
@@ -30904,6 +30934,30 @@
                     "traits": {
                         "smithy.api#enumValue": "EXPRESS_ONEZONE"
                     }
+                },
+                "FSX_OPENZFS": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "FSX_OPENZFS"
+                    }
+                },
+                "FSX_ONTAP": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "FSX_ONTAP"
+                    }
+                },
+                "AWS_BACKUP_WARM": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "AWS_BACKUP_WARM"
+                    }
+                },
+                "AWS_BACKUP_LOW_COST_WARM": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "AWS_BACKUP_LOW_COST_WARM"
+                    }
                 }
             }
         },
@@ -35852,6 +35906,30 @@
                     "target": "smithy.api#Unit",
                     "traits": {
                         "smithy.api#enumValue": "EXPRESS_ONEZONE"
+                    }
+                },
+                "FSX_OPENZFS": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "FSX_OPENZFS"
+                    }
+                },
+                "FSX_ONTAP": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "FSX_ONTAP"
+                    }
+                },
+                "AWS_BACKUP_WARM": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "AWS_BACKUP_WARM"
+                    }
+                },
+                "AWS_BACKUP_LOW_COST_WARM": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "AWS_BACKUP_LOW_COST_WARM"
                     }
                 }
             }
