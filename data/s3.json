@@ -27671,6 +27671,12 @@
                     "traits": {
                         "smithy.api#enumValue": "ObjectOwner"
                     }
+                },
+                "LifecycleExpirationDate": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "LifecycleExpirationDate"
+                    }
                 }
             }
         },

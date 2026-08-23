@@ -4544,6 +4544,9 @@ impl AwsConversion for s3s::dto::InventoryOptionalField {
             }
             aws_sdk_s3::types::InventoryOptionalField::IsMultipartUploaded => Self::from_static(Self::IS_MULTIPART_UPLOADED),
             aws_sdk_s3::types::InventoryOptionalField::LastModifiedDate => Self::from_static(Self::LAST_MODIFIED_DATE),
+            aws_sdk_s3::types::InventoryOptionalField::LifecycleExpirationDate => {
+                Self::from_static(Self::LIFECYCLE_EXPIRATION_DATE)
+            }
             aws_sdk_s3::types::InventoryOptionalField::ObjectAccessControlList => {
                 Self::from_static(Self::OBJECT_ACCESS_CONTROL_LIST)
             }

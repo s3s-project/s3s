@@ -11640,6 +11640,8 @@ impl InventoryOptionalField {
 
     pub const LAST_MODIFIED_DATE: &'static str = "LastModifiedDate";
 
+    pub const LIFECYCLE_EXPIRATION_DATE: &'static str = "LifecycleExpirationDate";
+
     pub const OBJECT_ACCESS_CONTROL_LIST: &'static str = "ObjectAccessControlList";
 
     pub const OBJECT_LOCK_LEGAL_HOLD_STATUS: &'static str = "ObjectLockLegalHoldStatus";

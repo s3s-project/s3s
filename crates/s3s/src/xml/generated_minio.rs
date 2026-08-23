@@ -5426,6 +5426,7 @@ impl<'xml> DeserializeContent<'xml> for InventoryOptionalField {
             "IntelligentTieringAccessTier" => Ok(Self::from_static(InventoryOptionalField::INTELLIGENT_TIERING_ACCESS_TIER)),
             "IsMultipartUploaded" => Ok(Self::from_static(InventoryOptionalField::IS_MULTIPART_UPLOADED)),
             "LastModifiedDate" => Ok(Self::from_static(InventoryOptionalField::LAST_MODIFIED_DATE)),
+            "LifecycleExpirationDate" => Ok(Self::from_static(InventoryOptionalField::LIFECYCLE_EXPIRATION_DATE)),
             "ObjectAccessControlList" => Ok(Self::from_static(InventoryOptionalField::OBJECT_ACCESS_CONTROL_LIST)),
             "ObjectLockLegalHoldStatus" => Ok(Self::from_static(InventoryOptionalField::OBJECT_LOCK_LEGAL_HOLD_STATUS)),
             "ObjectLockMode" => Ok(Self::from_static(InventoryOptionalField::OBJECT_LOCK_MODE)),
