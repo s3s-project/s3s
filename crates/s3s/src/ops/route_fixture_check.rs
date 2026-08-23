@@ -18,9 +18,9 @@
 //! |---|---|
 //! | `method` | HTTP method |
 //! | `path` | path shape: `Root`, `Bucket` or `Object`; the checker substitutes fixed concrete values (`bucket`, `key.txt`) |
-//! | `qs` | ordered query pairs `[[k, v], ...]`; `[]` means the query string is present but empty, `null` means it is absent entirely. Order and duplicates are significant because some rules distinguish duplicate keys |
+//! | `qs` | query pairs `[[k, v], ...]`; `[]` means the query string is present but empty, `null` means it is absent entirely. Pairs are stored as a list because duplicate keys are significant (see the `duplicate:` cases). The checker feeds them through [`OrderedQs`](crate::http::OrderedQs), which stable-sorts by key, so cross-key order carries no meaning and values must already be URL-decoded |
 //! | `headers` | the request headers consulted by the router (e.g. `x-amz-copy-source`) |
-//! | `expect` | expected operation name; `__NOT_IMPLEMENTED__` means the router must reject the request |
+//! | `expect` | expected operation name; `__NOT_IMPLEMENTED__` means the router must reject the request. This is a frozen answer, not a placeholder (placeholders use the `__CAPTURE__` prefix, see below) |
 //! | `nfb` | expected `needs_full_body` flag |
 //! | `note` | provenance label: which generated rule (or variant) the sample exercises |
 //!
@@ -41,10 +41,12 @@
 //! # Capture mode
 //!
 //! With `ROUTE_FIXTURE_CAPTURE=1` the test rewrites placeholder expectations
-//! (`expect == "__..."`) with the current router's answer and writes the file
-//! back. After an intentional router change, reset the affected entries to
-//! placeholders and re-capture; entries with real expectations are left
-//! untouched and skipped.
+//! (`expect` prefixed with `__CAPTURE__`) with the current router's answer and
+//! writes the file back. After an intentional router change, reset the affected
+//! entries to `__CAPTURE__` placeholders and re-capture; all other entries —
+//! including frozen rejects (`__NOT_IMPLEMENTED__`) — are left untouched and
+//! skipped. A dedicated prefix keeps the two distinguishable, so capture never
+//! silently rewrites frozen expectations.
 //!
 //! # Placement
 //!
@@ -99,10 +101,11 @@ fn s3_path(path: &str) -> S3Path {
     match path {
         "Root" => S3Path::Root,
         "Bucket" => S3Path::Bucket { bucket: "bucket".into() },
-        _ => S3Path::Object {
+        "Object" => S3Path::Object {
             bucket: "bucket".into(),
             key: "key.txt".into(),
         },
+        other => panic!("unknown path kind in fixture: {other}"),
     }
 }
 
@@ -137,7 +140,7 @@ fn route_fixtures_match() {
         };
 
         if capture {
-            if !fx.expect_op.starts_with("__") {
+            if !fx.expect_op.starts_with("__CAPTURE__") {
                 continue;
             }
             let entry = raw.as_mut().unwrap().get_mut(idx).unwrap();
