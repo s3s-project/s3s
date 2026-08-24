@@ -11,6 +11,8 @@ use crate::dto::*;
 
 use std::io::Write;
 
+//   Serialize: AbacStatus
+// Deserialize: AbacStatus
 //   Serialize: AccelerateConfiguration
 // Deserialize: AccelerateConfiguration
 //   Serialize: AccessControlPolicy
@@ -122,6 +124,8 @@ use std::io::Write;
 //   Serialize: WebsiteConfiguration
 // Deserialize: WebsiteConfiguration
 
+//   SerializeContent: AbacStatus
+// DeserializeContent: AbacStatus
 //   SerializeContent: AbortIncompleteMultipartUpload
 // DeserializeContent: AbortIncompleteMultipartUpload
 //   SerializeContent: AccelerateConfiguration
@@ -172,6 +176,8 @@ use std::io::Write;
 // DeserializeContent: AssumedRoleUser
 //   SerializeContent: Bucket
 // DeserializeContent: Bucket
+//   SerializeContent: BucketAbacStatus
+// DeserializeContent: BucketAbacStatus
 //   SerializeContent: BucketAccelerateStatus
 // DeserializeContent: BucketAccelerateStatus
 //   SerializeContent: BucketInfo
@@ -848,6 +854,18 @@ use std::io::Write;
 
 const XMLNS_S3: &str = "http://s3.amazonaws.com/doc/2006-03-01/";
 
+impl Serialize for AbacStatus {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("AbacStatus", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for AbacStatus {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("AbacStatus", Deserializer::content)
+    }
+}
+
 impl Serialize for AccelerateConfiguration {
     fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         s.content("AccelerateConfiguration", self)
@@ -1496,6 +1514,34 @@ impl<'xml> Deserialize<'xml> for WebsiteConfiguration {
     }
 }
 
+impl SerializeContent for AbacStatus {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.status {
+            s.content("Status", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for AbacStatus {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut status: Option<BucketAbacStatus> = None;
+        d.for_each_element(|d, x| match x {
+            b"Status" => {
+                if status.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                status = Some(d.content()?);
+                Ok(())
+            }
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
+        })?;
+        Ok(Self { status })
+    }
+}
 impl SerializeContent for AbortIncompleteMultipartUpload {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.days_after_initiation {
@@ -1959,6 +2005,20 @@ impl<'xml> DeserializeContent<'xml> for Bucket {
             bucket_region,
             creation_date,
             name,
+        })
+    }
+}
+impl SerializeContent for BucketAbacStatus {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        self.as_str().serialize_content(s)
+    }
+}
+impl<'xml> DeserializeContent<'xml> for BucketAbacStatus {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.text(|s| match s {
+            "Disabled" => Ok(Self::from_static(BucketAbacStatus::DISABLED)),
+            "Enabled" => Ok(Self::from_static(BucketAbacStatus::ENABLED)),
+            _ => Ok(Self::from(s.to_owned())),
         })
     }
 }

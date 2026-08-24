@@ -153,6 +153,7 @@ impl S3 for Proxy {
         let mut b = self.0.create_bucket();
         b = b.set_acl(try_into_aws(input.acl)?);
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
+        b = b.set_bucket_namespace(try_into_aws(input.bucket_namespace)?);
         b = b.set_create_bucket_configuration(try_into_aws(input.create_bucket_configuration)?);
         b = b.set_grant_full_control(try_into_aws(input.grant_full_control)?);
         b = b.set_grant_read(try_into_aws(input.grant_read)?);
@@ -676,6 +677,28 @@ impl S3 for Proxy {
         let input = req.input;
         debug!(?input);
         let mut b = self.0.delete_public_access_block();
+        b = b.set_bucket(Some(try_into_aws(input.bucket)?));
+        b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
+        let result = b.send().await;
+        match result {
+            Ok(output) => {
+                let headers = super::meta::build_headers(&output)?;
+                let output = try_from_aws(output)?;
+                debug!(?output);
+                Ok(S3Response::with_headers(output, headers))
+            }
+            Err(e) => Err(wrap_sdk_error!(e)),
+        }
+    }
+
+    #[tracing::instrument(skip(self, req))]
+    async fn get_bucket_abac(
+        &self,
+        req: S3Request<s3s::dto::GetBucketAbacInput>,
+    ) -> S3Result<S3Response<s3s::dto::GetBucketAbacOutput>> {
+        let input = req.input;
+        debug!(?input);
+        let mut b = self.0.get_bucket_abac();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
@@ -1723,6 +1746,31 @@ impl S3 for Proxy {
         b = b.set_sse_customer_key(try_into_aws(input.sse_customer_key)?);
         b = b.set_sse_customer_key_md5(try_into_aws(input.sse_customer_key_md5)?);
         b = b.set_upload_id(Some(try_into_aws(input.upload_id)?));
+        let result = b.send().await;
+        match result {
+            Ok(output) => {
+                let headers = super::meta::build_headers(&output)?;
+                let output = try_from_aws(output)?;
+                debug!(?output);
+                Ok(S3Response::with_headers(output, headers))
+            }
+            Err(e) => Err(wrap_sdk_error!(e)),
+        }
+    }
+
+    #[tracing::instrument(skip(self, req))]
+    async fn put_bucket_abac(
+        &self,
+        req: S3Request<s3s::dto::PutBucketAbacInput>,
+    ) -> S3Result<S3Response<s3s::dto::PutBucketAbacOutput>> {
+        let input = req.input;
+        debug!(?input);
+        let mut b = self.0.put_bucket_abac();
+        b = b.set_abac_status(Some(try_into_aws(input.abac_status)?));
+        b = b.set_bucket(Some(try_into_aws(input.bucket)?));
+        b = b.set_checksum_algorithm(try_into_aws(input.checksum_algorithm)?);
+        b = b.set_content_md5(try_into_aws(input.content_md5)?);
+        b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
         match result {
             Ok(output) => {

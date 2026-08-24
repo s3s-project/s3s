@@ -5,6 +5,23 @@
 
 use super::*;
 
+impl AwsConversion for s3s::dto::AbacStatus {
+    type Target = aws_sdk_s3::types::AbacStatus;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            status: try_from_aws(x.status)?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_status(try_into_aws(x.status)?);
+        Ok(y.build())
+    }
+}
+
 impl AwsConversion for s3s::dto::AbortIncompleteMultipartUpload {
     type Target = aws_sdk_s3::types::AbortIncompleteMultipartUpload;
     type Error = S3Error;
@@ -276,6 +293,23 @@ impl AwsConversion for s3s::dto::Bucket {
     }
 }
 
+impl AwsConversion for s3s::dto::BucketAbacStatus {
+    type Target = aws_sdk_s3::types::BucketAbacStatus;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(match x {
+            aws_sdk_s3::types::BucketAbacStatus::Disabled => Self::from_static(Self::DISABLED),
+            aws_sdk_s3::types::BucketAbacStatus::Enabled => Self::from_static(Self::ENABLED),
+            _ => Self::from(x.as_str().to_owned()),
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        Ok(aws_sdk_s3::types::BucketAbacStatus::from(x.as_str()))
+    }
+}
+
 impl AwsConversion for s3s::dto::BucketAccelerateStatus {
     type Target = aws_sdk_s3::types::BucketAccelerateStatus;
     type Error = S3Error;
@@ -466,6 +500,23 @@ impl AwsConversion for s3s::dto::BucketLogsPermission {
 
     fn try_into_aws(x: Self) -> S3Result<Self::Target> {
         Ok(aws_sdk_s3::types::BucketLogsPermission::from(x.as_str()))
+    }
+}
+
+impl AwsConversion for s3s::dto::BucketNamespace {
+    type Target = aws_sdk_s3::types::BucketNamespace;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(match x {
+            aws_sdk_s3::types::BucketNamespace::AccountRegional => Self::from_static(Self::ACCOUNT_REGIONAL),
+            aws_sdk_s3::types::BucketNamespace::Global => Self::from_static(Self::GLOBAL),
+            _ => Self::from(x.as_str().to_owned()),
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        Ok(aws_sdk_s3::types::BucketNamespace::from(x.as_str()))
     }
 }
 
@@ -1184,6 +1235,7 @@ impl AwsConversion for s3s::dto::CreateBucketInput {
         Ok(Self {
             acl: try_from_aws(x.acl)?,
             bucket: unwrap_from_aws(x.bucket, "bucket")?,
+            bucket_namespace: try_from_aws(x.bucket_namespace)?,
             create_bucket_configuration: try_from_aws(x.create_bucket_configuration)?,
             grant_full_control: try_from_aws(x.grant_full_control)?,
             grant_read: try_from_aws(x.grant_read)?,
@@ -1199,6 +1251,7 @@ impl AwsConversion for s3s::dto::CreateBucketInput {
         let mut y = Self::Target::builder();
         y = y.set_acl(try_into_aws(x.acl)?);
         y = y.set_bucket(Some(try_into_aws(x.bucket)?));
+        y = y.set_bucket_namespace(try_into_aws(x.bucket_namespace)?);
         y = y.set_create_bucket_configuration(try_into_aws(x.create_bucket_configuration)?);
         y = y.set_grant_full_control(try_into_aws(x.grant_full_control)?);
         y = y.set_grant_read(try_into_aws(x.grant_read)?);
@@ -2571,6 +2624,42 @@ impl AwsConversion for s3s::dto::FilterRuleName {
 
     fn try_into_aws(x: Self) -> S3Result<Self::Target> {
         Ok(aws_sdk_s3::types::FilterRuleName::from(x.as_str()))
+    }
+}
+
+impl AwsConversion for s3s::dto::GetBucketAbacInput {
+    type Target = aws_sdk_s3::operation::get_bucket_abac::GetBucketAbacInput;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            bucket: unwrap_from_aws(x.bucket, "bucket")?,
+            expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_bucket(Some(try_into_aws(x.bucket)?));
+        y = y.set_expected_bucket_owner(try_into_aws(x.expected_bucket_owner)?);
+        y.build().map_err(S3Error::internal_error)
+    }
+}
+
+impl AwsConversion for s3s::dto::GetBucketAbacOutput {
+    type Target = aws_sdk_s3::operation::get_bucket_abac::GetBucketAbacOutput;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            abac_status: try_from_aws(x.abac_status)?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_abac_status(try_into_aws(x.abac_status)?);
+        Ok(y.build())
     }
 }
 
@@ -6647,6 +6736,47 @@ impl AwsConversion for s3s::dto::PublicAccessBlockConfiguration {
         y = y.set_block_public_policy(try_into_aws(x.block_public_policy)?);
         y = y.set_ignore_public_acls(try_into_aws(x.ignore_public_acls)?);
         y = y.set_restrict_public_buckets(try_into_aws(x.restrict_public_buckets)?);
+        Ok(y.build())
+    }
+}
+
+impl AwsConversion for s3s::dto::PutBucketAbacInput {
+    type Target = aws_sdk_s3::operation::put_bucket_abac::PutBucketAbacInput;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            abac_status: unwrap_from_aws(x.abac_status, "abac_status")?,
+            bucket: unwrap_from_aws(x.bucket, "bucket")?,
+            checksum_algorithm: try_from_aws(x.checksum_algorithm)?,
+            content_md5: try_from_aws(x.content_md5)?,
+            expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_abac_status(Some(try_into_aws(x.abac_status)?));
+        y = y.set_bucket(Some(try_into_aws(x.bucket)?));
+        y = y.set_checksum_algorithm(try_into_aws(x.checksum_algorithm)?);
+        y = y.set_content_md5(try_into_aws(x.content_md5)?);
+        y = y.set_expected_bucket_owner(try_into_aws(x.expected_bucket_owner)?);
+        y.build().map_err(S3Error::internal_error)
+    }
+}
+
+impl AwsConversion for s3s::dto::PutBucketAbacOutput {
+    type Target = aws_sdk_s3::operation::put_bucket_abac::PutBucketAbacOutput;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        let _ = x;
+        Ok(Self {})
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let _ = x;
+        let y = Self::Target::builder();
         Ok(y.build())
     }
 }

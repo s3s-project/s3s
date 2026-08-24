@@ -61,6 +61,8 @@ pub const X_AMZ_BUCKET_LOCATION_NAME: HeaderName = HeaderName::from_static("x-am
 
 pub const X_AMZ_BUCKET_LOCATION_TYPE: HeaderName = HeaderName::from_static("x-amz-bucket-location-type");
 
+pub const X_AMZ_BUCKET_NAMESPACE: HeaderName = HeaderName::from_static("x-amz-bucket-namespace");
+
 pub const X_AMZ_BUCKET_OBJECT_LOCK_ENABLED: HeaderName = HeaderName::from_static("x-amz-bucket-object-lock-enabled");
 
 pub const X_AMZ_BUCKET_OBJECT_LOCK_TOKEN: HeaderName = HeaderName::from_static("x-amz-bucket-object-lock-token");

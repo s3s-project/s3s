@@ -19,6 +19,23 @@ use futures::future::BoxFuture;
 use serde::{Deserialize, Serialize};
 use stdx::default::default;
 
+/// <p>The ABAC status of the general purpose bucket. When ABAC is enabled for the general purpose bucket, you can use tags to manage access to the general purpose buckets as well as for cost tracking purposes. When ABAC is disabled for the general purpose buckets, you can only use tags for cost tracking purposes. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/buckets-tagging.html">Using tags with S3 general purpose buckets</a>. </p>
+#[derive(Clone, Default, PartialEq)]
+pub struct AbacStatus {
+    /// <p>The ABAC status of the general purpose bucket. </p>
+    pub status: Option<BucketAbacStatus>,
+}
+
+impl fmt::Debug for AbacStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("AbacStatus");
+        if let Some(ref val) = self.status {
+            d.field("status", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+
 pub type AbortDate = Timestamp;
 
 /// <p>Specifies the days since the initiation of an incomplete multipart upload that Amazon S3 will
@@ -524,6 +541,44 @@ impl fmt::Debug for Bucket {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BucketAbacStatus(Cow<'static, str>);
+
+impl BucketAbacStatus {
+    pub const DISABLED: &'static str = "Disabled";
+
+    pub const ENABLED: &'static str = "Enabled";
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    #[must_use]
+    pub fn from_static(s: &'static str) -> Self {
+        Self(Cow::from(s))
+    }
+}
+
+impl From<String> for BucketAbacStatus {
+    fn from(s: String) -> Self {
+        Self(Cow::from(s))
+    }
+}
+
+impl From<BucketAbacStatus> for Cow<'static, str> {
+    fn from(s: BucketAbacStatus) -> Self {
+        s.0
+    }
+}
+
+impl FromStr for BucketAbacStatus {
+    type Err = Infallible;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(s.to_owned()))
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BucketAccelerateStatus(Cow<'static, str>);
 
@@ -844,6 +899,44 @@ impl FromStr for BucketLogsPermission {
 }
 
 pub type BucketName = String;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BucketNamespace(Cow<'static, str>);
+
+impl BucketNamespace {
+    pub const ACCOUNT_REGIONAL: &'static str = "account-regional";
+
+    pub const GLOBAL: &'static str = "global";
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    #[must_use]
+    pub fn from_static(s: &'static str) -> Self {
+        Self(Cow::from(s))
+    }
+}
+
+impl From<String> for BucketNamespace {
+    fn from(s: String) -> Self {
+        Self(Cow::from(s))
+    }
+}
+
+impl From<BucketNamespace> for Cow<'static, str> {
+    fn from(s: BucketNamespace) -> Self {
+        s.0
+    }
+}
+
+impl FromStr for BucketNamespace {
+    type Err = Infallible;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(s.to_owned()))
+    }
+}
 
 pub type BucketRegion = String;
 
@@ -3126,10 +3219,25 @@ pub struct CreateBucketInput {
     /// <i>DOC-EXAMPLE-BUCKET</i>--<i>usw2-az1</i>--x-s3</code>). For information about bucket naming restrictions, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/directory-bucket-naming-rules.html">Directory bucket naming rules</a> in the <i>Amazon S3 User Guide</i>
     /// </p>
     pub bucket: BucketName,
+    /// <p>Specifies the namespace where you want to create your general purpose bucket. When you create a
+    /// general purpose bucket, you can choose to create a bucket in the shared global namespace or you can choose to
+    /// create a bucket in your account regional namespace. Your account regional namespace is a subdivision of
+    /// the global namespace that only your account can create buckets in. For more information on bucket
+    /// namespaces, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/gpbucketnamespaces.html">Namespaces for general purpose buckets</a>.</p>
+    /// <p>General purpose buckets in your account regional namespace must follow a specific naming convention. These
+    /// buckets consist of a bucket name prefix that you create, and a suffix that contains your 12-digit Amazon Web Services
+    /// Account ID, the Amazon Web Services Region code, and ends with <code>-an</code>. Bucket names must follow the format
+    /// <code>bucket-name-prefix-accountId-region-an</code> (for example,
+    /// <code>amzn-s3-demo-bucket-111122223333-us-west-2-an</code>). For information about bucket naming
+    /// restrictions, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucketnamingrules.html#account-regional-naming-rules">Account regional namespace naming rules</a>
+    /// in the <i>Amazon S3 User Guide</i>.</p>
+    /// <note>
+    /// <p>This functionality is not supported for directory buckets.</p>
+    /// </note>
+    pub bucket_namespace: Option<BucketNamespace>,
     /// <p>The configuration information for the bucket.</p>
     pub create_bucket_configuration: Option<CreateBucketConfiguration>,
-    /// <p>Allows grantee the read, write, read ACP, and write ACP permissions on the
-    /// bucket.</p>
+    /// <p>Allows grantee the read, write, read ACP, and write ACP permissions on the bucket.</p>
     /// <note>
     /// <p>This functionality is not supported for directory buckets.</p>
     /// </note>
@@ -3145,8 +3253,8 @@ pub struct CreateBucketInput {
     /// </note>
     pub grant_read_acp: Option<GrantReadACP>,
     /// <p>Allows grantee to create new objects in the bucket.</p>
-    /// <p>For the bucket and object owners of existing objects, also allows deletions and
-    /// overwrites of those objects.</p>
+    /// <p>For the bucket and object owners of existing objects, also allows deletions and overwrites of those
+    /// objects.</p>
     /// <note>
     /// <p>This functionality is not supported for directory buckets.</p>
     /// </note>
@@ -3171,6 +3279,9 @@ impl fmt::Debug for CreateBucketInput {
             d.field("acl", val);
         }
         d.field("bucket", &self.bucket);
+        if let Some(ref val) = self.bucket_namespace {
+            d.field("bucket_namespace", val);
+        }
         if let Some(ref val) = self.create_bucket_configuration {
             d.field("create_bucket_configuration", val);
         }
@@ -7897,6 +8008,48 @@ impl FromStr for FilterRuleName {
 }
 
 pub type FilterRuleValue = String;
+
+#[derive(Clone, Default, PartialEq)]
+pub struct GetBucketAbacInput {
+    /// <p>The name of the general purpose bucket.</p>
+    pub bucket: BucketName,
+    /// <p>The Amazon Web Services account ID of the general purpose bucket's owner. </p>
+    pub expected_bucket_owner: Option<AccountId>,
+}
+
+impl fmt::Debug for GetBucketAbacInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("GetBucketAbacInput");
+        d.field("bucket", &self.bucket);
+        if let Some(ref val) = self.expected_bucket_owner {
+            d.field("expected_bucket_owner", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+
+impl GetBucketAbacInput {
+    #[must_use]
+    pub fn builder() -> builders::GetBucketAbacInputBuilder {
+        default()
+    }
+}
+
+#[derive(Clone, Default, PartialEq)]
+pub struct GetBucketAbacOutput {
+    /// <p>The ABAC status of the general purpose bucket. </p>
+    pub abac_status: Option<AbacStatus>,
+}
+
+impl fmt::Debug for GetBucketAbacOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("GetBucketAbacOutput");
+        if let Some(ref val) = self.abac_status {
+            d.field("abac_status", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
 
 #[derive(Clone, Default, PartialEq)]
 pub struct GetBucketAccelerateConfigurationInput {
@@ -16725,6 +16878,57 @@ impl fmt::Debug for PublicAccessBlockConfiguration {
 }
 
 #[derive(Clone, PartialEq)]
+pub struct PutBucketAbacInput {
+    /// <p>The ABAC status of the general purpose bucket. When ABAC is enabled for the general purpose bucket, you can use tags to manage access to the general purpose buckets as well as for cost tracking purposes. When ABAC is disabled for the general purpose buckets, you can only use tags for cost tracking purposes. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/buckets-tagging.html">Using tags with S3 general purpose buckets</a>. </p>
+    pub abac_status: AbacStatus,
+    /// <p>The name of the general purpose bucket.</p>
+    pub bucket: BucketName,
+    /// <p>Indicates the algorithm that you want Amazon S3 to use to create the checksum. For more
+    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html"> Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_algorithm: Option<ChecksumAlgorithm>,
+    /// <p>The MD5 hash of the <code>PutBucketAbac</code> request body. </p>
+    /// <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
+    pub content_md5: Option<ContentMD5>,
+    /// <p>The Amazon Web Services account ID of the general purpose bucket's owner. </p>
+    pub expected_bucket_owner: Option<AccountId>,
+}
+
+impl fmt::Debug for PutBucketAbacInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("PutBucketAbacInput");
+        d.field("abac_status", &self.abac_status);
+        d.field("bucket", &self.bucket);
+        if let Some(ref val) = self.checksum_algorithm {
+            d.field("checksum_algorithm", val);
+        }
+        if let Some(ref val) = self.content_md5 {
+            d.field("content_md5", val);
+        }
+        if let Some(ref val) = self.expected_bucket_owner {
+            d.field("expected_bucket_owner", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+
+impl PutBucketAbacInput {
+    #[must_use]
+    pub fn builder() -> builders::PutBucketAbacInputBuilder {
+        default()
+    }
+}
+
+#[derive(Clone, Default, PartialEq)]
+pub struct PutBucketAbacOutput {}
+
+impl fmt::Debug for PutBucketAbacOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("PutBucketAbacOutput");
+        d.finish_non_exhaustive()
+    }
+}
+
+#[derive(Clone, PartialEq)]
 pub struct PutBucketAccelerateConfigurationInput {
     /// <p>Container for setting the transfer acceleration state.</p>
     pub accelerate_configuration: AccelerateConfiguration,
@@ -22862,6 +23066,7 @@ mod tests {
         require_default::<DeleteObjectTaggingOutput>();
         require_default::<DeleteObjectsOutput>();
         require_default::<DeletePublicAccessBlockOutput>();
+        require_default::<GetBucketAbacOutput>();
         require_default::<GetBucketAccelerateConfigurationOutput>();
         require_default::<GetBucketAclOutput>();
         require_default::<GetBucketAnalyticsConfigurationOutput>();
@@ -22906,6 +23111,7 @@ mod tests {
         require_default::<ListObjectsV2Output>();
         require_default::<ListPartsOutput>();
         require_default::<PostObjectOutput>();
+        require_default::<PutBucketAbacOutput>();
         require_default::<PutBucketAccelerateConfigurationOutput>();
         require_default::<PutBucketAclOutput>();
         require_default::<PutBucketAnalyticsConfigurationOutput>();
@@ -22989,6 +23195,8 @@ mod tests {
         require_clone::<DeleteObjectsOutput>();
         require_clone::<DeletePublicAccessBlockInput>();
         require_clone::<DeletePublicAccessBlockOutput>();
+        require_clone::<GetBucketAbacInput>();
+        require_clone::<GetBucketAbacOutput>();
         require_clone::<GetBucketAccelerateConfigurationInput>();
         require_clone::<GetBucketAccelerateConfigurationOutput>();
         require_clone::<GetBucketAclInput>();
@@ -23074,6 +23282,8 @@ mod tests {
         require_clone::<ListPartsInput>();
         require_clone::<ListPartsOutput>();
         require_clone::<PostObjectOutput>();
+        require_clone::<PutBucketAbacInput>();
+        require_clone::<PutBucketAbacOutput>();
         require_clone::<PutBucketAccelerateConfigurationInput>();
         require_clone::<PutBucketAccelerateConfigurationOutput>();
         require_clone::<PutBucketAclInput>();
@@ -24230,6 +24440,8 @@ pub mod builders {
 
         bucket: Option<BucketName>,
 
+        bucket_namespace: Option<BucketNamespace>,
+
         create_bucket_configuration: Option<CreateBucketConfiguration>,
 
         grant_full_control: Option<GrantFullControl>,
@@ -24255,6 +24467,11 @@ pub mod builders {
 
         pub fn set_bucket(&mut self, field: BucketName) -> &mut Self {
             self.bucket = Some(field);
+            self
+        }
+
+        pub fn set_bucket_namespace(&mut self, field: Option<BucketNamespace>) -> &mut Self {
+            self.bucket_namespace = field;
             self
         }
 
@@ -24311,6 +24528,12 @@ pub mod builders {
         }
 
         #[must_use]
+        pub fn bucket_namespace(mut self, field: Option<BucketNamespace>) -> Self {
+            self.bucket_namespace = field;
+            self
+        }
+
+        #[must_use]
         pub fn create_bucket_configuration(mut self, field: Option<CreateBucketConfiguration>) -> Self {
             self.create_bucket_configuration = field;
             self
@@ -24361,6 +24584,7 @@ pub mod builders {
         pub fn build(self) -> Result<CreateBucketInput, BuildError> {
             let acl = self.acl;
             let bucket = self.bucket.ok_or_else(|| BuildError::missing_field("bucket"))?;
+            let bucket_namespace = self.bucket_namespace;
             let create_bucket_configuration = self.create_bucket_configuration;
             let grant_full_control = self.grant_full_control;
             let grant_read = self.grant_read;
@@ -24372,6 +24596,7 @@ pub mod builders {
             Ok(CreateBucketInput {
                 acl,
                 bucket,
+                bucket_namespace,
                 create_bucket_configuration,
                 grant_full_control,
                 grant_read,
@@ -26066,6 +26291,47 @@ pub mod builders {
             let bucket = self.bucket.ok_or_else(|| BuildError::missing_field("bucket"))?;
             let expected_bucket_owner = self.expected_bucket_owner;
             Ok(DeletePublicAccessBlockInput {
+                bucket,
+                expected_bucket_owner,
+            })
+        }
+    }
+
+    /// A builder for [`GetBucketAbacInput`]
+    #[derive(Default)]
+    pub struct GetBucketAbacInputBuilder {
+        bucket: Option<BucketName>,
+
+        expected_bucket_owner: Option<AccountId>,
+    }
+
+    impl GetBucketAbacInputBuilder {
+        pub fn set_bucket(&mut self, field: BucketName) -> &mut Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        pub fn set_expected_bucket_owner(&mut self, field: Option<AccountId>) -> &mut Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        #[must_use]
+        pub fn bucket(mut self, field: BucketName) -> Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn expected_bucket_owner(mut self, field: Option<AccountId>) -> Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        pub fn build(self) -> Result<GetBucketAbacInput, BuildError> {
+            let bucket = self.bucket.ok_or_else(|| BuildError::missing_field("bucket"))?;
+            let expected_bucket_owner = self.expected_bucket_owner;
+            Ok(GetBucketAbacInput {
                 bucket,
                 expected_bucket_owner,
             })
@@ -30242,6 +30508,92 @@ pub mod builders {
                 success_action_redirect,
                 success_action_status,
                 policy,
+            })
+        }
+    }
+
+    /// A builder for [`PutBucketAbacInput`]
+    #[derive(Default)]
+    pub struct PutBucketAbacInputBuilder {
+        abac_status: Option<AbacStatus>,
+
+        bucket: Option<BucketName>,
+
+        checksum_algorithm: Option<ChecksumAlgorithm>,
+
+        content_md5: Option<ContentMD5>,
+
+        expected_bucket_owner: Option<AccountId>,
+    }
+
+    impl PutBucketAbacInputBuilder {
+        pub fn set_abac_status(&mut self, field: AbacStatus) -> &mut Self {
+            self.abac_status = Some(field);
+            self
+        }
+
+        pub fn set_bucket(&mut self, field: BucketName) -> &mut Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        pub fn set_checksum_algorithm(&mut self, field: Option<ChecksumAlgorithm>) -> &mut Self {
+            self.checksum_algorithm = field;
+            self
+        }
+
+        pub fn set_content_md5(&mut self, field: Option<ContentMD5>) -> &mut Self {
+            self.content_md5 = field;
+            self
+        }
+
+        pub fn set_expected_bucket_owner(&mut self, field: Option<AccountId>) -> &mut Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        #[must_use]
+        pub fn abac_status(mut self, field: AbacStatus) -> Self {
+            self.abac_status = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn bucket(mut self, field: BucketName) -> Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_algorithm(mut self, field: Option<ChecksumAlgorithm>) -> Self {
+            self.checksum_algorithm = field;
+            self
+        }
+
+        #[must_use]
+        pub fn content_md5(mut self, field: Option<ContentMD5>) -> Self {
+            self.content_md5 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn expected_bucket_owner(mut self, field: Option<AccountId>) -> Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        pub fn build(self) -> Result<PutBucketAbacInput, BuildError> {
+            let abac_status = self.abac_status.ok_or_else(|| BuildError::missing_field("abac_status"))?;
+            let bucket = self.bucket.ok_or_else(|| BuildError::missing_field("bucket"))?;
+            let checksum_algorithm = self.checksum_algorithm;
+            let content_md5 = self.content_md5;
+            let expected_bucket_owner = self.expected_bucket_owner;
+            Ok(PutBucketAbacInput {
+                abac_status,
+                bucket,
+                checksum_algorithm,
+                content_md5,
+                expected_bucket_owner,
             })
         }
     }
@@ -35184,6 +35536,15 @@ pub trait DtoExt {
     /// Modifies all empty string fields from `Some("")` to `None`
     fn ignore_empty_strings(&mut self);
 }
+impl DtoExt for AbacStatus {
+    fn ignore_empty_strings(&mut self) {
+        if let Some(ref val) = self.status
+            && val.as_str() == ""
+        {
+            self.status = None;
+        }
+    }
+}
 impl DtoExt for AbortIncompleteMultipartUpload {
     fn ignore_empty_strings(&mut self) {}
 }
@@ -35820,6 +36181,11 @@ impl DtoExt for CreateBucketInput {
         {
             self.acl = None;
         }
+        if let Some(ref val) = self.bucket_namespace
+            && val.as_str() == ""
+        {
+            self.bucket_namespace = None;
+        }
         if let Some(ref mut val) = self.create_bucket_configuration {
             val.ignore_empty_strings();
         }
@@ -36358,6 +36724,20 @@ impl DtoExt for FilterRule {
         }
         if self.value.as_deref() == Some("") {
             self.value = None;
+        }
+    }
+}
+impl DtoExt for GetBucketAbacInput {
+    fn ignore_empty_strings(&mut self) {
+        if self.expected_bucket_owner.as_deref() == Some("") {
+            self.expected_bucket_owner = None;
+        }
+    }
+}
+impl DtoExt for GetBucketAbacOutput {
+    fn ignore_empty_strings(&mut self) {
+        if let Some(ref mut val) = self.abac_status {
+            val.ignore_empty_strings();
         }
     }
 }
@@ -38360,6 +38740,22 @@ impl DtoExt for ProgressEvent {
 }
 impl DtoExt for PublicAccessBlockConfiguration {
     fn ignore_empty_strings(&mut self) {}
+}
+impl DtoExt for PutBucketAbacInput {
+    fn ignore_empty_strings(&mut self) {
+        self.abac_status.ignore_empty_strings();
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
+        }
+        if self.content_md5.as_deref() == Some("") {
+            self.content_md5 = None;
+        }
+        if self.expected_bucket_owner.as_deref() == Some("") {
+            self.expected_bucket_owner = None;
+        }
+    }
 }
 impl DtoExt for PutBucketAccelerateConfigurationInput {
     fn ignore_empty_strings(&mut self) {
