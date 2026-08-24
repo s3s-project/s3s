@@ -885,3 +885,55 @@ fn deserialize_structural_errors() {
     let r = deserialize::<s3s::dto::BucketLoggingStatus>(xml.as_bytes());
     assert!(r.is_err());
 }
+
+/// The `ObjectEncryption` union payload must be wrapped in a root element named
+/// after the payload member (`<ObjectEncryption>`), matching the official AWS
+/// wire form (empirically confirmed with aws-sdk-s3 1.144.0):
+/// `<ObjectEncryption><SSE-KMS>...</SSE-KMS></ObjectEncryption>`.
+#[test]
+fn update_object_encryption_union_root() {
+    use s3s::dto::ObjectEncryption;
+
+    // Official wire form (with the S3 namespace; matched by local name).
+    let xml = r#"
+    <ObjectEncryption xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+        <SSE-KMS>
+            <KMSKeyArn>arn:aws:kms:us-east-1:111122223333:key/abc123</KMSKeyArn>
+            <BucketKeyEnabled>true</BucketKeyEnabled>
+        </SSE-KMS>
+    </ObjectEncryption>
+    "#;
+
+    let val = deserialize::<ObjectEncryption>(xml.as_bytes()).unwrap();
+    match &val {
+        ObjectEncryption::SSEKMS(ssekms) => {
+            assert_eq!(ssekms.kms_key_arn, "arn:aws:kms:us-east-1:111122223333:key/abc123");
+            assert_eq!(ssekms.bucket_key_enabled, Some(true));
+        }
+        _ => unreachable!(),
+    }
+
+    // Serialization must produce the wrapped root element.
+    let ans = serialize(&val).unwrap();
+    assert_eq!(
+        ans,
+        "<ObjectEncryption><SSE-KMS><BucketKeyEnabled>true</BucketKeyEnabled>\
+         <KMSKeyArn>arn:aws:kms:us-east-1:111122223333:key/abc123</KMSKeyArn></SSE-KMS></ObjectEncryption>"
+    );
+
+    test_serde(&val);
+
+    // The unwrapped form is not accepted for the root: the wire form requires
+    // the `<ObjectEncryption>` wrapper (this is the intentional behavior change).
+    let unwrapped = r"<SSE-KMS><KMSKeyArn>arn:aws:kms:us-east-1:111122223333:key/abc123</KMSKeyArn></SSE-KMS>";
+    assert!(deserialize::<ObjectEncryption>(unwrapped.as_bytes()).is_err());
+
+    // Content form (member embedding) stays unwrapped.
+    let content = serialize_content(&val).unwrap();
+    assert_eq!(
+        content,
+        "<SSE-KMS><BucketKeyEnabled>true</BucketKeyEnabled>\
+         <KMSKeyArn>arn:aws:kms:us-east-1:111122223333:key/abc123</KMSKeyArn></SSE-KMS>"
+    );
+    test_serde_content(&val);
+}

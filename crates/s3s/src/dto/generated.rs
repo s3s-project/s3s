@@ -251,6 +251,19 @@ impl DtoExt for AccessControlTranslation {
     fn ignore_empty_strings(&mut self) {}
 }
 
+/// <p>
+/// You might receive this error for several reasons. For details, see the description of this API
+/// operation.</p>
+#[derive(Clone, Default, PartialEq)]
+pub struct AccessDenied {}
+
+impl fmt::Debug for AccessDenied {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("AccessDenied");
+        d.finish_non_exhaustive()
+    }
+}
+
 pub type AccessKeyIdType = String;
 
 pub type AccessKeyIdValue = String;
@@ -568,6 +581,12 @@ impl From<DeleteMarkerReplicationStatus> for Cow<'static, str> {
 
 impl From<EncodingType> for Cow<'static, str> {
     fn from(s: EncodingType) -> Self {
+        s.0
+    }
+}
+
+impl From<EncryptionType> for Cow<'static, str> {
+    fn from(s: EncryptionType) -> Self {
         s.0
     }
 }
@@ -1202,6 +1221,54 @@ impl fmt::Debug for AssumedRoleUser {
     }
 }
 impl DtoExt for AssumedRoleUser {
+    fn ignore_empty_strings(&mut self) {}
+}
+
+/// <p>A bucket-level setting for Amazon S3 general purpose buckets used to prevent the upload of new objects encrypted with the specified server-side encryption type. For example, blocking an encryption type will block <code>PutObject</code>, <code>CopyObject</code>, <code>PostObject</code>, multipart upload, and replication requests to the bucket for objects with the specified encryption type. However, you can continue to read and list any pre-existing objects already encrypted with the specified encryption type. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/blocking-unblocking-s3-c-encryption-gpb.html">Blocking or unblocking SSE-C for a general purpose bucket</a>.</p>
+/// <p>This data type is used with the following actions:</p>
+/// <ul>
+/// <li>
+/// <p>
+/// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketEncryption.html">PutBucketEncryption</a>
+/// </p>
+/// </li>
+/// <li>
+/// <p>
+/// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketEncryption.html">GetBucketEncryption</a>
+/// </p>
+/// </li>
+/// <li>
+/// <p>
+/// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketEncryption.html">DeleteBucketEncryption</a>
+/// </p>
+/// </li>
+/// </ul>
+/// <dl>
+/// <dt>Permissions</dt>
+/// <dd>
+/// <p>You must have the <code>s3:PutEncryptionConfiguration</code> permission to block or unblock an encryption type for a bucket. </p>
+/// <p>You must have the <code>s3:GetEncryptionConfiguration</code> permission to view a bucket's encryption type. </p>
+/// </dd>
+/// </dl>
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct BlockedEncryptionTypes {
+    /// <p>The object encryption type that you want to block or unblock for an Amazon S3 general purpose bucket.</p>
+    /// <note>
+    /// <p>Currently, this parameter only supports blocking or unblocking server side encryption with customer-provided keys (SSE-C). For more information about SSE-C, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/ServerSideEncryptionCustomerKeys.html">Using server-side encryption with customer-provided keys (SSE-C)</a>.</p>
+    /// </note>
+    pub encryption_type: Option<EncryptionTypeList>,
+}
+
+impl fmt::Debug for BlockedEncryptionTypes {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("BlockedEncryptionTypes");
+        if let Some(ref val) = self.encryption_type {
+            d.field("encryption_type", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+impl DtoExt for BlockedEncryptionTypes {
     fn ignore_empty_strings(&mut self) {}
 }
 
@@ -9121,6 +9188,40 @@ impl DtoExt for EncryptionConfiguration {
         }
     }
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EncryptionType(Cow<'static, str>);
+
+impl EncryptionType {
+    pub const NONE: &'static str = "NONE";
+
+    pub const SSE_C: &'static str = "SSE-C";
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    #[must_use]
+    pub fn from_static(s: &'static str) -> Self {
+        Self(Cow::from(s))
+    }
+}
+
+impl From<String> for EncryptionType {
+    fn from(s: String) -> Self {
+        Self(Cow::from(s))
+    }
+}
+
+impl FromStr for EncryptionType {
+    type Err = Infallible;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(s.to_owned()))
+    }
+}
+
+pub type EncryptionTypeList = List<EncryptionType>;
 
 /// <p>
 /// The existing object was created with a different encryption type.
@@ -20407,6 +20508,8 @@ impl fmt::Debug for NoSuchUpload {
     }
 }
 
+pub type NonEmptyKmsKeyArnString = String;
+
 pub type NonNegativeIntegerType = i32;
 
 /// <p>Specifies when noncurrent object versions expire. Upon expiration, Amazon S3 permanently
@@ -20808,6 +20911,22 @@ impl FromStr for ObjectCannedACL {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(Self::from(s.to_owned()))
     }
+}
+
+/// <p>
+/// The updated server-side encryption type for this object. The <code>UpdateObjectEncryption</code>
+/// operation supports the SSE-S3 and SSE-KMS encryption types.
+/// </p>
+/// <p>Valid Values: <code>SSES3</code> | <code>SSEKMS</code>
+/// </p>
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub enum ObjectEncryption {
+    /// <p>
+    /// Specifies to update the object encryption type to server-side encryption with Key Management Service (KMS) keys
+    /// (SSE-KMS).
+    /// </p>
+    SSEKMS(SSEKMSEncryption),
 }
 
 /// <p>Object Identifier is unique value to identify objects.</p>
@@ -29485,6 +29604,50 @@ impl DtoExt for SSEKMS {
     fn ignore_empty_strings(&mut self) {}
 }
 
+/// <p>
+/// If <code>SSEKMS</code> is specified for <code>ObjectEncryption</code>, this data type specifies
+/// the Amazon Web Services KMS key Amazon Resource Name (ARN) to use and whether to use an S3 Bucket Key for
+/// server-side encryption using Key Management Service (KMS) keys (SSE-KMS).
+/// </p>
+#[derive(Clone, Default, PartialEq)]
+pub struct SSEKMSEncryption {
+    /// <p>
+    /// Specifies whether Amazon S3 should use an S3 Bucket Key for object encryption with server-side encryption
+    /// using Key Management Service (KMS) keys (SSE-KMS). If this value isn't specified, it defaults to <code>false</code>.
+    /// Setting this value to <code>true</code> causes Amazon S3 to use an S3 Bucket Key for object encryption with
+    /// SSE-KMS. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucket-key.html">
+    /// Using Amazon S3 Bucket Keys</a> in the <i>Amazon S3 User Guide</i>.
+    /// </p>
+    /// <p>Valid Values: <code>true</code> | <code>false</code>
+    /// </p>
+    pub bucket_key_enabled: Option<BucketKeyEnabled>,
+    /// <p>
+    /// Specifies the Amazon Web Services KMS key Amazon Resource Name (ARN) to use for the updated server-side encryption
+    /// type. Required if <code>ObjectEncryption</code> specifies <code>SSEKMS</code>.
+    /// </p>
+    /// <note>
+    /// <p>You must specify the full Amazon Web Services KMS key ARN. The KMS key ID and KMS key alias aren't
+    /// supported.</p>
+    /// </note>
+    /// <p>Pattern: (<code>arn:aws[-a-z0-9]*:kms:[-a-z0-9]*:[0-9]{12}:key/.+</code>)</p>
+    pub kms_key_arn: NonEmptyKmsKeyArnString,
+}
+
+impl fmt::Debug for SSEKMSEncryption {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("SSEKMSEncryption");
+        if let Some(ref val) = self.bucket_key_enabled {
+            d.field("bucket_key_enabled", val);
+        }
+        d.field("kms_key_arn", &self.kms_key_arn);
+        d.finish_non_exhaustive()
+    }
+}
+impl DtoExt for SSEKMSEncryption {
+    fn ignore_empty_strings(&mut self) {}
+}
+
 pub type SSEKMSEncryptionContext = String;
 
 pub type SSEKMSKeyId = String;
@@ -29778,6 +29941,10 @@ pub struct ServerSideEncryption(Cow<'static, str>);
 impl ServerSideEncryption {
     pub const AES256: &'static str = "AES256";
 
+    pub const AWS_BACKUP: &'static str = "aws:backup";
+
+    pub const AWS_FSX: &'static str = "aws:fsx";
+
     pub const AWS_KMS: &'static str = "aws:kms";
 
     pub const AWS_KMS_DSSE: &'static str = "aws:kms:dsse";
@@ -29945,11 +30112,11 @@ impl DtoExt for ServerSideEncryptionConfiguration {
 /// <ul>
 /// <li>
 /// <p>
-/// <b>General purpose buckets</b> - If you're specifying
-/// a customer managed KMS key, we recommend using a fully qualified KMS key ARN.
-/// If you use a KMS key alias instead, then KMS resolves the key within the
-/// requester’s account. This behavior can result in data that's encrypted with a
-/// KMS key that belongs to the requester, and not the bucket owner.</p>
+/// <b>General purpose buckets</b> - If you're specifying a customer
+/// managed KMS key, we recommend using a fully qualified KMS key ARN. If you use a KMS key
+/// alias instead, then KMS resolves the key within the requester’s account. This behavior can
+/// result in data that's encrypted with a KMS key that belongs to the requester, and not the bucket
+/// owner.</p>
 /// </li>
 /// <li>
 /// <p>
@@ -29960,20 +30127,23 @@ impl DtoExt for ServerSideEncryptionConfiguration {
 /// </note>
 #[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ServerSideEncryptionRule {
-    /// <p>Specifies the default server-side encryption to apply to new objects in the bucket. If a
-    /// PUT Object request doesn't specify any server-side encryption, this default encryption will
-    /// be applied.</p>
+    /// <p>Specifies the default server-side encryption to apply to new objects in the bucket. If a PUT Object
+    /// request doesn't specify any server-side encryption, this default encryption will be applied.</p>
     pub apply_server_side_encryption_by_default: Option<ServerSideEncryptionByDefault>,
-    /// <p>Specifies whether Amazon S3 should use an S3 Bucket Key with server-side encryption using KMS
-    /// (SSE-KMS) for new objects in the bucket. Existing objects are not affected. Setting the
-    /// <code>BucketKeyEnabled</code> element to <code>true</code> causes Amazon S3 to use an S3
-    /// Bucket Key. </p>
+    /// <p>A bucket-level setting for Amazon S3 general purpose buckets used to prevent the upload of new objects encrypted with the specified server-side encryption type. For example, blocking an encryption type will block <code>PutObject</code>, <code>CopyObject</code>, <code>PostObject</code>, multipart upload, and replication requests to the bucket for objects with the specified encryption type. However, you can continue to read and list any pre-existing objects already encrypted with the specified encryption type. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/blocking-unblocking-s3-c-encryption-gpb.html">Blocking or unblocking SSE-C for a general purpose bucket</a>.</p>
+    /// <note>
+    /// <p>Currently, this parameter only supports blocking or unblocking server-side encryption with customer-provided keys (SSE-C). For more information about SSE-C, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/ServerSideEncryptionCustomerKeys.html">Using server-side encryption with customer-provided keys (SSE-C)</a>.</p>
+    /// </note>
+    pub blocked_encryption_types: Option<BlockedEncryptionTypes>,
+    /// <p>Specifies whether Amazon S3 should use an S3 Bucket Key with server-side encryption using KMS (SSE-KMS)
+    /// for new objects in the bucket. Existing objects are not affected. Setting the
+    /// <code>BucketKeyEnabled</code> element to <code>true</code> causes Amazon S3 to use an S3 Bucket Key. </p>
     /// <note>
     /// <ul>
     /// <li>
     /// <p>
-    /// <b>General purpose buckets</b> - By default, S3
-    /// Bucket Key is not enabled. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/bucket-key.html">Amazon S3 Bucket Keys</a> in the
+    /// <b>General purpose buckets</b> - By default, S3 Bucket Key is not
+    /// enabled. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/bucket-key.html">Amazon S3 Bucket Keys</a> in the
     /// <i>Amazon S3 User Guide</i>.</p>
     /// </li>
     /// <li>
@@ -29994,6 +30164,9 @@ impl fmt::Debug for ServerSideEncryptionRule {
         if let Some(ref val) = self.apply_server_side_encryption_by_default {
             d.field("apply_server_side_encryption_by_default", val);
         }
+        if let Some(ref val) = self.blocked_encryption_types {
+            d.field("blocked_encryption_types", val);
+        }
         if let Some(ref val) = self.bucket_key_enabled {
             d.field("bucket_key_enabled", val);
         }
@@ -30003,6 +30176,9 @@ impl fmt::Debug for ServerSideEncryptionRule {
 impl DtoExt for ServerSideEncryptionRule {
     fn ignore_empty_strings(&mut self) {
         if let Some(ref mut val) = self.apply_server_side_encryption_by_default {
+            val.ignore_empty_strings();
+        }
+        if let Some(ref mut val) = self.blocked_encryption_types {
             val.ignore_empty_strings();
         }
     }
@@ -31115,6 +31291,140 @@ impl fmt::Debug for UpdateBucketMetadataJournalTableConfigurationOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut d = f.debug_struct("UpdateBucketMetadataJournalTableConfigurationOutput");
         d.finish_non_exhaustive()
+    }
+}
+
+#[derive(Clone, PartialEq)]
+pub struct UpdateObjectEncryptionInput {
+    /// <p>
+    /// The name of the general purpose bucket that contains the specified object key name.
+    /// </p>
+    /// <p>When you use this operation with an access point attached to a general purpose bucket, you
+    /// must either provide the alias of the access point in place of the bucket name or you must specify
+    /// the access point Amazon Resource Name (ARN). When using the access point ARN, you must direct
+    /// requests to the access point hostname. The access point hostname takes the form
+    /// <code>
+    /// <i>AccessPointName</i>-<i>AccountId</i>.s3-accesspoint.<i>Region</i>.amazonaws.com</code>.
+    /// When using this operation with an access point through the Amazon Web Services SDKs, you provide the access point
+    /// ARN in place of the bucket name. For more information about access point ARNs, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-points-naming.html">
+    /// Referencing access points</a> in the <i>Amazon S3 User Guide</i>.</p>
+    pub bucket: BucketName,
+    /// <p>
+    /// Indicates the algorithm used to create the checksum for the object when you use an Amazon Web Services SDK. This header
+    /// doesn't provide any additional functionality if you don't use the SDK. When you send this header,
+    /// there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent.
+    /// Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more
+    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">
+    /// Checking object integrity </a> in the <i>Amazon S3 User Guide</i>.  
+    /// </p>
+    /// <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code>
+    /// parameter.</p>
+    pub checksum_algorithm: Option<ChecksumAlgorithm>,
+    /// <p>
+    /// The MD5 hash for the request body. For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.
+    /// </p>
+    pub content_md5: Option<ContentMD5>,
+    /// <p>
+    /// The account ID of the expected bucket owner. If the account ID that you provide doesn't match the
+    /// actual owner of the bucket, the request fails with the HTTP status code <code>403 Forbidden</code>
+    /// (access denied).
+    /// </p>
+    pub expected_bucket_owner: Option<AccountId>,
+    /// <p>
+    /// The key name of the object that you want to update the server-side encryption type for.
+    /// </p>
+    pub key: ObjectKey,
+    /// <p>
+    /// The updated server-side encryption type for this object. The <code>UpdateObjectEncryption</code>
+    /// operation supports the SSE-S3 and SSE-KMS encryption types.
+    /// </p>
+    /// <p>Valid Values: <code>SSES3</code> | <code>SSEKMS</code>
+    /// </p>
+    pub object_encryption: ObjectEncryption,
+    pub request_payer: Option<RequestPayer>,
+    /// <p>
+    /// The version ID of the object that you want to update the server-side encryption type for.
+    /// </p>
+    pub version_id: Option<ObjectVersionId>,
+}
+
+impl fmt::Debug for UpdateObjectEncryptionInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("UpdateObjectEncryptionInput");
+        d.field("bucket", &self.bucket);
+        if let Some(ref val) = self.checksum_algorithm {
+            d.field("checksum_algorithm", val);
+        }
+        if let Some(ref val) = self.content_md5 {
+            d.field("content_md5", val);
+        }
+        if let Some(ref val) = self.expected_bucket_owner {
+            d.field("expected_bucket_owner", val);
+        }
+        d.field("key", &self.key);
+        d.field("object_encryption", &self.object_encryption);
+        if let Some(ref val) = self.request_payer {
+            d.field("request_payer", val);
+        }
+        if let Some(ref val) = self.version_id {
+            d.field("version_id", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+
+impl UpdateObjectEncryptionInput {
+    #[must_use]
+    pub fn builder() -> builders::UpdateObjectEncryptionInputBuilder {
+        default()
+    }
+}
+impl DtoExt for UpdateObjectEncryptionInput {
+    fn ignore_empty_strings(&mut self) {
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
+        }
+        if self.content_md5.as_deref() == Some("") {
+            self.content_md5 = None;
+        }
+        if self.expected_bucket_owner.as_deref() == Some("") {
+            self.expected_bucket_owner = None;
+        }
+        if let Some(ref val) = self.request_payer
+            && val.as_str() == ""
+        {
+            self.request_payer = None;
+        }
+        if self.version_id.as_deref() == Some("") {
+            self.version_id = None;
+        }
+    }
+}
+
+#[derive(Clone, Default, PartialEq)]
+pub struct UpdateObjectEncryptionOutput {
+    pub request_charged: Option<RequestCharged>,
+}
+
+impl fmt::Debug for UpdateObjectEncryptionOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("UpdateObjectEncryptionOutput");
+        if let Some(ref val) = self.request_charged {
+            d.field("request_charged", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+impl DtoExt for UpdateObjectEncryptionOutput {
+    fn ignore_empty_strings(&mut self) {
+        if let Some(ref val) = self.request_charged
+            && val.as_str() == ""
+        {
+            self.request_charged = None;
+        }
     }
 }
 
@@ -32701,6 +33011,7 @@ mod tests {
         require_default::<UpdateBucketMetadataAnnotationTableConfigurationOutput>();
         require_default::<UpdateBucketMetadataInventoryTableConfigurationOutput>();
         require_default::<UpdateBucketMetadataJournalTableConfigurationOutput>();
+        require_default::<UpdateObjectEncryptionOutput>();
         require_default::<UploadPartOutput>();
         require_default::<UploadPartCopyOutput>();
         require_default::<WriteGetObjectResponseOutput>();
@@ -32911,6 +33222,8 @@ mod tests {
         require_clone::<UpdateBucketMetadataInventoryTableConfigurationOutput>();
         require_clone::<UpdateBucketMetadataJournalTableConfigurationInput>();
         require_clone::<UpdateBucketMetadataJournalTableConfigurationOutput>();
+        require_clone::<UpdateObjectEncryptionInput>();
+        require_clone::<UpdateObjectEncryptionOutput>();
         require_clone::<UploadPartOutput>();
         require_clone::<UploadPartCopyInput>();
         require_clone::<UploadPartCopyOutput>();
@@ -33034,6 +33347,7 @@ mod tests {
         require_default::<UpdateBucketMetadataAnnotationTableConfigurationOutput>();
         require_default::<UpdateBucketMetadataInventoryTableConfigurationOutput>();
         require_default::<UpdateBucketMetadataJournalTableConfigurationOutput>();
+        require_default::<UpdateObjectEncryptionOutput>();
         require_default::<UploadPartOutput>();
         require_default::<UploadPartCopyOutput>();
         require_default::<WriteGetObjectResponseOutput>();
@@ -33245,6 +33559,8 @@ mod tests {
         require_clone::<UpdateBucketMetadataInventoryTableConfigurationOutput>();
         require_clone::<UpdateBucketMetadataJournalTableConfigurationInput>();
         require_clone::<UpdateBucketMetadataJournalTableConfigurationOutput>();
+        require_clone::<UpdateObjectEncryptionInput>();
+        require_clone::<UpdateObjectEncryptionOutput>();
         require_clone::<UploadPartOutput>();
         require_clone::<UploadPartCopyInput>();
         require_clone::<UploadPartCopyOutput>();
@@ -44518,6 +44834,139 @@ pub mod builders {
                 content_md5,
                 expected_bucket_owner,
                 journal_table_configuration,
+            })
+        }
+    }
+
+    /// A builder for [`UpdateObjectEncryptionInput`]
+    #[derive(Default)]
+    pub struct UpdateObjectEncryptionInputBuilder {
+        bucket: Option<BucketName>,
+
+        checksum_algorithm: Option<ChecksumAlgorithm>,
+
+        content_md5: Option<ContentMD5>,
+
+        expected_bucket_owner: Option<AccountId>,
+
+        key: Option<ObjectKey>,
+
+        object_encryption: Option<ObjectEncryption>,
+
+        request_payer: Option<RequestPayer>,
+
+        version_id: Option<ObjectVersionId>,
+    }
+
+    impl UpdateObjectEncryptionInputBuilder {
+        pub fn set_bucket(&mut self, field: BucketName) -> &mut Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        pub fn set_checksum_algorithm(&mut self, field: Option<ChecksumAlgorithm>) -> &mut Self {
+            self.checksum_algorithm = field;
+            self
+        }
+
+        pub fn set_content_md5(&mut self, field: Option<ContentMD5>) -> &mut Self {
+            self.content_md5 = field;
+            self
+        }
+
+        pub fn set_expected_bucket_owner(&mut self, field: Option<AccountId>) -> &mut Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        pub fn set_key(&mut self, field: ObjectKey) -> &mut Self {
+            self.key = Some(field);
+            self
+        }
+
+        pub fn set_object_encryption(&mut self, field: ObjectEncryption) -> &mut Self {
+            self.object_encryption = Some(field);
+            self
+        }
+
+        pub fn set_request_payer(&mut self, field: Option<RequestPayer>) -> &mut Self {
+            self.request_payer = field;
+            self
+        }
+
+        pub fn set_version_id(&mut self, field: Option<ObjectVersionId>) -> &mut Self {
+            self.version_id = field;
+            self
+        }
+
+        #[must_use]
+        pub fn bucket(mut self, field: BucketName) -> Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_algorithm(mut self, field: Option<ChecksumAlgorithm>) -> Self {
+            self.checksum_algorithm = field;
+            self
+        }
+
+        #[must_use]
+        pub fn content_md5(mut self, field: Option<ContentMD5>) -> Self {
+            self.content_md5 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn expected_bucket_owner(mut self, field: Option<AccountId>) -> Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        #[must_use]
+        pub fn key(mut self, field: ObjectKey) -> Self {
+            self.key = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn object_encryption(mut self, field: ObjectEncryption) -> Self {
+            self.object_encryption = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn request_payer(mut self, field: Option<RequestPayer>) -> Self {
+            self.request_payer = field;
+            self
+        }
+
+        #[must_use]
+        pub fn version_id(mut self, field: Option<ObjectVersionId>) -> Self {
+            self.version_id = field;
+            self
+        }
+
+        pub fn build(self) -> Result<UpdateObjectEncryptionInput, BuildError> {
+            let bucket = self.bucket.ok_or_else(|| BuildError::missing_field("bucket"))?;
+            let checksum_algorithm = self.checksum_algorithm;
+            let content_md5 = self.content_md5;
+            let expected_bucket_owner = self.expected_bucket_owner;
+            let key = self.key.ok_or_else(|| BuildError::missing_field("key"))?;
+            let object_encryption = self
+                .object_encryption
+                .ok_or_else(|| BuildError::missing_field("object_encryption"))?;
+            let request_payer = self.request_payer;
+            let version_id = self.version_id;
+            Ok(UpdateObjectEncryptionInput {
+                bucket,
+                checksum_algorithm,
+                content_md5,
+                expected_bucket_owner,
+                key,
+                object_encryption,
+                request_payer,
+                version_id,
             })
         }
     }
@@ -57288,6 +57737,139 @@ pub mod builders {
                 content_md5,
                 expected_bucket_owner,
                 journal_table_configuration,
+            })
+        }
+    }
+
+    /// A builder for [`UpdateObjectEncryptionInput`]
+    #[derive(Default)]
+    pub struct UpdateObjectEncryptionInputBuilder {
+        bucket: Option<BucketName>,
+
+        checksum_algorithm: Option<ChecksumAlgorithm>,
+
+        content_md5: Option<ContentMD5>,
+
+        expected_bucket_owner: Option<AccountId>,
+
+        key: Option<ObjectKey>,
+
+        object_encryption: Option<ObjectEncryption>,
+
+        request_payer: Option<RequestPayer>,
+
+        version_id: Option<ObjectVersionId>,
+    }
+
+    impl UpdateObjectEncryptionInputBuilder {
+        pub fn set_bucket(&mut self, field: BucketName) -> &mut Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        pub fn set_checksum_algorithm(&mut self, field: Option<ChecksumAlgorithm>) -> &mut Self {
+            self.checksum_algorithm = field;
+            self
+        }
+
+        pub fn set_content_md5(&mut self, field: Option<ContentMD5>) -> &mut Self {
+            self.content_md5 = field;
+            self
+        }
+
+        pub fn set_expected_bucket_owner(&mut self, field: Option<AccountId>) -> &mut Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        pub fn set_key(&mut self, field: ObjectKey) -> &mut Self {
+            self.key = Some(field);
+            self
+        }
+
+        pub fn set_object_encryption(&mut self, field: ObjectEncryption) -> &mut Self {
+            self.object_encryption = Some(field);
+            self
+        }
+
+        pub fn set_request_payer(&mut self, field: Option<RequestPayer>) -> &mut Self {
+            self.request_payer = field;
+            self
+        }
+
+        pub fn set_version_id(&mut self, field: Option<ObjectVersionId>) -> &mut Self {
+            self.version_id = field;
+            self
+        }
+
+        #[must_use]
+        pub fn bucket(mut self, field: BucketName) -> Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_algorithm(mut self, field: Option<ChecksumAlgorithm>) -> Self {
+            self.checksum_algorithm = field;
+            self
+        }
+
+        #[must_use]
+        pub fn content_md5(mut self, field: Option<ContentMD5>) -> Self {
+            self.content_md5 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn expected_bucket_owner(mut self, field: Option<AccountId>) -> Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        #[must_use]
+        pub fn key(mut self, field: ObjectKey) -> Self {
+            self.key = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn object_encryption(mut self, field: ObjectEncryption) -> Self {
+            self.object_encryption = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn request_payer(mut self, field: Option<RequestPayer>) -> Self {
+            self.request_payer = field;
+            self
+        }
+
+        #[must_use]
+        pub fn version_id(mut self, field: Option<ObjectVersionId>) -> Self {
+            self.version_id = field;
+            self
+        }
+
+        pub fn build(self) -> Result<UpdateObjectEncryptionInput, BuildError> {
+            let bucket = self.bucket.ok_or_else(|| BuildError::missing_field("bucket"))?;
+            let checksum_algorithm = self.checksum_algorithm;
+            let content_md5 = self.content_md5;
+            let expected_bucket_owner = self.expected_bucket_owner;
+            let key = self.key.ok_or_else(|| BuildError::missing_field("key"))?;
+            let object_encryption = self
+                .object_encryption
+                .ok_or_else(|| BuildError::missing_field("object_encryption"))?;
+            let request_payer = self.request_payer;
+            let version_id = self.version_id;
+            Ok(UpdateObjectEncryptionInput {
+                bucket,
+                checksum_algorithm,
+                content_md5,
+                expected_bucket_owner,
+                key,
+                object_encryption,
+                request_payer,
+                version_id,
             })
         }
     }

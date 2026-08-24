@@ -278,6 +278,7 @@ pub fn collect_rust_types(model: &smithy::Model, ops: &Operations) -> RustTypes 
                         name: variant_name.clone(),
                         type_: to_type_name(&variant.target).to_owned(),
                         doc: variant.traits.doc().map(o),
+                        xml_name: variant.traits.xml_name().map(o),
                     };
                     variants.push(variant);
                 }
@@ -497,14 +498,25 @@ fn unify_operation_types(ops: &Operations, space: &mut RustTypes) {
             if op.smithy_output == op.output {
                 continue;
             }
-            assert_eq!(op.name, "GetBucketNotificationConfiguration");
-            assert_eq!(op.output, "GetBucketNotificationConfigurationOutput");
-            let rust::Type::Struct(ref origin) = space[&op.smithy_output] else { panic!() };
-            let mut ty = origin.clone();
-            ty.name.clone_from(&op.output); // duplicate type
-            assert!(origin.xml_name.is_none());
-            ty.xml_name = Some(origin.name.clone());
-            ty
+            if op.smithy_output.ends_with("Response") {
+                // `{Op}Response` output shape: rename it in place to the `<Op>Output`
+                // convention. The shape is exclusive to the operation (no other
+                // shape references it), so it can be moved out of the space.
+                let Some(rust::Type::Struct(mut ty)) = space.remove(&op.smithy_output) else { panic!() };
+                ty.name.clone_from(&op.output); // rename type
+                ty
+            } else {
+                // Shared payload shape (e.g. `NotificationConfiguration`): duplicate it
+                // under the `<Op>Output` name, keeping the original type for other uses.
+                assert_eq!(op.name, "GetBucketNotificationConfiguration");
+                assert_eq!(op.output, "GetBucketNotificationConfigurationOutput");
+                let rust::Type::Struct(ref origin) = space[&op.smithy_output] else { panic!() };
+                let mut ty = origin.clone();
+                ty.name.clone_from(&op.output); // duplicate type
+                assert!(origin.xml_name.is_none());
+                ty.xml_name = Some(origin.name.clone());
+                ty
+            }
         };
         assert!(space.insert(op.output.clone(), rust::Type::Struct(output_ty)).is_none());
     }

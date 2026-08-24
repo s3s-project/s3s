@@ -2715,6 +2715,34 @@ impl S3 for Proxy {
     }
 
     #[tracing::instrument(skip(self, req))]
+    async fn update_object_encryption(
+        &self,
+        req: S3Request<s3s::dto::UpdateObjectEncryptionInput>,
+    ) -> S3Result<S3Response<s3s::dto::UpdateObjectEncryptionOutput>> {
+        let input = req.input;
+        debug!(?input);
+        let mut b = self.client.update_object_encryption();
+        b = b.set_bucket(Some(try_into_aws(input.bucket)?));
+        b = b.set_checksum_algorithm(try_into_aws(input.checksum_algorithm)?);
+        b = b.set_content_md5(try_into_aws(input.content_md5)?);
+        b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
+        b = b.set_key(Some(try_into_aws(input.key)?));
+        b = b.set_object_encryption(Some(try_into_aws(input.object_encryption)?));
+        b = b.set_request_payer(try_into_aws(input.request_payer)?);
+        b = b.set_version_id(try_into_aws(input.version_id)?);
+        let result = b.send().await;
+        match result {
+            Ok(output) => {
+                let headers = super::meta::build_headers(&output)?;
+                let output = try_from_aws(output)?;
+                debug!(?output);
+                Ok(S3Response::with_headers(output, headers))
+            }
+            Err(e) => Err(wrap_sdk_error!(e)),
+        }
+    }
+
+    #[tracing::instrument(skip(self, req))]
     async fn upload_part(&self, req: S3Request<s3s::dto::UploadPartInput>) -> S3Result<S3Response<s3s::dto::UploadPartOutput>> {
         let input = req.input;
         debug!(?input);

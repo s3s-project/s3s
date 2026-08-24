@@ -3679,5 +3679,37 @@
     "zz"
    ]
   ]
+ },
+ {
+  "expect": "UpdateObjectEncryption",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "if:qs.has(\"encryption\")",
+  "path": "Object",
+  "qs": [
+   [
+    "encryption",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "UpdateObjectEncryption",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "noise:qs.has(\"encryption\")",
+  "path": "Object",
+  "qs": [
+   [
+    "encryption",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
  }
 ]

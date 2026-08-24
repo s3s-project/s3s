@@ -236,12 +236,20 @@ fn s3_unwrapped_xml_output(ops: &Operations, ty_name: &str) -> bool {
 
 fn codegen_xml_serde(ops: &Operations, rust_types: &RustTypes, root_type_names: &BTreeMap<&str, Option<&str>>) {
     for (rust_type, xml_name) in root_type_names.iter().map(|(&name, xml_name)| (&rust_types[name], xml_name)) {
-        let rust::Type::Struct(ty) = rust_type else { panic!("{rust_type:#?}") };
+        match rust_type {
+            rust::Type::Struct(ty) => codegen_xml_serde_root_struct(ops, rust_types, ty, *xml_name),
+            rust::Type::StructEnum(ty) => codegen_xml_serde_root_struct_enum(rust_types, ty, *xml_name),
+            _ => panic!("{rust_type:#?}"),
+        }
+    }
+}
 
+fn codegen_xml_serde_root_struct(ops: &Operations, rust_types: &RustTypes, ty: &rust::Struct, xml_name: Option<&str>) {
+    {
         // https://github.com/Nugine/s3s/pull/127
         if s3_unwrapped_xml_output(ops, &ty.name) {
             assert_eq!(ty.name, "GetBucketLocationOutput");
-            continue; // manually implemented
+            return; // manually implemented
         }
 
         // https://github.com/Nugine/s3s/issues/2
@@ -280,6 +288,39 @@ fn codegen_xml_serde(ops: &Operations, rust_types: &RustTypes, root_type_names: 
             g!("}}");
             g!();
         }
+    }
+}
+
+fn codegen_xml_serde_root_struct_enum(rust_types: &RustTypes, ty: &rust::StructEnum, xml_name: Option<&str>) {
+    let xml_name = xml_name.unwrap_or(&ty.name);
+
+    if can_impl_serialize(rust_types, &ty.name) {
+        g!("impl Serialize for {} {{", ty.name);
+        g!("fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {{");
+        g!("s.element(\"{xml_name}\", |s| match self {{");
+        for variant in &ty.variants {
+            let xml_name = variant.xml_name.as_deref().unwrap_or(&variant.name);
+            g!("Self::{0}(x) => s.content(\"{xml_name}\", x),", variant.name);
+        }
+        g!("}})");
+        g!("}}");
+        g!("}}");
+        g!();
+    }
+
+    if can_impl_deserialize(rust_types, &ty.name) {
+        g!("impl<'xml> Deserialize<'xml> for {} {{", ty.name);
+        g!("fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {{");
+        g!("d.named_element(\"{xml_name}\", |d| d.element(|d, x| match x {{");
+        for variant in &ty.variants {
+            let xml_name = variant.xml_name.as_deref().unwrap_or(&variant.name);
+            g!("b\"{xml_name}\" => Ok(Self::{0}(d.content()?)),", variant.name);
+        }
+        g!("_ => Err(DeError::UnexpectedTagName)");
+        g!("}}))");
+        g!("}}");
+        g!("}}");
+        g!();
     }
 }
 
@@ -331,7 +372,8 @@ fn codegen_xml_serde_content(
                     g!("match self {{");
 
                     for variant in &ty.variants {
-                        g!("Self::{0}(x) => s.content(\"{0}\", x),", variant.name);
+                        let xml_name = variant.xml_name.as_deref().unwrap_or(&variant.name);
+                        g!("Self::{0}(x) => s.content(\"{xml_name}\", x),", variant.name);
                     }
 
                     g!("}}");
@@ -345,7 +387,8 @@ fn codegen_xml_serde_content(
 
                     g!("d.element(|d, x| match x {{");
                     for variant in &ty.variants {
-                        g!("b\"{0}\" => Ok(Self::{0}(d.content()?)),", variant.name);
+                        let xml_name = variant.xml_name.as_deref().unwrap_or(&variant.name);
+                        g!("b\"{xml_name}\" => Ok(Self::{0}(d.content()?)),", variant.name);
                     }
                     g!("_ => Err(DeError::UnexpectedTagName)");
                     g!("}})");

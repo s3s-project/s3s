@@ -163,7 +163,8 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
             rust::Type::StructEnum(ty) => {
                 g!("Ok(match x {{");
                 for variant in &ty.variants {
-                    g!("{aws_path}::{0}(v) => Self::{0}(try_from_aws(v)?),", variant.name);
+                    let aws_variant_name = variant.name.to_upper_camel_case();
+                    g!("{aws_path}::{aws_variant_name}(v) => Self::{0}(try_from_aws(v)?),", variant.name);
                 }
                 g!("_ => unimplemented!(\"unknown variant of {aws_path}: {{x:?}}\"),");
                 g!("}})");
@@ -235,7 +236,8 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
             rust::Type::StructEnum(ty) => {
                 g!("Ok(match x {{");
                 for variant in &ty.variants {
-                    g!("Self::{0}(v) => {aws_path}::{0}(try_into_aws(v)?),", variant.name);
+                    let aws_variant_name = variant.name.to_upper_camel_case();
+                    g!("Self::{0}(v) => {aws_path}::{aws_variant_name}(try_into_aws(v)?),", variant.name);
                 }
                 g!("_ => unimplemented!(\"unknown variant of {}: {{x:?}}\"),", ty.name);
                 g!("}})");
@@ -265,6 +267,7 @@ fn aws_ty_name(name: &str) -> &str {
         "SSEKMS" => "Ssekms",
         "SSES3" => "Sses3",
         "SelectObjectContentEvent" => "SelectObjectContentEventStream",
+        "SSEKMSEncryption" => "SsekmsEncryption",
         _ => name,
     }
 }

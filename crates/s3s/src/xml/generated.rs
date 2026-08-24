@@ -101,6 +101,8 @@ use std::io::Write;
 // Deserialize: MetricsConfiguration
 //   Serialize: NotificationConfiguration
 // Deserialize: NotificationConfiguration
+//   Serialize: ObjectEncryption
+// Deserialize: ObjectEncryption
 //   Serialize: ObjectLockConfiguration
 // Deserialize: ObjectLockConfiguration
 //   Serialize: ObjectLockLegalHold "LegalHold"
@@ -192,6 +194,8 @@ use std::io::Write;
 // DeserializeContent: AssumedRoleIdType
 //   SerializeContent: AssumedRoleUser
 // DeserializeContent: AssumedRoleUser
+//   SerializeContent: BlockedEncryptionTypes
+// DeserializeContent: BlockedEncryptionTypes
 //   SerializeContent: Bucket
 // DeserializeContent: Bucket
 //   SerializeContent: BucketAbacStatus
@@ -336,6 +340,8 @@ use std::io::Write;
 // DeserializeContent: Encryption
 //   SerializeContent: EncryptionConfiguration
 // DeserializeContent: EncryptionConfiguration
+//   SerializeContent: EncryptionType
+// DeserializeContent: EncryptionType
 //   SerializeContent: End
 // DeserializeContent: End
 //   SerializeContent: Error
@@ -613,6 +619,8 @@ use std::io::Write;
 // DeserializeContent: NextUploadIdMarker
 //   SerializeContent: NextVersionIdMarker
 // DeserializeContent: NextVersionIdMarker
+//   SerializeContent: NonEmptyKmsKeyArnString
+// DeserializeContent: NonEmptyKmsKeyArnString
 //   SerializeContent: NonNegativeIntegerType
 // DeserializeContent: NonNegativeIntegerType
 //   SerializeContent: NoncurrentVersionExpiration
@@ -629,6 +637,8 @@ use std::io::Write;
 // DeserializeContent: Object
 //   SerializeContent: ObjectCannedACL
 // DeserializeContent: ObjectCannedACL
+//   SerializeContent: ObjectEncryption
+// DeserializeContent: ObjectEncryption
 //   SerializeContent: ObjectIdentifier
 // DeserializeContent: ObjectIdentifier
 //   SerializeContent: ObjectKey
@@ -791,6 +801,8 @@ use std::io::Write;
 // DeserializeContent: S3TablesNamespace
 //   SerializeContent: SSEKMS
 // DeserializeContent: SSEKMS
+//   SerializeContent: SSEKMSEncryption
+// DeserializeContent: SSEKMSEncryption
 //   SerializeContent: SSEKMSKeyId
 // DeserializeContent: SSEKMSKeyId
 //   SerializeContent: SSES3
@@ -3669,6 +3681,40 @@ impl<'xml> DeserializeContent<'xml> for NotificationConfiguration {
     }
 }
 
+impl Serialize for ObjectEncryption {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.element("ObjectEncryption", |s| match self {
+            Self::SSEKMS(x) => s.content("SSE-KMS", x),
+        })
+    }
+}
+
+impl<'xml> Deserialize<'xml> for ObjectEncryption {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("ObjectEncryption", |d| {
+            d.element(|d, x| match x {
+                b"SSE-KMS" => Ok(Self::SSEKMS(d.content()?)),
+                _ => Err(DeError::UnexpectedTagName),
+            })
+        })
+    }
+}
+impl SerializeContent for ObjectEncryption {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        match self {
+            Self::SSEKMS(x) => s.content("SSE-KMS", x),
+        }
+    }
+}
+impl<'xml> DeserializeContent<'xml> for ObjectEncryption {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.element(|d, x| match x {
+            b"SSE-KMS" => Ok(Self::SSEKMS(d.content()?)),
+            _ => Err(DeError::UnexpectedTagName),
+        })
+    }
+}
+
 impl Serialize for ObjectLockConfiguration {
     fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         s.content("ObjectLockConfiguration", self)
@@ -5128,6 +5174,30 @@ impl<'xml> DeserializeContent<'xml> for AssumedRoleUser {
             arn: arn.ok_or(DeError::MissingField)?,
             assumed_role_id: assumed_role_id.ok_or(DeError::MissingField)?,
         })
+    }
+}
+
+impl SerializeContent for BlockedEncryptionTypes {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(iter) = &self.encryption_type {
+            s.flattened_list("EncryptionType", iter)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for BlockedEncryptionTypes {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut encryption_type: Option<EncryptionTypeList> = None;
+        d.for_each_element(|d, x| match x {
+            b"EncryptionType" => {
+                let ans: EncryptionType = d.content()?;
+                encryption_type.get_or_insert_with(List::new).push(ans);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self { encryption_type })
     }
 }
 
@@ -6642,6 +6712,21 @@ impl<'xml> DeserializeContent<'xml> for EncryptionConfiguration {
             _ => Err(DeError::UnexpectedTagName),
         })?;
         Ok(Self { replica_kms_key_id })
+    }
+}
+
+impl SerializeContent for EncryptionType {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        self.as_str().serialize_content(s)
+    }
+}
+impl<'xml> DeserializeContent<'xml> for EncryptionType {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.text(|s| match s {
+            "NONE" => Ok(Self::from_static(EncryptionType::NONE)),
+            "SSE-C" => Ok(Self::from_static(EncryptionType::SSE_C)),
+            _ => Ok(Self::from(s.to_owned())),
+        })
     }
 }
 
@@ -11491,6 +11576,44 @@ impl<'xml> DeserializeContent<'xml> for SSEKMS {
     }
 }
 
+impl SerializeContent for SSEKMSEncryption {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.bucket_key_enabled {
+            s.content("BucketKeyEnabled", val)?;
+        }
+        s.content("KMSKeyArn", &self.kms_key_arn)?;
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for SSEKMSEncryption {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut bucket_key_enabled: Option<BucketKeyEnabled> = None;
+        let mut kms_key_arn: Option<NonEmptyKmsKeyArnString> = None;
+        d.for_each_element(|d, x| match x {
+            b"BucketKeyEnabled" => {
+                if bucket_key_enabled.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                bucket_key_enabled = Some(d.content()?);
+                Ok(())
+            }
+            b"KMSKeyArn" => {
+                if kms_key_arn.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                kms_key_arn = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            bucket_key_enabled,
+            kms_key_arn: kms_key_arn.ok_or(DeError::MissingField)?,
+        })
+    }
+}
+
 impl SerializeContent for SSES3 {
     fn serialize_content<W: Write>(&self, _: &mut Serializer<W>) -> SerResult {
         Ok(())
@@ -11605,6 +11728,8 @@ impl<'xml> DeserializeContent<'xml> for ServerSideEncryption {
     fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
         d.text(|s| match s {
             "AES256" => Ok(Self::from_static(ServerSideEncryption::AES256)),
+            "aws:backup" => Ok(Self::from_static(ServerSideEncryption::AWS_BACKUP)),
+            "aws:fsx" => Ok(Self::from_static(ServerSideEncryption::AWS_FSX)),
             "aws:kms" => Ok(Self::from_static(ServerSideEncryption::AWS_KMS)),
             "aws:kms:dsse" => Ok(Self::from_static(ServerSideEncryption::AWS_KMS_DSSE)),
             _ => Ok(Self::from(s.to_owned())),
@@ -11655,6 +11780,9 @@ impl SerializeContent for ServerSideEncryptionRule {
         if let Some(ref val) = self.apply_server_side_encryption_by_default {
             s.content("ApplyServerSideEncryptionByDefault", val)?;
         }
+        if let Some(ref val) = self.blocked_encryption_types {
+            s.content("BlockedEncryptionTypes", val)?;
+        }
         if let Some(ref val) = self.bucket_key_enabled {
             s.content("BucketKeyEnabled", val)?;
         }
@@ -11665,6 +11793,7 @@ impl SerializeContent for ServerSideEncryptionRule {
 impl<'xml> DeserializeContent<'xml> for ServerSideEncryptionRule {
     fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
         let mut apply_server_side_encryption_by_default: Option<ServerSideEncryptionByDefault> = None;
+        let mut blocked_encryption_types: Option<BlockedEncryptionTypes> = None;
         let mut bucket_key_enabled: Option<BucketKeyEnabled> = None;
         d.for_each_element(|d, x| match x {
             b"ApplyServerSideEncryptionByDefault" => {
@@ -11672,6 +11801,13 @@ impl<'xml> DeserializeContent<'xml> for ServerSideEncryptionRule {
                     return Err(DeError::DuplicateField);
                 }
                 apply_server_side_encryption_by_default = Some(d.content()?);
+                Ok(())
+            }
+            b"BlockedEncryptionTypes" => {
+                if blocked_encryption_types.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                blocked_encryption_types = Some(d.content()?);
                 Ok(())
             }
             b"BucketKeyEnabled" => {
@@ -11685,6 +11821,7 @@ impl<'xml> DeserializeContent<'xml> for ServerSideEncryptionRule {
         })?;
         Ok(Self {
             apply_server_side_encryption_by_default,
+            blocked_encryption_types,
             bucket_key_enabled,
         })
     }
