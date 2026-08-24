@@ -581,8 +581,6 @@ impl<'a> SignatureContext<'a> {
         let method = &self.req_method;
         let query_strings: &[(String, String)] = self.qs.as_ref().map_or(&[], AsRef::as_ref);
 
-        let headers = collect_signed_headers(self.hs, &authorization.signed_headers, |name| self.signed_host_fallback(name))?;
-
         let payload_hash;
         let payload = match amz_content_sha256 {
             Some(AmzContentSha256::StreamingAws4HmacSha256Payload) => sig_v4::Payload::MultipleChunks,
@@ -620,6 +618,8 @@ impl<'a> SignatureContext<'a> {
                 }
             }
         };
+
+        let headers = collect_signed_headers(self.hs, &authorization.signed_headers, |name| self.signed_host_fallback(name))?;
 
         let verifier = SignatureVerificationContext {
             expected_signature,
@@ -995,7 +995,7 @@ mod tests {
             &method,
             "/test-bucket/path",
             &[] as &[(&str, &str)],
-            &headers,
+            headers,
             sig_v4::Payload::Unsigned,
         );
         let verifier = SignatureVerificationContext {
@@ -1015,7 +1015,7 @@ mod tests {
             &method,
             "/test-bucket/path=",
             &[] as &[(&str, &str)],
-            &headers,
+            headers,
             sig_v4::Payload::Unsigned,
         );
         let verifier = SignatureVerificationContext {
@@ -1032,7 +1032,7 @@ mod tests {
                     &method,
                     "/test-bucket/path=",
                     &[] as &[(&str, &str)],
-                    &headers,
+                    headers,
                     sig_v4::Payload::Unsigned,
                 )
             })
@@ -1583,13 +1583,13 @@ file content\r\n\
                 &method,
                 decoded_uri_path,
                 &query_strings_for_signing,
-                &headers_for_signing,
+                headers_for_signing,
             ),
             sig_v4::create_presigned_canonical_request_with_raw_uri_path(
                 &method,
                 raw_uri_path,
                 &query_strings_for_signing,
-                &headers_for_signing,
+                headers_for_signing,
             ),
         ];
         assert_ne!(canonical_requests[0], canonical_requests[1]);
@@ -1655,7 +1655,7 @@ file content\r\n\
             &method,
             decoded_uri_path,
             &query_strings_for_signing,
-            &headers_for_signing,
+            headers_for_signing,
         );
         let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
         let signature = sig_v4::calculate_signature(&string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
@@ -1722,7 +1722,7 @@ file content\r\n\
             &method,
             "/test-bucket/test-key",
             &query_strings_for_signing,
-            &headers_for_signing,
+            headers_for_signing,
         );
         let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
         let signature = sig_v4::calculate_signature(&string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
@@ -1801,7 +1801,7 @@ file content\r\n\
             &method,
             "/test-bucket/test-key",
             &query_strings_for_signing,
-            &headers_for_signing,
+            headers_for_signing,
         );
         let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
         let signature = sig_v4::calculate_signature(&string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
@@ -1929,14 +1929,14 @@ file content\r\n\
                 &method,
                 decoded_uri_path,
                 &[] as &[(&str, &str)],
-                &headers_for_signing,
+                headers_for_signing,
                 sig_v4::Payload::Unsigned,
             ),
             sig_v4::create_canonical_request_with_raw_uri_path(
                 &method,
                 raw_uri_path,
                 &[] as &[(&str, &str)],
-                &headers_for_signing,
+                headers_for_signing,
                 sig_v4::Payload::Unsigned,
             ),
         ];
@@ -2017,7 +2017,7 @@ file content\r\n\
             &method,
             path,
             &[] as &[(&str, &str)],
-            &headers_for_signing,
+            headers_for_signing,
             sig_v4::Payload::SingleChunk(payload_hash),
         );
         let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
@@ -2096,7 +2096,7 @@ file content\r\n\
             &method,
             decoded_uri_path,
             &[] as &[(&str, &str)],
-            &headers_for_signing,
+            headers_for_signing,
             sig_v4::Payload::Unsigned,
         );
         let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
@@ -2175,14 +2175,14 @@ file content\r\n\
             &method,
             decoded_uri_path,
             &[] as &[(&str, &str)],
-            &headers_for_signing,
+            headers_for_signing,
             sig_v4::Payload::MultipleChunks,
         );
         let raw_canonical_request = sig_v4::create_canonical_request_with_raw_uri_path(
             &method,
             raw_uri_path,
             &[] as &[(&str, &str)],
-            &headers_for_signing,
+            headers_for_signing,
             sig_v4::Payload::MultipleChunks,
         );
         assert_ne!(standard_canonical_request, raw_canonical_request);
@@ -2352,7 +2352,7 @@ file content\r\n\
             &method,
             "/test.txt",
             &[] as &[(&str, &str)],
-            &headers_for_signing,
+            headers_for_signing,
             sig_v4::Payload::Unsigned,
         );
         let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");

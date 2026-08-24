@@ -1353,7 +1353,7 @@ mod tests {
                 req.method(),
                 uri_path,
                 query_strings,
-                &signed_headers,
+                signed_headers,
                 Payload::SingleChunk(&payload_checksum),
             );
 
