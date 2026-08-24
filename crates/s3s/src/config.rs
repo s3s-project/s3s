@@ -51,6 +51,9 @@ use crate::region::Region;
 // AWS-compatible default: https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-presigned-url.html#PresignedUrl-Expiration
 pub(crate) const DEFAULT_PRESIGNED_URL_MAX_EXPIRES_SECS: u32 = 7 * 24 * 60 * 60;
 
+// Aligned with MinIO: https://github.com/minio/minio/blob/master/cmd/streaming-signature-v4.go
+pub(crate) const DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE: usize = 256 * 1024 * 1024;
+
 /// S3 Service Configuration Provider trait.
 ///
 /// This trait provides a `snapshot` method that returns an `Arc<S3Config>`.
@@ -112,6 +115,15 @@ pub struct S3Config {
     ///
     /// Default: 5 GB (5 * 1024 * 1024 * 1024)
     pub post_object_max_file_size: u64,
+
+    /// Maximum chunk data size for aws-chunked streaming uploads in bytes.
+    ///
+    /// Signed chunks must be buffered in full before their signature can be verified,
+    /// so this limit bounds the memory retained per chunk. Unsigned chunks are streamed
+    /// without buffering and are not subject to this limit.
+    ///
+    /// Default: 256 MB (256 * 1024 * 1024)
+    pub aws_chunked_stream_max_chunk_size: usize,
 
     /// Maximum size per form field in bytes.
     ///
@@ -194,8 +206,9 @@ impl Default for S3Config {
         Self {
             xml_max_body_size: 20 * 1024 * 1024,               // 20 MB
             post_object_max_file_size: 5 * 1024 * 1024 * 1024, // 5 GB
-            form_max_field_size: 1024 * 1024,                  // 1 MB
-            form_max_fields_size: 20 * 1024 * 1024,            // 20 MB
+            aws_chunked_stream_max_chunk_size: DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
+            form_max_field_size: 1024 * 1024,       // 1 MB
+            form_max_fields_size: 20 * 1024 * 1024, // 20 MB
             form_max_parts: 1000,
             presigned_url_max_skew_time_secs: 900, // 15 minutes
             expected_region: None,
@@ -405,6 +418,7 @@ mod tests {
         let config = S3Config {
             xml_max_body_size: 10 * 1024 * 1024,
             post_object_max_file_size: 1024 * 1024 * 1024,
+            aws_chunked_stream_max_chunk_size: DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
             form_max_field_size: 512 * 1024,
             form_max_fields_size: 5 * 1024 * 1024,
             form_max_parts: 500,

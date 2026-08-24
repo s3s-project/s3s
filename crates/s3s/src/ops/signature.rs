@@ -639,6 +639,7 @@ impl SignatureContext<'_> {
                 secret_key.clone(),
                 decoded_content_length,
                 unsigned,
+                self.config.snapshot().aws_chunked_stream_max_chunk_size,
             );
 
             debug!(len=?stream.exact_remaining_length(), "aws-chunked");
