@@ -80,11 +80,17 @@ fn collect_signed_headers<'a>(
 
     for &name in names {
         let mut has_value = false;
+        let mut has_invalid_value = false;
         for value in hs.get_all(name) {
             if let Some(value) = http::header_value_to_str(value) {
                 headers.push((name, value));
                 has_value = true;
+            } else {
+                has_invalid_value = true;
             }
+        }
+        if has_invalid_value {
+            return Err(s3_error!(SignatureDoesNotMatch, "invalid signed header: {name}"));
         }
         if !has_value {
             let Some(value) = on_missing(name) else {
@@ -948,9 +954,11 @@ mod tests {
         );
         let signed_headers = ["x-amz-meta-name"];
 
-        let err = collect_signed_headers(&headers, &signed_headers, |_| None).expect_err("non-UTF-8 value must not be signed");
+        let err = collect_signed_headers(&headers, &signed_headers, |_| Some("example.com"))
+            .expect_err("non-UTF-8 value must not be signed");
 
         assert_eq!(err.code(), &S3ErrorCode::SignatureDoesNotMatch);
+        assert_eq!(err.message(), Some("invalid signed header: x-amz-meta-name"));
     }
 
     #[test]

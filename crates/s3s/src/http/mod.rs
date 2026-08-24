@@ -15,6 +15,7 @@ pub use self::de::*;
 mod ordered_qs;
 pub use self::ordered_qs::*;
 
+// Deprecated compatibility shim retained until the next breaking release.
 #[allow(dead_code)]
 mod ordered_headers;
 #[allow(deprecated, unused_imports)]
