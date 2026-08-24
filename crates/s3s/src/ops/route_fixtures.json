@@ -3391,5 +3391,37 @@
   "note": "fallback-empty-qs|null-qs",
   "path": "Object",
   "qs": null
+ },
+ {
+  "expect": "RenameObject",
+  "headers": {},
+  "method": "PUT",
+  "nfb": false,
+  "note": "if:qs.has(\"renameObject\")",
+  "path": "Object",
+  "qs": [
+   [
+    "renameObject",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "RenameObject",
+  "headers": {},
+  "method": "PUT",
+  "nfb": false,
+  "note": "noise:qs.has(\"renameObject\")",
+  "path": "Object",
+  "qs": [
+   [
+    "renameObject",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
  }
 ]

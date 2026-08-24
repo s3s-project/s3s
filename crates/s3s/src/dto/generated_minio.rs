@@ -1384,6 +1384,8 @@ pub type ChecksumXXHASH3 = String;
 
 pub type ChecksumXXHASH64 = String;
 
+pub type ClientToken = String;
+
 pub type Code = String;
 
 pub type Comments = String;
@@ -11145,6 +11147,23 @@ pub type HttpRedirectCode = String;
 
 pub type ID = String;
 
+/// <p>Parameters on this idempotent request are inconsistent with parameters used in previous request(s). </p>
+/// <p>For a list of error codes and more information on Amazon S3 errors, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html#ErrorCodeList">Error codes</a>.</p>
+/// <note>
+/// <p>Idempotency ensures that an API request completes no more than one time. With an idempotent
+/// request, if the original request completes successfully, any subsequent retries complete successfully
+/// without performing any further actions.</p>
+/// </note>
+#[derive(Clone, Default, PartialEq)]
+pub struct IdempotencyParameterMismatch {}
+
+impl fmt::Debug for IdempotencyParameterMismatch {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("IdempotencyParameterMismatch");
+        d.finish_non_exhaustive()
+    }
+}
+
 pub type IfMatch = ETagCondition;
 
 pub type IfMatchInitiatedTime = Timestamp;
@@ -19455,6 +19474,126 @@ impl fmt::Debug for RedirectAllRequestsTo {
 
 pub type Region = String;
 
+#[derive(Clone, Default, PartialEq)]
+pub struct RenameObjectInput {
+    /// <p>The bucket name of the directory bucket containing the object.</p>
+    /// <p> You must use virtual-hosted-style requests in the format
+    /// <code>Bucket-name.s3express-zone-id.region-code.amazonaws.com</code>. Path-style requests are not
+    /// supported. Directory bucket names must be unique in the chosen Availability Zone. Bucket names must
+    /// follow the format <code>bucket-base-name--zone-id--x-s3 </code> (for example,
+    /// <code>amzn-s3-demo-bucket--usw2-az1--x-s3</code>). For information about bucket naming restrictions, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/directory-bucket-naming-rules.html">Directory bucket naming rules</a> in the <i>Amazon S3 User Guide</i>.</p>
+    pub bucket: BucketName,
+    /// <p> A unique string with a max of 64 ASCII characters in the ASCII range of 33 - 126.</p>
+    /// <note>
+    /// <p>
+    /// <code>RenameObject</code> supports idempotency using a client token. To make an idempotent API request
+    /// using <code>RenameObject</code>, specify a client token in the request. You should not reuse the same
+    /// client token for other API requests. If you retry a request that completed successfully using the same
+    /// client token and the same parameters, the retry succeeds without performing any further actions. If
+    /// you retry a successful request using the same client token, but one or more of the parameters are
+    /// different, the retry fails and an <code>IdempotentParameterMismatch</code> error is returned. </p>
+    /// </note>
+    pub client_token: Option<ClientToken>,
+    /// <p>Renames the object only if the ETag (entity tag) value provided during the operation matches the
+    /// ETag of the object in S3. The <code>If-Match</code> header field makes the request method conditional on
+    /// ETags. If the ETag values do not match, the operation returns a <code>412 Precondition Failed</code>
+    /// error.</p>
+    /// <p>Expects the ETag value as a string.</p>
+    pub destination_if_match: Option<IfMatch>,
+    /// <p>Renames the object if the destination exists and if it has been modified since the specified
+    /// time.</p>
+    pub destination_if_modified_since: Option<IfModifiedSince>,
+    /// <p> Renames the object only if the destination does not already exist in the specified directory
+    /// bucket. If the object does exist when you send a request with <code>If-None-Match:*</code>, the S3 API
+    /// will return a <code>412 Precondition Failed</code> error, preventing an overwrite. The
+    /// <code>If-None-Match</code> header prevents overwrites of existing data by validating that there's not
+    /// an object with the same key name already in your directory bucket.</p>
+    /// <p> Expects the <code>*</code> character (asterisk).</p>
+    pub destination_if_none_match: Option<IfNoneMatch>,
+    /// <p>Renames the object if it hasn't been modified since the specified time.</p>
+    pub destination_if_unmodified_since: Option<IfUnmodifiedSince>,
+    /// <p>Key name of the object to rename.</p>
+    pub key: ObjectKey,
+    /// <p>Specifies the source for the rename operation. The value must be URL encoded.</p>
+    pub rename_source: RenameSource,
+    /// <p>Renames the object if the source exists and if its entity tag (ETag) matches the specified ETag.
+    /// </p>
+    pub source_if_match: Option<RenameSourceIfMatch>,
+    /// <p>Renames the object if the source exists and if it has been modified since the specified time.</p>
+    pub source_if_modified_since: Option<RenameSourceIfModifiedSince>,
+    /// <p>Renames the object if the source exists and if its entity tag (ETag) is different than the specified
+    /// ETag. If an asterisk (<code>*</code>) character is provided, the operation will fail and return a
+    /// <code>412 Precondition Failed</code> error. </p>
+    pub source_if_none_match: Option<RenameSourceIfNoneMatch>,
+    /// <p>Renames the object if the source exists and hasn't been modified since the specified time.</p>
+    pub source_if_unmodified_since: Option<RenameSourceIfUnmodifiedSince>,
+}
+
+impl fmt::Debug for RenameObjectInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("RenameObjectInput");
+        d.field("bucket", &self.bucket);
+        if let Some(ref val) = self.client_token {
+            d.field("client_token", val);
+        }
+        if let Some(ref val) = self.destination_if_match {
+            d.field("destination_if_match", val);
+        }
+        if let Some(ref val) = self.destination_if_modified_since {
+            d.field("destination_if_modified_since", val);
+        }
+        if let Some(ref val) = self.destination_if_none_match {
+            d.field("destination_if_none_match", val);
+        }
+        if let Some(ref val) = self.destination_if_unmodified_since {
+            d.field("destination_if_unmodified_since", val);
+        }
+        d.field("key", &self.key);
+        d.field("rename_source", &self.rename_source);
+        if let Some(ref val) = self.source_if_match {
+            d.field("source_if_match", val);
+        }
+        if let Some(ref val) = self.source_if_modified_since {
+            d.field("source_if_modified_since", val);
+        }
+        if let Some(ref val) = self.source_if_none_match {
+            d.field("source_if_none_match", val);
+        }
+        if let Some(ref val) = self.source_if_unmodified_since {
+            d.field("source_if_unmodified_since", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+
+impl RenameObjectInput {
+    #[must_use]
+    pub fn builder() -> builders::RenameObjectInputBuilder {
+        default()
+    }
+}
+
+#[derive(Clone, Default, PartialEq)]
+pub struct RenameObjectOutput {}
+
+impl fmt::Debug for RenameObjectOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("RenameObjectOutput");
+        d.finish_non_exhaustive()
+    }
+}
+
+pub type RenameSource = String;
+
+pub type RenameSourceIfMatch = String;
+
+pub type RenameSourceIfModifiedSince = Timestamp;
+
+pub type RenameSourceIfNoneMatch = String;
+
+pub type RenameSourceIfUnmodifiedSince = Timestamp;
+
 pub type ReplaceKeyPrefixWith = String;
 
 pub type ReplaceKeyWith = String;
@@ -22989,6 +23128,7 @@ mod tests {
         require_default::<PutObjectRetentionOutput>();
         require_default::<PutObjectTaggingOutput>();
         require_default::<PutPublicAccessBlockOutput>();
+        require_default::<RenameObjectOutput>();
         require_default::<RestoreObjectOutput>();
         require_default::<SelectObjectContentOutput>();
         require_default::<UploadPartOutput>();
@@ -23180,6 +23320,8 @@ mod tests {
         require_clone::<PutObjectTaggingOutput>();
         require_clone::<PutPublicAccessBlockInput>();
         require_clone::<PutPublicAccessBlockOutput>();
+        require_clone::<RenameObjectInput>();
+        require_clone::<RenameObjectOutput>();
         require_clone::<RestoreObjectInput>();
         require_clone::<RestoreObjectOutput>();
         require_clone::<SelectObjectContentInput>();
@@ -33534,6 +33676,197 @@ pub mod builders {
         }
     }
 
+    /// A builder for [`RenameObjectInput`]
+    #[derive(Default)]
+    pub struct RenameObjectInputBuilder {
+        bucket: Option<BucketName>,
+
+        client_token: Option<ClientToken>,
+
+        destination_if_match: Option<IfMatch>,
+
+        destination_if_modified_since: Option<IfModifiedSince>,
+
+        destination_if_none_match: Option<IfNoneMatch>,
+
+        destination_if_unmodified_since: Option<IfUnmodifiedSince>,
+
+        key: Option<ObjectKey>,
+
+        rename_source: Option<RenameSource>,
+
+        source_if_match: Option<RenameSourceIfMatch>,
+
+        source_if_modified_since: Option<RenameSourceIfModifiedSince>,
+
+        source_if_none_match: Option<RenameSourceIfNoneMatch>,
+
+        source_if_unmodified_since: Option<RenameSourceIfUnmodifiedSince>,
+    }
+
+    impl RenameObjectInputBuilder {
+        pub fn set_bucket(&mut self, field: BucketName) -> &mut Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        pub fn set_client_token(&mut self, field: Option<ClientToken>) -> &mut Self {
+            self.client_token = field;
+            self
+        }
+
+        pub fn set_destination_if_match(&mut self, field: Option<IfMatch>) -> &mut Self {
+            self.destination_if_match = field;
+            self
+        }
+
+        pub fn set_destination_if_modified_since(&mut self, field: Option<IfModifiedSince>) -> &mut Self {
+            self.destination_if_modified_since = field;
+            self
+        }
+
+        pub fn set_destination_if_none_match(&mut self, field: Option<IfNoneMatch>) -> &mut Self {
+            self.destination_if_none_match = field;
+            self
+        }
+
+        pub fn set_destination_if_unmodified_since(&mut self, field: Option<IfUnmodifiedSince>) -> &mut Self {
+            self.destination_if_unmodified_since = field;
+            self
+        }
+
+        pub fn set_key(&mut self, field: ObjectKey) -> &mut Self {
+            self.key = Some(field);
+            self
+        }
+
+        pub fn set_rename_source(&mut self, field: RenameSource) -> &mut Self {
+            self.rename_source = Some(field);
+            self
+        }
+
+        pub fn set_source_if_match(&mut self, field: Option<RenameSourceIfMatch>) -> &mut Self {
+            self.source_if_match = field;
+            self
+        }
+
+        pub fn set_source_if_modified_since(&mut self, field: Option<RenameSourceIfModifiedSince>) -> &mut Self {
+            self.source_if_modified_since = field;
+            self
+        }
+
+        pub fn set_source_if_none_match(&mut self, field: Option<RenameSourceIfNoneMatch>) -> &mut Self {
+            self.source_if_none_match = field;
+            self
+        }
+
+        pub fn set_source_if_unmodified_since(&mut self, field: Option<RenameSourceIfUnmodifiedSince>) -> &mut Self {
+            self.source_if_unmodified_since = field;
+            self
+        }
+
+        #[must_use]
+        pub fn bucket(mut self, field: BucketName) -> Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn client_token(mut self, field: Option<ClientToken>) -> Self {
+            self.client_token = field;
+            self
+        }
+
+        #[must_use]
+        pub fn destination_if_match(mut self, field: Option<IfMatch>) -> Self {
+            self.destination_if_match = field;
+            self
+        }
+
+        #[must_use]
+        pub fn destination_if_modified_since(mut self, field: Option<IfModifiedSince>) -> Self {
+            self.destination_if_modified_since = field;
+            self
+        }
+
+        #[must_use]
+        pub fn destination_if_none_match(mut self, field: Option<IfNoneMatch>) -> Self {
+            self.destination_if_none_match = field;
+            self
+        }
+
+        #[must_use]
+        pub fn destination_if_unmodified_since(mut self, field: Option<IfUnmodifiedSince>) -> Self {
+            self.destination_if_unmodified_since = field;
+            self
+        }
+
+        #[must_use]
+        pub fn key(mut self, field: ObjectKey) -> Self {
+            self.key = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn rename_source(mut self, field: RenameSource) -> Self {
+            self.rename_source = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn source_if_match(mut self, field: Option<RenameSourceIfMatch>) -> Self {
+            self.source_if_match = field;
+            self
+        }
+
+        #[must_use]
+        pub fn source_if_modified_since(mut self, field: Option<RenameSourceIfModifiedSince>) -> Self {
+            self.source_if_modified_since = field;
+            self
+        }
+
+        #[must_use]
+        pub fn source_if_none_match(mut self, field: Option<RenameSourceIfNoneMatch>) -> Self {
+            self.source_if_none_match = field;
+            self
+        }
+
+        #[must_use]
+        pub fn source_if_unmodified_since(mut self, field: Option<RenameSourceIfUnmodifiedSince>) -> Self {
+            self.source_if_unmodified_since = field;
+            self
+        }
+
+        pub fn build(self) -> Result<RenameObjectInput, BuildError> {
+            let bucket = self.bucket.ok_or_else(|| BuildError::missing_field("bucket"))?;
+            let client_token = self.client_token;
+            let destination_if_match = self.destination_if_match;
+            let destination_if_modified_since = self.destination_if_modified_since;
+            let destination_if_none_match = self.destination_if_none_match;
+            let destination_if_unmodified_since = self.destination_if_unmodified_since;
+            let key = self.key.ok_or_else(|| BuildError::missing_field("key"))?;
+            let rename_source = self.rename_source.ok_or_else(|| BuildError::missing_field("rename_source"))?;
+            let source_if_match = self.source_if_match;
+            let source_if_modified_since = self.source_if_modified_since;
+            let source_if_none_match = self.source_if_none_match;
+            let source_if_unmodified_since = self.source_if_unmodified_since;
+            Ok(RenameObjectInput {
+                bucket,
+                client_token,
+                destination_if_match,
+                destination_if_modified_since,
+                destination_if_none_match,
+                destination_if_unmodified_since,
+                key,
+                rename_source,
+                source_if_match,
+                source_if_modified_since,
+                source_if_none_match,
+                source_if_unmodified_since,
+            })
+        }
+    }
+
     /// A builder for [`RestoreObjectInput`]
     #[derive(Default)]
     pub struct RestoreObjectInputBuilder {
@@ -39047,6 +39380,19 @@ impl DtoExt for RedirectAllRequestsTo {
             && val.as_str() == ""
         {
             self.protocol = None;
+        }
+    }
+}
+impl DtoExt for RenameObjectInput {
+    fn ignore_empty_strings(&mut self) {
+        if self.client_token.as_deref() == Some("") {
+            self.client_token = None;
+        }
+        if self.source_if_match.as_deref() == Some("") {
+            self.source_if_match = None;
+        }
+        if self.source_if_none_match.as_deref() == Some("") {
+            self.source_if_none_match = None;
         }
     }
 }
