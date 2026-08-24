@@ -530,7 +530,7 @@ impl AwsChunkedStream {
             }
         };
 
-        let mut remaining_bytes = 'outer: {
+        let remaining_bytes = 'outer: {
             if let Some(remaining_bytes) = push_data_bytes(prev_bytes) {
                 break 'outer remaining_bytes;
             }
@@ -547,6 +547,22 @@ impl AwsChunkedStream {
             }
         };
 
+        let remaining_bytes = match Self::consume_trailing_crlf(body, remaining_bytes).await? {
+            Err(e) => return Some(Err(e)),
+            Ok(remaining_bytes) => remaining_bytes,
+        };
+
+        Some(Ok((bytes_buffer, remaining_bytes)))
+    }
+
+    /// consume the trailing `\r\n` of a chunk and return remaining bytes
+    async fn consume_trailing_crlf<S>(
+        mut body: Pin<&mut S>,
+        mut remaining_bytes: Bytes,
+    ) -> Option<Result<Bytes, AwsChunkedStreamError>>
+    where
+        S: Stream<Item = Result<Bytes, StdError>> + Send + 'static,
+    {
         if remaining_bytes.starts_with(b"\r\n") {
             // fast path
             remaining_bytes.advance(2);
@@ -569,7 +585,7 @@ impl AwsChunkedStream {
             }
         }
 
-        Some(Ok((bytes_buffer, remaining_bytes)))
+        Some(Ok(remaining_bytes))
     }
 
     /// read data and yield fragments directly
@@ -611,29 +627,7 @@ impl AwsChunkedStream {
             }
         }
 
-        if remaining_bytes.starts_with(b"\r\n") {
-            // fast path
-            remaining_bytes.advance(2);
-        } else {
-            for &expected_byte in b"\r\n" {
-                loop {
-                    match *remaining_bytes.as_ref() {
-                        [] => match body.next().await? {
-                            Err(e) => return Some(Err(AwsChunkedStreamError::Underlying(e))),
-                            Ok(bytes) => remaining_bytes = bytes,
-                        },
-
-                        [x, ..] if x == expected_byte => {
-                            remaining_bytes.advance(1);
-                            break;
-                        }
-                        _ => return Some(Err(AwsChunkedStreamError::FormatError)),
-                    }
-                }
-            }
-        }
-
-        Some(Ok(remaining_bytes))
+        Self::consume_trailing_crlf(body, remaining_bytes).await
     }
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Result<Bytes, AwsChunkedStreamError>>> {
