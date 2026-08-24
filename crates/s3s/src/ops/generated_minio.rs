@@ -28,6 +28,7 @@
 // DeleteObjectTagging
 // DeleteObjects
 // DeletePublicAccessBlock
+// GetBucketAbac
 // GetBucketAccelerateConfiguration
 // GetBucketAcl
 // GetBucketAnalyticsConfiguration
@@ -72,6 +73,7 @@
 // ListObjectsV2
 // ListParts
 // PostObject
+// PutBucketAbac
 // PutBucketAccelerateConfiguration
 // PutBucketAcl
 // PutBucketAnalyticsConfiguration
@@ -131,6 +133,16 @@ impl http::TryIntoHeaderValue for ArchiveStatus {
 }
 
 impl http::TryIntoHeaderValue for BucketCannedACL {
+    type Error = http::InvalidHeaderValue;
+    fn try_into_header_value(self) -> Result<http::HeaderValue, Self::Error> {
+        match Cow::from(self) {
+            Cow::Borrowed(s) => http::HeaderValue::try_from(s),
+            Cow::Owned(s) => http::HeaderValue::try_from(s),
+        }
+    }
+}
+
+impl http::TryIntoHeaderValue for BucketNamespace {
     type Error = http::InvalidHeaderValue;
     fn try_into_header_value(self) -> Result<http::HeaderValue, Self::Error> {
         match Cow::from(self) {
@@ -339,6 +351,14 @@ impl http::TryFromHeaderValue for ArchiveStatus {
 }
 
 impl http::TryFromHeaderValue for BucketCannedACL {
+    type Error = http::ParseHeaderError;
+    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
+        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
+        Ok(Self::from(val.to_owned()))
+    }
+}
+
+impl http::TryFromHeaderValue for BucketNamespace {
     type Error = http::ParseHeaderError;
     fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
         let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
@@ -873,6 +893,8 @@ impl CreateBucket {
 
         let acl: Option<BucketCannedACL> = http::parse_opt_header(req, &X_AMZ_ACL)?;
 
+        let bucket_namespace: Option<BucketNamespace> = http::parse_opt_header(req, &X_AMZ_BUCKET_NAMESPACE)?;
+
         let create_bucket_configuration: Option<CreateBucketConfiguration> = http::take_opt_xml_body(req)?;
 
         let grant_full_control: Option<GrantFullControl> = http::parse_opt_header(req, &X_AMZ_GRANT_FULL_CONTROL)?;
@@ -893,6 +915,7 @@ impl CreateBucket {
         Ok(CreateBucketInput {
             acl,
             bucket,
+            bucket_namespace,
             create_bucket_configuration,
             grant_full_control,
             grant_read,
@@ -2142,6 +2165,58 @@ impl super::Operation for DeletePublicAccessBlock {
             access.delete_public_access_block(&mut s3_req).await?;
         }
         let result = s3.delete_public_access_block(s3_req).await;
+        let s3_resp = match result {
+            Ok(val) => val,
+            Err(err) => return super::serialize_error(err, false),
+        };
+        let mut resp = Self::serialize_http(s3_resp.output)?;
+        resp.headers.extend(s3_resp.headers);
+        resp.extensions.extend(s3_resp.extensions);
+        Ok(resp)
+    }
+}
+
+pub struct GetBucketAbac;
+
+impl GetBucketAbac {
+    pub fn deserialize_http(req: &mut http::Request) -> S3Result<GetBucketAbacInput> {
+        let bucket = http::unwrap_bucket(req);
+
+        let expected_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_EXPECTED_BUCKET_OWNER)?;
+
+        Ok(GetBucketAbacInput {
+            bucket,
+            expected_bucket_owner,
+        })
+    }
+
+    pub fn serialize_http(x: GetBucketAbacOutput) -> S3Result<http::Response> {
+        let mut res = http::Response::with_status(http::StatusCode::OK);
+        if let Some(ref val) = x.abac_status {
+            http::set_xml_body(&mut res, val)?;
+        }
+        Ok(res)
+    }
+}
+
+#[async_trait::async_trait]
+impl super::Operation for GetBucketAbac {
+    fn name(&self) -> &'static str {
+        "GetBucketAbac"
+    }
+
+    fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
+        let input = Self::deserialize_http(req)?;
+        let mut s3_req = super::build_s3_request(input, req);
+        let s3 = ccx.s3;
+        if let Some(access) = ccx.access {
+            access.get_bucket_abac(&mut s3_req).await?;
+        }
+        let result = s3.get_bucket_abac(s3_req).await;
         let s3_resp = match result {
             Ok(val) => val,
             Err(err) => return super::serialize_error(err, false),
@@ -4779,6 +4854,63 @@ impl super::Operation for ListParts {
             access.list_parts(&mut s3_req).await?;
         }
         let result = s3.list_parts(s3_req).await;
+        let s3_resp = match result {
+            Ok(val) => val,
+            Err(err) => return super::serialize_error(err, false),
+        };
+        let mut resp = Self::serialize_http(s3_resp.output)?;
+        resp.headers.extend(s3_resp.headers);
+        resp.extensions.extend(s3_resp.extensions);
+        Ok(resp)
+    }
+}
+
+pub struct PutBucketAbac;
+
+impl PutBucketAbac {
+    pub fn deserialize_http(req: &mut http::Request) -> S3Result<PutBucketAbacInput> {
+        let bucket = http::unwrap_bucket(req);
+
+        let abac_status: AbacStatus = http::take_xml_body(req)?;
+
+        let checksum_algorithm: Option<ChecksumAlgorithm> = http::parse_checksum_algorithm_header(req)?;
+
+        let content_md5: Option<ContentMD5> = http::parse_opt_header(req, &CONTENT_MD5)?;
+
+        let expected_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_EXPECTED_BUCKET_OWNER)?;
+
+        Ok(PutBucketAbacInput {
+            abac_status,
+            bucket,
+            checksum_algorithm,
+            content_md5,
+            expected_bucket_owner,
+        })
+    }
+
+    pub fn serialize_http(_: PutBucketAbacOutput) -> S3Result<http::Response> {
+        Ok(http::Response::with_status(http::StatusCode::OK))
+    }
+}
+
+#[async_trait::async_trait]
+impl super::Operation for PutBucketAbac {
+    fn name(&self) -> &'static str {
+        "PutBucketAbac"
+    }
+
+    fn needs_full_body(&self) -> bool {
+        true
+    }
+
+    async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
+        let input = Self::deserialize_http(req)?;
+        let mut s3_req = super::build_s3_request(input, req);
+        let s3 = ccx.s3;
+        if let Some(access) = ccx.access {
+            access.put_bucket_abac(&mut s3_req).await?;
+        }
+        let result = s3.put_bucket_abac(s3_req).await;
         let s3_resp = match result {
             Ok(val) => val,
             Err(err) => return super::serialize_error(err, false),
@@ -7462,6 +7594,9 @@ pub fn resolve_route(
                     if qs.has("session") {
                         return Ok(&CreateSession as &'static dyn super::Operation);
                     }
+                    if qs.has("abac") {
+                        return Ok(&GetBucketAbac as &'static dyn super::Operation);
+                    }
                     if qs.has("accelerate") {
                         return Ok(&GetBucketAccelerateConfiguration as &'static dyn super::Operation);
                     }
@@ -7623,6 +7758,9 @@ pub fn resolve_route(
                     }
                     if qs.has("metrics") {
                         return Ok(&PutBucketMetricsConfiguration as &'static dyn super::Operation);
+                    }
+                    if qs.has("abac") {
+                        return Ok(&PutBucketAbac as &'static dyn super::Operation);
                     }
                     if qs.has("accelerate") {
                         return Ok(&PutBucketAccelerateConfiguration as &'static dyn super::Operation);

@@ -29,6 +29,20 @@
         ]
     },
     "shapes": {
+        "com.amazonaws.s3#AbacStatus": {
+            "type": "structure",
+            "members": {
+                "Status": {
+                    "target": "com.amazonaws.s3#BucketAbacStatus",
+                    "traits": {
+                        "smithy.api#documentation": "<p>The ABAC status of the general purpose bucket. </p>"
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#documentation": "<p>The ABAC status of the general purpose bucket. When ABAC is enabled for the general purpose bucket, you can use tags to manage access to the general purpose buckets as well as for cost tracking purposes. When ABAC is disabled for the general purpose buckets, you can only use tags for cost tracking purposes. For more information, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/buckets-tagging.html\">Using tags with S3 general purpose buckets</a>. </p>"
+            }
+        },
         "com.amazonaws.s3#AbortDate": {
             "type": "timestamp"
         },
@@ -27301,6 +27315,23 @@
                 "smithy.api#documentation": "<p> In terms of implementation, a Bucket is a resource. </p>"
             }
         },
+        "com.amazonaws.s3#BucketAbacStatus": {
+            "type": "enum",
+            "members": {
+                "Enabled": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "Enabled"
+                    }
+                },
+                "Disabled": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "Disabled"
+                    }
+                }
+            }
+        },
         "com.amazonaws.s3#BucketAccelerateStatus": {
             "type": "enum",
             "members": {
@@ -27677,6 +27708,23 @@
         },
         "com.amazonaws.s3#BucketName": {
             "type": "string"
+        },
+        "com.amazonaws.s3#BucketNamespace": {
+            "type": "enum",
+            "members": {
+                "ACCOUNT_REGIONAL": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "account-regional"
+                    }
+                },
+                "GLOBAL": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "global"
+                    }
+                }
+            }
         },
         "com.amazonaws.s3#BucketRegion": {
             "type": "string"
@@ -29512,7 +29560,7 @@
                 "GrantFullControl": {
                     "target": "com.amazonaws.s3#GrantFullControl",
                     "traits": {
-                        "smithy.api#documentation": "<p>Allows grantee the read, write, read ACP, and write ACP permissions on the\n         bucket.</p>\n         <note>\n            <p>This functionality is not supported for directory buckets.</p>\n         </note>",
+                        "smithy.api#documentation": "<p>Allows grantee the read, write, read ACP, and write ACP permissions on the bucket.</p>\n         <note>\n            <p>This functionality is not supported for directory buckets.</p>\n         </note>",
                         "smithy.api#httpHeader": "x-amz-grant-full-control"
                     }
                 },
@@ -29533,7 +29581,7 @@
                 "GrantWrite": {
                     "target": "com.amazonaws.s3#GrantWrite",
                     "traits": {
-                        "smithy.api#documentation": "<p>Allows grantee to create new objects in the bucket.</p>\n         <p>For the bucket and object owners of existing objects, also allows deletions and\n         overwrites of those objects.</p>\n         <note>\n            <p>This functionality is not supported for directory buckets.</p>\n         </note>",
+                        "smithy.api#documentation": "<p>Allows grantee to create new objects in the bucket.</p>\n         <p>For the bucket and object owners of existing objects, also allows deletions and overwrites of those\n      objects.</p>\n         <note>\n            <p>This functionality is not supported for directory buckets.</p>\n         </note>",
                         "smithy.api#httpHeader": "x-amz-grant-write"
                     }
                 },
@@ -29555,6 +29603,13 @@
                     "target": "com.amazonaws.s3#ObjectOwnership",
                     "traits": {
                         "smithy.api#httpHeader": "x-amz-object-ownership"
+                    }
+                },
+                "BucketNamespace": {
+                    "target": "com.amazonaws.s3#BucketNamespace",
+                    "traits": {
+                        "smithy.api#documentation": "<p>Specifies the namespace where you want to create your general purpose bucket. When you create a\n    general purpose bucket, you can choose to create a bucket in the shared global namespace or you can choose to\n    create a bucket in your account regional namespace. Your account regional namespace is a subdivision of\n    the global namespace that only your account can create buckets in. For more information on bucket\n    namespaces, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/gpbucketnamespaces.html\">Namespaces for general purpose buckets</a>.</p>\n         <p>General purpose buckets in your account regional namespace must follow a specific naming convention. These\n    buckets consist of a bucket name prefix that you create, and a suffix that contains your 12-digit Amazon Web Services\n    Account ID, the Amazon Web Services Region code, and ends with <code>-an</code>. Bucket names must follow the format\n    <code>bucket-name-prefix-accountId-region-an</code> (for example,\n    <code>amzn-s3-demo-bucket-111122223333-us-west-2-an</code>). For information about bucket naming\n    restrictions, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucketnamingrules.html#account-regional-naming-rules\">Account regional namespace naming rules</a>\n    in the <i>Amazon S3 User Guide</i>.</p>\n         <note>\n            <p>This functionality is not supported for directory buckets.</p>\n         </note>",
+                        "smithy.api#httpHeader": "x-amz-bucket-namespace"
                     }
                 }
             },
@@ -32069,6 +32124,64 @@
         },
         "com.amazonaws.s3#FilterRuleValue": {
             "type": "string"
+        },
+        "com.amazonaws.s3#GetBucketAbac": {
+            "type": "operation",
+            "input": {
+                "target": "com.amazonaws.s3#GetBucketAbacRequest"
+            },
+            "output": {
+                "target": "com.amazonaws.s3#GetBucketAbacOutput"
+            },
+            "traits": {
+                "smithy.api#documentation": "<p>Returns the attribute-based access control (ABAC) property of the general purpose bucket. If ABAC is enabled on your bucket, you can use tags on the bucket for access control. For more information, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/buckets-tagging-enable-abac.html\">Enabling ABAC in general purpose buckets</a>.</p>",
+                "smithy.api#http": {
+                    "method": "GET",
+                    "uri": "/{Bucket}?abac",
+                    "code": 200
+                }
+            }
+        },
+        "com.amazonaws.s3#GetBucketAbacOutput": {
+            "type": "structure",
+            "members": {
+                "AbacStatus": {
+                    "target": "com.amazonaws.s3#AbacStatus",
+                    "traits": {
+                        "smithy.api#documentation": "<p>The ABAC status of the general purpose bucket. </p>",
+                        "smithy.api#httpPayload": {}
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#output": {}
+            }
+        },
+        "com.amazonaws.s3#GetBucketAbacRequest": {
+            "type": "structure",
+            "members": {
+                "Bucket": {
+                    "target": "com.amazonaws.s3#BucketName",
+                    "traits": {
+                        "smithy.api#documentation": "<p>The name of the general purpose bucket.</p>",
+                        "smithy.api#httpLabel": {},
+                        "smithy.api#required": {},
+                        "smithy.rules#contextParam": {
+                            "name": "Bucket"
+                        }
+                    }
+                },
+                "ExpectedBucketOwner": {
+                    "target": "com.amazonaws.s3#AccountId",
+                    "traits": {
+                        "smithy.api#documentation": "<p>The Amazon Web Services account ID of the general purpose bucket's owner. </p>",
+                        "smithy.api#httpHeader": "x-amz-expected-bucket-owner"
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#input": {}
+            }
         },
         "com.amazonaws.s3#GetBucketAccelerateConfiguration": {
             "type": "operation",
@@ -40220,6 +40333,75 @@
             },
             "traits": {
                 "smithy.api#documentation": "<p>The PublicAccessBlock configuration that you want to apply to this Amazon S3 bucket. You can\n         enable the configuration options in any combination. For more information about when Amazon S3\n         considers a bucket or object public, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/dev/access-control-block-public-access.html#access-control-block-public-access-policy-status\">The Meaning of \"Public\"</a> in the <i>Amazon S3 User Guide</i>. </p>"
+            }
+        },
+        "com.amazonaws.s3#PutBucketAbac": {
+            "type": "operation",
+            "input": {
+                "target": "com.amazonaws.s3#PutBucketAbacRequest"
+            },
+            "output": {
+                "target": "smithy.api#Unit"
+            },
+            "traits": {
+                "aws.protocols#httpChecksum": {
+                    "requestAlgorithmMember": "ChecksumAlgorithm"
+                },
+                "smithy.api#documentation": "<p>Sets the attribute-based access control (ABAC) property of the general purpose bucket. You must have <code>s3:PutBucketABAC</code> permission to perform this action. When you enable ABAC, you can use tags for access control on your buckets. Additionally, when ABAC is enabled, you must use the <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_TagResource.html\">TagResource</a> and <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_UntagResource.html\">UntagResource</a> actions to manage tags on your buckets. You can nolonger use the <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketTagging.html\">PutBucketTagging</a> and <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketTagging.html\">DeleteBucketTagging</a> actions to tag your bucket. For more information, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/buckets-tagging-enable-abac.html\">Enabling ABAC in general purpose buckets</a>. </p>",
+                "smithy.api#http": {
+                    "method": "PUT",
+                    "uri": "/{Bucket}?abac",
+                    "code": 200
+                }
+            }
+        },
+        "com.amazonaws.s3#PutBucketAbacRequest": {
+            "type": "structure",
+            "members": {
+                "Bucket": {
+                    "target": "com.amazonaws.s3#BucketName",
+                    "traits": {
+                        "smithy.api#documentation": "<p>The name of the general purpose bucket.</p>",
+                        "smithy.api#httpLabel": {},
+                        "smithy.api#required": {},
+                        "smithy.rules#contextParam": {
+                            "name": "Bucket"
+                        }
+                    }
+                },
+                "ContentMD5": {
+                    "target": "com.amazonaws.s3#ContentMD5",
+                    "traits": {
+                        "smithy.api#documentation": "<p>The MD5 hash of the <code>PutBucketAbac</code> request body. </p>\n         <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>",
+                        "smithy.api#httpHeader": "Content-MD5"
+                    }
+                },
+                "ChecksumAlgorithm": {
+                    "target": "com.amazonaws.s3#ChecksumAlgorithm",
+                    "traits": {
+                        "smithy.api#documentation": "<p>Indicates the algorithm that you want Amazon S3 to use to create the checksum. For more\n         information, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html\"> Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>",
+                        "smithy.api#httpHeader": "x-amz-sdk-checksum-algorithm"
+                    }
+                },
+                "ExpectedBucketOwner": {
+                    "target": "com.amazonaws.s3#AccountId",
+                    "traits": {
+                        "smithy.api#documentation": "<p>The Amazon Web Services account ID of the general purpose bucket's owner. </p>",
+                        "smithy.api#httpHeader": "x-amz-expected-bucket-owner"
+                    }
+                },
+                "AbacStatus": {
+                    "target": "com.amazonaws.s3#AbacStatus",
+                    "traits": {
+                        "smithy.api#documentation": "<p>The ABAC status of the general purpose bucket. When ABAC is enabled for the general purpose bucket, you can use tags to manage access to the general purpose buckets as well as for cost tracking purposes. When ABAC is disabled for the general purpose buckets, you can only use tags for cost tracking purposes. For more information, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/buckets-tagging.html\">Using tags with S3 general purpose buckets</a>. </p>",
+                        "smithy.api#httpPayload": {},
+                        "smithy.api#required": {},
+                        "smithy.api#xmlName": "AbacStatus"
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#input": {}
             }
         },
         "com.amazonaws.s3#PutBucketAccelerateConfiguration": {

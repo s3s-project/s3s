@@ -2028,6 +2028,11 @@ pub trait S3: Send + Sync + 'static {
         Err(s3_error!(NotImplemented, "DeletePublicAccessBlock is not implemented yet"))
     }
 
+    /// <p>Returns the attribute-based access control (ABAC) property of the general purpose bucket. If ABAC is enabled on your bucket, you can use tags on the bucket for access control. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/buckets-tagging-enable-abac.html">Enabling ABAC in general purpose buckets</a>.</p>
+    async fn get_bucket_abac(&self, _req: S3Request<GetBucketAbacInput>) -> S3Result<S3Response<GetBucketAbacOutput>> {
+        Err(s3_error!(NotImplemented, "GetBucketAbac is not implemented yet"))
+    }
+
     /// <note>
     /// <p>This operation is not supported for directory buckets.</p>
     /// </note>
@@ -4437,6 +4442,11 @@ pub trait S3: Send + Sync + 'static {
             .put_object(req.map_input(crate::dto::post_object_input_into_put_object_input))
             .await?;
         Ok(resp.map_output(crate::dto::put_object_output_into_post_object_output))
+    }
+
+    /// <p>Sets the attribute-based access control (ABAC) property of the general purpose bucket. You must have <code>s3:PutBucketABAC</code> permission to perform this action. When you enable ABAC, you can use tags for access control on your buckets. Additionally, when ABAC is enabled, you must use the <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_TagResource.html">TagResource</a> and <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_UntagResource.html">UntagResource</a> actions to manage tags on your buckets. You can nolonger use the <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketTagging.html">PutBucketTagging</a> and <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketTagging.html">DeleteBucketTagging</a> actions to tag your bucket. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/buckets-tagging-enable-abac.html">Enabling ABAC in general purpose buckets</a>. </p>
+    async fn put_bucket_abac(&self, _req: S3Request<PutBucketAbacInput>) -> S3Result<S3Response<PutBucketAbacOutput>> {
+        Err(s3_error!(NotImplemented, "PutBucketAbac is not implemented yet"))
     }
 
     /// <note>

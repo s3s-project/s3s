@@ -223,6 +223,13 @@ pub trait S3Access: Send + Sync + 'static {
         Ok(())
     }
 
+    /// Checks whether the GetBucketAbac request has accesses to the resources.
+    ///
+    /// This method returns `Ok(())` by default.
+    async fn get_bucket_abac(&self, _req: &mut S3Request<GetBucketAbacInput>) -> S3Result<()> {
+        Ok(())
+    }
+
     /// Checks whether the GetBucketAccelerateConfiguration request has accesses to the resources.
     ///
     /// This method returns `Ok(())` by default.
@@ -561,6 +568,13 @@ pub trait S3Access: Send + Sync + 'static {
     ///
     /// This method returns `Ok(())` by default.
     async fn post_object(&self, _req: &mut S3Request<PostObjectInput>) -> S3Result<()> {
+        Ok(())
+    }
+
+    /// Checks whether the PutBucketAbac request has accesses to the resources.
+    ///
+    /// This method returns `Ok(())` by default.
+    async fn put_bucket_abac(&self, _req: &mut S3Request<PutBucketAbacInput>) -> S3Result<()> {
         Ok(())
     }
 

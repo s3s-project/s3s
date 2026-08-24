@@ -3423,5 +3423,69 @@
     "zz"
    ]
   ]
+ },
+ {
+  "expect": "GetBucketAbac",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"abac\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "abac",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketAbac",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"abac\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "abac",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "PutBucketAbac",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "if:qs.has(\"abac\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "abac",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "PutBucketAbac",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "noise:qs.has(\"abac\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "abac",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
  }
 ]
