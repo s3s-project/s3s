@@ -4,7 +4,6 @@
 //! aws-chunked stream
 
 use crate::auth::SecretKey;
-use crate::auth::signature::Signature;
 use crate::error::StdError;
 use crate::protocol::TrailingHeaders;
 use crate::sig_v4;
@@ -160,7 +159,7 @@ impl AwsChunkedStream {
     #[allow(clippy::too_many_arguments)]
     pub fn new<S>(
         body: S,
-        seed_signature: Signature,
+        seed_signature: Sha256Sum,
         amz_date: AmzDate,
         region: Box<str>,
         service: Box<str>,
@@ -179,15 +178,12 @@ impl AwsChunkedStream {
                 pin_mut!(body);
                 let mut prev_bytes = Bytes::new();
                 let mut buf: Vec<u8> = Vec::new();
-                let Some(prev_signature) = Sha256Sum::from_hex(seed_signature.as_str()) else {
-                    unreachable!("invariant: Signature holds canonical lowercase hex");
-                };
                 let mut ctx = SignatureCtx {
                     amz_date,
                     region,
                     service,
                     secret_key,
-                    prev_signature,
+                    prev_signature: seed_signature,
                 };
 
                 loop {
@@ -650,7 +646,7 @@ mod tests {
         let stream = futures::stream::iter(chunk_results);
         let mut chunked_stream = AwsChunkedStream::new(
             stream,
-            Signature::from_hex(seed_signature).unwrap(),
+            Sha256Sum::from_hex(seed_signature).unwrap(),
             date,
             region.into(),
             service.into(),
@@ -704,7 +700,7 @@ mod tests {
         let stream = futures::stream::iter(chunk_results);
         let mut chunked_stream = AwsChunkedStream::new(
             stream,
-            Signature::from_hex(seed_signature).unwrap(),
+            Sha256Sum::from_hex(seed_signature).unwrap(),
             date,
             region.into(),
             service.into(),
@@ -768,7 +764,7 @@ mod tests {
         let stream = futures::stream::iter(chunk_results);
         let mut chunked_stream = AwsChunkedStream::new(
             stream,
-            Signature::from_hex(seed_signature).unwrap(),
+            Sha256Sum::from_hex(seed_signature).unwrap(),
             date,
             region.into(),
             service.into(),
@@ -820,7 +816,7 @@ mod tests {
         let stream = futures::stream::iter(chunk_results);
         let mut chunked_stream = AwsChunkedStream::new(
             stream,
-            Signature::from_hex(seed_signature).unwrap(),
+            Sha256Sum::from_hex(seed_signature).unwrap(),
             date,
             region.into(),
             service.into(),
@@ -855,7 +851,7 @@ mod tests {
         let stream = futures::stream::iter(chunk_results);
         let mut chunked_stream = AwsChunkedStream::new(
             stream,
-            Signature::from_hex(seed_signature).unwrap(),
+            Sha256Sum::from_hex(seed_signature).unwrap(),
             date,
             "us-east-1".into(),
             "s3".into(),
@@ -881,7 +877,7 @@ mod tests {
         let stream = futures::stream::iter(chunk_results);
         let mut chunked_stream = AwsChunkedStream::new(
             stream,
-            Signature::from_hex(seed_signature).unwrap(),
+            Sha256Sum::from_hex(seed_signature).unwrap(),
             date,
             "us-east-1".into(),
             "s3".into(),
@@ -910,7 +906,7 @@ mod tests {
         let stream = futures::stream::iter(chunk_results);
         let mut chunked_stream = AwsChunkedStream::new(
             stream,
-            Signature::from_hex(seed_signature).unwrap(),
+            Sha256Sum::from_hex(seed_signature).unwrap(),
             date,
             "us-east-1".into(),
             "s3".into(),
@@ -939,7 +935,7 @@ mod tests {
         let stream = futures::stream::iter(chunk_results);
         let mut chunked_stream = AwsChunkedStream::new(
             stream,
-            Signature::from_hex(seed_signature).unwrap(),
+            Sha256Sum::from_hex(seed_signature).unwrap(),
             date,
             "us-east-1".into(),
             "s3".into(),
@@ -968,7 +964,7 @@ mod tests {
         let stream = futures::stream::iter(chunk_results);
         let mut chunked_stream = AwsChunkedStream::new(
             stream,
-            Signature::from_hex(seed_signature).unwrap(),
+            Sha256Sum::from_hex(seed_signature).unwrap(),
             date,
             "us-east-1".into(),
             "s3".into(),
@@ -1006,7 +1002,7 @@ mod tests {
         let stream = futures::stream::iter(chunk_results);
         let mut chunked_stream = AwsChunkedStream::new(
             stream,
-            Signature::from_hex(seed_signature).unwrap(),
+            Sha256Sum::from_hex(seed_signature).unwrap(),
             date,
             "us-east-1".into(),
             "s3".into(),
@@ -1039,7 +1035,7 @@ mod tests {
         let stream = futures::stream::iter(chunk_results);
         let mut chunked_stream = AwsChunkedStream::new(
             stream,
-            Signature::from_hex(seed_signature).unwrap(),
+            Sha256Sum::from_hex(seed_signature).unwrap(),
             date,
             "us-east-1".into(),
             "s3".into(),
@@ -1076,7 +1072,7 @@ mod tests {
         let stream = futures::stream::iter(chunk_results);
         let mut chunked_stream = AwsChunkedStream::new(
             stream,
-            Signature::from_hex(seed_signature).unwrap(),
+            Sha256Sum::from_hex(seed_signature).unwrap(),
             date,
             "us-east-1".into(),
             "s3".into(),
@@ -1135,7 +1131,7 @@ mod tests {
         let stream = futures::stream::iter(chunk_results);
         let mut chunked_stream = AwsChunkedStream::new(
             stream,
-            Signature::from_hex(seed_signature).unwrap(),
+            Sha256Sum::from_hex(seed_signature).unwrap(),
             date,
             region.into(),
             service.into(),
@@ -1177,7 +1173,7 @@ mod tests {
         let stream = futures::stream::iter(chunk_results);
         let mut chunked_stream = AwsChunkedStream::new(
             stream,
-            Signature::from_hex(seed_signature).unwrap(),
+            Sha256Sum::from_hex(seed_signature).unwrap(),
             date,
             region.into(),
             service.into(),
@@ -1236,7 +1232,7 @@ mod tests {
         let stream = futures::stream::iter(chunk_results);
         let mut chunked_stream = AwsChunkedStream::new(
             stream,
-            Signature::from_hex(seed_signature).unwrap(),
+            Sha256Sum::from_hex(seed_signature).unwrap(),
             date,
             region.into(),
             service.into(),
@@ -1321,7 +1317,7 @@ mod tests {
         let stream = futures::stream::iter(chunk_results);
         let mut chunked_stream = AwsChunkedStream::new(
             stream,
-            Signature::from_hex(seed_signature).unwrap(),
+            Sha256Sum::from_hex(seed_signature).unwrap(),
             date,
             region.into(),
             service.into(),
