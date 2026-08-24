@@ -7,12 +7,14 @@ use super::{ContinuationEvent, EndEvent, ProgressEvent, RecordsEvent, StatsEvent
 use crate::S3Error;
 use crate::S3Result;
 use crate::StdError;
+use crate::crypto::Checksum;
 use crate::crypto::Crc32;
 use crate::stream::ByteStream;
 use crate::stream::DynByteStream;
 use crate::{S3ErrorCode, xml};
 
 use std::fmt;
+use std::mem;
 use std::num::TryFromIntError;
 use std::pin::Pin;
 use std::task::ready;
@@ -38,7 +40,11 @@ impl SelectObjectContentEventStream {
 
     #[must_use]
     pub fn into_byte_stream(self) -> DynByteStream {
-        Box::pin(Wrapper(self))
+        Box::pin(Wrapper {
+            inner: self,
+            pending: SmallVec::new(),
+            pending_idx: 0,
+        })
     }
 }
 
@@ -62,35 +68,82 @@ impl fmt::Debug for SelectObjectContentEventStream {
     }
 }
 
-struct Wrapper(SelectObjectContentEventStream);
+struct Wrapper {
+    inner: SelectObjectContentEventStream,
+    pending: SmallVec<[Bytes; 3]>,
+    pending_idx: usize,
+}
 
 impl Stream for Wrapper {
     type Item = Result<Bytes, StdError>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let item = ready!(Pin::new(&mut self.0).poll_next(cx));
-        debug!(?item, "SelectObjectContentEventStream");
-        match item {
-            Some(ev) => {
-                let result = event_into_bytes(ev);
-                if let Err(ref err) = result {
-                    debug!("SelectObjectContentEventStream: Error: {}", err);
-                }
-                Poll::Ready(Some(result.map_err(|e| Box::new(e) as StdError)))
+        loop {
+            if let Some(bytes) = self.next_pending() {
+                return Poll::Ready(Some(Ok(bytes)));
             }
-            None => Poll::Ready(None),
+
+            let item = ready!(Pin::new(&mut self.inner).poll_next(cx));
+            debug!(?item, "SelectObjectContentEventStream");
+            match item {
+                Some(ev) => {
+                    let result = event_into_chunks(ev);
+                    match result {
+                        Ok(chunks) => {
+                            self.pending = chunks;
+                            self.pending_idx = 0;
+                        }
+                        Err(err) => {
+                            debug!("SelectObjectContentEventStream: Error: {}", err);
+                            return Poll::Ready(Some(Err(Box::new(err) as StdError)));
+                        }
+                    }
+                }
+                None => return Poll::Ready(None),
+            }
         }
     }
 }
 
 impl ByteStream for Wrapper {}
 
+impl Wrapper {
+    fn next_pending(&mut self) -> Option<Bytes> {
+        if self.pending_idx == self.pending.len() {
+            self.pending.clear();
+            self.pending_idx = 0;
+            return None;
+        }
+
+        let bytes = mem::take(&mut self.pending[self.pending_idx]);
+        self.pending_idx += 1;
+
+        if self.pending_idx == self.pending.len() {
+            self.pending.clear();
+            self.pending_idx = 0;
+        }
+
+        Some(bytes)
+    }
+}
+
+#[cfg(test)]
 fn event_into_bytes(ev: S3Result<SelectObjectContentEvent>) -> Result<Bytes, SerError> {
     match ev {
         Ok(event) => event.into_message().serialize(),
         Err(err) => {
             debug!(?err, "SelectObjectContentEventStream: Request Level Error");
             request_level_error(&err).serialize()
+        }
+    }
+}
+
+fn event_into_chunks(ev: S3Result<SelectObjectContentEvent>) -> Result<SmallVec<[Bytes; 3]>, SerError> {
+    match ev {
+        Ok(event) => event.into_message().serialize_chunks(),
+        Err(err) => {
+            debug!(?err, "SelectObjectContentEventStream: Request Level Error");
+            request_level_error(&err).serialize_chunks()
         }
     }
 }
@@ -105,6 +158,10 @@ struct Header {
     value: Bytes,
 }
 
+const PRELUDE_BYTE_LENGTH: usize = 12;
+const MESSAGE_CRC_BYTE_LENGTH: usize = 4;
+const MESSAGE_OVERHEAD_BYTE_LENGTH: usize = PRELUDE_BYTE_LENGTH + MESSAGE_CRC_BYTE_LENGTH;
+
 #[derive(Debug, thiserror::Error)]
 enum SerError {
     #[error("Message Serialization: LengthOverflow")]
@@ -116,7 +173,22 @@ enum SerError {
 
 impl Message {
     /// <https://docs.aws.amazon.com/AmazonS3/latest/API/RESTSelectObjectAppendix.html>
+    #[cfg(test)]
     fn serialize(self) -> Result<Bytes, SerError> {
+        let chunks = self.serialize_chunks()?;
+        if chunks.len() == 1 {
+            return Ok(chunks.into_iter().next().expect("one chunk"));
+        }
+
+        let total_len = chunks.iter().map(Bytes::len).sum();
+        let mut buf = Vec::with_capacity(total_len);
+        for chunk in chunks {
+            buf.put(chunk.as_ref());
+        }
+        Ok(buf.into())
+    }
+
+    fn serialize_chunks(self) -> Result<SmallVec<[Bytes; 3]>, SerError> {
         let total_byte_length: u32;
         let headers_byte_length: u32;
         {
@@ -130,14 +202,20 @@ impl Message {
             let payload_len = self.payload.as_ref().map_or(0, Bytes::len);
 
             let total_len = headers_len
-                .and_then(|acc| acc.checked_add(4 + 4 + 4 + 4))
+                .and_then(|acc| acc.checked_add(MESSAGE_OVERHEAD_BYTE_LENGTH))
                 .and_then(|acc| acc.checked_add(payload_len));
 
             total_byte_length = u32::try_from(total_len.ok_or(SerError::LengthOverflow)?)?;
             headers_byte_length = u32::try_from(headers_len.ok_or(SerError::LengthOverflow)?)?;
         }
 
-        let mut buf: Vec<u8> = Vec::with_capacity(total_byte_length as usize);
+        let payload = self.payload.filter(|payload| !payload.is_empty());
+        let frame_overhead = if payload.is_some() {
+            PRELUDE_BYTE_LENGTH
+        } else {
+            MESSAGE_OVERHEAD_BYTE_LENGTH
+        };
+        let mut buf: Vec<u8> = Vec::with_capacity(frame_overhead + headers_byte_length as usize);
         buf.put_u32(total_byte_length);
         buf.put_u32(headers_byte_length);
 
@@ -156,14 +234,23 @@ impl Message {
             buf.put(&*h.value);
         }
 
-        if let Some(payload) = self.payload.as_deref() {
-            buf.put(payload);
+        let mut chunks = SmallVec::new();
+
+        if let Some(payload) = payload {
+            let mut message_crc = Crc32::new();
+            message_crc.update(&buf);
+            message_crc.update(&payload);
+
+            chunks.push(buf.into());
+            chunks.push(payload);
+            chunks.push(Bytes::copy_from_slice(&message_crc.finalize()));
+        } else {
+            let message_crc = Crc32::checksum_u32(&buf);
+            buf.put_u32(message_crc);
+            chunks.push(buf.into());
         }
 
-        let message_crc = Crc32::checksum_u32(&buf);
-        buf.put_u32(message_crc);
-
-        Ok(buf.into())
+        Ok(chunks)
     }
 }
 
@@ -336,6 +423,14 @@ mod tests {
         (headers, payload)
     }
 
+    fn wrapper(stream: SelectObjectContentEventStream) -> Wrapper {
+        Wrapper {
+            inner: stream,
+            pending: SmallVec::new(),
+            pending_idx: 0,
+        }
+    }
+
     #[test]
     fn continuation_event_message() {
         let event = SelectObjectContentEvent::Cont(ContinuationEvent {});
@@ -501,6 +596,28 @@ mod tests {
     }
 
     #[test]
+    fn message_serialize_chunks_reuses_payload() {
+        let payload = Bytes::from(vec![1, 2, 3, 4]);
+        let payload_ptr = payload.as_ptr();
+        let msg = Message {
+            headers: const_headers(&[(":event-type", "Records")]),
+            payload: Some(payload.clone()),
+        };
+
+        let chunks = msg.serialize_chunks().unwrap();
+        assert_eq!(chunks.len(), 3);
+        assert_eq!(chunks[1], payload);
+        assert_eq!(chunks[1].as_ptr(), payload_ptr);
+
+        let mut bytes = Vec::new();
+        for chunk in chunks {
+            bytes.put(chunk.as_ref());
+        }
+        let (_, parsed_payload) = parse_message(&bytes);
+        assert_eq!(parsed_payload.unwrap(), [1, 2, 3, 4]);
+    }
+
+    #[test]
     fn stream_debug() {
         let stream = SelectObjectContentEventStream::new(futures::stream::empty());
         let debug = format!("{stream:?}");
@@ -541,7 +658,7 @@ mod tests {
             Ok(SelectObjectContentEvent::End(EndEvent {})),
         ];
         let stream = SelectObjectContentEventStream::new(futures::stream::iter(events));
-        let mut wrapper = Wrapper(stream);
+        let mut wrapper = wrapper(stream);
         let first = wrapper.next().await;
         assert!(first.is_some());
         assert!(first.unwrap().is_ok());
@@ -557,7 +674,7 @@ mod tests {
     async fn wrapper_stream_handles_errors() {
         let events: Vec<S3Result<SelectObjectContentEvent>> = vec![Err(S3Error::new(S3ErrorCode::InternalError))];
         let stream = SelectObjectContentEventStream::new(futures::stream::iter(events));
-        let mut wrapper = Wrapper(stream);
+        let mut wrapper = wrapper(stream);
         let result = wrapper.next().await.unwrap();
         assert!(result.is_ok()); // errors are serialized as messages, not stream errors
     }
@@ -570,6 +687,105 @@ mod tests {
         let chunk = byte_stream.next().await;
         assert!(chunk.is_some());
         assert!(chunk.unwrap().is_ok());
+    }
+
+    #[tokio::test]
+    async fn into_byte_stream_reuses_records_payload_chunk() {
+        let payload = Bytes::from(vec![1, 2, 3, 4]);
+        let payload_ptr = payload.as_ptr();
+        let events: Vec<S3Result<SelectObjectContentEvent>> = vec![Ok(SelectObjectContentEvent::Records(RecordsEvent {
+            payload: Some(payload.clone()),
+        }))];
+        let stream = SelectObjectContentEventStream::new(futures::stream::iter(events));
+        let mut byte_stream = stream.into_byte_stream();
+
+        let head = byte_stream.next().await.unwrap().unwrap();
+        let payload_chunk = byte_stream.next().await.unwrap().unwrap();
+        let trailer = byte_stream.next().await.unwrap().unwrap();
+        assert!(byte_stream.next().await.is_none());
+
+        assert_eq!(payload_chunk, payload);
+        assert_eq!(payload_chunk.as_ptr(), payload_ptr);
+
+        let mut bytes = Vec::new();
+        bytes.put(head.as_ref());
+        bytes.put(payload_chunk.as_ref());
+        bytes.put(trailer.as_ref());
+        let (_, parsed_payload) = parse_message(&bytes);
+        assert_eq!(parsed_payload.unwrap(), [1, 2, 3, 4]);
+    }
+
+    #[tokio::test]
+    async fn into_byte_stream_empty_payload_yields_single_chunk() {
+        let events: Vec<S3Result<SelectObjectContentEvent>> = vec![Ok(SelectObjectContentEvent::Records(RecordsEvent {
+            payload: Some(Bytes::new()),
+        }))];
+        let stream = SelectObjectContentEventStream::new(futures::stream::iter(events));
+        let mut byte_stream = stream.into_byte_stream();
+
+        let frame = byte_stream.next().await.unwrap().unwrap();
+        assert!(byte_stream.next().await.is_none());
+
+        // byte-identical to a message without payload
+        let none_events: Vec<S3Result<SelectObjectContentEvent>> =
+            vec![Ok(SelectObjectContentEvent::Records(RecordsEvent { payload: None }))];
+        let mut none_stream = SelectObjectContentEventStream::new(futures::stream::iter(none_events)).into_byte_stream();
+        let none_frame = none_stream.next().await.unwrap().unwrap();
+        assert_eq!(frame, none_frame);
+
+        let (_headers, payload) = parse_message(&frame);
+        assert!(payload.is_none());
+    }
+
+    #[test]
+    fn event_into_bytes_propagates_serialization_error() {
+        // an error code exceeding the u16 header-value limit forces IntOverflow during serialization
+        let err = S3Error::with_message(
+            S3ErrorCode::Custom(bytestring::ByteString::from("x".repeat(u16::MAX as usize + 1))),
+            "serialization overflow",
+        );
+        let error = event_into_bytes(Err(err)).expect_err("serialization must overflow");
+        assert!(error.to_string().contains("IntOverflow"));
+    }
+
+    #[tokio::test]
+    async fn into_byte_stream_propagates_serialization_error() {
+        let err = S3Error::with_message(
+            S3ErrorCode::Custom(bytestring::ByteString::from("x".repeat(u16::MAX as usize + 1))),
+            "serialization overflow",
+        );
+        let events: Vec<S3Result<SelectObjectContentEvent>> = vec![Err(err)];
+        let stream = SelectObjectContentEventStream::new(futures::stream::iter(events));
+        let mut byte_stream = stream.into_byte_stream();
+
+        let item = byte_stream.next().await.expect("one error item");
+        assert!(item.is_err(), "serialization overflow must surface as a stream error");
+        assert!(byte_stream.next().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn into_byte_stream_polls_pending_inner() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let events = futures::stream::poll_fn({
+            let calls = Arc::clone(&calls);
+            move |cx| {
+                if calls.fetch_add(1, Ordering::Relaxed) == 0 {
+                    cx.waker().wake_by_ref();
+                    Poll::Pending
+                } else {
+                    Poll::Ready(Some(Ok(SelectObjectContentEvent::End(EndEvent {}))))
+                }
+            }
+        });
+        let stream = SelectObjectContentEventStream::new(events);
+        let mut byte_stream = stream.into_byte_stream();
+
+        let frame = byte_stream.next().await.unwrap().unwrap();
+        let (_headers, payload) = parse_message(&frame);
+        assert!(payload.is_none());
     }
 
     #[test]
