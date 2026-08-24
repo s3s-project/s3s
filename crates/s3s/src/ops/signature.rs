@@ -6,9 +6,8 @@ use crate::auth::SecretKey;
 use crate::auth::signature::Signature;
 use crate::config::{S3Config, S3ConfigProvider};
 use crate::error::*;
-use crate::http;
+use crate::http::{self, OrderedQs};
 use crate::http::{AwsChunkedStream, Body, Multipart, MultipartLimits};
-use crate::http::{OrderedHeaders, OrderedQs};
 use crate::post_policy::PostPolicy;
 use crate::protocol::TrailingHeaders;
 use crate::sig_v2;
@@ -27,16 +26,22 @@ use std::mem;
 use std::ops::Not;
 use std::sync::Arc;
 
+use hyper::HeaderMap;
 use hyper::Method;
 use hyper::Uri;
 use mime::Mime;
+use smallvec::SmallVec;
 use tracing::debug;
 
 /// Maximum allowed size for STS request body (8KB should be enough for operations like `AssumeRole`)
 const MAX_STS_BODY_SIZE: usize = 8192;
 
-fn extract_amz_content_sha256(hs: &OrderedHeaders<'_>) -> S3Result<Option<AmzContentSha256>> {
-    let Some(val) = hs.get_unique(crate::header::X_AMZ_CONTENT_SHA256) else { return Ok(None) };
+type SignedHeaderPairs<'a> = SmallVec<[(&'a str, &'a str); 16]>;
+
+fn extract_amz_content_sha256(hs: &HeaderMap) -> S3Result<Option<AmzContentSha256>> {
+    let Some(val) = http::get_header_str(hs, crate::header::X_AMZ_CONTENT_SHA256.as_str()) else {
+        return Ok(None);
+    };
     match AmzContentSha256::parse(val) {
         Ok(x) => Ok(Some(x)),
         Err(e) => {
@@ -46,20 +51,50 @@ fn extract_amz_content_sha256(hs: &OrderedHeaders<'_>) -> S3Result<Option<AmzCon
     }
 }
 
-fn extract_authorization_v4<'a>(hs: &'_ OrderedHeaders<'a>) -> S3Result<Option<AuthorizationV4<'a>>> {
-    let Some(val) = hs.get_unique(crate::header::AUTHORIZATION) else { return Ok(None) };
+fn extract_authorization_v4(hs: &HeaderMap) -> S3Result<Option<AuthorizationV4<'_>>> {
+    let Some(val) = http::get_header_str(hs, crate::header::AUTHORIZATION.as_str()) else {
+        return Ok(None);
+    };
     match AuthorizationV4::parse(val) {
         Ok(x) => Ok(Some(x)),
         Err(e) => Err(invalid_request!(e, "invalid header: authorization")),
     }
 }
 
-fn extract_amz_date(hs: &'_ OrderedHeaders<'_>) -> S3Result<Option<AmzDate>> {
-    let Some(val) = hs.get_unique(crate::header::X_AMZ_DATE) else { return Ok(None) };
+fn extract_amz_date(hs: &HeaderMap) -> S3Result<Option<AmzDate>> {
+    let Some(val) = http::get_header_str(hs, crate::header::X_AMZ_DATE.as_str()) else {
+        return Ok(None);
+    };
     match AmzDate::parse(val) {
         Ok(x) => Ok(Some(x)),
         Err(e) => Err(invalid_request!(e, "invalid header: x-amz-date")),
     }
+}
+
+fn collect_signed_headers<'a>(
+    hs: &'a HeaderMap,
+    names: &[&'a str],
+    on_missing: impl Fn(&'a str) -> Option<&'a str>,
+) -> S3Result<SignedHeaderPairs<'a>> {
+    let mut headers = SignedHeaderPairs::new();
+
+    for &name in names {
+        let mut has_value = false;
+        for value in hs.get_all(name) {
+            if let Some(value) = http::header_value_to_str(value) {
+                headers.push((name, value));
+                has_value = true;
+            }
+        }
+        if !has_value {
+            let Some(value) = on_missing(name) else {
+                return Err(s3_error!(SignatureDoesNotMatch, "missing signed header: {name}"));
+            };
+            headers.push((name, value));
+        }
+    }
+
+    Ok(headers)
 }
 
 pub struct SignatureContext<'a> {
@@ -72,7 +107,7 @@ pub struct SignatureContext<'a> {
     pub req_body: &'a mut Body,
 
     pub qs: Option<&'a OrderedQs>,
-    pub hs: OrderedHeaders<'a>,
+    pub hs: &'a HeaderMap,
 
     pub decoded_uri_path: &'a str,
     pub raw_uri_path: &'a str,
@@ -176,7 +211,17 @@ impl SignatureVerificationContext<'_> {
     }
 }
 
-impl SignatureContext<'_> {
+impl<'a> SignatureContext<'a> {
+    fn signed_host_fallback(&self, name: &'a str) -> Option<&'a str> {
+        if name == "host"
+            && matches!(self.req_version, ::http::Version::HTTP_2 | ::http::Version::HTTP_3)
+            && let Some(authority) = self.req_uri.authority()
+        {
+            return Some(authority.as_str());
+        }
+        None
+    }
+
     /// Rejects `SigV2` requests when the `enable_sig_v2` configuration is off.
     ///
     /// `SigV2` is enabled by default. When disabled, a recognized `SigV2` request
@@ -262,7 +307,7 @@ impl SignatureContext<'_> {
         }
 
         // header auth
-        if self.hs.get_unique(crate::header::AUTHORIZATION).is_some() {
+        if http::get_header_str(self.hs, crate::header::AUTHORIZATION.as_str()).is_some() {
             debug!("checking header auth");
             return Some(self.v4_check_header_auth().await);
         }
@@ -391,7 +436,7 @@ impl SignatureContext<'_> {
 
         let region = presigned_url.credential.aws_region;
 
-        let amz_content_sha256 = extract_amz_content_sha256(&self.hs)?;
+        let amz_content_sha256 = extract_amz_content_sha256(self.hs)?;
 
         // Presigned URLs do not support streaming (chunked) payload signing,
         // so reject them here before reaching the SingleChunk handler below.
@@ -441,18 +486,7 @@ impl SignatureContext<'_> {
         }
 
         let expected_signature = Signature::from_hex(presigned_url.signature).ok_or_else(|| s3_error!(SignatureDoesNotMatch))?;
-        let headers = self.hs.find_multiple_with_on_missing(&presigned_url.signed_headers, |name| {
-            // HTTP/2 replaces `host` header with `:authority`
-            // but `:authority` is not in the request headers
-            // so we need to add it back if `host` is in the signed headers
-            if name == "host"
-                && matches!(self.req_version, ::http::Version::HTTP_2 | ::http::Version::HTTP_3)
-                && let Some(authority) = self.req_uri.authority()
-            {
-                return Some(authority.as_str());
-            }
-            None
-        });
+        let headers = collect_signed_headers(self.hs, &presigned_url.signed_headers, |name| self.signed_host_fallback(name))?;
 
         let method = &self.req_method;
         let amz_date = &presigned_url.amz_date;
@@ -503,9 +537,7 @@ impl SignatureContext<'_> {
     pub async fn v4_check_header_auth(&mut self) -> S3Result<CredentialsExt> {
         let authorization: AuthorizationV4<'_> = {
             // assume: headers has "authorization"
-            let mut a = extract_authorization_v4(&self.hs)?.unwrap();
-            a.signed_headers.sort_unstable();
-            a
+            extract_authorization_v4(self.hs)?.unwrap()
         };
         let region = authorization.credential.aws_region;
         let service = authorization.credential.aws_service;
@@ -521,7 +553,7 @@ impl SignatureContext<'_> {
         let auth = require_auth(self.auth)?;
 
         // Reject stale requests before doing I/O work (secret key lookup).
-        let amz_date = extract_amz_date(&self.hs)?.ok_or_else(|| invalid_request!("missing header: x-amz-date"))?;
+        let amz_date = extract_amz_date(self.hs)?.ok_or_else(|| invalid_request!("missing header: x-amz-date"))?;
 
         // Per AWS SigV4 spec, the credential scope date must match the x-amz-date date.
         if authorization.credential.date != amz_date.fmt_date().as_str() {
@@ -534,7 +566,7 @@ impl SignatureContext<'_> {
             validate_sig_v4_clock_skew(&amz_date, time::OffsetDateTime::now_utc(), &config)?;
         }
 
-        let amz_content_sha256 = extract_amz_content_sha256(&self.hs)?;
+        let amz_content_sha256 = extract_amz_content_sha256(self.hs)?;
 
         if service == "s3" && amz_content_sha256.is_none() {
             return Err(invalid_request!("missing header: x-amz-content-sha256"));
@@ -549,22 +581,7 @@ impl SignatureContext<'_> {
         let method = &self.req_method;
         let query_strings: &[(String, String)] = self.qs.as_ref().map_or(&[], AsRef::as_ref);
 
-        // FIXME: throw error if any signed header is not in the request
-        // `host` header need to be special handled
-
-        // here requires that `auth.signed_headers` is sorted
-        let headers = self.hs.find_multiple_with_on_missing(&authorization.signed_headers, |name| {
-            // HTTP/2 replaces `host` header with `:authority`
-            // but `:authority` is not in the request headers
-            // so we need to add it back if `host` is in the signed headers
-            if name == "host"
-                && self.req_version == ::http::Version::HTTP_2
-                && let Some(authority) = self.req_uri.authority()
-            {
-                return Some(authority.as_str());
-            }
-            None
-        });
+        let headers = collect_signed_headers(self.hs, &authorization.signed_headers, |name| self.signed_host_fallback(name))?;
 
         let payload_hash;
         let payload = match amz_content_sha256 {
@@ -620,7 +637,7 @@ impl SignatureContext<'_> {
         if is_stream {
             // For streaming with trailers, AWS requires x-amz-trailer header present.
             let has_trailer = amz_content_sha256.is_some_and(|v| v.has_trailer());
-            if has_trailer && self.hs.get_unique("x-amz-trailer").is_none() {
+            if has_trailer && http::get_header_str(self.hs, "x-amz-trailer").is_none() {
                 return Err(invalid_request!("missing header: x-amz-trailer"));
             }
             let decoded_content_length = self
@@ -690,7 +707,7 @@ impl SignatureContext<'_> {
         }
 
         // header auth
-        if let Some(auth) = self.hs.get_unique(crate::header::AUTHORIZATION)
+        if let Some(auth) = http::get_header_str(self.hs, crate::header::AUTHORIZATION.as_str())
             && let Ok(auth) = AuthorizationV2::parse(auth)
         {
             debug!("checking header auth");
@@ -705,7 +722,7 @@ impl SignatureContext<'_> {
 
         let method = &self.req_method;
 
-        let date = self.hs.get_unique("date").or_else(|| self.hs.get_unique("x-amz-date"));
+        let date = http::get_header_str(self.hs, "date").or_else(|| http::get_header_str(self.hs, "x-amz-date"));
         if date.is_none() {
             return Err(invalid_request!("missing date"));
         }
@@ -719,7 +736,7 @@ impl SignatureContext<'_> {
             method,
             self.req_uri.path(),
             self.qs,
-            &self.hs,
+            self.hs,
             self.vh_bucket,
         );
         let signature = sig_v2::calculate_signature(&secret_key, &string_to_sign);
@@ -792,7 +809,7 @@ impl SignatureContext<'_> {
             self.req_method,
             self.req_uri.path(),
             self.qs,
-            &self.hs,
+            self.hs,
             self.vh_bucket,
         );
         let signature = sig_v2::calculate_signature(&secret_key, &string_to_sign);
@@ -816,6 +833,19 @@ impl SignatureContext<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use hyper::header::{HeaderName, HeaderValue};
+
+    fn headers_from_slice(slice: &[(&str, &str)]) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        for &(name, value) in slice {
+            headers.append(
+                HeaderName::from_bytes(name.as_bytes()).expect("valid test header name"),
+                HeaderValue::from_bytes(value.as_bytes()).expect("valid test header value"),
+            );
+        }
+        headers
+    }
 
     fn fmt_current_amz_date(dt: time::OffsetDateTime) -> String {
         format!(
@@ -845,8 +875,7 @@ mod tests {
     #[test]
     fn test_extract_amz_content_sha256_missing() {
         // Test that extract_amz_content_sha256 returns None when header is missing
-        let headers =
-            OrderedHeaders::from_slice_unchecked(&[("host", "example.s3.amazonaws.com"), ("x-amz-date", "20130524T000000Z")]);
+        let headers = headers_from_slice(&[("host", "example.s3.amazonaws.com"), ("x-amz-date", "20130524T000000Z")]);
         let result = extract_amz_content_sha256(&headers).unwrap();
         assert!(result.is_none());
     }
@@ -854,7 +883,7 @@ mod tests {
     #[test]
     fn test_extract_amz_content_sha256_present() {
         // Test that extract_amz_content_sha256 returns Some when header is present
-        let headers = OrderedHeaders::from_slice_unchecked(&[
+        let headers = headers_from_slice(&[
             ("host", "example.s3.amazonaws.com"),
             ("x-amz-content-sha256", "UNSIGNED-PAYLOAD"),
             ("x-amz-date", "20130524T000000Z"),
@@ -867,7 +896,7 @@ mod tests {
     #[test]
     fn test_extract_amz_content_sha256_invalid() {
         // Test that extract_amz_content_sha256 returns error for invalid header value
-        let headers = OrderedHeaders::from_slice_unchecked(&[
+        let headers = headers_from_slice(&[
             ("host", "example.s3.amazonaws.com"),
             ("x-amz-content-sha256", "INVALID-VALUE"),
             ("x-amz-date", "20130524T000000Z"),
@@ -876,6 +905,63 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.message().unwrap().contains("x-amz-content-sha256"));
+    }
+
+    #[test]
+    fn collect_signed_headers_preserves_duplicate_arrival_order() {
+        let headers = headers_from_slice(&[
+            ("host", "example.s3.amazonaws.com"),
+            ("x-amz-meta-reviewer", "joe@example.com"),
+            ("x-amz-meta-reviewer", "jane@example.com"),
+        ]);
+        let signed_headers = ["host", "x-amz-meta-reviewer"];
+
+        let collected = collect_signed_headers(&headers, &signed_headers, |_| None).unwrap();
+
+        assert_eq!(
+            collected.as_slice(),
+            [
+                ("host", "example.s3.amazonaws.com"),
+                ("x-amz-meta-reviewer", "joe@example.com"),
+                ("x-amz-meta-reviewer", "jane@example.com"),
+            ]
+        );
+    }
+
+    #[test]
+    fn collect_signed_headers_rejects_missing_header() {
+        let headers = headers_from_slice(&[("host", "example.s3.amazonaws.com")]);
+        let signed_headers = ["host", "x-amz-meta-missing"];
+
+        let err = collect_signed_headers(&headers, &signed_headers, |_| None).expect_err("missing signed header must fail");
+
+        assert_eq!(err.code(), &S3ErrorCode::SignatureDoesNotMatch);
+        assert_eq!(err.message(), Some("missing signed header: x-amz-meta-missing"));
+    }
+
+    #[test]
+    fn collect_signed_headers_skips_non_utf8_values() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            HeaderName::from_static("x-amz-meta-name"),
+            HeaderValue::from_bytes(b"JULI\xC1N").expect("valid opaque header value"),
+        );
+        let signed_headers = ["x-amz-meta-name"];
+
+        let err = collect_signed_headers(&headers, &signed_headers, |_| None).expect_err("non-UTF-8 value must not be signed");
+
+        assert_eq!(err.code(), &S3ErrorCode::SignatureDoesNotMatch);
+    }
+
+    #[test]
+    fn collect_signed_headers_uses_missing_header_fallback() {
+        let headers = HeaderMap::new();
+        let signed_headers = ["host"];
+
+        let collected =
+            collect_signed_headers(&headers, &signed_headers, |name| (name == "host").then_some("example.com")).unwrap();
+
+        assert_eq!(collected.as_slice(), [("host", "example.com")]);
     }
 
     #[test]
@@ -899,11 +985,11 @@ mod tests {
         let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
         let amz_date = AmzDate::parse("20130524T000000Z").unwrap();
         let method = Method::GET;
-        let headers = OrderedHeaders::from_slice_unchecked(&[
+        let headers = [
             ("host", "s3.amazonaws.com"),
             ("x-amz-content-sha256", "UNSIGNED-PAYLOAD"),
             ("x-amz-date", "20130524T000000Z"),
-        ]);
+        ];
 
         let canonical_request = sig_v4::create_canonical_request(
             &method,
@@ -970,6 +1056,7 @@ mod tests {
         let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
         let method = Method::GET;
         let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+        let headers = headers_from_slice(&[("authorization", "AWS4-HMAC-SHA256 Credential=invalid")]);
         let mut body = Body::empty();
         let mut cx = SignatureContext {
             auth: None,
@@ -979,7 +1066,7 @@ mod tests {
             req_uri: &uri,
             req_body: &mut body,
             qs: Some(&qs),
-            hs: OrderedHeaders::from_slice_unchecked(&[("authorization", "AWS4-HMAC-SHA256 Credential=invalid")]),
+            hs: &headers,
             decoded_uri_path: "/test.txt",
             raw_uri_path: "/test.txt",
             vh_bucket: None,
@@ -1023,6 +1110,7 @@ mod tests {
         let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(s3_config)));
         let method = Method::GET;
         let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+        let headers = headers_from_slice(&[("host", "s3.amazonaws.com")]);
         let mut body = Body::empty();
         let mut cx = SignatureContext {
             auth: None,
@@ -1032,7 +1120,7 @@ mod tests {
             req_uri: &uri,
             req_body: &mut body,
             qs: Some(&qs),
-            hs: OrderedHeaders::from_slice_unchecked(&[("host", "s3.amazonaws.com")]),
+            hs: &headers,
             decoded_uri_path: "/test.txt",
             raw_uri_path: "/test.txt",
             vh_bucket: None,
@@ -1060,6 +1148,7 @@ mod tests {
         let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
         let method = Method::GET;
         let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+        let anonymous_headers = HeaderMap::new();
         let mut body = Body::empty();
         let mut anonymous = SignatureContext {
             auth: None,
@@ -1069,7 +1158,7 @@ mod tests {
             req_uri: &uri,
             req_body: &mut body,
             qs: Some(&qs),
-            hs: OrderedHeaders::from_slice_unchecked(&[]),
+            hs: &anonymous_headers,
             decoded_uri_path: "/test.txt",
             raw_uri_path: "/test.txt",
             vh_bucket: None,
@@ -1085,6 +1174,7 @@ mod tests {
             "an unsigned query must not be treated as presigned auth"
         );
 
+        let header_auth_headers = headers_from_slice(&[("authorization", "AWS4-HMAC-SHA256 Credential=invalid")]);
         let mut body = Body::empty();
         let mut header_auth = SignatureContext {
             auth: None,
@@ -1094,7 +1184,7 @@ mod tests {
             req_uri: &uri,
             req_body: &mut body,
             qs: Some(&qs),
-            hs: OrderedHeaders::from_slice_unchecked(&[("authorization", "AWS4-HMAC-SHA256 Credential=invalid")]),
+            hs: &header_auth_headers,
             decoded_uri_path: "/test.txt",
             raw_uri_path: "/test.txt",
             vh_bucket: None,
@@ -1135,6 +1225,7 @@ file content\r\n\
         let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
         let method = Method::POST;
         let uri = Uri::from_static("http://localhost/test-bucket");
+        let headers = HeaderMap::new();
 
         let mut cx = SignatureContext {
             auth: None,
@@ -1144,7 +1235,7 @@ file content\r\n\
             req_uri: &uri,
             req_body: &mut body,
             qs: None,
-            hs: OrderedHeaders::from_slice_unchecked(&[]),
+            hs: &headers,
             decoded_uri_path: "/test-bucket",
             raw_uri_path: "/test-bucket",
             vh_bucket: None,
@@ -1181,7 +1272,7 @@ file content\r\n\
         uri: &'a Uri,
         body: &'a mut Body,
         qs: Option<&'a OrderedQs>,
-        hs: OrderedHeaders<'a>,
+        hs: &'a HeaderMap,
         mime: Option<Mime>,
     ) -> SignatureContext<'a> {
         SignatureContext {
@@ -1210,16 +1301,9 @@ file content\r\n\
         let config = sig_v2_test_config(false);
         let method = Method::GET;
         let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+        let headers = headers_from_slice(&[("authorization", "AWS AKIAIOSFODNN7EXAMPLE:qgk2+6Sv9/oM7G3qLEjTH1a1l1g=")]);
         let mut body = Body::empty();
-        let mut cx = sig_v2_test_context(
-            &config,
-            &method,
-            &uri,
-            &mut body,
-            None,
-            OrderedHeaders::from_slice_unchecked(&[("authorization", "AWS AKIAIOSFODNN7EXAMPLE:qgk2+6Sv9/oM7G3qLEjTH1a1l1g=")]),
-            None,
-        );
+        let mut cx = sig_v2_test_context(&config, &method, &uri, &mut body, None, &headers, None);
 
         let err = cx
             .v2_check()
@@ -1235,16 +1319,9 @@ file content\r\n\
         let method = Method::GET;
         let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
         let qs = OrderedQs::parse("AWSAccessKeyId=AKIAIOSFODNN7EXAMPLE&Signature=abc&Expires=1175139620").unwrap();
+        let headers = HeaderMap::new();
         let mut body = Body::empty();
-        let mut cx = sig_v2_test_context(
-            &config,
-            &method,
-            &uri,
-            &mut body,
-            Some(&qs),
-            OrderedHeaders::from_slice_unchecked(&[]),
-            None,
-        );
+        let mut cx = sig_v2_test_context(&config, &method, &uri, &mut body, Some(&qs), &headers, None);
 
         let err = cx
             .v2_check()
@@ -1276,15 +1353,8 @@ file content\r\n\
         let config = sig_v2_test_config(false);
         let method = Method::POST;
         let uri = Uri::from_static("http://localhost/test-bucket");
-        let mut cx = sig_v2_test_context(
-            &config,
-            &method,
-            &uri,
-            &mut body,
-            None,
-            OrderedHeaders::from_slice_unchecked(&[]),
-            Some(mime),
-        );
+        let headers = HeaderMap::new();
+        let mut cx = sig_v2_test_context(&config, &method, &uri, &mut body, None, &headers, Some(mime));
 
         let err = cx.check().await.expect_err("SigV2 POST must be rejected when disabled");
         assert_eq!(err.code(), &S3ErrorCode::AccessDenied);
@@ -1299,19 +1369,12 @@ file content\r\n\
         // With the default config SigV2 is enabled, so the gate passes and the
         // request proceeds to signature verification; without an auth provider
         // it fails at the auth lookup with NotImplemented, not AccessDenied.
+        let headers = headers_from_slice(&[
+            ("authorization", "AWS AKIAIOSFODNN7EXAMPLE:qgk2+6Sv9/oM7G3qLEjTH1a1l1g="),
+            ("date", "Mon, 26 Nov 2024 00:00:00 GMT"),
+        ]);
         let mut body = Body::empty();
-        let mut cx = sig_v2_test_context(
-            &config,
-            &method,
-            &uri,
-            &mut body,
-            None,
-            OrderedHeaders::from_slice_unchecked(&[
-                ("authorization", "AWS AKIAIOSFODNN7EXAMPLE:qgk2+6Sv9/oM7G3qLEjTH1a1l1g="),
-                ("date", "Mon, 26 Nov 2024 00:00:00 GMT"),
-            ]),
-            None,
-        );
+        let mut cx = sig_v2_test_context(&config, &method, &uri, &mut body, None, &headers, None);
 
         let err = cx
             .v2_check()
@@ -1407,6 +1470,7 @@ file content\r\n\
 
         let method = Method::GET;
         let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+        let headers = HeaderMap::new();
         let mut body = Body::empty();
 
         let mut cx = SignatureContext {
@@ -1417,7 +1481,7 @@ file content\r\n\
             req_uri: &uri,
             req_body: &mut body,
             qs: Some(&qs),
-            hs: OrderedHeaders::from_slice_unchecked(&[]),
+            hs: &headers,
             decoded_uri_path: "/test.txt",
             raw_uri_path: "/test.txt",
             vh_bucket: None,
@@ -1460,6 +1524,7 @@ file content\r\n\
 
         let method = Method::GET;
         let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+        let headers = headers_from_slice(&[("host", "s3.amazonaws.com")]);
         let mut body = Body::empty();
         let mut cx = SignatureContext {
             auth: Some(&auth),
@@ -1469,7 +1534,7 @@ file content\r\n\
             req_uri: &uri,
             req_body: &mut body,
             qs: Some(&qs),
-            hs: OrderedHeaders::from_slice_unchecked(&[("host", "s3.amazonaws.com")]),
+            hs: &headers,
             decoded_uri_path: "/test.txt",
             raw_uri_path: "/test.txt",
             vh_bucket: None,
@@ -1510,7 +1575,7 @@ file content\r\n\
         let raw_uri_path = "/test-bucket/path/sitemap.xmlage=";
         let amz_date = AmzDate::parse(&fmt_current_amz_date(time::OffsetDateTime::now_utc()))
             .expect("current time should produce a valid x-amz-date");
-        let headers_for_signing = OrderedHeaders::from_slice_unchecked(&[("host", "s3.amazonaws.com")]);
+        let headers_for_signing = [("host", "s3.amazonaws.com")];
         let query_strings_for_signing = presigned_query_fields(&amz_date, "s3");
 
         let canonical_requests = [
@@ -1535,7 +1600,7 @@ file content\r\n\
             let mut signed_query_strings = query_strings_for_signing.clone();
             signed_query_strings.push(("X-Amz-Signature".to_owned(), signature.as_str().to_owned()));
             let qs = OrderedQs::from_vec_unchecked(signed_query_strings);
-            let headers = OrderedHeaders::from_slice_unchecked(&[("host", "s3.amazonaws.com")]);
+            let headers = headers_from_slice(&[("host", "s3.amazonaws.com")]);
 
             let mut body = Body::empty();
             let mut cx = SignatureContext {
@@ -1546,7 +1611,7 @@ file content\r\n\
                 req_uri: &uri,
                 req_body: &mut body,
                 qs: Some(&qs),
-                hs: headers,
+                hs: &headers,
                 decoded_uri_path,
                 raw_uri_path,
                 vh_bucket: None,
@@ -1584,7 +1649,7 @@ file content\r\n\
         let raw_uri_path = "/test-bucket/path/sitemap.xmlage=";
         let amz_date = AmzDate::parse(&fmt_current_amz_date(time::OffsetDateTime::now_utc()))
             .expect("current time should produce a valid x-amz-date");
-        let headers_for_signing = OrderedHeaders::from_slice_unchecked(&[("host", "s3.amazonaws.com")]);
+        let headers_for_signing = [("host", "s3.amazonaws.com")];
         let query_strings_for_signing = presigned_query_fields(&amz_date, "s3");
         let canonical_request = sig_v4::create_presigned_canonical_request(
             &method,
@@ -1598,6 +1663,7 @@ file content\r\n\
         signed_query_strings.push(("X-Amz-Signature".to_owned(), signature.as_str().to_owned()));
         let qs = OrderedQs::from_vec_unchecked(signed_query_strings);
 
+        let headers = HeaderMap::new();
         let mut body = Body::empty();
         let mut cx = SignatureContext {
             auth: Some(&auth),
@@ -1607,7 +1673,7 @@ file content\r\n\
             req_uri: &uri,
             req_body: &mut body,
             qs: Some(&qs),
-            hs: OrderedHeaders::from_slice_unchecked(&[]),
+            hs: &headers,
             decoded_uri_path,
             raw_uri_path,
             vh_bucket: None,
@@ -1649,7 +1715,7 @@ file content\r\n\
         let uri = Uri::from_static("https://s3.amazonaws.com/test-bucket/test-key");
         let amz_date = AmzDate::parse(&fmt_current_amz_date(time::OffsetDateTime::now_utc()))
             .expect("current time should produce a valid x-amz-date");
-        let headers_for_signing = OrderedHeaders::from_slice_unchecked(&[("host", "s3.amazonaws.com")]);
+        let headers_for_signing = [("host", "s3.amazonaws.com")];
         let query_strings_for_signing = presigned_query_fields(&amz_date, "s3");
 
         let canonical_request = sig_v4::create_presigned_canonical_request(
@@ -1665,7 +1731,7 @@ file content\r\n\
         signed_query_strings.push(("X-Amz-Signature".to_owned(), signature.as_str().to_owned()));
         let qs = OrderedQs::from_vec_unchecked(signed_query_strings);
 
-        let headers = OrderedHeaders::from_slice_unchecked(&[
+        let headers = headers_from_slice(&[
             ("host", "s3.amazonaws.com"),
             ("x-amz-content-sha256", content_sha256.as_str()),
         ]);
@@ -1679,7 +1745,7 @@ file content\r\n\
             req_uri: &uri,
             req_body: &mut body,
             qs: Some(&qs),
-            hs: headers,
+            hs: &headers,
             decoded_uri_path: "/test-bucket/test-key",
             raw_uri_path: "/test-bucket/test-key",
             vh_bucket: None,
@@ -1728,7 +1794,7 @@ file content\r\n\
         let uri = Uri::from_static("https://s3.amazonaws.com/test-bucket/test-key");
         let amz_date = AmzDate::parse(&fmt_current_amz_date(time::OffsetDateTime::now_utc()))
             .expect("current time should produce a valid x-amz-date");
-        let headers_for_signing = OrderedHeaders::from_slice_unchecked(&[("host", "s3.amazonaws.com")]);
+        let headers_for_signing = [("host", "s3.amazonaws.com")];
         let query_strings_for_signing = presigned_query_fields(&amz_date, "s3");
 
         let canonical_request = sig_v4::create_presigned_canonical_request(
@@ -1744,7 +1810,7 @@ file content\r\n\
         signed_query_strings.push(("X-Amz-Signature".to_owned(), signature.as_str().to_owned()));
         let qs = OrderedQs::from_vec_unchecked(signed_query_strings);
 
-        let headers = OrderedHeaders::from_slice_unchecked(&[
+        let headers = headers_from_slice(&[
             ("host", "s3.amazonaws.com"),
             ("x-amz-content-sha256", "STREAMING-AWS4-HMAC-SHA256-PAYLOAD"),
         ]);
@@ -1758,7 +1824,7 @@ file content\r\n\
             req_uri: &uri,
             req_body: &mut body,
             qs: Some(&qs),
-            hs: headers,
+            hs: &headers,
             decoded_uri_path: "/test-bucket/test-key",
             raw_uri_path: "/test-bucket/test-key",
             vh_bucket: None,
@@ -1794,7 +1860,7 @@ file content\r\n\
         let authorization = format!(
             "AWS4-HMAC-SHA256 Credential={access_key}/20130524/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         );
-        let headers = OrderedHeaders::from_slice_unchecked(&[
+        let headers = headers_from_slice(&[
             ("authorization", authorization.as_str()),
             ("host", "s3.amazonaws.com"),
             ("x-amz-content-sha256", "UNSIGNED-PAYLOAD"),
@@ -1811,7 +1877,7 @@ file content\r\n\
             req_uri: &uri,
             req_body: &mut body,
             qs: None,
-            hs: headers,
+            hs: &headers,
             decoded_uri_path: "/test.txt",
             raw_uri_path: "/test.txt",
             vh_bucket: None,
@@ -1852,11 +1918,11 @@ file content\r\n\
         let decoded_uri_path = "/test-bucket/path/sitemap.xmlage=";
         let raw_uri_path = "/test-bucket/path/sitemap.xmlage=";
         let amz_date = AmzDate::parse("20130524T000000Z").unwrap();
-        let headers_for_signing = OrderedHeaders::from_slice_unchecked(&[
+        let headers_for_signing = [
             ("host", "s3.amazonaws.com"),
             ("x-amz-content-sha256", "UNSIGNED-PAYLOAD"),
             ("x-amz-date", "20130524T000000Z"),
-        ]);
+        ];
 
         let canonical_requests = [
             sig_v4::create_canonical_request(
@@ -1882,7 +1948,7 @@ file content\r\n\
                 "AWS4-HMAC-SHA256 Credential={access_key}/20130524/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature={}",
                 signature.as_str(),
             );
-            let headers = OrderedHeaders::from_slice_unchecked(&[
+            let headers = headers_from_slice(&[
                 ("authorization", authorization.as_str()),
                 ("host", "s3.amazonaws.com"),
                 ("x-amz-content-sha256", "UNSIGNED-PAYLOAD"),
@@ -1898,7 +1964,7 @@ file content\r\n\
                 req_uri: &uri,
                 req_body: &mut body,
                 qs: None,
-                hs: headers,
+                hs: &headers,
                 decoded_uri_path,
                 raw_uri_path,
                 vh_bucket: None,
@@ -1942,11 +2008,11 @@ file content\r\n\
         let payload_hash = "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9";
         let content_sha256 = "uU0nuZNNPgilLlLX2n2r+sSE7+N6U4DukIj3rOLvzek=";
         let amz_date = AmzDate::parse("20130524T000000Z").unwrap();
-        let headers_for_signing = OrderedHeaders::from_slice_unchecked(&[
+        let headers_for_signing = [
             ("host", "s3.amazonaws.com"),
             ("x-amz-content-sha256", content_sha256),
             ("x-amz-date", "20130524T000000Z"),
-        ]);
+        ];
         let canonical_request = sig_v4::create_canonical_request(
             &method,
             path,
@@ -1961,7 +2027,7 @@ file content\r\n\
             signature.as_str(),
         );
 
-        let headers = OrderedHeaders::from_slice_unchecked(&[
+        let headers = headers_from_slice(&[
             ("authorization", authorization.as_str()),
             ("host", "s3.amazonaws.com"),
             ("x-amz-content-sha256", content_sha256),
@@ -1976,7 +2042,7 @@ file content\r\n\
             req_uri: &uri,
             req_body: &mut body,
             qs: None,
-            hs: headers,
+            hs: &headers,
             decoded_uri_path: path,
             raw_uri_path: path,
             vh_bucket: None,
@@ -2021,11 +2087,11 @@ file content\r\n\
         let decoded_uri_path = "/test-bucket/path/sitemap.xmlage=";
         let raw_uri_path = "/test-bucket/path/sitemap.xmlage=";
         let amz_date = AmzDate::parse("20130524T000000Z").unwrap();
-        let headers_for_signing = OrderedHeaders::from_slice_unchecked(&[
+        let headers_for_signing = [
             ("host", "s3.amazonaws.com"),
             ("x-amz-content-sha256", "UNSIGNED-PAYLOAD"),
             ("x-amz-date", "20130524T000000Z"),
-        ]);
+        ];
         let canonical_request = sig_v4::create_canonical_request(
             &method,
             decoded_uri_path,
@@ -2039,7 +2105,7 @@ file content\r\n\
             "AWS4-HMAC-SHA256 Credential={access_key}/20130524/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature={}",
             signature.as_str(),
         );
-        let headers = OrderedHeaders::from_slice_unchecked(&[
+        let headers = headers_from_slice(&[
             ("authorization", authorization.as_str()),
             ("x-amz-content-sha256", "UNSIGNED-PAYLOAD"),
             ("x-amz-date", "20130524T000000Z"),
@@ -2054,7 +2120,7 @@ file content\r\n\
             req_uri: &uri,
             req_body: &mut body,
             qs: None,
-            hs: headers,
+            hs: &headers,
             decoded_uri_path,
             raw_uri_path,
             vh_bucket: None,
@@ -2098,12 +2164,12 @@ file content\r\n\
         let amz_date = AmzDate::parse("20130524T000000Z").unwrap();
         let chunk_data = Bytes::from_static(b"hello");
         let decoded_content_length = chunk_data.len();
-        let headers_for_signing = OrderedHeaders::from_slice_unchecked(&[
+        let headers_for_signing = [
             ("host", "s3.amazonaws.com"),
             ("x-amz-content-sha256", "STREAMING-AWS4-HMAC-SHA256-PAYLOAD"),
             ("x-amz-date", "20130524T000000Z"),
             ("x-amz-decoded-content-length", "5"),
-        ]);
+        ];
 
         let standard_canonical_request = sig_v4::create_canonical_request(
             &method,
@@ -2148,7 +2214,7 @@ file content\r\n\
             "AWS4-HMAC-SHA256 Credential={access_key}/20130524/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date;x-amz-decoded-content-length, Signature={}",
             seed_signature.as_str()
         );
-        let headers = OrderedHeaders::from_slice_unchecked(&[
+        let headers = headers_from_slice(&[
             ("authorization", authorization.as_str()),
             ("host", "s3.amazonaws.com"),
             ("x-amz-content-sha256", "STREAMING-AWS4-HMAC-SHA256-PAYLOAD"),
@@ -2165,7 +2231,7 @@ file content\r\n\
             req_uri: &uri,
             req_body: &mut body,
             qs: None,
-            hs: headers,
+            hs: &headers,
             decoded_uri_path,
             raw_uri_path,
             vh_bucket: None,
@@ -2207,7 +2273,7 @@ file content\r\n\
         let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
 
         let date = "Fri, 24 Jan 2030 12:00:00 +0000";
-        let hs = OrderedHeaders::from_slice_unchecked(&[("date", date), ("host", "s3.amazonaws.com")]);
+        let hs = headers_from_slice(&[("date", date), ("host", "s3.amazonaws.com")]);
 
         let method = Method::GET;
         let uri = Uri::from_static("https://s3.amazonaws.com/test-bucket/test-key");
@@ -2237,7 +2303,7 @@ file content\r\n\
             req_uri: &uri,
             req_body: &mut body,
             qs: None,
-            hs,
+            hs: &hs,
             decoded_uri_path: "/test-bucket/test-key",
             raw_uri_path: "/test-bucket/test-key",
             vh_bucket: None,
@@ -2277,11 +2343,11 @@ file content\r\n\
 
         let method = Method::GET;
         let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
-        let headers_for_signing = OrderedHeaders::from_slice_unchecked(&[
+        let headers_for_signing = [
             ("host", "s3.amazonaws.com"),
             ("x-amz-content-sha256", "UNSIGNED-PAYLOAD"),
             ("x-amz-date", amz_date_str.as_str()),
-        ]);
+        ];
         let canonical_request = sig_v4::create_canonical_request(
             &method,
             "/test.txt",
@@ -2297,7 +2363,7 @@ file content\r\n\
             signature.as_str(),
         );
 
-        let headers = OrderedHeaders::from_slice_unchecked(&[
+        let headers = headers_from_slice(&[
             ("authorization", authorization.as_str()),
             ("host", "s3.amazonaws.com"),
             ("x-amz-content-sha256", "UNSIGNED-PAYLOAD"),
@@ -2313,7 +2379,7 @@ file content\r\n\
             req_uri: &uri,
             req_body: &mut body,
             qs: None,
-            hs: headers,
+            hs: &headers,
             decoded_uri_path: "/test.txt",
             raw_uri_path: "/test.txt",
             vh_bucket: None,
@@ -2394,6 +2460,7 @@ file content\r\n\
         let mime: Mime = format!("multipart/form-data; boundary={boundary}").parse().unwrap();
         let method = Method::POST;
         let uri = Uri::from_static("http://localhost/test-bucket");
+        let headers = HeaderMap::new();
         let mut body = Body::from(body);
         let mut cx = SignatureContext {
             auth: Some(&auth),
@@ -2403,7 +2470,7 @@ file content\r\n\
             req_uri: &uri,
             req_body: &mut body,
             qs: None,
-            hs: OrderedHeaders::from_slice_unchecked(&[]),
+            hs: &headers,
             decoded_uri_path: "/test-bucket",
             raw_uri_path: "/test-bucket",
             vh_bucket: None,

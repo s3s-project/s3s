@@ -7,7 +7,6 @@ use super::AmzDate;
 
 use crate::auth::SecretKey;
 use crate::auth::signature::Signature;
-use crate::http::OrderedHeaders;
 use crate::utils::crypto::{Sha256Sum, hex_sha256, hex_sha256_chunk, hmac_sha256};
 use crate::utils::stable_sort_by_first;
 
@@ -119,11 +118,11 @@ impl Payload<'_> {
     }
 }
 
-fn create_canonical_request_with_uri_mode(
+fn create_canonical_request_with_uri_mode<'a>(
     method: &Method,
     uri_path: &str,
     decoded_query_strings: &[(impl AsRef<str>, impl AsRef<str>)],
-    signed_headers: &OrderedHeaders<'_>,
+    signed_headers: impl AsRef<[(&'a str, &'a str)]>,
     payload: Payload<'_>,
     raw_uri_path: bool,
 ) -> String {
@@ -255,21 +254,21 @@ fn create_canonical_request_with_uri_mode(
 
 /// create canonical request
 #[must_use]
-pub fn create_canonical_request(
+pub fn create_canonical_request<'a>(
     method: &Method,
     uri_path: &str,
     decoded_query_strings: &[(impl AsRef<str>, impl AsRef<str>)],
-    signed_headers: &OrderedHeaders<'_>,
+    signed_headers: impl AsRef<[(&'a str, &'a str)]>,
     payload: Payload<'_>,
 ) -> String {
     create_canonical_request_with_uri_mode(method, uri_path, decoded_query_strings, signed_headers, payload, false)
 }
 
-pub(crate) fn create_canonical_request_with_raw_uri_path(
+pub(crate) fn create_canonical_request_with_raw_uri_path<'a>(
     method: &Method,
     raw_uri_path: &str,
     decoded_query_strings: &[(impl AsRef<str>, impl AsRef<str>)],
-    signed_headers: &OrderedHeaders<'_>,
+    signed_headers: impl AsRef<[(&'a str, &'a str)]>,
     payload: Payload<'_>,
 ) -> String {
     create_canonical_request_with_uri_mode(method, raw_uri_path, decoded_query_strings, signed_headers, payload, true)
@@ -439,11 +438,11 @@ pub(crate) fn calculate_signature_with_key(string_to_sign: &str, signing_key: &[
     Sha256Sum::from_bytes(hmac_sha256(signing_key, string_to_sign))
 }
 
-fn create_presigned_canonical_request_with_uri_mode(
+fn create_presigned_canonical_request_with_uri_mode<'a>(
     method: &Method,
     uri_path: &str,
     decoded_query_strings: &[(impl AsRef<str>, impl AsRef<str>)],
-    signed_headers: &OrderedHeaders<'_>,
+    signed_headers: impl AsRef<[(&'a str, &'a str)]>,
     raw_uri_path: bool,
 ) -> String {
     let mut ans = String::with_capacity(256);
@@ -561,28 +560,30 @@ fn create_presigned_canonical_request_with_uri_mode(
 }
 
 /// create presigned canonical request
-pub fn create_presigned_canonical_request(
+pub fn create_presigned_canonical_request<'a>(
     method: &Method,
     uri_path: &str,
     decoded_query_strings: &[(impl AsRef<str>, impl AsRef<str>)],
-    signed_headers: &OrderedHeaders<'_>,
+    signed_headers: impl AsRef<[(&'a str, &'a str)]>,
 ) -> String {
     create_presigned_canonical_request_with_uri_mode(method, uri_path, decoded_query_strings, signed_headers, false)
 }
 
-pub(crate) fn create_presigned_canonical_request_with_raw_uri_path(
+pub(crate) fn create_presigned_canonical_request_with_raw_uri_path<'a>(
     method: &Method,
     raw_uri_path: &str,
     decoded_query_strings: &[(impl AsRef<str>, impl AsRef<str>)],
-    signed_headers: &OrderedHeaders<'_>,
+    signed_headers: impl AsRef<[(&'a str, &'a str)]>,
 ) -> String {
     create_presigned_canonical_request_with_uri_mode(method, raw_uri_path, decoded_query_strings, signed_headers, true)
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
 
+    use crate::http::OrderedHeaders;
     use crate::http::OrderedQs;
     use crate::sig_v4::PresignedUrlV4;
     use crate::utils::crypto::hex_sha256_string;
@@ -1272,8 +1273,6 @@ mod tests {
                 .insert(HeaderName::from_static(name), HeaderValue::from_static(value));
         }
 
-        let signed_header_names = &["content-md5", "host", "x-amz-content-sha256", "x-amz-date"];
-
         let payload = Payload::empty();
         let date = AmzDate::parse(x_amz_date).unwrap();
         let region = "us-east-1";
@@ -1286,10 +1285,7 @@ mod tests {
             let qs = req.uri().query().map(|q| OrderedQs::parse(q).unwrap());
             let query_strings: &[_] = qs.as_ref().map_or(&[], |x| x.as_ref());
 
-            let signed_headers =
-                OrderedHeaders::from_headers(req.headers()).find_multiple_with_on_missing(signed_header_names, |_| None);
-
-            let canonical_request = create_canonical_request(req.method(), uri_path, query_strings, &signed_headers, payload);
+            let canonical_request = create_canonical_request(req.method(), uri_path, query_strings, headers, payload);
 
             let string_to_sign = create_string_to_sign(&canonical_request, &date, region, service);
 
@@ -1309,6 +1305,8 @@ mod tests {
         *req.uri_mut() = hyper::Uri::from_static("https://play.rustfs.com:7000/");
 
         let x_amz_date = "20250414T022518Z";
+        let x_amz_user_agent =
+            "aws-sdk-js/3.777.0 ua/2.1 os/macOS#10.15.7 lang/js md/browser#Chrome_135.0.0.0 api/sts#3.777.0 m/N,E,e";
         let headers = [
             ("amz-sdk-invocation-id", "8c875471-a10a-45ad-b37e-e67e82de17d6"),
             ("amz-sdk-request", "attempt=1; max=3"),
@@ -1316,10 +1314,7 @@ mod tests {
             ("content-type", "application/x-www-form-urlencoded"),
             ("x-amz-content-sha256", "8e333076fe36da6633c89f2e38100cecb8e7587a1e0d6ce31838b6f68262b949"),
             ("x-amz-date", x_amz_date),
-            (
-                "x-amz-user-agent",
-                "aws-sdk-js/3.777.0 ua/2.1 os/macOS#10.15.7 lang/js md/browser#Chrome_135.0.0.0 api/sts#3.777.0 m/N,E,e",
-            ),
+            ("x-amz-user-agent", x_amz_user_agent),
         ];
         for (name, value) in &headers {
             req.headers_mut()
@@ -1330,17 +1325,6 @@ mod tests {
             let authorithy = HeaderValue::from_str(req.uri().authority().unwrap().as_str()).unwrap();
             req.headers_mut().insert(HeaderName::from_static("host"), authorithy);
         }
-
-        let signed_header_names = &[
-            "amz-sdk-invocation-id",
-            "amz-sdk-request",
-            "content-length",
-            "content-type",
-            "host",
-            "x-amz-content-sha256",
-            "x-amz-date",
-            "x-amz-user-agent",
-        ];
 
         let body = b"RoleArn=arn%3Aaws%3Aiam%3A%3A%2A%3Arole%2FAdmin&RoleSessionName=console&DurationSeconds=43200&Action=AssumeRole&Version=2011-06-15";
         let payload_checksum = hex_sha256_string(body);
@@ -1354,9 +1338,16 @@ mod tests {
             let uri_path = req.uri().path();
             let qs = req.uri().query().map(|q| OrderedQs::parse(q).unwrap());
             let query_strings: &[_] = qs.as_ref().map_or(&[], |x| x.as_ref());
-
-            let signed_headers =
-                OrderedHeaders::from_headers(req.headers()).find_multiple_with_on_missing(signed_header_names, |_| panic!());
+            let signed_headers = [
+                ("amz-sdk-invocation-id", "8c875471-a10a-45ad-b37e-e67e82de17d6"),
+                ("amz-sdk-request", "attempt=1; max=3"),
+                ("content-length", "130"),
+                ("content-type", "application/x-www-form-urlencoded"),
+                ("host", req.uri().authority().unwrap().as_str()),
+                ("x-amz-content-sha256", "8e333076fe36da6633c89f2e38100cecb8e7587a1e0d6ce31838b6f68262b949"),
+                ("x-amz-date", x_amz_date),
+                ("x-amz-user-agent", x_amz_user_agent),
+            ];
 
             let canonical_request = create_canonical_request(
                 req.method(),

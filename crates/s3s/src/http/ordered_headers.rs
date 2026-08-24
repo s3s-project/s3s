@@ -9,11 +9,13 @@ use crate::utils::stable_sort_by_first;
 
 /// Immutable http header container
 #[derive(Debug, Default)]
+#[deprecated(note = "use direct HeaderMap lookups; OrderedHeaders will be removed in a future breaking release")]
 pub struct OrderedHeaders<'a> {
     /// Ascending headers (header names are lowercase)
     headers: Vec<(&'a str, &'a str)>,
 }
 
+#[allow(deprecated)]
 impl<'a> OrderedHeaders<'a> {
     /// Constructs [`OrderedHeaders`] from slice
     ///
@@ -121,6 +123,7 @@ impl<'a> OrderedHeaders<'a> {
     }
 }
 
+#[allow(deprecated)]
 impl<'a> AsRef<[(&'a str, &'a str)]> for OrderedHeaders<'a> {
     fn as_ref(&self) -> &[(&'a str, &'a str)] {
         self.headers.as_ref()
@@ -128,6 +131,7 @@ impl<'a> AsRef<[(&'a str, &'a str)]> for OrderedHeaders<'a> {
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::OrderedHeaders;
     use hyper::HeaderMap;
