@@ -716,7 +716,7 @@ mod tests {
 
         // The chunk meta declares 6 bytes but the data arrives in two fragments.
         // The first fragment must be yielded before the rest is even sent.
-        let (mut tx, rx) = futures::channel::mpsc::channel(4);
+        let (mut tx, rx) = futures::channel::mpsc::channel::<Result<Bytes, StdError>>(4);
 
         let seed_signature = "0000000000000000000000000000000000000000000000000000000000000000";
         let date = AmzDate::parse("20130524T000000Z").unwrap();
@@ -744,6 +744,125 @@ mod tests {
         assert_eq!(second.as_ref(), b"def");
 
         assert!(chunked_stream.next().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn unsigned_chunk_streams_crlf_split_across_fragments() {
+        use futures::SinkExt as _;
+
+        // The chunk data exactly fills the first fragment, so the trailing CRLF
+        // arrives later and must be consumed byte-by-byte.
+        let (mut tx, rx) = futures::channel::mpsc::channel::<Result<Bytes, StdError>>(4);
+
+        let mut chunked_stream = AwsChunkedStream::new(
+            rx,
+            Sha256Sum::from_hex("0000000000000000000000000000000000000000000000000000000000000000").unwrap(),
+            AmzDate::parse("20130524T000000Z").unwrap(),
+            "us-east-1".into(),
+            "s3".into(),
+            "test-key".into(),
+            6,
+            true, // unsigned
+        );
+
+        tx.send(Ok(Bytes::from_static(b"6\r\nabcdef"))).await.unwrap();
+
+        let data = chunked_stream.next().await.unwrap().unwrap();
+        assert_eq!(data.as_ref(), b"abcdef");
+
+        tx.send(Ok(Bytes::from_static(b"\r\n0\r\n\r\n"))).await.unwrap();
+        drop(tx);
+
+        assert!(chunked_stream.next().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn unsigned_chunk_streaming_error_paths() {
+        use futures::SinkExt as _;
+
+        let build = |rx| {
+            AwsChunkedStream::new(
+                rx,
+                Sha256Sum::from_hex("0000000000000000000000000000000000000000000000000000000000000000").unwrap(),
+                AmzDate::parse("20130524T000000Z").unwrap(),
+                "us-east-1".into(),
+                "s3".into(),
+                "test-key".into(),
+                6,
+                true, // unsigned
+            )
+        };
+
+        {
+            // Underlying error while waiting for the rest of the chunk data:
+            // the received fragment is yielded first, then the error surfaces.
+            let (mut tx, rx) = futures::channel::mpsc::channel::<Result<Bytes, StdError>>(4);
+            let mut stream = build(rx);
+            tx.send(Ok(Bytes::from_static(b"6\r\nabc"))).await.unwrap();
+            tx.send(Err(Box::new(std::io::Error::new(std::io::ErrorKind::ConnectionReset, "boom"))))
+                .await
+                .unwrap();
+
+            let first = stream.next().await.unwrap().unwrap();
+            assert_eq!(first.as_ref(), b"abc");
+            let err = stream.next().await.unwrap().unwrap_err();
+            assert!(matches!(err, AwsChunkedStreamError::Underlying(_)));
+        }
+
+        {
+            // Malformed trailing CRLF: the chunk data is yielded, then FormatError.
+            let (mut tx, rx) = futures::channel::mpsc::channel::<Result<Bytes, StdError>>(4);
+            let mut stream = build(rx);
+            tx.send(Ok(Bytes::from_static(b"6\r\nabcdefXX"))).await.unwrap();
+
+            let data = stream.next().await.unwrap().unwrap();
+            assert_eq!(data.as_ref(), b"abcdef");
+            let err = stream.next().await.unwrap().unwrap_err();
+            assert!(matches!(err, AwsChunkedStreamError::FormatError));
+        }
+
+        {
+            // Underlying error while waiting for the trailing CRLF.
+            let (mut tx, rx) = futures::channel::mpsc::channel::<Result<Bytes, StdError>>(4);
+            let mut stream = build(rx);
+            tx.send(Ok(Bytes::from_static(b"6\r\nabcdef"))).await.unwrap();
+            tx.send(Err(Box::new(std::io::Error::new(std::io::ErrorKind::ConnectionReset, "boom"))))
+                .await
+                .unwrap();
+
+            let data = stream.next().await.unwrap().unwrap();
+            assert_eq!(data.as_ref(), b"abcdef");
+            let err = stream.next().await.unwrap().unwrap_err();
+            assert!(matches!(err, AwsChunkedStreamError::Underlying(_)));
+        }
+    }
+
+    #[tokio::test]
+    async fn signed_chunk_propagates_underlying_error() {
+        // In signed mode the whole chunk is collected before verification,
+        // so an underlying error surfaces before any data is yielded.
+        let chunk_meta = b"100;chunk-signature=0000000000000000000000000000000000000000000000000000000000000000\r\n";
+        let chunk_data = b"short";
+        let chunk1 = join(&[chunk_meta, chunk_data]);
+
+        let cause = std::io::Error::new(std::io::ErrorKind::ConnectionReset, "boom");
+        let err: Result<Bytes, StdError> = Err(Box::new(cause));
+        let chunk_results = vec![Ok(chunk1), err];
+
+        let stream = futures::stream::iter(chunk_results);
+        let mut chunked_stream = AwsChunkedStream::new(
+            stream,
+            Sha256Sum::from_hex("0000000000000000000000000000000000000000000000000000000000000000").unwrap(),
+            AmzDate::parse("20130524T000000Z").unwrap(),
+            "us-east-1".into(),
+            "s3".into(),
+            "test-key".into(),
+            256,
+            false, // signed
+        );
+
+        let result = chunked_stream.next().await;
+        assert!(matches!(result, Some(Err(AwsChunkedStreamError::Underlying(_)))));
     }
 
     fn join(bytes: &[&[u8]]) -> Bytes {
