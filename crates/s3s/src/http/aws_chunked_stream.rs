@@ -105,6 +105,9 @@ pub enum AwsChunkedStreamError {
     /// Chunk metadata too large
     #[error("AwsChunkedStreamError: ChunkMetaTooLarge: size {0} exceeds limit {1}")]
     ChunkMetaTooLarge(usize, usize),
+    /// Chunk data too large
+    #[error("AwsChunkedStreamError: ChunkDataTooLarge: size {0} exceeds limit {1}")]
+    ChunkDataTooLarge(usize, usize),
     /// Trailers too large
     #[error("AwsChunkedStreamError: TrailersTooLarge: size {0} exceeds limit {1}")]
     TrailersTooLarge(usize, usize),
@@ -178,6 +181,7 @@ impl AwsChunkedStream {
         secret_key: SecretKey,
         decoded_content_length: usize,
         unsigned: bool,
+        max_chunk_size: usize,
     ) -> Self
     where
         S: Stream<Item = Result<Bytes, StdError>> + Send + Sync + 'static,
@@ -219,6 +223,10 @@ impl AwsChunkedStream {
                     };
 
                     tracing::trace!(?meta);
+
+                    if meta.signature.is_some() && meta.size > max_chunk_size {
+                        return Err(AwsChunkedStreamError::ChunkDataTooLarge(meta.size, max_chunk_size));
+                    }
 
                     let remaining_after_data = if let Some(expected_sig) = meta.signature {
                         let (data, remaining_bytes): (Vec<Bytes>, Bytes) = {
@@ -724,6 +732,7 @@ mod tests {
             "test-key".into(),
             6,
             true, // unsigned
+            crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
         );
 
         tx.send(Ok(Bytes::from_static(b"6\r\nabc"))).await.unwrap();
@@ -757,6 +766,7 @@ mod tests {
             "test-key".into(),
             6,
             true, // unsigned
+            crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
         );
 
         tx.send(Ok(Bytes::from_static(b"6\r\nabcdef"))).await.unwrap();
@@ -784,6 +794,7 @@ mod tests {
                 "test-key".into(),
                 6,
                 true, // unsigned
+                crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
             )
         };
 
@@ -853,10 +864,61 @@ mod tests {
             "test-key".into(),
             256,
             false, // signed
+            crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
         );
 
         let result = chunked_stream.next().await;
         assert!(matches!(result, Some(Err(AwsChunkedStreamError::Underlying(_)))));
+    }
+
+    #[tokio::test]
+    async fn signed_chunk_rejects_oversized_declaration() {
+        // Declares 16 bytes but the limit is 8; the signed path buffers whole
+        // chunks, so the declaration is rejected before any data is read.
+        let chunk_meta = b"10;chunk-signature=0000000000000000000000000000000000000000000000000000000000000000\r\n";
+        let chunk_data = b"short";
+        let chunk1 = join(&[chunk_meta, chunk_data]);
+        let chunk_results = vec![Ok(chunk1)];
+
+        let stream = futures::stream::iter(chunk_results);
+        let mut chunked_stream = AwsChunkedStream::new(
+            stream,
+            Sha256Sum::from_hex("0000000000000000000000000000000000000000000000000000000000000000").unwrap(),
+            AmzDate::parse("20130524T000000Z").unwrap(),
+            "us-east-1".into(),
+            "s3".into(),
+            "test-key".into(),
+            16,
+            false,
+            8,
+        );
+
+        let result = chunked_stream.next().await;
+        assert!(matches!(result, Some(Err(AwsChunkedStreamError::ChunkDataTooLarge(16, 8)))));
+    }
+
+    #[tokio::test]
+    async fn unsigned_chunk_accepts_oversized_declaration() {
+        // Unsigned chunks are streamed without buffering and are not subject to the limit.
+        let chunk1 = join(&[b"10\r\n", b"0123456789abcdef\r\n", b"0\r\n\r\n"]);
+        let chunk_results = vec![Ok(chunk1)];
+
+        let stream = futures::stream::iter(chunk_results);
+        let mut chunked_stream = AwsChunkedStream::new(
+            stream,
+            Sha256Sum::from_hex("0000000000000000000000000000000000000000000000000000000000000000").unwrap(),
+            AmzDate::parse("20130524T000000Z").unwrap(),
+            "us-east-1".into(),
+            "s3".into(),
+            "test-key".into(),
+            16,
+            true, // unsigned
+            8,
+        );
+
+        let data = chunked_stream.next().await.unwrap().unwrap();
+        assert_eq!(data.as_ref(), b"0123456789abcdef");
+        assert!(chunked_stream.next().await.is_none());
     }
 
     fn join(bytes: &[&[u8]]) -> Bytes {
@@ -902,6 +964,7 @@ mod tests {
             secret_access_key.into(),
             decoded_content_length,
             false,
+            crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
         );
 
         let ans1 = chunked_stream.next().await.unwrap();
@@ -956,6 +1019,7 @@ mod tests {
             secret_access_key.into(),
             decoded_content_length,
             false,
+            crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
         );
 
         let ans1 = chunked_stream.next().await.unwrap();
@@ -1020,6 +1084,7 @@ mod tests {
             secret_access_key.into(),
             decoded_content_length,
             true, // unsigned
+            crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
         );
 
         let ans1 = chunked_stream.next().await.unwrap();
@@ -1072,6 +1137,7 @@ mod tests {
             secret_access_key.into(),
             decoded_content_length,
             true, // unsigned
+            crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
         );
 
         let ans1 = chunked_stream.next().await.unwrap();
@@ -1107,6 +1173,7 @@ mod tests {
             "test-key".into(),
             0,
             true, // unsigned
+            crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
         );
 
         let result = chunked_stream.next().await.unwrap();
@@ -1133,6 +1200,7 @@ mod tests {
             "test-key".into(),
             16,
             true,
+            crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
         );
 
         // Stream ends without proper chunk metadata
@@ -1162,6 +1230,7 @@ mod tests {
             "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".into(),
             5,
             false, // signed mode
+            crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
         );
 
         let result = chunked_stream.next().await.unwrap();
@@ -1191,6 +1260,7 @@ mod tests {
             "test-key".into(),
             256,
             true,
+            crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
         );
 
         let result = chunked_stream.next().await;
@@ -1225,6 +1295,7 @@ mod tests {
             "test-key".into(),
             256,
             false,
+            crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
         );
 
         let result = chunked_stream.next().await;
@@ -1254,6 +1325,7 @@ mod tests {
             "test-key".into(),
             0,
             true,
+            crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
         );
 
         let result = chunked_stream.next().await.unwrap();
@@ -1292,6 +1364,7 @@ mod tests {
             "test-key".into(),
             5,
             false, // signed mode - should require signatures
+            crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
         );
 
         let result = chunked_stream.next().await.unwrap();
@@ -1325,6 +1398,7 @@ mod tests {
             "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".into(),
             3,
             true, // unsigned chunks but signed trailer
+            crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
         );
 
         let ans1 = chunked_stream.next().await.unwrap();
@@ -1362,6 +1436,7 @@ mod tests {
             "test-key".into(),
             3,
             true,
+            crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
         );
 
         let ans1 = chunked_stream.next().await.unwrap();
@@ -1421,6 +1496,7 @@ mod tests {
             secret_access_key.into(),
             decoded_content_length,
             true, // unsigned
+            crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
         );
 
         let ans1 = chunked_stream.next().await.unwrap();
@@ -1463,6 +1539,7 @@ mod tests {
             secret_access_key.into(),
             0,
             true, // unsigned
+            crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
         );
 
         // Should get an error due to meta size limit
@@ -1522,6 +1599,7 @@ mod tests {
             secret_access_key.into(),
             decoded_content_length,
             true, // unsigned
+            crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
         );
 
         // Read the chunk data
@@ -1607,6 +1685,7 @@ mod tests {
             secret_access_key.into(),
             decoded_content_length,
             true, // unsigned
+            crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
         );
 
         // Read the chunk data
