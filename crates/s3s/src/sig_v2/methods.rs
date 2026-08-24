@@ -3,6 +3,7 @@
 
 use crate::auth::SecretKey;
 use crate::auth::signature::Signature;
+use crate::error::*;
 use crate::http;
 use crate::http::OrderedQs;
 use crate::utils::crypto::hmac_sha1;
@@ -73,7 +74,7 @@ pub fn create_string_to_sign(
     qs: Option<&OrderedQs>,
     headers: &HeaderMap,
     virtual_host_bucket: Option<&str>,
-) -> String {
+) -> S3Result<String> {
     let mut ans = String::with_capacity(256);
 
     {
@@ -128,6 +129,8 @@ pub fn create_string_to_sign(
             }
             if let Some(value) = http::header_value_to_str(value) {
                 amz_headers.push((name, value));
+            } else {
+                return Err(s3_error!(SignatureDoesNotMatch, "invalid header: {name}"));
             }
         }
         stable_sort_by_first(&mut amz_headers);
@@ -183,7 +186,7 @@ pub fn create_string_to_sign(
         }
     }
 
-    ans
+    Ok(ans)
 }
 
 #[cfg(test)]
@@ -210,6 +213,21 @@ mod tests {
         }
     }
 
+    #[test]
+    fn rejects_non_utf8_amz_header() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            HeaderName::from_static("x-amz-meta-name"),
+            HeaderValue::from_bytes(b"JULI\xC1N").expect("valid opaque header value"),
+        );
+
+        let err = create_string_to_sign(Mode::HeaderAuth, &Method::GET, "/bucket/key", None, &headers, None)
+            .expect_err("non-UTF-8 x-amz headers must fail signature verification");
+
+        assert_eq!(err.code(), &S3ErrorCode::SignatureDoesNotMatch);
+        assert_eq!(err.message(), Some("invalid header: x-amz-meta-name"));
+    }
+
     #[allow(clippy::too_many_lines)]
     #[test]
     fn examples() {
@@ -224,7 +242,7 @@ mod tests {
             let qs = None;
             let vh_bucket = Some("awsexamplebucket1");
 
-            let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket);
+            let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket).unwrap();
             let signature = calculate_signature(&secret_key, &string_to_sign);
 
             assert_eq!(
@@ -249,7 +267,7 @@ mod tests {
             let qs = None;
             let vh_bucket = Some("awsexamplebucket1");
 
-            let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket);
+            let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket).unwrap();
             let signature = calculate_signature(&secret_key, &string_to_sign);
 
             assert_eq!(
@@ -274,7 +292,7 @@ mod tests {
             let qs = None;
             let vh_bucket = Some("awsexamplebucket1");
 
-            let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket);
+            let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket).unwrap();
             let signature = calculate_signature(&secret_key, &string_to_sign);
 
             assert_eq!(
@@ -299,7 +317,8 @@ mod tests {
             let headers = headers_from_slice(&[("date", "Tue, 27 Mar 2007 19:44:46 +0000")]);
             let vh_bucket = Some("awsexamplebucket1");
 
-            let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, Some(&qs), &headers, vh_bucket);
+            let string_to_sign =
+                create_string_to_sign(Mode::HeaderAuth, method, uri_path, Some(&qs), &headers, vh_bucket).unwrap();
             let signature = calculate_signature(&secret_key, &string_to_sign);
 
             assert_eq!(
@@ -327,7 +346,7 @@ mod tests {
             let qs = None;
             let vh_bucket = None;
 
-            let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket);
+            let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket).unwrap();
             let signature = calculate_signature(&secret_key, &string_to_sign);
 
             assert_eq!(
@@ -367,7 +386,7 @@ mod tests {
             let qs = None;
             let vh_bucket = Some("static.example.com");
 
-            let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket);
+            let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket).unwrap();
             let signature = calculate_signature(&secret_key, &string_to_sign);
 
             assert_eq!(
@@ -397,7 +416,7 @@ mod tests {
             let qs = None;
             let vh_bucket = None;
 
-            let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket);
+            let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket).unwrap();
             let signature = calculate_signature(&secret_key, &string_to_sign);
 
             assert_eq!(
@@ -422,7 +441,7 @@ mod tests {
             let qs = None;
             let vh_bucket = None;
 
-            let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket);
+            let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket).unwrap();
             let signature = calculate_signature(&secret_key, &string_to_sign);
 
             assert_eq!(
@@ -456,7 +475,8 @@ mod tests {
             let presigned_url = super::super::PresignedUrlV2::parse(&qs).unwrap();
             assert_eq!(presigned_url.access_key, access_key);
 
-            let string_to_sign = create_string_to_sign(Mode::PresignedUrl, method, uri_path, Some(&qs), &headers, vh_bucket);
+            let string_to_sign =
+                create_string_to_sign(Mode::PresignedUrl, method, uri_path, Some(&qs), &headers, vh_bucket).unwrap();
             let signature = calculate_signature(&secret_key, &string_to_sign);
 
             assert_eq!(
@@ -495,7 +515,7 @@ mod tests {
         let qs = None;
         let vh_bucket = None;
 
-        let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket);
+        let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket).unwrap();
 
         // Date field must be empty when x-amz-date is present
         assert_eq!(
@@ -529,7 +549,7 @@ mod tests {
         let qs = None;
         let vh_bucket = Some("mybucket");
 
-        let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket);
+        let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket).unwrap();
 
         assert_eq!(
             string_to_sign,
@@ -554,7 +574,7 @@ mod tests {
         let qs = OrderedQs::from_vec_unchecked(vec![("Expires".into(), "1710417600".into())]);
         let vh_bucket = Some("mybucket");
 
-        let string_to_sign = create_string_to_sign(Mode::PresignedUrl, method, uri_path, Some(&qs), &headers, vh_bucket);
+        let string_to_sign = create_string_to_sign(Mode::PresignedUrl, method, uri_path, Some(&qs), &headers, vh_bucket).unwrap();
 
         // In presigned URL mode, the date line should be the Expires value from the query string
         assert_eq!(

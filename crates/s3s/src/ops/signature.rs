@@ -744,7 +744,7 @@ impl<'a> SignatureContext<'a> {
             self.qs,
             self.hs,
             self.vh_bucket,
-        );
+        )?;
         let signature = sig_v2::calculate_signature(&secret_key, &string_to_sign);
 
         debug!(?string_to_sign, "sig_v2 header_auth");
@@ -817,7 +817,7 @@ impl<'a> SignatureContext<'a> {
             self.qs,
             self.hs,
             self.vh_bucket,
-        );
+        )?;
         let signature = sig_v2::calculate_signature(&secret_key, &string_to_sign);
 
         let expected_signature =
@@ -2295,7 +2295,8 @@ file content\r\n\
             None,
             &hs,
             None,
-        );
+        )
+        .unwrap();
         let signature = crate::sig_v2::calculate_signature(&secret_key, &string_to_sign);
 
         let auth_v2 = AuthorizationV2 {
