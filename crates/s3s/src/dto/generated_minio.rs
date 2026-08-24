@@ -391,6 +391,145 @@ impl FromStr for AnalyticsS3ExportFileFormat {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AnnotationConfigurationState(Cow<'static, str>);
+
+impl AnnotationConfigurationState {
+    pub const DISABLED: &'static str = "DISABLED";
+
+    pub const ENABLED: &'static str = "ENABLED";
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    #[must_use]
+    pub fn from_static(s: &'static str) -> Self {
+        Self(Cow::from(s))
+    }
+}
+
+impl From<String> for AnnotationConfigurationState {
+    fn from(s: String) -> Self {
+        Self(Cow::from(s))
+    }
+}
+
+impl From<AnnotationConfigurationState> for Cow<'static, str> {
+    fn from(s: AnnotationConfigurationState) -> Self {
+        s.0
+    }
+}
+
+impl FromStr for AnnotationConfigurationState {
+    type Err = Infallible;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(s.to_owned()))
+    }
+}
+
+/// <p>Specifies the configuration for the annotation table associated with a bucket's Amazon S3 Metadata
+/// configuration. The annotation table is an Iceberg table that records annotation events for objects
+/// in the bucket.</p>
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
+pub struct AnnotationTableConfiguration {
+    /// <p>The state of the annotation table. Valid values are <code>ENABLED</code> and <code>DISABLED</code>.</p>
+    pub configuration_state: AnnotationConfigurationState,
+    pub encryption_configuration: Option<MetadataTableEncryptionConfiguration>,
+    /// <p>The ARN of the IAM role used to manage the annotation table.</p>
+    pub role: Option<Role>,
+}
+
+impl fmt::Debug for AnnotationTableConfiguration {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("AnnotationTableConfiguration");
+        d.field("configuration_state", &self.configuration_state);
+        if let Some(ref val) = self.encryption_configuration {
+            d.field("encryption_configuration", val);
+        }
+        if let Some(ref val) = self.role {
+            d.field("role", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+
+impl Default for AnnotationTableConfiguration {
+    fn default() -> Self {
+        Self {
+            configuration_state: String::new().into(),
+            encryption_configuration: None,
+            role: None,
+        }
+    }
+}
+
+/// <p>Contains the current state of the annotation table associated with a bucket's Amazon S3 Metadata
+/// configuration, including its provisioning status and identifiers.</p>
+#[derive(Clone, PartialEq)]
+pub struct AnnotationTableConfigurationResult {
+    /// <p>The current configuration state of the annotation table.</p>
+    pub configuration_state: AnnotationConfigurationState,
+    pub error: Option<ErrorDetails>,
+    /// <p>The ARN of the IAM role associated with the annotation table.</p>
+    pub role: Option<Role>,
+    /// <p>The ARN of the annotation table.</p>
+    pub table_arn: Option<S3TablesArn>,
+    /// <p>The name of the annotation table.</p>
+    pub table_name: Option<S3TablesName>,
+    /// <p>The provisioning status of the annotation table. Possible values: <code>CREATING</code>, <code>BACKFILLING</code>, <code>ACTIVE</code>, <code>FAILED</code>.</p>
+    pub table_status: Option<MetadataTableStatus>,
+}
+
+impl fmt::Debug for AnnotationTableConfigurationResult {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("AnnotationTableConfigurationResult");
+        d.field("configuration_state", &self.configuration_state);
+        if let Some(ref val) = self.error {
+            d.field("error", val);
+        }
+        if let Some(ref val) = self.role {
+            d.field("role", val);
+        }
+        if let Some(ref val) = self.table_arn {
+            d.field("table_arn", val);
+        }
+        if let Some(ref val) = self.table_name {
+            d.field("table_name", val);
+        }
+        if let Some(ref val) = self.table_status {
+            d.field("table_status", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+
+/// <p>Specifies updates to apply to the annotation table configuration. Used as the request body for
+/// <code>UpdateBucketMetadataAnnotationTableConfiguration</code>.</p>
+#[derive(Clone, PartialEq)]
+pub struct AnnotationTableConfigurationUpdates {
+    /// <p>The new configuration state to apply.</p>
+    pub configuration_state: AnnotationConfigurationState,
+    pub encryption_configuration: Option<MetadataTableEncryptionConfiguration>,
+    /// <p>The new IAM role ARN to apply.</p>
+    pub role: Option<Role>,
+}
+
+impl fmt::Debug for AnnotationTableConfigurationUpdates {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("AnnotationTableConfigurationUpdates");
+        d.field("configuration_state", &self.configuration_state);
+        if let Some(ref val) = self.encryption_configuration {
+            d.field("encryption_configuration", val);
+        }
+        if let Some(ref val) = self.role {
+            d.field("role", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArchiveStatus(Cow<'static, str>);
 
@@ -3326,6 +3465,65 @@ impl CreateBucketInput {
 }
 
 #[derive(Clone, PartialEq)]
+pub struct CreateBucketMetadataConfigurationInput {
+    /// <p>
+    /// The general purpose bucket that you want to create the metadata configuration for.
+    /// </p>
+    pub bucket: BucketName,
+    /// <p>
+    /// The checksum algorithm to use with your metadata configuration.
+    /// </p>
+    pub checksum_algorithm: Option<ChecksumAlgorithm>,
+    /// <p>
+    /// The <code>Content-MD5</code> header for the metadata configuration.
+    /// </p>
+    pub content_md5: Option<ContentMD5>,
+    /// <p>
+    /// The expected owner of the general purpose bucket that corresponds to your metadata configuration.
+    /// </p>
+    pub expected_bucket_owner: Option<AccountId>,
+    /// <p>
+    /// The contents of your metadata configuration.
+    /// </p>
+    pub metadata_configuration: MetadataConfiguration,
+}
+
+impl fmt::Debug for CreateBucketMetadataConfigurationInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("CreateBucketMetadataConfigurationInput");
+        d.field("bucket", &self.bucket);
+        if let Some(ref val) = self.checksum_algorithm {
+            d.field("checksum_algorithm", val);
+        }
+        if let Some(ref val) = self.content_md5 {
+            d.field("content_md5", val);
+        }
+        if let Some(ref val) = self.expected_bucket_owner {
+            d.field("expected_bucket_owner", val);
+        }
+        d.field("metadata_configuration", &self.metadata_configuration);
+        d.finish_non_exhaustive()
+    }
+}
+
+impl CreateBucketMetadataConfigurationInput {
+    #[must_use]
+    pub fn builder() -> builders::CreateBucketMetadataConfigurationInputBuilder {
+        default()
+    }
+}
+
+#[derive(Clone, Default, PartialEq)]
+pub struct CreateBucketMetadataConfigurationOutput {}
+
+impl fmt::Debug for CreateBucketMetadataConfigurationOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("CreateBucketMetadataConfigurationOutput");
+        d.finish_non_exhaustive()
+    }
+}
+
+#[derive(Clone, PartialEq)]
 pub struct CreateBucketMetadataTableConfigurationInput {
     /// <p>
     /// The general purpose bucket that you want to create the metadata table configuration in.
@@ -4666,6 +4864,47 @@ impl fmt::Debug for DeleteBucketLifecycleOutput {
 }
 
 #[derive(Clone, Default, PartialEq)]
+pub struct DeleteBucketMetadataConfigurationInput {
+    /// <p>
+    /// The general purpose bucket that you want to remove the metadata configuration from.
+    /// </p>
+    pub bucket: BucketName,
+    /// <p>
+    /// The expected bucket owner of the general purpose bucket that you want to remove the metadata table
+    /// configuration from.
+    /// </p>
+    pub expected_bucket_owner: Option<AccountId>,
+}
+
+impl fmt::Debug for DeleteBucketMetadataConfigurationInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("DeleteBucketMetadataConfigurationInput");
+        d.field("bucket", &self.bucket);
+        if let Some(ref val) = self.expected_bucket_owner {
+            d.field("expected_bucket_owner", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+
+impl DeleteBucketMetadataConfigurationInput {
+    #[must_use]
+    pub fn builder() -> builders::DeleteBucketMetadataConfigurationInputBuilder {
+        default()
+    }
+}
+
+#[derive(Clone, Default, PartialEq)]
+pub struct DeleteBucketMetadataConfigurationOutput {}
+
+impl fmt::Debug for DeleteBucketMetadataConfigurationOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("DeleteBucketMetadataConfigurationOutput");
+        d.finish_non_exhaustive()
+    }
+}
+
+#[derive(Clone, Default, PartialEq)]
 pub struct DeleteBucketMetadataTableConfigurationInput {
     /// <p>
     /// The general purpose bucket that you want to remove the metadata table configuration from.
@@ -5613,6 +5852,45 @@ impl fmt::Debug for Destination {
         }
         if let Some(ref val) = self.storage_class {
             d.field("storage_class", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+
+/// <p>
+/// The destination information for the S3 Metadata configuration.
+/// </p>
+#[derive(Clone, Default, PartialEq)]
+pub struct DestinationResult {
+    /// <p>
+    /// The Amazon Resource Name (ARN) of the table bucket where the metadata configuration is stored.
+    /// </p>
+    pub table_bucket_arn: Option<S3TablesBucketArn>,
+    /// <p>
+    /// The type of the table bucket where the metadata configuration is stored. The <code>aws</code>
+    /// value indicates an Amazon Web Services managed table bucket, and the <code>customer</code> value indicates a
+    /// customer-managed table bucket. V2 metadata configurations are stored in Amazon Web Services managed table
+    /// buckets, and V1 metadata configurations are stored in customer-managed table buckets.
+    /// </p>
+    pub table_bucket_type: Option<S3TablesBucketType>,
+    /// <p>
+    /// The namespace in the table bucket where the metadata tables for a metadata configuration are
+    /// stored.
+    /// </p>
+    pub table_namespace: Option<S3TablesNamespace>,
+}
+
+impl fmt::Debug for DestinationResult {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("DestinationResult");
+        if let Some(ref val) = self.table_bucket_arn {
+            d.field("table_bucket_arn", val);
+        }
+        if let Some(ref val) = self.table_bucket_type {
+            d.field("table_bucket_type", val);
+        }
+        if let Some(ref val) = self.table_namespace {
+            d.field("table_namespace", val);
         }
         d.finish_non_exhaustive()
     }
@@ -7907,6 +8185,44 @@ impl FromStr for ExistingObjectReplicationStatus {
 pub type Expiration = String;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExpirationState(Cow<'static, str>);
+
+impl ExpirationState {
+    pub const DISABLED: &'static str = "DISABLED";
+
+    pub const ENABLED: &'static str = "ENABLED";
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    #[must_use]
+    pub fn from_static(s: &'static str) -> Self {
+        Self(Cow::from(s))
+    }
+}
+
+impl From<String> for ExpirationState {
+    fn from(s: String) -> Self {
+        Self(Cow::from(s))
+    }
+}
+
+impl From<ExpirationState> for Cow<'static, str> {
+    fn from(s: ExpirationState) -> Self {
+        s.0
+    }
+}
+
+impl FromStr for ExpirationState {
+    type Err = Infallible;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(s.to_owned()))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExpirationStatus(Cow<'static, str>);
 
 impl ExpirationStatus {
@@ -8653,6 +8969,75 @@ impl fmt::Debug for GetBucketLoggingOutput {
         if let Some(ref val) = self.logging_enabled {
             d.field("logging_enabled", val);
         }
+        d.finish_non_exhaustive()
+    }
+}
+
+#[derive(Clone, Default, PartialEq)]
+pub struct GetBucketMetadataConfigurationInput {
+    /// <p>
+    /// The general purpose bucket that corresponds to the metadata configuration that you want to
+    /// retrieve.
+    /// </p>
+    pub bucket: BucketName,
+    /// <p>
+    /// The expected owner of the general purpose bucket that you want to retrieve the metadata table
+    /// configuration for.
+    /// </p>
+    pub expected_bucket_owner: Option<AccountId>,
+}
+
+impl fmt::Debug for GetBucketMetadataConfigurationInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("GetBucketMetadataConfigurationInput");
+        d.field("bucket", &self.bucket);
+        if let Some(ref val) = self.expected_bucket_owner {
+            d.field("expected_bucket_owner", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+
+impl GetBucketMetadataConfigurationInput {
+    #[must_use]
+    pub fn builder() -> builders::GetBucketMetadataConfigurationInputBuilder {
+        default()
+    }
+}
+
+#[derive(Clone, Default, PartialEq)]
+pub struct GetBucketMetadataConfigurationOutput {
+    /// <p>
+    /// The metadata configuration for the general purpose bucket.
+    /// </p>
+    pub get_bucket_metadata_configuration_result: Option<GetBucketMetadataConfigurationResult>,
+}
+
+impl fmt::Debug for GetBucketMetadataConfigurationOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("GetBucketMetadataConfigurationOutput");
+        if let Some(ref val) = self.get_bucket_metadata_configuration_result {
+            d.field("get_bucket_metadata_configuration_result", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+
+/// <p>
+/// The S3 Metadata configuration for a general purpose bucket.
+/// </p>
+#[derive(Clone, PartialEq)]
+pub struct GetBucketMetadataConfigurationResult {
+    /// <p>
+    /// The metadata configuration for a general purpose bucket.
+    /// </p>
+    pub metadata_configuration_result: MetadataConfigurationResult,
+}
+
+impl fmt::Debug for GetBucketMetadataConfigurationResult {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("GetBucketMetadataConfigurationResult");
+        d.field("metadata_configuration_result", &self.metadata_configuration_result);
         d.finish_non_exhaustive()
     }
 }
@@ -11728,6 +12113,44 @@ impl Default for InventoryConfiguration {
 
 pub type InventoryConfigurationList = List<InventoryConfiguration>;
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InventoryConfigurationState(Cow<'static, str>);
+
+impl InventoryConfigurationState {
+    pub const DISABLED: &'static str = "DISABLED";
+
+    pub const ENABLED: &'static str = "ENABLED";
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    #[must_use]
+    pub fn from_static(s: &'static str) -> Self {
+        Self(Cow::from(s))
+    }
+}
+
+impl From<String> for InventoryConfigurationState {
+    fn from(s: String) -> Self {
+        Self(Cow::from(s))
+    }
+}
+
+impl From<InventoryConfigurationState> for Cow<'static, str> {
+    fn from(s: InventoryConfigurationState) -> Self {
+        s.0
+    }
+}
+
+impl FromStr for InventoryConfigurationState {
+    type Err = Infallible;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(s.to_owned()))
+    }
+}
+
 /// <p>Specifies the inventory configuration for an Amazon S3 bucket.</p>
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct InventoryDestination {
@@ -12053,6 +12476,140 @@ impl Default for InventorySchedule {
     }
 }
 
+/// <p>
+/// The inventory table configuration for an S3 Metadata configuration.
+/// </p>
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
+pub struct InventoryTableConfiguration {
+    /// <p>
+    /// The configuration state of the inventory table, indicating whether the inventory table is enabled
+    /// or disabled.
+    /// </p>
+    pub configuration_state: InventoryConfigurationState,
+    /// <p>
+    /// The encryption configuration for the inventory table.
+    /// </p>
+    pub encryption_configuration: Option<MetadataTableEncryptionConfiguration>,
+}
+
+impl fmt::Debug for InventoryTableConfiguration {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("InventoryTableConfiguration");
+        d.field("configuration_state", &self.configuration_state);
+        if let Some(ref val) = self.encryption_configuration {
+            d.field("encryption_configuration", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+
+impl Default for InventoryTableConfiguration {
+    fn default() -> Self {
+        Self {
+            configuration_state: String::new().into(),
+            encryption_configuration: None,
+        }
+    }
+}
+
+/// <p>
+/// The inventory table configuration for an S3 Metadata configuration.
+/// </p>
+#[derive(Clone, PartialEq)]
+pub struct InventoryTableConfigurationResult {
+    /// <p>
+    /// The configuration state of the inventory table, indicating whether the inventory table is enabled
+    /// or disabled.
+    /// </p>
+    pub configuration_state: InventoryConfigurationState,
+    pub error: Option<ErrorDetails>,
+    /// <p>
+    /// The Amazon Resource Name (ARN) for the inventory table.
+    /// </p>
+    pub table_arn: Option<S3TablesArn>,
+    /// <p>
+    /// The name of the inventory table.
+    /// </p>
+    pub table_name: Option<S3TablesName>,
+    /// <p> The status of the inventory table. The status values are: </p>
+    /// <ul>
+    /// <li>
+    /// <p>
+    /// <code>CREATING</code> - The inventory table is in the process of being created in the specified
+    /// Amazon Web Services managed table bucket.</p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <code>BACKFILLING</code> - The inventory table is in the process of being backfilled. When
+    /// you enable the inventory table for your metadata configuration, the table goes through a
+    /// process known as backfilling, during which Amazon S3 scans your general purpose bucket to retrieve
+    /// the initial metadata for all objects in the bucket. Depending on the number of objects in your
+    /// bucket, this process can take several hours. When the backfilling process is finished, the
+    /// status of your inventory table changes from <code>BACKFILLING</code> to <code>ACTIVE</code>.
+    /// After backfilling is completed, updates to your objects are reflected in the inventory table
+    /// within one hour.</p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <code>ACTIVE</code> - The inventory table has been created successfully, and records are being
+    /// delivered to the table. </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <code>FAILED</code> - Amazon S3 is unable to create the inventory table, or Amazon S3 is unable to deliver
+    /// records.</p>
+    /// </li>
+    /// </ul>
+    pub table_status: Option<MetadataTableStatus>,
+}
+
+impl fmt::Debug for InventoryTableConfigurationResult {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("InventoryTableConfigurationResult");
+        d.field("configuration_state", &self.configuration_state);
+        if let Some(ref val) = self.error {
+            d.field("error", val);
+        }
+        if let Some(ref val) = self.table_arn {
+            d.field("table_arn", val);
+        }
+        if let Some(ref val) = self.table_name {
+            d.field("table_name", val);
+        }
+        if let Some(ref val) = self.table_status {
+            d.field("table_status", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+
+/// <p>
+/// The specified updates to the S3 Metadata inventory table configuration.
+/// </p>
+#[derive(Clone, PartialEq)]
+pub struct InventoryTableConfigurationUpdates {
+    /// <p>
+    /// The configuration state of the inventory table, indicating whether the inventory table is enabled
+    /// or disabled.
+    /// </p>
+    pub configuration_state: InventoryConfigurationState,
+    /// <p>
+    /// The encryption configuration for the inventory table.
+    /// </p>
+    pub encryption_configuration: Option<MetadataTableEncryptionConfiguration>,
+}
+
+impl fmt::Debug for InventoryTableConfigurationUpdates {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("InventoryTableConfigurationUpdates");
+        d.field("configuration_state", &self.configuration_state);
+        if let Some(ref val) = self.encryption_configuration {
+            d.field("encryption_configuration", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+
 pub type IsEnabled = bool;
 
 pub type IsLatest = bool;
@@ -12136,6 +12693,115 @@ impl FromStr for JSONType {
     }
 }
 
+/// <p>
+/// The journal table configuration for an S3 Metadata configuration.
+/// </p>
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
+pub struct JournalTableConfiguration {
+    /// <p>
+    /// The encryption configuration for the journal table.
+    /// </p>
+    pub encryption_configuration: Option<MetadataTableEncryptionConfiguration>,
+    /// <p>
+    /// The journal table record expiration settings for the journal table.
+    /// </p>
+    pub record_expiration: RecordExpiration,
+}
+
+impl fmt::Debug for JournalTableConfiguration {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("JournalTableConfiguration");
+        if let Some(ref val) = self.encryption_configuration {
+            d.field("encryption_configuration", val);
+        }
+        d.field("record_expiration", &self.record_expiration);
+        d.finish_non_exhaustive()
+    }
+}
+
+impl Default for JournalTableConfiguration {
+    fn default() -> Self {
+        Self {
+            encryption_configuration: None,
+            record_expiration: default(),
+        }
+    }
+}
+
+/// <p>
+/// The journal table configuration for the S3 Metadata configuration.
+/// </p>
+#[derive(Clone, PartialEq)]
+pub struct JournalTableConfigurationResult {
+    pub error: Option<ErrorDetails>,
+    /// <p>
+    /// The journal table record expiration settings for the journal table.
+    /// </p>
+    pub record_expiration: RecordExpiration,
+    /// <p>
+    /// The Amazon Resource Name (ARN) for the journal table.
+    /// </p>
+    pub table_arn: Option<S3TablesArn>,
+    /// <p>
+    /// The name of the journal table.
+    /// </p>
+    pub table_name: S3TablesName,
+    /// <p> The status of the journal table. The status values are: </p>
+    /// <ul>
+    /// <li>
+    /// <p>
+    /// <code>CREATING</code> - The journal table is in the process of being created in the specified
+    /// table bucket.</p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <code>ACTIVE</code> - The journal table has been created successfully, and records are being
+    /// delivered to the table. </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <code>FAILED</code> - Amazon S3 is unable to create the journal table, or Amazon S3 is unable to deliver
+    /// records.</p>
+    /// </li>
+    /// </ul>
+    pub table_status: MetadataTableStatus,
+}
+
+impl fmt::Debug for JournalTableConfigurationResult {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("JournalTableConfigurationResult");
+        if let Some(ref val) = self.error {
+            d.field("error", val);
+        }
+        d.field("record_expiration", &self.record_expiration);
+        if let Some(ref val) = self.table_arn {
+            d.field("table_arn", val);
+        }
+        d.field("table_name", &self.table_name);
+        d.field("table_status", &self.table_status);
+        d.finish_non_exhaustive()
+    }
+}
+
+/// <p>
+/// The specified updates to the S3 Metadata journal table configuration.
+/// </p>
+#[derive(Clone, PartialEq)]
+pub struct JournalTableConfigurationUpdates {
+    /// <p>
+    /// The journal table record expiration settings for the journal table.
+    /// </p>
+    pub record_expiration: RecordExpiration,
+}
+
+impl fmt::Debug for JournalTableConfigurationUpdates {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("JournalTableConfigurationUpdates");
+        d.field("record_expiration", &self.record_expiration);
+        d.finish_non_exhaustive()
+    }
+}
+
 pub type KMSContext = String;
 
 pub type KeyCount = i32;
@@ -12143,6 +12809,8 @@ pub type KeyCount = i32;
 pub type KeyMarker = String;
 
 pub type KeyPrefixEquals = String;
+
+pub type KmsKeyArn = String;
 
 pub type LambdaFunctionArn = String;
 
@@ -14202,6 +14870,85 @@ pub type Message = String;
 
 pub type Metadata = Map<MetadataKey, MetadataValue>;
 
+/// <p>
+/// The S3 Metadata configuration for a general purpose bucket.
+/// </p>
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
+pub struct MetadataConfiguration {
+    /// <p>Optional annotation table configuration to include with the metadata configuration.</p>
+    pub annotation_table_configuration: Option<AnnotationTableConfiguration>,
+    /// <p>
+    /// The inventory table configuration for a metadata configuration.
+    /// </p>
+    pub inventory_table_configuration: Option<InventoryTableConfiguration>,
+    /// <p>
+    /// The journal table configuration for a metadata configuration.
+    /// </p>
+    pub journal_table_configuration: JournalTableConfiguration,
+}
+
+impl fmt::Debug for MetadataConfiguration {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("MetadataConfiguration");
+        if let Some(ref val) = self.annotation_table_configuration {
+            d.field("annotation_table_configuration", val);
+        }
+        if let Some(ref val) = self.inventory_table_configuration {
+            d.field("inventory_table_configuration", val);
+        }
+        d.field("journal_table_configuration", &self.journal_table_configuration);
+        d.finish_non_exhaustive()
+    }
+}
+
+impl Default for MetadataConfiguration {
+    fn default() -> Self {
+        Self {
+            annotation_table_configuration: None,
+            inventory_table_configuration: None,
+            journal_table_configuration: default(),
+        }
+    }
+}
+
+/// <p>
+/// The S3 Metadata configuration for a general purpose bucket.
+/// </p>
+#[derive(Clone, PartialEq)]
+pub struct MetadataConfigurationResult {
+    /// <p>The annotation table configuration result, if an annotation table is configured.</p>
+    pub annotation_table_configuration_result: Option<AnnotationTableConfigurationResult>,
+    /// <p>
+    /// The destination settings for a metadata configuration.
+    /// </p>
+    pub destination_result: DestinationResult,
+    /// <p>
+    /// The inventory table configuration for a metadata configuration.
+    /// </p>
+    pub inventory_table_configuration_result: Option<InventoryTableConfigurationResult>,
+    /// <p>
+    /// The journal table configuration for a metadata configuration.
+    /// </p>
+    pub journal_table_configuration_result: Option<JournalTableConfigurationResult>,
+}
+
+impl fmt::Debug for MetadataConfigurationResult {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("MetadataConfigurationResult");
+        if let Some(ref val) = self.annotation_table_configuration_result {
+            d.field("annotation_table_configuration_result", val);
+        }
+        d.field("destination_result", &self.destination_result);
+        if let Some(ref val) = self.inventory_table_configuration_result {
+            d.field("inventory_table_configuration_result", val);
+        }
+        if let Some(ref val) = self.journal_table_configuration_result {
+            d.field("journal_table_configuration_result", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MetadataDirective(Cow<'static, str>);
 
@@ -14316,6 +15063,46 @@ impl fmt::Debug for MetadataTableConfigurationResult {
         let mut d = f.debug_struct("MetadataTableConfigurationResult");
         d.field("s3_tables_destination_result", &self.s3_tables_destination_result);
         d.finish_non_exhaustive()
+    }
+}
+
+/// <p>
+/// The encryption settings for an S3 Metadata journal table or inventory table configuration.
+/// </p>
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
+pub struct MetadataTableEncryptionConfiguration {
+    /// <p>
+    /// If server-side encryption with Key Management Service (KMS) keys (SSE-KMS) is specified, you must also
+    /// specify the KMS key Amazon Resource Name (ARN). You must specify a customer-managed KMS key
+    /// that's located in the same Region as the general purpose bucket that corresponds to the metadata
+    /// table configuration.
+    /// </p>
+    pub kms_key_arn: Option<KmsKeyArn>,
+    /// <p>
+    /// The encryption type specified for a metadata table. To specify server-side encryption with
+    /// Key Management Service (KMS) keys (SSE-KMS), use the <code>aws:kms</code> value. To specify server-side
+    /// encryption with Amazon S3 managed keys (SSE-S3), use the <code>AES256</code> value.
+    /// </p>
+    pub sse_algorithm: TableSseAlgorithm,
+}
+
+impl fmt::Debug for MetadataTableEncryptionConfiguration {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("MetadataTableEncryptionConfiguration");
+        if let Some(ref val) = self.kms_key_arn {
+            d.field("kms_key_arn", val);
+        }
+        d.field("sse_algorithm", &self.sse_algorithm);
+        d.finish_non_exhaustive()
+    }
+}
+
+impl Default for MetadataTableEncryptionConfiguration {
+    fn default() -> Self {
+        Self {
+            kms_key_arn: None,
+            sse_algorithm: String::new().into(),
+        }
     }
 }
 
@@ -19575,6 +20362,46 @@ impl FromStr for QuoteFields {
 
 pub type RecordDelimiter = String;
 
+/// <p>
+/// The journal table record expiration settings for a journal table in an S3 Metadata configuration.
+/// </p>
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
+pub struct RecordExpiration {
+    /// <p>
+    /// If you enable journal table record expiration, you can set the number of days to retain your
+    /// journal table records. Journal table records must be retained for a minimum of 7 days. To set
+    /// this value, specify any whole number from <code>7</code> to <code>2147483647</code>. For example,
+    /// to retain your journal table records for one year, set this value to <code>365</code>.
+    /// </p>
+    pub days: Option<RecordExpirationDays>,
+    /// <p>
+    /// Specifies whether journal table record expiration is enabled or disabled.
+    /// </p>
+    pub expiration: ExpirationState,
+}
+
+impl fmt::Debug for RecordExpiration {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("RecordExpiration");
+        if let Some(ref val) = self.days {
+            d.field("days", val);
+        }
+        d.field("expiration", &self.expiration);
+        d.finish_non_exhaustive()
+    }
+}
+
+impl Default for RecordExpiration {
+    fn default() -> Self {
+        Self {
+            days: None,
+            expiration: String::new().into(),
+        }
+    }
+}
+
+pub type RecordExpirationDays = i32;
+
 /// <p>The container for the records event.</p>
 #[derive(Clone, Default, PartialEq)]
 pub struct RecordsEvent {
@@ -20705,6 +21532,44 @@ pub type S3TablesArn = String;
 
 pub type S3TablesBucketArn = String;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct S3TablesBucketType(Cow<'static, str>);
+
+impl S3TablesBucketType {
+    pub const AWS: &'static str = "aws";
+
+    pub const CUSTOMER: &'static str = "customer";
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    #[must_use]
+    pub fn from_static(s: &'static str) -> Self {
+        Self(Cow::from(s))
+    }
+}
+
+impl From<String> for S3TablesBucketType {
+    fn from(s: String) -> Self {
+        Self(Cow::from(s))
+    }
+}
+
+impl From<S3TablesBucketType> for Cow<'static, str> {
+    fn from(s: S3TablesBucketType) -> Self {
+        s.0
+    }
+}
+
+impl FromStr for S3TablesBucketType {
+    type Err = Infallible;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(s.to_owned()))
+    }
+}
+
 /// <p>
 /// The destination information for the metadata table configuration. The destination table bucket
 /// must be in the same Region and Amazon Web Services account as the general purpose bucket. The specified metadata
@@ -21675,6 +22540,44 @@ impl FromStr for StorageClassAnalysisSchemaVersion {
 
 pub type Suffix = String;
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TableSseAlgorithm(Cow<'static, str>);
+
+impl TableSseAlgorithm {
+    pub const AES256: &'static str = "AES256";
+
+    pub const AWS_KMS: &'static str = "aws:kms";
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    #[must_use]
+    pub fn from_static(s: &'static str) -> Self {
+        Self(Cow::from(s))
+    }
+}
+
+impl From<String> for TableSseAlgorithm {
+    fn from(s: String) -> Self {
+        Self(Cow::from(s))
+    }
+}
+
+impl From<TableSseAlgorithm> for Cow<'static, str> {
+    fn from(s: TableSseAlgorithm) -> Self {
+        s.0
+    }
+}
+
+impl FromStr for TableSseAlgorithm {
+    type Err = Infallible;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(s.to_owned()))
+    }
+}
+
 /// <p>A container of a key value name pair.</p>
 #[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Tag {
@@ -22097,6 +23000,177 @@ impl FromStr for Type {
 }
 
 pub type URI = String;
+
+#[derive(Clone, PartialEq)]
+pub struct UpdateBucketMetadataAnnotationTableConfigurationInput {
+    /// <p>The annotation table configuration updates to apply.</p>
+    pub annotation_table_configuration: AnnotationTableConfigurationUpdates,
+    /// <p>The name of the bucket whose annotation table configuration to update.</p>
+    pub bucket: BucketName,
+    /// <p>Checksum algorithm for the request payload.</p>
+    pub checksum_algorithm: Option<ChecksumAlgorithm>,
+    /// <p>Base64-encoded MD5 digest of the message body.</p>
+    pub content_md5: Option<ContentMD5>,
+    /// <p>The account ID of the expected bucket owner.</p>
+    pub expected_bucket_owner: Option<AccountId>,
+}
+
+impl fmt::Debug for UpdateBucketMetadataAnnotationTableConfigurationInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("UpdateBucketMetadataAnnotationTableConfigurationInput");
+        d.field("annotation_table_configuration", &self.annotation_table_configuration);
+        d.field("bucket", &self.bucket);
+        if let Some(ref val) = self.checksum_algorithm {
+            d.field("checksum_algorithm", val);
+        }
+        if let Some(ref val) = self.content_md5 {
+            d.field("content_md5", val);
+        }
+        if let Some(ref val) = self.expected_bucket_owner {
+            d.field("expected_bucket_owner", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+
+impl UpdateBucketMetadataAnnotationTableConfigurationInput {
+    #[must_use]
+    pub fn builder() -> builders::UpdateBucketMetadataAnnotationTableConfigurationInputBuilder {
+        default()
+    }
+}
+
+#[derive(Clone, Default, PartialEq)]
+pub struct UpdateBucketMetadataAnnotationTableConfigurationOutput {}
+
+impl fmt::Debug for UpdateBucketMetadataAnnotationTableConfigurationOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("UpdateBucketMetadataAnnotationTableConfigurationOutput");
+        d.finish_non_exhaustive()
+    }
+}
+
+#[derive(Clone, PartialEq)]
+pub struct UpdateBucketMetadataInventoryTableConfigurationInput {
+    /// <p>
+    /// The general purpose bucket that corresponds to the metadata configuration that you want to
+    /// enable or disable an inventory table for.
+    /// </p>
+    pub bucket: BucketName,
+    /// <p>
+    /// The checksum algorithm to use with your inventory table configuration.
+    /// </p>
+    pub checksum_algorithm: Option<ChecksumAlgorithm>,
+    /// <p>
+    /// The <code>Content-MD5</code> header for the inventory table configuration.
+    /// </p>
+    pub content_md5: Option<ContentMD5>,
+    /// <p>
+    /// The expected owner of the general purpose bucket that corresponds to the metadata table
+    /// configuration that you want to enable or disable an inventory table for.
+    /// </p>
+    pub expected_bucket_owner: Option<AccountId>,
+    /// <p>
+    /// The contents of your inventory table configuration.      
+    /// </p>
+    pub inventory_table_configuration: InventoryTableConfigurationUpdates,
+}
+
+impl fmt::Debug for UpdateBucketMetadataInventoryTableConfigurationInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("UpdateBucketMetadataInventoryTableConfigurationInput");
+        d.field("bucket", &self.bucket);
+        if let Some(ref val) = self.checksum_algorithm {
+            d.field("checksum_algorithm", val);
+        }
+        if let Some(ref val) = self.content_md5 {
+            d.field("content_md5", val);
+        }
+        if let Some(ref val) = self.expected_bucket_owner {
+            d.field("expected_bucket_owner", val);
+        }
+        d.field("inventory_table_configuration", &self.inventory_table_configuration);
+        d.finish_non_exhaustive()
+    }
+}
+
+impl UpdateBucketMetadataInventoryTableConfigurationInput {
+    #[must_use]
+    pub fn builder() -> builders::UpdateBucketMetadataInventoryTableConfigurationInputBuilder {
+        default()
+    }
+}
+
+#[derive(Clone, Default, PartialEq)]
+pub struct UpdateBucketMetadataInventoryTableConfigurationOutput {}
+
+impl fmt::Debug for UpdateBucketMetadataInventoryTableConfigurationOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("UpdateBucketMetadataInventoryTableConfigurationOutput");
+        d.finish_non_exhaustive()
+    }
+}
+
+#[derive(Clone, PartialEq)]
+pub struct UpdateBucketMetadataJournalTableConfigurationInput {
+    /// <p>
+    /// The general purpose bucket that corresponds to the metadata configuration that you want to
+    /// enable or disable journal table record expiration for.
+    /// </p>
+    pub bucket: BucketName,
+    /// <p>
+    /// The checksum algorithm to use with your journal table configuration.
+    /// </p>
+    pub checksum_algorithm: Option<ChecksumAlgorithm>,
+    /// <p>
+    /// The <code>Content-MD5</code> header for the journal table configuration.
+    /// </p>
+    pub content_md5: Option<ContentMD5>,
+    /// <p>
+    /// The expected owner of the general purpose bucket that corresponds to the metadata table
+    /// configuration that you want to enable or disable journal table record expiration for.      
+    /// </p>
+    pub expected_bucket_owner: Option<AccountId>,
+    /// <p>
+    /// The contents of your journal table configuration.
+    /// </p>
+    pub journal_table_configuration: JournalTableConfigurationUpdates,
+}
+
+impl fmt::Debug for UpdateBucketMetadataJournalTableConfigurationInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("UpdateBucketMetadataJournalTableConfigurationInput");
+        d.field("bucket", &self.bucket);
+        if let Some(ref val) = self.checksum_algorithm {
+            d.field("checksum_algorithm", val);
+        }
+        if let Some(ref val) = self.content_md5 {
+            d.field("content_md5", val);
+        }
+        if let Some(ref val) = self.expected_bucket_owner {
+            d.field("expected_bucket_owner", val);
+        }
+        d.field("journal_table_configuration", &self.journal_table_configuration);
+        d.finish_non_exhaustive()
+    }
+}
+
+impl UpdateBucketMetadataJournalTableConfigurationInput {
+    #[must_use]
+    pub fn builder() -> builders::UpdateBucketMetadataJournalTableConfigurationInputBuilder {
+        default()
+    }
+}
+
+#[derive(Clone, Default, PartialEq)]
+pub struct UpdateBucketMetadataJournalTableConfigurationOutput {}
+
+impl fmt::Debug for UpdateBucketMetadataJournalTableConfigurationOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("UpdateBucketMetadataJournalTableConfigurationOutput");
+        d.finish_non_exhaustive()
+    }
+}
 
 pub type UploadIdMarker = String;
 
@@ -23242,6 +24316,7 @@ mod tests {
         require_default::<CompleteMultipartUploadOutput>();
         require_default::<CopyObjectOutput>();
         require_default::<CreateBucketOutput>();
+        require_default::<CreateBucketMetadataConfigurationOutput>();
         require_default::<CreateBucketMetadataTableConfigurationOutput>();
         require_default::<CreateMultipartUploadOutput>();
         require_default::<CreateSessionOutput>();
@@ -23252,6 +24327,7 @@ mod tests {
         require_default::<DeleteBucketIntelligentTieringConfigurationOutput>();
         require_default::<DeleteBucketInventoryConfigurationOutput>();
         require_default::<DeleteBucketLifecycleOutput>();
+        require_default::<DeleteBucketMetadataConfigurationOutput>();
         require_default::<DeleteBucketMetadataTableConfigurationOutput>();
         require_default::<DeleteBucketMetricsConfigurationOutput>();
         require_default::<DeleteBucketOwnershipControlsOutput>();
@@ -23274,6 +24350,7 @@ mod tests {
         require_default::<GetBucketLifecycleConfigurationOutput>();
         require_default::<GetBucketLocationOutput>();
         require_default::<GetBucketLoggingOutput>();
+        require_default::<GetBucketMetadataConfigurationOutput>();
         require_default::<GetBucketMetadataTableConfigurationOutput>();
         require_default::<GetBucketMetricsConfigurationOutput>();
         require_default::<GetBucketNotificationConfigurationOutput>();
@@ -23337,6 +24414,9 @@ mod tests {
         require_default::<RenameObjectOutput>();
         require_default::<RestoreObjectOutput>();
         require_default::<SelectObjectContentOutput>();
+        require_default::<UpdateBucketMetadataAnnotationTableConfigurationOutput>();
+        require_default::<UpdateBucketMetadataInventoryTableConfigurationOutput>();
+        require_default::<UpdateBucketMetadataJournalTableConfigurationOutput>();
         require_default::<UploadPartOutput>();
         require_default::<UploadPartCopyOutput>();
         require_default::<WriteGetObjectResponseOutput>();
@@ -23350,6 +24430,8 @@ mod tests {
         require_clone::<CopyObjectOutput>();
         require_clone::<CreateBucketInput>();
         require_clone::<CreateBucketOutput>();
+        require_clone::<CreateBucketMetadataConfigurationInput>();
+        require_clone::<CreateBucketMetadataConfigurationOutput>();
         require_clone::<CreateBucketMetadataTableConfigurationInput>();
         require_clone::<CreateBucketMetadataTableConfigurationOutput>();
         require_clone::<CreateMultipartUploadInput>();
@@ -23370,6 +24452,8 @@ mod tests {
         require_clone::<DeleteBucketInventoryConfigurationOutput>();
         require_clone::<DeleteBucketLifecycleInput>();
         require_clone::<DeleteBucketLifecycleOutput>();
+        require_clone::<DeleteBucketMetadataConfigurationInput>();
+        require_clone::<DeleteBucketMetadataConfigurationOutput>();
         require_clone::<DeleteBucketMetadataTableConfigurationInput>();
         require_clone::<DeleteBucketMetadataTableConfigurationOutput>();
         require_clone::<DeleteBucketMetricsConfigurationInput>();
@@ -23414,6 +24498,8 @@ mod tests {
         require_clone::<GetBucketLocationOutput>();
         require_clone::<GetBucketLoggingInput>();
         require_clone::<GetBucketLoggingOutput>();
+        require_clone::<GetBucketMetadataConfigurationInput>();
+        require_clone::<GetBucketMetadataConfigurationOutput>();
         require_clone::<GetBucketMetadataTableConfigurationInput>();
         require_clone::<GetBucketMetadataTableConfigurationOutput>();
         require_clone::<GetBucketMetricsConfigurationInput>();
@@ -23535,6 +24621,12 @@ mod tests {
         require_clone::<RestoreObjectInput>();
         require_clone::<RestoreObjectOutput>();
         require_clone::<SelectObjectContentInput>();
+        require_clone::<UpdateBucketMetadataAnnotationTableConfigurationInput>();
+        require_clone::<UpdateBucketMetadataAnnotationTableConfigurationOutput>();
+        require_clone::<UpdateBucketMetadataInventoryTableConfigurationInput>();
+        require_clone::<UpdateBucketMetadataInventoryTableConfigurationOutput>();
+        require_clone::<UpdateBucketMetadataJournalTableConfigurationInput>();
+        require_clone::<UpdateBucketMetadataJournalTableConfigurationOutput>();
         require_clone::<UploadPartOutput>();
         require_clone::<UploadPartCopyInput>();
         require_clone::<UploadPartCopyOutput>();
@@ -24821,6 +25913,94 @@ pub mod builders {
         }
     }
 
+    /// A builder for [`CreateBucketMetadataConfigurationInput`]
+    #[derive(Default)]
+    pub struct CreateBucketMetadataConfigurationInputBuilder {
+        bucket: Option<BucketName>,
+
+        checksum_algorithm: Option<ChecksumAlgorithm>,
+
+        content_md5: Option<ContentMD5>,
+
+        expected_bucket_owner: Option<AccountId>,
+
+        metadata_configuration: Option<MetadataConfiguration>,
+    }
+
+    impl CreateBucketMetadataConfigurationInputBuilder {
+        pub fn set_bucket(&mut self, field: BucketName) -> &mut Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        pub fn set_checksum_algorithm(&mut self, field: Option<ChecksumAlgorithm>) -> &mut Self {
+            self.checksum_algorithm = field;
+            self
+        }
+
+        pub fn set_content_md5(&mut self, field: Option<ContentMD5>) -> &mut Self {
+            self.content_md5 = field;
+            self
+        }
+
+        pub fn set_expected_bucket_owner(&mut self, field: Option<AccountId>) -> &mut Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        pub fn set_metadata_configuration(&mut self, field: MetadataConfiguration) -> &mut Self {
+            self.metadata_configuration = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn bucket(mut self, field: BucketName) -> Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_algorithm(mut self, field: Option<ChecksumAlgorithm>) -> Self {
+            self.checksum_algorithm = field;
+            self
+        }
+
+        #[must_use]
+        pub fn content_md5(mut self, field: Option<ContentMD5>) -> Self {
+            self.content_md5 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn expected_bucket_owner(mut self, field: Option<AccountId>) -> Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        #[must_use]
+        pub fn metadata_configuration(mut self, field: MetadataConfiguration) -> Self {
+            self.metadata_configuration = Some(field);
+            self
+        }
+
+        pub fn build(self) -> Result<CreateBucketMetadataConfigurationInput, BuildError> {
+            let bucket = self.bucket.ok_or_else(|| BuildError::missing_field("bucket"))?;
+            let checksum_algorithm = self.checksum_algorithm;
+            let content_md5 = self.content_md5;
+            let expected_bucket_owner = self.expected_bucket_owner;
+            let metadata_configuration = self
+                .metadata_configuration
+                .ok_or_else(|| BuildError::missing_field("metadata_configuration"))?;
+            Ok(CreateBucketMetadataConfigurationInput {
+                bucket,
+                checksum_algorithm,
+                content_md5,
+                expected_bucket_owner,
+                metadata_configuration,
+            })
+        }
+    }
+
     /// A builder for [`CreateBucketMetadataTableConfigurationInput`]
     #[derive(Default)]
     pub struct CreateBucketMetadataTableConfigurationInputBuilder {
@@ -25842,6 +27022,47 @@ pub mod builders {
             let bucket = self.bucket.ok_or_else(|| BuildError::missing_field("bucket"))?;
             let expected_bucket_owner = self.expected_bucket_owner;
             Ok(DeleteBucketLifecycleInput {
+                bucket,
+                expected_bucket_owner,
+            })
+        }
+    }
+
+    /// A builder for [`DeleteBucketMetadataConfigurationInput`]
+    #[derive(Default)]
+    pub struct DeleteBucketMetadataConfigurationInputBuilder {
+        bucket: Option<BucketName>,
+
+        expected_bucket_owner: Option<AccountId>,
+    }
+
+    impl DeleteBucketMetadataConfigurationInputBuilder {
+        pub fn set_bucket(&mut self, field: BucketName) -> &mut Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        pub fn set_expected_bucket_owner(&mut self, field: Option<AccountId>) -> &mut Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        #[must_use]
+        pub fn bucket(mut self, field: BucketName) -> Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn expected_bucket_owner(mut self, field: Option<AccountId>) -> Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        pub fn build(self) -> Result<DeleteBucketMetadataConfigurationInput, BuildError> {
+            let bucket = self.bucket.ok_or_else(|| BuildError::missing_field("bucket"))?;
+            let expected_bucket_owner = self.expected_bucket_owner;
+            Ok(DeleteBucketMetadataConfigurationInput {
                 bucket,
                 expected_bucket_owner,
             })
@@ -27044,6 +28265,47 @@ pub mod builders {
             let bucket = self.bucket.ok_or_else(|| BuildError::missing_field("bucket"))?;
             let expected_bucket_owner = self.expected_bucket_owner;
             Ok(GetBucketLoggingInput {
+                bucket,
+                expected_bucket_owner,
+            })
+        }
+    }
+
+    /// A builder for [`GetBucketMetadataConfigurationInput`]
+    #[derive(Default)]
+    pub struct GetBucketMetadataConfigurationInputBuilder {
+        bucket: Option<BucketName>,
+
+        expected_bucket_owner: Option<AccountId>,
+    }
+
+    impl GetBucketMetadataConfigurationInputBuilder {
+        pub fn set_bucket(&mut self, field: BucketName) -> &mut Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        pub fn set_expected_bucket_owner(&mut self, field: Option<AccountId>) -> &mut Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        #[must_use]
+        pub fn bucket(mut self, field: BucketName) -> Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn expected_bucket_owner(mut self, field: Option<AccountId>) -> Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        pub fn build(self) -> Result<GetBucketMetadataConfigurationInput, BuildError> {
+            let bucket = self.bucket.ok_or_else(|| BuildError::missing_field("bucket"))?;
+            let expected_bucket_owner = self.expected_bucket_owner;
+            Ok(GetBucketMetadataConfigurationInput {
                 bucket,
                 expected_bucket_owner,
             })
@@ -34451,6 +35713,270 @@ pub mod builders {
         }
     }
 
+    /// A builder for [`UpdateBucketMetadataAnnotationTableConfigurationInput`]
+    #[derive(Default)]
+    pub struct UpdateBucketMetadataAnnotationTableConfigurationInputBuilder {
+        annotation_table_configuration: Option<AnnotationTableConfigurationUpdates>,
+
+        bucket: Option<BucketName>,
+
+        checksum_algorithm: Option<ChecksumAlgorithm>,
+
+        content_md5: Option<ContentMD5>,
+
+        expected_bucket_owner: Option<AccountId>,
+    }
+
+    impl UpdateBucketMetadataAnnotationTableConfigurationInputBuilder {
+        pub fn set_annotation_table_configuration(&mut self, field: AnnotationTableConfigurationUpdates) -> &mut Self {
+            self.annotation_table_configuration = Some(field);
+            self
+        }
+
+        pub fn set_bucket(&mut self, field: BucketName) -> &mut Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        pub fn set_checksum_algorithm(&mut self, field: Option<ChecksumAlgorithm>) -> &mut Self {
+            self.checksum_algorithm = field;
+            self
+        }
+
+        pub fn set_content_md5(&mut self, field: Option<ContentMD5>) -> &mut Self {
+            self.content_md5 = field;
+            self
+        }
+
+        pub fn set_expected_bucket_owner(&mut self, field: Option<AccountId>) -> &mut Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        #[must_use]
+        pub fn annotation_table_configuration(mut self, field: AnnotationTableConfigurationUpdates) -> Self {
+            self.annotation_table_configuration = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn bucket(mut self, field: BucketName) -> Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_algorithm(mut self, field: Option<ChecksumAlgorithm>) -> Self {
+            self.checksum_algorithm = field;
+            self
+        }
+
+        #[must_use]
+        pub fn content_md5(mut self, field: Option<ContentMD5>) -> Self {
+            self.content_md5 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn expected_bucket_owner(mut self, field: Option<AccountId>) -> Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        pub fn build(self) -> Result<UpdateBucketMetadataAnnotationTableConfigurationInput, BuildError> {
+            let annotation_table_configuration = self
+                .annotation_table_configuration
+                .ok_or_else(|| BuildError::missing_field("annotation_table_configuration"))?;
+            let bucket = self.bucket.ok_or_else(|| BuildError::missing_field("bucket"))?;
+            let checksum_algorithm = self.checksum_algorithm;
+            let content_md5 = self.content_md5;
+            let expected_bucket_owner = self.expected_bucket_owner;
+            Ok(UpdateBucketMetadataAnnotationTableConfigurationInput {
+                annotation_table_configuration,
+                bucket,
+                checksum_algorithm,
+                content_md5,
+                expected_bucket_owner,
+            })
+        }
+    }
+
+    /// A builder for [`UpdateBucketMetadataInventoryTableConfigurationInput`]
+    #[derive(Default)]
+    pub struct UpdateBucketMetadataInventoryTableConfigurationInputBuilder {
+        bucket: Option<BucketName>,
+
+        checksum_algorithm: Option<ChecksumAlgorithm>,
+
+        content_md5: Option<ContentMD5>,
+
+        expected_bucket_owner: Option<AccountId>,
+
+        inventory_table_configuration: Option<InventoryTableConfigurationUpdates>,
+    }
+
+    impl UpdateBucketMetadataInventoryTableConfigurationInputBuilder {
+        pub fn set_bucket(&mut self, field: BucketName) -> &mut Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        pub fn set_checksum_algorithm(&mut self, field: Option<ChecksumAlgorithm>) -> &mut Self {
+            self.checksum_algorithm = field;
+            self
+        }
+
+        pub fn set_content_md5(&mut self, field: Option<ContentMD5>) -> &mut Self {
+            self.content_md5 = field;
+            self
+        }
+
+        pub fn set_expected_bucket_owner(&mut self, field: Option<AccountId>) -> &mut Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        pub fn set_inventory_table_configuration(&mut self, field: InventoryTableConfigurationUpdates) -> &mut Self {
+            self.inventory_table_configuration = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn bucket(mut self, field: BucketName) -> Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_algorithm(mut self, field: Option<ChecksumAlgorithm>) -> Self {
+            self.checksum_algorithm = field;
+            self
+        }
+
+        #[must_use]
+        pub fn content_md5(mut self, field: Option<ContentMD5>) -> Self {
+            self.content_md5 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn expected_bucket_owner(mut self, field: Option<AccountId>) -> Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        #[must_use]
+        pub fn inventory_table_configuration(mut self, field: InventoryTableConfigurationUpdates) -> Self {
+            self.inventory_table_configuration = Some(field);
+            self
+        }
+
+        pub fn build(self) -> Result<UpdateBucketMetadataInventoryTableConfigurationInput, BuildError> {
+            let bucket = self.bucket.ok_or_else(|| BuildError::missing_field("bucket"))?;
+            let checksum_algorithm = self.checksum_algorithm;
+            let content_md5 = self.content_md5;
+            let expected_bucket_owner = self.expected_bucket_owner;
+            let inventory_table_configuration = self
+                .inventory_table_configuration
+                .ok_or_else(|| BuildError::missing_field("inventory_table_configuration"))?;
+            Ok(UpdateBucketMetadataInventoryTableConfigurationInput {
+                bucket,
+                checksum_algorithm,
+                content_md5,
+                expected_bucket_owner,
+                inventory_table_configuration,
+            })
+        }
+    }
+
+    /// A builder for [`UpdateBucketMetadataJournalTableConfigurationInput`]
+    #[derive(Default)]
+    pub struct UpdateBucketMetadataJournalTableConfigurationInputBuilder {
+        bucket: Option<BucketName>,
+
+        checksum_algorithm: Option<ChecksumAlgorithm>,
+
+        content_md5: Option<ContentMD5>,
+
+        expected_bucket_owner: Option<AccountId>,
+
+        journal_table_configuration: Option<JournalTableConfigurationUpdates>,
+    }
+
+    impl UpdateBucketMetadataJournalTableConfigurationInputBuilder {
+        pub fn set_bucket(&mut self, field: BucketName) -> &mut Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        pub fn set_checksum_algorithm(&mut self, field: Option<ChecksumAlgorithm>) -> &mut Self {
+            self.checksum_algorithm = field;
+            self
+        }
+
+        pub fn set_content_md5(&mut self, field: Option<ContentMD5>) -> &mut Self {
+            self.content_md5 = field;
+            self
+        }
+
+        pub fn set_expected_bucket_owner(&mut self, field: Option<AccountId>) -> &mut Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        pub fn set_journal_table_configuration(&mut self, field: JournalTableConfigurationUpdates) -> &mut Self {
+            self.journal_table_configuration = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn bucket(mut self, field: BucketName) -> Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_algorithm(mut self, field: Option<ChecksumAlgorithm>) -> Self {
+            self.checksum_algorithm = field;
+            self
+        }
+
+        #[must_use]
+        pub fn content_md5(mut self, field: Option<ContentMD5>) -> Self {
+            self.content_md5 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn expected_bucket_owner(mut self, field: Option<AccountId>) -> Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        #[must_use]
+        pub fn journal_table_configuration(mut self, field: JournalTableConfigurationUpdates) -> Self {
+            self.journal_table_configuration = Some(field);
+            self
+        }
+
+        pub fn build(self) -> Result<UpdateBucketMetadataJournalTableConfigurationInput, BuildError> {
+            let bucket = self.bucket.ok_or_else(|| BuildError::missing_field("bucket"))?;
+            let checksum_algorithm = self.checksum_algorithm;
+            let content_md5 = self.content_md5;
+            let expected_bucket_owner = self.expected_bucket_owner;
+            let journal_table_configuration = self
+                .journal_table_configuration
+                .ok_or_else(|| BuildError::missing_field("journal_table_configuration"))?;
+            Ok(UpdateBucketMetadataJournalTableConfigurationInput {
+                bucket,
+                checksum_algorithm,
+                content_md5,
+                expected_bucket_owner,
+                journal_table_configuration,
+            })
+        }
+    }
+
     /// A builder for [`UploadPartInput`]
     #[derive(Default)]
     pub struct UploadPartInputBuilder {
@@ -35887,6 +37413,45 @@ impl DtoExt for AnalyticsS3BucketDestination {
         }
     }
 }
+impl DtoExt for AnnotationTableConfiguration {
+    fn ignore_empty_strings(&mut self) {
+        if let Some(ref mut val) = self.encryption_configuration {
+            val.ignore_empty_strings();
+        }
+        if self.role.as_deref() == Some("") {
+            self.role = None;
+        }
+    }
+}
+impl DtoExt for AnnotationTableConfigurationResult {
+    fn ignore_empty_strings(&mut self) {
+        if let Some(ref mut val) = self.error {
+            val.ignore_empty_strings();
+        }
+        if self.role.as_deref() == Some("") {
+            self.role = None;
+        }
+        if self.table_arn.as_deref() == Some("") {
+            self.table_arn = None;
+        }
+        if self.table_name.as_deref() == Some("") {
+            self.table_name = None;
+        }
+        if self.table_status.as_deref() == Some("") {
+            self.table_status = None;
+        }
+    }
+}
+impl DtoExt for AnnotationTableConfigurationUpdates {
+    fn ignore_empty_strings(&mut self) {
+        if let Some(ref mut val) = self.encryption_configuration {
+            val.ignore_empty_strings();
+        }
+        if self.role.as_deref() == Some("") {
+            self.role = None;
+        }
+    }
+}
 impl DtoExt for AssumeRoleOutput {
     fn ignore_empty_strings(&mut self) {
         if let Some(ref mut val) = self.assumed_role_user {
@@ -36486,6 +38051,22 @@ impl DtoExt for CreateBucketInput {
         }
     }
 }
+impl DtoExt for CreateBucketMetadataConfigurationInput {
+    fn ignore_empty_strings(&mut self) {
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
+        }
+        if self.content_md5.as_deref() == Some("") {
+            self.content_md5 = None;
+        }
+        if self.expected_bucket_owner.as_deref() == Some("") {
+            self.expected_bucket_owner = None;
+        }
+        self.metadata_configuration.ignore_empty_strings();
+    }
+}
 impl DtoExt for CreateBucketMetadataTableConfigurationInput {
     fn ignore_empty_strings(&mut self) {
         if let Some(ref val) = self.checksum_algorithm
@@ -36755,6 +38336,13 @@ impl DtoExt for DeleteBucketLifecycleInput {
         }
     }
 }
+impl DtoExt for DeleteBucketMetadataConfigurationInput {
+    fn ignore_empty_strings(&mut self) {
+        if self.expected_bucket_owner.as_deref() == Some("") {
+            self.expected_bucket_owner = None;
+        }
+    }
+}
 impl DtoExt for DeleteBucketMetadataTableConfigurationInput {
     fn ignore_empty_strings(&mut self) {
         if self.expected_bucket_owner.as_deref() == Some("") {
@@ -36947,6 +38535,21 @@ impl DtoExt for Destination {
             && val.as_str() == ""
         {
             self.storage_class = None;
+        }
+    }
+}
+impl DtoExt for DestinationResult {
+    fn ignore_empty_strings(&mut self) {
+        if self.table_bucket_arn.as_deref() == Some("") {
+            self.table_bucket_arn = None;
+        }
+        if let Some(ref val) = self.table_bucket_type
+            && val.as_str() == ""
+        {
+            self.table_bucket_type = None;
+        }
+        if self.table_namespace.as_deref() == Some("") {
+            self.table_namespace = None;
         }
     }
 }
@@ -37182,6 +38785,25 @@ impl DtoExt for GetBucketLoggingOutput {
         if let Some(ref mut val) = self.logging_enabled {
             val.ignore_empty_strings();
         }
+    }
+}
+impl DtoExt for GetBucketMetadataConfigurationInput {
+    fn ignore_empty_strings(&mut self) {
+        if self.expected_bucket_owner.as_deref() == Some("") {
+            self.expected_bucket_owner = None;
+        }
+    }
+}
+impl DtoExt for GetBucketMetadataConfigurationOutput {
+    fn ignore_empty_strings(&mut self) {
+        if let Some(ref mut val) = self.get_bucket_metadata_configuration_result {
+            val.ignore_empty_strings();
+        }
+    }
+}
+impl DtoExt for GetBucketMetadataConfigurationResult {
+    fn ignore_empty_strings(&mut self) {
+        self.metadata_configuration_result.ignore_empty_strings();
     }
 }
 impl DtoExt for GetBucketMetadataTableConfigurationInput {
@@ -38016,6 +39638,36 @@ impl DtoExt for InventoryS3BucketDestination {
 impl DtoExt for InventorySchedule {
     fn ignore_empty_strings(&mut self) {}
 }
+impl DtoExt for InventoryTableConfiguration {
+    fn ignore_empty_strings(&mut self) {
+        if let Some(ref mut val) = self.encryption_configuration {
+            val.ignore_empty_strings();
+        }
+    }
+}
+impl DtoExt for InventoryTableConfigurationResult {
+    fn ignore_empty_strings(&mut self) {
+        if let Some(ref mut val) = self.error {
+            val.ignore_empty_strings();
+        }
+        if self.table_arn.as_deref() == Some("") {
+            self.table_arn = None;
+        }
+        if self.table_name.as_deref() == Some("") {
+            self.table_name = None;
+        }
+        if self.table_status.as_deref() == Some("") {
+            self.table_status = None;
+        }
+    }
+}
+impl DtoExt for InventoryTableConfigurationUpdates {
+    fn ignore_empty_strings(&mut self) {
+        if let Some(ref mut val) = self.encryption_configuration {
+            val.ignore_empty_strings();
+        }
+    }
+}
 impl DtoExt for JSONInput {
     fn ignore_empty_strings(&mut self) {
         if let Some(ref val) = self.type_
@@ -38030,6 +39682,30 @@ impl DtoExt for JSONOutput {
         if self.record_delimiter.as_deref() == Some("") {
             self.record_delimiter = None;
         }
+    }
+}
+impl DtoExt for JournalTableConfiguration {
+    fn ignore_empty_strings(&mut self) {
+        if let Some(ref mut val) = self.encryption_configuration {
+            val.ignore_empty_strings();
+        }
+        self.record_expiration.ignore_empty_strings();
+    }
+}
+impl DtoExt for JournalTableConfigurationResult {
+    fn ignore_empty_strings(&mut self) {
+        if let Some(ref mut val) = self.error {
+            val.ignore_empty_strings();
+        }
+        self.record_expiration.ignore_empty_strings();
+        if self.table_arn.as_deref() == Some("") {
+            self.table_arn = None;
+        }
+    }
+}
+impl DtoExt for JournalTableConfigurationUpdates {
+    fn ignore_empty_strings(&mut self) {
+        self.record_expiration.ignore_empty_strings();
     }
 }
 impl DtoExt for LambdaFunctionConfiguration {
@@ -38536,6 +40212,31 @@ impl DtoExt for LoggingEnabled {
         }
     }
 }
+impl DtoExt for MetadataConfiguration {
+    fn ignore_empty_strings(&mut self) {
+        if let Some(ref mut val) = self.annotation_table_configuration {
+            val.ignore_empty_strings();
+        }
+        if let Some(ref mut val) = self.inventory_table_configuration {
+            val.ignore_empty_strings();
+        }
+        self.journal_table_configuration.ignore_empty_strings();
+    }
+}
+impl DtoExt for MetadataConfigurationResult {
+    fn ignore_empty_strings(&mut self) {
+        if let Some(ref mut val) = self.annotation_table_configuration_result {
+            val.ignore_empty_strings();
+        }
+        self.destination_result.ignore_empty_strings();
+        if let Some(ref mut val) = self.inventory_table_configuration_result {
+            val.ignore_empty_strings();
+        }
+        if let Some(ref mut val) = self.journal_table_configuration_result {
+            val.ignore_empty_strings();
+        }
+    }
+}
 impl DtoExt for MetadataEntry {
     fn ignore_empty_strings(&mut self) {
         if self.name.as_deref() == Some("") {
@@ -38554,6 +40255,13 @@ impl DtoExt for MetadataTableConfiguration {
 impl DtoExt for MetadataTableConfigurationResult {
     fn ignore_empty_strings(&mut self) {
         self.s3_tables_destination_result.ignore_empty_strings();
+    }
+}
+impl DtoExt for MetadataTableEncryptionConfiguration {
+    fn ignore_empty_strings(&mut self) {
+        if self.kms_key_arn.as_deref() == Some("") {
+            self.kms_key_arn = None;
+        }
     }
 }
 impl DtoExt for Metrics {
@@ -39746,6 +41454,9 @@ impl DtoExt for QueueConfiguration {
         }
     }
 }
+impl DtoExt for RecordExpiration {
+    fn ignore_empty_strings(&mut self) {}
+}
 impl DtoExt for RecordsEvent {
     fn ignore_empty_strings(&mut self) {}
 }
@@ -40110,6 +41821,54 @@ impl DtoExt for Transition {
         {
             self.storage_class = None;
         }
+    }
+}
+impl DtoExt for UpdateBucketMetadataAnnotationTableConfigurationInput {
+    fn ignore_empty_strings(&mut self) {
+        self.annotation_table_configuration.ignore_empty_strings();
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
+        }
+        if self.content_md5.as_deref() == Some("") {
+            self.content_md5 = None;
+        }
+        if self.expected_bucket_owner.as_deref() == Some("") {
+            self.expected_bucket_owner = None;
+        }
+    }
+}
+impl DtoExt for UpdateBucketMetadataInventoryTableConfigurationInput {
+    fn ignore_empty_strings(&mut self) {
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
+        }
+        if self.content_md5.as_deref() == Some("") {
+            self.content_md5 = None;
+        }
+        if self.expected_bucket_owner.as_deref() == Some("") {
+            self.expected_bucket_owner = None;
+        }
+        self.inventory_table_configuration.ignore_empty_strings();
+    }
+}
+impl DtoExt for UpdateBucketMetadataJournalTableConfigurationInput {
+    fn ignore_empty_strings(&mut self) {
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
+        }
+        if self.content_md5.as_deref() == Some("") {
+            self.content_md5 = None;
+        }
+        if self.expected_bucket_owner.as_deref() == Some("") {
+            self.expected_bucket_owner = None;
+        }
+        self.journal_table_configuration.ignore_empty_strings();
     }
 }
 impl DtoExt for UploadPartCopyInput {

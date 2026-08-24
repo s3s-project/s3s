@@ -3487,5 +3487,197 @@
     "zz"
    ]
   ]
+ },
+ {
+  "expect": "CreateBucketMetadataConfiguration",
+  "headers": {},
+  "method": "POST",
+  "nfb": true,
+  "note": "if:qs.has(\"metadataConfiguration\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "metadataConfiguration",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "CreateBucketMetadataConfiguration",
+  "headers": {},
+  "method": "POST",
+  "nfb": true,
+  "note": "noise:qs.has(\"metadataConfiguration\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "metadataConfiguration",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "DeleteBucketMetadataConfiguration",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "if:qs.has(\"metadataConfiguration\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "metadataConfiguration",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "DeleteBucketMetadataConfiguration",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "noise:qs.has(\"metadataConfiguration\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "metadataConfiguration",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketMetadataConfiguration",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"metadataConfiguration\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "metadataConfiguration",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "GetBucketMetadataConfiguration",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"metadataConfiguration\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "metadataConfiguration",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "UpdateBucketMetadataAnnotationTableConfiguration",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "if:qs.has(\"metadataAnnotationTable\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "metadataAnnotationTable",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "UpdateBucketMetadataAnnotationTableConfiguration",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "noise:qs.has(\"metadataAnnotationTable\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "metadataAnnotationTable",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "UpdateBucketMetadataInventoryTableConfiguration",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "if:qs.has(\"metadataInventoryTable\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "metadataInventoryTable",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "UpdateBucketMetadataInventoryTableConfiguration",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "noise:qs.has(\"metadataInventoryTable\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "metadataInventoryTable",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "UpdateBucketMetadataJournalTableConfiguration",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "if:qs.has(\"metadataJournalTable\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "metadataJournalTable",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "UpdateBucketMetadataJournalTableConfiguration",
+  "headers": {},
+  "method": "PUT",
+  "nfb": true,
+  "note": "noise:qs.has(\"metadataJournalTable\")",
+  "path": "Bucket",
+  "qs": [
+   [
+    "metadataJournalTable",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
  }
 ]

@@ -58,6 +58,16 @@ pub trait S3Access: Send + Sync + 'static {
         Ok(())
     }
 
+    /// Checks whether the CreateBucketMetadataConfiguration request has accesses to the resources.
+    ///
+    /// This method returns `Ok(())` by default.
+    async fn create_bucket_metadata_configuration(
+        &self,
+        _req: &mut S3Request<CreateBucketMetadataConfigurationInput>,
+    ) -> S3Result<()> {
+        Ok(())
+    }
+
     /// Checks whether the CreateBucketMetadataTableConfiguration request has accesses to the resources.
     ///
     /// This method returns `Ok(())` by default.
@@ -137,6 +147,16 @@ pub trait S3Access: Send + Sync + 'static {
     ///
     /// This method returns `Ok(())` by default.
     async fn delete_bucket_lifecycle(&self, _req: &mut S3Request<DeleteBucketLifecycleInput>) -> S3Result<()> {
+        Ok(())
+    }
+
+    /// Checks whether the DeleteBucketMetadataConfiguration request has accesses to the resources.
+    ///
+    /// This method returns `Ok(())` by default.
+    async fn delete_bucket_metadata_configuration(
+        &self,
+        _req: &mut S3Request<DeleteBucketMetadataConfigurationInput>,
+    ) -> S3Result<()> {
         Ok(())
     }
 
@@ -312,6 +332,13 @@ pub trait S3Access: Send + Sync + 'static {
     ///
     /// This method returns `Ok(())` by default.
     async fn get_bucket_logging(&self, _req: &mut S3Request<GetBucketLoggingInput>) -> S3Result<()> {
+        Ok(())
+    }
+
+    /// Checks whether the GetBucketMetadataConfiguration request has accesses to the resources.
+    ///
+    /// This method returns `Ok(())` by default.
+    async fn get_bucket_metadata_configuration(&self, _req: &mut S3Request<GetBucketMetadataConfigurationInput>) -> S3Result<()> {
         Ok(())
     }
 
@@ -789,6 +816,36 @@ pub trait S3Access: Send + Sync + 'static {
     ///
     /// This method returns `Ok(())` by default.
     async fn select_object_content(&self, _req: &mut S3Request<SelectObjectContentInput>) -> S3Result<()> {
+        Ok(())
+    }
+
+    /// Checks whether the UpdateBucketMetadataAnnotationTableConfiguration request has accesses to the resources.
+    ///
+    /// This method returns `Ok(())` by default.
+    async fn update_bucket_metadata_annotation_table_configuration(
+        &self,
+        _req: &mut S3Request<UpdateBucketMetadataAnnotationTableConfigurationInput>,
+    ) -> S3Result<()> {
+        Ok(())
+    }
+
+    /// Checks whether the UpdateBucketMetadataInventoryTableConfiguration request has accesses to the resources.
+    ///
+    /// This method returns `Ok(())` by default.
+    async fn update_bucket_metadata_inventory_table_configuration(
+        &self,
+        _req: &mut S3Request<UpdateBucketMetadataInventoryTableConfigurationInput>,
+    ) -> S3Result<()> {
+        Ok(())
+    }
+
+    /// Checks whether the UpdateBucketMetadataJournalTableConfiguration request has accesses to the resources.
+    ///
+    /// This method returns `Ok(())` by default.
+    async fn update_bucket_metadata_journal_table_configuration(
+        &self,
+        _req: &mut S3Request<UpdateBucketMetadataJournalTableConfigurationInput>,
+    ) -> S3Result<()> {
         Ok(())
     }
 

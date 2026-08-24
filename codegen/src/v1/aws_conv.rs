@@ -295,9 +295,14 @@ fn has_unconditional_builder(name: &str) -> bool {
         name,
         "AnalyticsExportDestination"
             | "CreateSessionOutput"
+            | "GetBucketMetadataConfigurationResult"
             | "InventoryDestination"
-            | "RoutingRule"
+            | "JournalTableConfiguration"
+            | "JournalTableConfigurationUpdates"
+            | "MetadataConfiguration"
+            | "MetadataConfigurationResult"
             | "MetadataTableConfiguration"
             | "MetadataTableConfigurationResult"
+            | "RoutingRule"
     )
 }

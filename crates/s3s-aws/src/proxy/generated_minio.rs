@@ -175,6 +175,31 @@ impl S3 for Proxy {
     }
 
     #[tracing::instrument(skip(self, req))]
+    async fn create_bucket_metadata_configuration(
+        &self,
+        req: S3Request<s3s::dto::CreateBucketMetadataConfigurationInput>,
+    ) -> S3Result<S3Response<s3s::dto::CreateBucketMetadataConfigurationOutput>> {
+        let input = req.input;
+        debug!(?input);
+        let mut b = self.0.create_bucket_metadata_configuration();
+        b = b.set_bucket(Some(try_into_aws(input.bucket)?));
+        b = b.set_checksum_algorithm(try_into_aws(input.checksum_algorithm)?);
+        b = b.set_content_md5(try_into_aws(input.content_md5)?);
+        b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
+        b = b.set_metadata_configuration(Some(try_into_aws(input.metadata_configuration)?));
+        let result = b.send().await;
+        match result {
+            Ok(output) => {
+                let headers = super::meta::build_headers(&output)?;
+                let output = try_from_aws(output)?;
+                debug!(?output);
+                Ok(S3Response::with_headers(output, headers))
+            }
+            Err(e) => Err(wrap_sdk_error!(e)),
+        }
+    }
+
+    #[tracing::instrument(skip(self, req))]
     async fn create_bucket_metadata_table_configuration(
         &self,
         req: S3Request<s3s::dto::CreateBucketMetadataTableConfigurationInput>,
@@ -419,6 +444,28 @@ impl S3 for Proxy {
         let input = req.input;
         debug!(?input);
         let mut b = self.0.delete_bucket_lifecycle();
+        b = b.set_bucket(Some(try_into_aws(input.bucket)?));
+        b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
+        let result = b.send().await;
+        match result {
+            Ok(output) => {
+                let headers = super::meta::build_headers(&output)?;
+                let output = try_from_aws(output)?;
+                debug!(?output);
+                Ok(S3Response::with_headers(output, headers))
+            }
+            Err(e) => Err(wrap_sdk_error!(e)),
+        }
+    }
+
+    #[tracing::instrument(skip(self, req))]
+    async fn delete_bucket_metadata_configuration(
+        &self,
+        req: S3Request<s3s::dto::DeleteBucketMetadataConfigurationInput>,
+    ) -> S3Result<S3Response<s3s::dto::DeleteBucketMetadataConfigurationOutput>> {
+        let input = req.input;
+        debug!(?input);
+        let mut b = self.0.delete_bucket_metadata_configuration();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
@@ -923,6 +970,28 @@ impl S3 for Proxy {
         let input = req.input;
         debug!(?input);
         let mut b = self.0.get_bucket_logging();
+        b = b.set_bucket(Some(try_into_aws(input.bucket)?));
+        b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
+        let result = b.send().await;
+        match result {
+            Ok(output) => {
+                let headers = super::meta::build_headers(&output)?;
+                let output = try_from_aws(output)?;
+                debug!(?output);
+                Ok(S3Response::with_headers(output, headers))
+            }
+            Err(e) => Err(wrap_sdk_error!(e)),
+        }
+    }
+
+    #[tracing::instrument(skip(self, req))]
+    async fn get_bucket_metadata_configuration(
+        &self,
+        req: S3Request<s3s::dto::GetBucketMetadataConfigurationInput>,
+    ) -> S3Result<S3Response<s3s::dto::GetBucketMetadataConfigurationOutput>> {
+        let input = req.input;
+        debug!(?input);
+        let mut b = self.0.get_bucket_metadata_configuration();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
@@ -2549,6 +2618,81 @@ impl S3 for Proxy {
         b = b.set_output_serialization(Some(try_into_aws(input.request.output_serialization)?));
         b = b.set_request_progress(try_into_aws(input.request.request_progress)?);
         b = b.set_scan_range(try_into_aws(input.request.scan_range)?);
+        let result = b.send().await;
+        match result {
+            Ok(output) => {
+                let headers = super::meta::build_headers(&output)?;
+                let output = try_from_aws(output)?;
+                debug!(?output);
+                Ok(S3Response::with_headers(output, headers))
+            }
+            Err(e) => Err(wrap_sdk_error!(e)),
+        }
+    }
+
+    #[tracing::instrument(skip(self, req))]
+    async fn update_bucket_metadata_annotation_table_configuration(
+        &self,
+        req: S3Request<s3s::dto::UpdateBucketMetadataAnnotationTableConfigurationInput>,
+    ) -> S3Result<S3Response<s3s::dto::UpdateBucketMetadataAnnotationTableConfigurationOutput>> {
+        let input = req.input;
+        debug!(?input);
+        let mut b = self.0.update_bucket_metadata_annotation_table_configuration();
+        b = b.set_annotation_table_configuration(Some(try_into_aws(input.annotation_table_configuration)?));
+        b = b.set_bucket(Some(try_into_aws(input.bucket)?));
+        b = b.set_checksum_algorithm(try_into_aws(input.checksum_algorithm)?);
+        b = b.set_content_md5(try_into_aws(input.content_md5)?);
+        b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
+        let result = b.send().await;
+        match result {
+            Ok(output) => {
+                let headers = super::meta::build_headers(&output)?;
+                let output = try_from_aws(output)?;
+                debug!(?output);
+                Ok(S3Response::with_headers(output, headers))
+            }
+            Err(e) => Err(wrap_sdk_error!(e)),
+        }
+    }
+
+    #[tracing::instrument(skip(self, req))]
+    async fn update_bucket_metadata_inventory_table_configuration(
+        &self,
+        req: S3Request<s3s::dto::UpdateBucketMetadataInventoryTableConfigurationInput>,
+    ) -> S3Result<S3Response<s3s::dto::UpdateBucketMetadataInventoryTableConfigurationOutput>> {
+        let input = req.input;
+        debug!(?input);
+        let mut b = self.0.update_bucket_metadata_inventory_table_configuration();
+        b = b.set_bucket(Some(try_into_aws(input.bucket)?));
+        b = b.set_checksum_algorithm(try_into_aws(input.checksum_algorithm)?);
+        b = b.set_content_md5(try_into_aws(input.content_md5)?);
+        b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
+        b = b.set_inventory_table_configuration(Some(try_into_aws(input.inventory_table_configuration)?));
+        let result = b.send().await;
+        match result {
+            Ok(output) => {
+                let headers = super::meta::build_headers(&output)?;
+                let output = try_from_aws(output)?;
+                debug!(?output);
+                Ok(S3Response::with_headers(output, headers))
+            }
+            Err(e) => Err(wrap_sdk_error!(e)),
+        }
+    }
+
+    #[tracing::instrument(skip(self, req))]
+    async fn update_bucket_metadata_journal_table_configuration(
+        &self,
+        req: S3Request<s3s::dto::UpdateBucketMetadataJournalTableConfigurationInput>,
+    ) -> S3Result<S3Response<s3s::dto::UpdateBucketMetadataJournalTableConfigurationOutput>> {
+        let input = req.input;
+        debug!(?input);
+        let mut b = self.0.update_bucket_metadata_journal_table_configuration();
+        b = b.set_bucket(Some(try_into_aws(input.bucket)?));
+        b = b.set_checksum_algorithm(try_into_aws(input.checksum_algorithm)?);
+        b = b.set_content_md5(try_into_aws(input.content_md5)?);
+        b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
+        b = b.set_journal_table_configuration(Some(try_into_aws(input.journal_table_configuration)?));
         let result = b.send().await;
         match result {
             Ok(output) => {

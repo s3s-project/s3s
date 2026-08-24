@@ -644,6 +644,126 @@ pub trait S3: Send + Sync + 'static {
         Err(s3_error!(NotImplemented, "CreateBucket is not implemented yet"))
     }
 
+    /// <p>Creates an S3 Metadata V2 metadata configuration for a general purpose bucket. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/metadata-tables-overview.html">Accelerating
+    /// data discovery with S3 Metadata</a> in the <i>Amazon S3 User Guide</i>.</p>
+    /// <dl>
+    /// <dt>Permissions</dt>
+    /// <dd>
+    /// <p>To use this operation, you must have the following permissions. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/metadata-tables-permissions.html">Setting up permissions for configuring metadata tables</a> in the
+    /// <i>Amazon S3 User Guide</i>.</p>
+    /// <p>If you want to encrypt your metadata tables with server-side encryption with Key Management Service
+    /// (KMS) keys (SSE-KMS), you need additional permissions in your KMS key policy. For more
+    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/metadata-tables-permissions.html">
+    /// Setting up permissions for configuring metadata tables</a> in the
+    /// <i>Amazon S3 User Guide</i>.</p>
+    /// <p>If you also want to integrate your table bucket with Amazon Web Services analytics services so that you can
+    /// query your metadata table, you need additional permissions. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-tables-integrating-aws.html"> Integrating
+    /// Amazon S3 Tables with Amazon Web Services analytics services</a> in the
+    /// <i>Amazon S3 User Guide</i>.</p>
+    /// <p>To query your metadata tables, you need additional permissions. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/metadata-tables-bucket-query-permissions.html">
+    /// Permissions for querying metadata tables</a> in the <i>Amazon S3 User Guide</i>.</p>
+    /// <ul>
+    /// <li>
+    /// <p>
+    /// <code>s3:CreateBucketMetadataTableConfiguration</code>
+    /// </p>
+    /// <note>
+    /// <p>The IAM policy action name is the same for the V1 and V2 API operations.</p>
+    /// </note>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <code>s3tables:CreateTableBucket</code>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <code>s3tables:CreateNamespace</code>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <code>s3tables:GetTable</code>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <code>s3tables:CreateTable</code>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <code>s3tables:PutTablePolicy</code>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <code>s3tables:PutTableBucketPolicy</code>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <code>s3tables:PutTableEncryption</code>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <code>kms:DescribeKey</code>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <code>iam:PassRole</code> - required if you include an
+    /// <code>AnnotationTableConfiguration</code> with an IAM role.</p>
+    /// </li>
+    /// </ul>
+    /// </dd>
+    /// </dl>
+    /// <p>The following operations are related to <code>CreateBucketMetadataConfiguration</code>:</p>
+    /// <ul>
+    /// <li>
+    /// <p>
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketMetadataConfiguration.html">DeleteBucketMetadataConfiguration</a>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketMetadataConfiguration.html">GetBucketMetadataConfiguration</a>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_UpdateBucketMetadataInventoryTableConfiguration.html">UpdateBucketMetadataInventoryTableConfiguration</a>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_UpdateBucketMetadataJournalTableConfiguration.html">UpdateBucketMetadataJournalTableConfiguration</a>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_UpdateBucketMetadataAnnotationTableConfiguration.html">UpdateBucketMetadataAnnotationTableConfiguration</a>
+    /// </p>
+    /// </li>
+    /// </ul>
+    /// <p>If you include an <code>AnnotationTableConfiguration</code> with an IAM role, the role must
+    /// have a trust policy that allows the Amazon S3 metadata service to assume it, and a permissions policy
+    /// that grants the actions needed to read annotations from your bucket. The following examples show
+    /// a trust policy and a permissions policy that you can adapt for your bucket and account.</p>
+    /// <important>
+    /// <p>You must URL encode any signed header values that contain spaces. For example, if your header value is <code>my  file.txt</code>, containing two spaces after <code>my</code>, you must URL encode this value to <code>my%20%20file.txt</code>.</p>
+    /// </important>
+    async fn create_bucket_metadata_configuration(
+        &self,
+        _req: S3Request<CreateBucketMetadataConfigurationInput>,
+    ) -> S3Result<S3Response<CreateBucketMetadataConfigurationOutput>> {
+        Err(s3_error!(NotImplemented, "CreateBucketMetadataConfiguration is not implemented yet"))
+    }
+
     /// <p>Creates a metadata table configuration for a general purpose bucket. For more
     /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/metadata-tables-overview.html">Accelerating data
     /// discovery with S3 Metadata</a> in the <i>Amazon S3 User Guide</i>. </p>
@@ -1437,6 +1557,60 @@ pub trait S3: Send + Sync + 'static {
         _req: S3Request<DeleteBucketLifecycleInput>,
     ) -> S3Result<S3Response<DeleteBucketLifecycleOutput>> {
         Err(s3_error!(NotImplemented, "DeleteBucketLifecycle is not implemented yet"))
+    }
+
+    /// <p> Deletes an S3 Metadata configuration from a general purpose bucket. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/metadata-tables-overview.html">Accelerating
+    /// data discovery with S3 Metadata</a> in the <i>Amazon S3 User Guide</i>. </p>
+    /// <note>
+    /// <p>You can use the V2 <code>DeleteBucketMetadataConfiguration</code> API operation with V1 or V2
+    /// metadata configurations. However, if you try to use the V1
+    /// <code>DeleteBucketMetadataTableConfiguration</code> API operation with V2 configurations, you
+    /// will receive an HTTP <code>405 Method Not Allowed</code> error.</p>
+    /// </note>
+    /// <dl>
+    /// <dt>Permissions</dt>
+    /// <dd>
+    /// <p>To use this operation, you must have the
+    /// <code>s3:DeleteBucketMetadataTableConfiguration</code> permission. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/metadata-tables-permissions.html">Setting up permissions for configuring metadata tables</a> in the
+    /// <i>Amazon S3 User Guide</i>. </p>
+    /// <note>
+    /// <p>The IAM policy action name is the same for the V1 and V2 API operations.</p>
+    /// </note>
+    /// </dd>
+    /// </dl>
+    /// <p>The following operations are related to <code>DeleteBucketMetadataConfiguration</code>:</p>
+    /// <ul>
+    /// <li>
+    /// <p>
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucketMetadataConfiguration.html">CreateBucketMetadataConfiguration</a>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketMetadataConfiguration.html">GetBucketMetadataConfiguration</a>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_UpdateBucketMetadataInventoryTableConfiguration.html">UpdateBucketMetadataInventoryTableConfiguration</a>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_UpdateBucketMetadataJournalTableConfiguration.html">UpdateBucketMetadataJournalTableConfiguration</a>
+    /// </p>
+    /// </li>
+    /// </ul>
+    /// <important>
+    /// <p>You must URL encode any signed header values that contain spaces. For example, if your header value is <code>my  file.txt</code>, containing two spaces after <code>my</code>, you must URL encode this value to <code>my%20%20file.txt</code>.</p>
+    /// </important>
+    async fn delete_bucket_metadata_configuration(
+        &self,
+        _req: S3Request<DeleteBucketMetadataConfigurationInput>,
+    ) -> S3Result<S3Response<DeleteBucketMetadataConfigurationOutput>> {
+        Err(s3_error!(NotImplemented, "DeleteBucketMetadataConfiguration is not implemented yet"))
     }
 
     /// <p>
@@ -2479,6 +2653,59 @@ pub trait S3: Send + Sync + 'static {
     /// </ul>
     async fn get_bucket_logging(&self, _req: S3Request<GetBucketLoggingInput>) -> S3Result<S3Response<GetBucketLoggingOutput>> {
         Err(s3_error!(NotImplemented, "GetBucketLogging is not implemented yet"))
+    }
+
+    /// <p>Retrieves the S3 Metadata configuration for a general purpose bucket. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/metadata-tables-overview.html">Accelerating
+    /// data discovery with S3 Metadata</a> in the <i>Amazon S3 User Guide</i>. </p>
+    /// <note>
+    /// <p>You can use the V2 <code>GetBucketMetadataConfiguration</code> API operation with V1 or V2
+    /// metadata configurations. However, if you try to use the V1
+    /// <code>GetBucketMetadataTableConfiguration</code> API operation with V2 configurations, you
+    /// will receive an HTTP <code>405 Method Not Allowed</code> error.</p>
+    /// </note>
+    /// <dl>
+    /// <dt>Permissions</dt>
+    /// <dd>
+    /// <p>To use this operation, you must have the <code>s3:GetBucketMetadataTableConfiguration</code>
+    /// permission. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/metadata-tables-permissions.html">Setting up permissions for
+    /// configuring metadata tables</a> in the <i>Amazon S3 User Guide</i>. </p>
+    /// <note>
+    /// <p>The IAM policy action name is the same for the V1 and V2 API operations.</p>
+    /// </note>
+    /// </dd>
+    /// </dl>
+    /// <p>The following operations are related to <code>GetBucketMetadataConfiguration</code>:</p>
+    /// <ul>
+    /// <li>
+    /// <p>
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucketMetadataConfiguration.html">CreateBucketMetadataConfiguration</a>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketMetadataConfiguration.html">DeleteBucketMetadataConfiguration</a>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_UpdateBucketMetadataInventoryTableConfiguration.html">UpdateBucketMetadataInventoryTableConfiguration</a>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_UpdateBucketMetadataJournalTableConfiguration.html">UpdateBucketMetadataJournalTableConfiguration</a>
+    /// </p>
+    /// </li>
+    /// </ul>
+    /// <important>
+    /// <p>You must URL encode any signed header values that contain spaces. For example, if your header value is <code>my  file.txt</code>, containing two spaces after <code>my</code>, you must URL encode this value to <code>my%20%20file.txt</code>.</p>
+    /// </important>
+    async fn get_bucket_metadata_configuration(
+        &self,
+        _req: S3Request<GetBucketMetadataConfigurationInput>,
+    ) -> S3Result<S3Response<GetBucketMetadataConfigurationOutput>> {
+        Err(s3_error!(NotImplemented, "GetBucketMetadataConfiguration is not implemented yet"))
     }
 
     /// <p>
@@ -6910,6 +7137,185 @@ pub trait S3: Send + Sync + 'static {
         _req: S3Request<SelectObjectContentInput>,
     ) -> S3Result<S3Response<SelectObjectContentOutput>> {
         Err(s3_error!(NotImplemented, "SelectObjectContent is not implemented yet"))
+    }
+
+    /// <p>Updates the annotation table configuration for an Amazon S3 bucket's metadata configuration. Use this
+    /// operation to enable or disable the annotation table, or to update its associated IAM role.</p>
+    /// <p>An annotation table is a queryable Iceberg table that contains records of all annotations
+    /// attached to objects in the bucket. To use this operation, the bucket must have an existing Amazon S3
+    /// Metadata configuration.</p>
+    /// <p>To use this operation, you must have the
+    /// <code>s3:UpdateBucketMetadataAnnotationTableConfiguration</code> permission. If you are specifying
+    /// or changing the IAM role, you must also have <code>iam:PassRole</code> permission for the role.</p>
+    /// <p>The IAM role must have a trust policy that allows the Amazon S3 metadata service to assume it, and a
+    /// permissions policy that grants the actions needed to read annotations from your bucket. The
+    /// following examples show a trust policy and a permissions policy that you can adapt for your bucket
+    /// and account.</p>
+    /// <p>The following operations are related to
+    /// <code>UpdateBucketMetadataAnnotationTableConfiguration</code>:</p>
+    /// <ul>
+    /// <li>
+    /// <p>
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucketMetadataConfiguration.html">CreateBucketMetadataConfiguration</a>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketMetadataConfiguration.html">GetBucketMetadataConfiguration</a>
+    /// </p>
+    /// </li>
+    /// </ul>
+    async fn update_bucket_metadata_annotation_table_configuration(
+        &self,
+        _req: S3Request<UpdateBucketMetadataAnnotationTableConfigurationInput>,
+    ) -> S3Result<S3Response<UpdateBucketMetadataAnnotationTableConfigurationOutput>> {
+        Err(s3_error!(
+            NotImplemented,
+            "UpdateBucketMetadataAnnotationTableConfiguration is not implemented yet"
+        ))
+    }
+
+    /// <p>Enables or disables a live inventory table for an S3 Metadata configuration on a general
+    /// purpose bucket. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/metadata-tables-overview.html">Accelerating
+    /// data discovery with S3 Metadata</a> in the <i>Amazon S3 User Guide</i>.</p>
+    /// <dl>
+    /// <dt>Permissions</dt>
+    /// <dd>
+    /// <p>To use this operation, you must have the following permissions. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/metadata-tables-permissions.html">Setting up permissions for configuring metadata tables</a> in the
+    /// <i>Amazon S3 User Guide</i>.</p>
+    /// <p>If you want to encrypt your inventory table with server-side encryption with Key Management Service
+    /// (KMS) keys (SSE-KMS), you need additional permissions in your KMS key policy. For more
+    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/metadata-tables-permissions.html">
+    /// Setting up permissions for configuring metadata tables</a> in the
+    /// <i>Amazon S3 User Guide</i>.</p>
+    /// <ul>
+    /// <li>
+    /// <p>
+    /// <code>s3:UpdateBucketMetadataInventoryTableConfiguration</code>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <code>s3tables:CreateTableBucket</code>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <code>s3tables:CreateNamespace</code>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <code>s3tables:GetTable</code>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <code>s3tables:CreateTable</code>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <code>s3tables:PutTablePolicy</code>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <code>s3tables:PutTableEncryption</code>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <code>kms:DescribeKey</code>
+    /// </p>
+    /// </li>
+    /// </ul>
+    /// </dd>
+    /// </dl>
+    /// <p>The following operations are related to <code>UpdateBucketMetadataInventoryTableConfiguration</code>:</p>
+    /// <ul>
+    /// <li>
+    /// <p>
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucketMetadataConfiguration.html">CreateBucketMetadataConfiguration</a>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketMetadataConfiguration.html">DeleteBucketMetadataConfiguration</a>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketMetadataConfiguration.html">GetBucketMetadataConfiguration</a>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_UpdateBucketMetadataJournalTableConfiguration.html">UpdateBucketMetadataJournalTableConfiguration</a>
+    /// </p>
+    /// </li>
+    /// </ul>
+    /// <important>
+    /// <p>You must URL encode any signed header values that contain spaces. For example, if your header value is <code>my  file.txt</code>, containing two spaces after <code>my</code>, you must URL encode this value to <code>my%20%20file.txt</code>.</p>
+    /// </important>
+    async fn update_bucket_metadata_inventory_table_configuration(
+        &self,
+        _req: S3Request<UpdateBucketMetadataInventoryTableConfigurationInput>,
+    ) -> S3Result<S3Response<UpdateBucketMetadataInventoryTableConfigurationOutput>> {
+        Err(s3_error!(
+            NotImplemented,
+            "UpdateBucketMetadataInventoryTableConfiguration is not implemented yet"
+        ))
+    }
+
+    /// <p>Enables or disables journal table record expiration for an S3 Metadata configuration on a general
+    /// purpose bucket. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/metadata-tables-overview.html">Accelerating
+    /// data discovery with S3 Metadata</a> in the <i>Amazon S3 User Guide</i>.</p>
+    /// <dl>
+    /// <dt>Permissions</dt>
+    /// <dd>
+    /// <p>To use this operation, you must have the <code>s3:UpdateBucketMetadataJournalTableConfiguration</code>
+    /// permission. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/metadata-tables-permissions.html">Setting up permissions for
+    /// configuring metadata tables</a> in the <i>Amazon S3 User Guide</i>. </p>
+    /// </dd>
+    /// </dl>
+    /// <p>The following operations are related to <code>UpdateBucketMetadataJournalTableConfiguration</code>:</p>
+    /// <ul>
+    /// <li>
+    /// <p>
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucketMetadataConfiguration.html">CreateBucketMetadataConfiguration</a>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketMetadataConfiguration.html">DeleteBucketMetadataConfiguration</a>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketMetadataConfiguration.html">GetBucketMetadataConfiguration</a>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_UpdateBucketMetadataInventoryTableConfiguration.html">UpdateBucketMetadataInventoryTableConfiguration</a>
+    /// </p>
+    /// </li>
+    /// </ul>
+    /// <important>
+    /// <p>You must URL encode any signed header values that contain spaces. For example, if your header value is <code>my  file.txt</code>, containing two spaces after <code>my</code>, you must URL encode this value to <code>my%20%20file.txt</code>.</p>
+    /// </important>
+    async fn update_bucket_metadata_journal_table_configuration(
+        &self,
+        _req: S3Request<UpdateBucketMetadataJournalTableConfigurationInput>,
+    ) -> S3Result<S3Response<UpdateBucketMetadataJournalTableConfigurationOutput>> {
+        Err(s3_error!(
+            NotImplemented,
+            "UpdateBucketMetadataJournalTableConfiguration is not implemented yet"
+        ))
     }
 
     /// <p>Uploads a part in a multipart upload.</p>
