@@ -19,6 +19,8 @@ use std::io::Write;
 // Deserialize: AccessControlPolicy
 //   Serialize: AnalyticsConfiguration
 // Deserialize: AnalyticsConfiguration
+//   Serialize: AnnotationTableConfigurationUpdates "AnnotationTableConfiguration"
+// Deserialize: AnnotationTableConfigurationUpdates "AnnotationTableConfiguration"
 //   Serialize: BucketLifecycleConfiguration "LifecycleConfiguration"
 // Deserialize: BucketLifecycleConfiguration "LifecycleConfiguration"
 //   Serialize: BucketLoggingStatus
@@ -49,6 +51,8 @@ use std::io::Write;
 // Deserialize: GetBucketLocationOutput
 //   Serialize: GetBucketLoggingOutput
 // Deserialize: GetBucketLoggingOutput
+//   Serialize: GetBucketMetadataConfigurationResult
+// Deserialize: GetBucketMetadataConfigurationResult
 //   Serialize: GetBucketMetadataTableConfigurationResult
 // Deserialize: GetBucketMetadataTableConfigurationResult
 //   Serialize: GetBucketNotificationConfigurationOutput
@@ -68,6 +72,10 @@ use std::io::Write;
 // Deserialize: IntelligentTieringConfiguration
 //   Serialize: InventoryConfiguration
 // Deserialize: InventoryConfiguration
+//   Serialize: InventoryTableConfigurationUpdates "InventoryTableConfiguration"
+// Deserialize: InventoryTableConfigurationUpdates "InventoryTableConfiguration"
+//   Serialize: JournalTableConfigurationUpdates "JournalTableConfiguration"
+// Deserialize: JournalTableConfigurationUpdates "JournalTableConfiguration"
 //   Serialize: ListBucketAnalyticsConfigurationsOutput
 // Deserialize: ListBucketAnalyticsConfigurationsOutput
 //   Serialize: ListBucketIntelligentTieringConfigurationsOutput
@@ -85,6 +93,8 @@ use std::io::Write;
 //   Serialize: ListObjectsOutput
 //   Serialize: ListObjectsV2Output
 //   Serialize: ListPartsOutput
+//   Serialize: MetadataConfiguration
+// Deserialize: MetadataConfiguration
 //   Serialize: MetadataTableConfiguration
 // Deserialize: MetadataTableConfiguration
 //   Serialize: MetricsConfiguration
@@ -166,6 +176,14 @@ use std::io::Write;
 // DeserializeContent: AnalyticsS3BucketDestination
 //   SerializeContent: AnalyticsS3ExportFileFormat
 // DeserializeContent: AnalyticsS3ExportFileFormat
+//   SerializeContent: AnnotationConfigurationState
+// DeserializeContent: AnnotationConfigurationState
+//   SerializeContent: AnnotationTableConfiguration
+// DeserializeContent: AnnotationTableConfiguration
+//   SerializeContent: AnnotationTableConfigurationResult
+// DeserializeContent: AnnotationTableConfigurationResult
+//   SerializeContent: AnnotationTableConfigurationUpdates
+// DeserializeContent: AnnotationTableConfigurationUpdates
 //   SerializeContent: ArnType
 // DeserializeContent: ArnType
 //   SerializeContent: AssumeRoleOutput
@@ -300,6 +318,8 @@ use std::io::Write;
 // DeserializeContent: Description
 //   SerializeContent: Destination
 // DeserializeContent: Destination
+//   SerializeContent: DestinationResult
+// DeserializeContent: DestinationResult
 //   SerializeContent: DirectoryBucketToken
 // DeserializeContent: DirectoryBucketToken
 //   SerializeContent: DisplayName
@@ -336,6 +356,8 @@ use std::io::Write;
 // DeserializeContent: ExistingObjectReplication
 //   SerializeContent: ExistingObjectReplicationStatus
 // DeserializeContent: ExistingObjectReplicationStatus
+//   SerializeContent: ExpirationState
+// DeserializeContent: ExpirationState
 //   SerializeContent: ExpirationStatus
 // DeserializeContent: ExpirationStatus
 //   SerializeContent: ExpiredObjectDeleteMarker
@@ -366,6 +388,8 @@ use std::io::Write;
 // DeserializeContent: GetBucketLocationOutput
 //   SerializeContent: GetBucketLoggingOutput
 // DeserializeContent: GetBucketLoggingOutput
+//   SerializeContent: GetBucketMetadataConfigurationResult
+// DeserializeContent: GetBucketMetadataConfigurationResult
 //   SerializeContent: GetBucketMetadataTableConfigurationResult
 // DeserializeContent: GetBucketMetadataTableConfigurationResult
 //   SerializeContent: GetBucketNotificationConfigurationOutput
@@ -420,6 +444,8 @@ use std::io::Write;
 // DeserializeContent: IntelligentTieringStatus
 //   SerializeContent: InventoryConfiguration
 // DeserializeContent: InventoryConfiguration
+//   SerializeContent: InventoryConfigurationState
+// DeserializeContent: InventoryConfigurationState
 //   SerializeContent: InventoryDestination
 // DeserializeContent: InventoryDestination
 //   SerializeContent: InventoryEncryption
@@ -440,6 +466,12 @@ use std::io::Write;
 // DeserializeContent: InventoryS3BucketDestination
 //   SerializeContent: InventorySchedule
 // DeserializeContent: InventorySchedule
+//   SerializeContent: InventoryTableConfiguration
+// DeserializeContent: InventoryTableConfiguration
+//   SerializeContent: InventoryTableConfigurationResult
+// DeserializeContent: InventoryTableConfigurationResult
+//   SerializeContent: InventoryTableConfigurationUpdates
+// DeserializeContent: InventoryTableConfigurationUpdates
 //   SerializeContent: IsEnabled
 // DeserializeContent: IsEnabled
 //   SerializeContent: IsLatest
@@ -456,6 +488,12 @@ use std::io::Write;
 // DeserializeContent: JSONOutput
 //   SerializeContent: JSONType
 // DeserializeContent: JSONType
+//   SerializeContent: JournalTableConfiguration
+// DeserializeContent: JournalTableConfiguration
+//   SerializeContent: JournalTableConfigurationResult
+// DeserializeContent: JournalTableConfigurationResult
+//   SerializeContent: JournalTableConfigurationUpdates
+// DeserializeContent: JournalTableConfigurationUpdates
 //   SerializeContent: KMSContext
 // DeserializeContent: KMSContext
 //   SerializeContent: KeyCount
@@ -464,6 +502,8 @@ use std::io::Write;
 // DeserializeContent: KeyMarker
 //   SerializeContent: KeyPrefixEquals
 // DeserializeContent: KeyPrefixEquals
+//   SerializeContent: KmsKeyArn
+// DeserializeContent: KmsKeyArn
 //   SerializeContent: LambdaFunctionArn
 // DeserializeContent: LambdaFunctionArn
 //   SerializeContent: LambdaFunctionConfiguration
@@ -525,6 +565,10 @@ use std::io::Write;
 // DeserializeContent: MaxUploads
 //   SerializeContent: Message
 // DeserializeContent: Message
+//   SerializeContent: MetadataConfiguration
+// DeserializeContent: MetadataConfiguration
+//   SerializeContent: MetadataConfigurationResult
+// DeserializeContent: MetadataConfigurationResult
 //   SerializeContent: MetadataEntry
 // DeserializeContent: MetadataEntry
 //   SerializeContent: MetadataKey
@@ -533,6 +577,8 @@ use std::io::Write;
 // DeserializeContent: MetadataTableConfiguration
 //   SerializeContent: MetadataTableConfigurationResult
 // DeserializeContent: MetadataTableConfigurationResult
+//   SerializeContent: MetadataTableEncryptionConfiguration
+// DeserializeContent: MetadataTableEncryptionConfiguration
 //   SerializeContent: MetadataTableStatus
 // DeserializeContent: MetadataTableStatus
 //   SerializeContent: MetadataValue
@@ -675,6 +721,10 @@ use std::io::Write;
 // DeserializeContent: QuoteFields
 //   SerializeContent: RecordDelimiter
 // DeserializeContent: RecordDelimiter
+//   SerializeContent: RecordExpiration
+// DeserializeContent: RecordExpiration
+//   SerializeContent: RecordExpirationDays
+// DeserializeContent: RecordExpirationDays
 //   SerializeContent: Redirect
 // DeserializeContent: Redirect
 //   SerializeContent: RedirectAllRequestsTo
@@ -729,6 +779,8 @@ use std::io::Write;
 // DeserializeContent: S3TablesArn
 //   SerializeContent: S3TablesBucketArn
 // DeserializeContent: S3TablesBucketArn
+//   SerializeContent: S3TablesBucketType
+// DeserializeContent: S3TablesBucketType
 //   SerializeContent: S3TablesDestination
 // DeserializeContent: S3TablesDestination
 //   SerializeContent: S3TablesDestinationResult
@@ -793,6 +845,8 @@ use std::io::Write;
 // DeserializeContent: StorageClassAnalysisSchemaVersion
 //   SerializeContent: Suffix
 // DeserializeContent: Suffix
+//   SerializeContent: TableSseAlgorithm
+// DeserializeContent: TableSseAlgorithm
 //   SerializeContent: Tag
 // DeserializeContent: Tag
 //   SerializeContent: Tagging
@@ -887,6 +941,18 @@ impl Serialize for AnalyticsConfiguration {
 impl<'xml> Deserialize<'xml> for AnalyticsConfiguration {
     fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
         d.named_element("AnalyticsConfiguration", Deserializer::content)
+    }
+}
+
+impl Serialize for AnnotationTableConfigurationUpdates {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("AnnotationTableConfiguration", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for AnnotationTableConfigurationUpdates {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("AnnotationTableConfiguration", Deserializer::content)
     }
 }
 
@@ -1058,6 +1124,18 @@ impl<'xml> Deserialize<'xml> for GetBucketLoggingOutput {
     }
 }
 
+impl Serialize for GetBucketMetadataConfigurationResult {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("GetBucketMetadataConfigurationResult", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for GetBucketMetadataConfigurationResult {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("GetBucketMetadataConfigurationResult", Deserializer::content)
+    }
+}
+
 impl Serialize for GetBucketMetadataTableConfigurationResult {
     fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         s.content("GetBucketMetadataTableConfigurationResult", self)
@@ -1172,6 +1250,30 @@ impl<'xml> Deserialize<'xml> for InventoryConfiguration {
     }
 }
 
+impl Serialize for InventoryTableConfigurationUpdates {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("InventoryTableConfiguration", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for InventoryTableConfigurationUpdates {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("InventoryTableConfiguration", Deserializer::content)
+    }
+}
+
+impl Serialize for JournalTableConfigurationUpdates {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("JournalTableConfiguration", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for JournalTableConfigurationUpdates {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("JournalTableConfiguration", Deserializer::content)
+    }
+}
+
 impl Serialize for ListBucketAnalyticsConfigurationsOutput {
     fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         s.content_with_ns("ListBucketAnalyticsConfigurationResult", XMLNS_S3, self)
@@ -1271,6 +1373,18 @@ impl Serialize for ListObjectsV2Output {
 impl Serialize for ListPartsOutput {
     fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         s.content_with_ns("ListPartsResult", XMLNS_S3, self)
+    }
+}
+
+impl Serialize for MetadataConfiguration {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("MetadataConfiguration", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for MetadataConfiguration {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("MetadataConfiguration", Deserializer::content)
     }
 }
 
@@ -1844,6 +1958,206 @@ impl<'xml> DeserializeContent<'xml> for AnalyticsS3ExportFileFormat {
         d.text(|s| match s {
             "CSV" => Ok(Self::from_static(AnalyticsS3ExportFileFormat::CSV)),
             _ => Ok(Self::from(s.to_owned())),
+        })
+    }
+}
+impl SerializeContent for AnnotationConfigurationState {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        self.as_str().serialize_content(s)
+    }
+}
+impl<'xml> DeserializeContent<'xml> for AnnotationConfigurationState {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.text(|s| match s {
+            "DISABLED" => Ok(Self::from_static(AnnotationConfigurationState::DISABLED)),
+            "ENABLED" => Ok(Self::from_static(AnnotationConfigurationState::ENABLED)),
+            _ => Ok(Self::from(s.to_owned())),
+        })
+    }
+}
+impl SerializeContent for AnnotationTableConfiguration {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("ConfigurationState", &self.configuration_state)?;
+        if let Some(ref val) = self.encryption_configuration {
+            s.content("EncryptionConfiguration", val)?;
+        }
+        if let Some(ref val) = self.role {
+            s.content("Role", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for AnnotationTableConfiguration {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut configuration_state: Option<AnnotationConfigurationState> = None;
+        let mut encryption_configuration: Option<MetadataTableEncryptionConfiguration> = None;
+        let mut role: Option<Role> = None;
+        d.for_each_element(|d, x| match x {
+            b"ConfigurationState" => {
+                if configuration_state.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                configuration_state = Some(d.content()?);
+                Ok(())
+            }
+            b"EncryptionConfiguration" => {
+                if encryption_configuration.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                encryption_configuration = Some(d.content()?);
+                Ok(())
+            }
+            b"Role" => {
+                if role.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                role = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            configuration_state: configuration_state.ok_or(DeError::MissingField)?,
+            encryption_configuration,
+            role,
+        })
+    }
+}
+impl SerializeContent for AnnotationTableConfigurationResult {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("ConfigurationState", &self.configuration_state)?;
+        if let Some(ref val) = self.error {
+            s.content("Error", val)?;
+        }
+        if let Some(ref val) = self.role {
+            s.content("Role", val)?;
+        }
+        if let Some(ref val) = self.table_arn {
+            s.content("TableArn", val)?;
+        }
+        if let Some(ref val) = self.table_name {
+            s.content("TableName", val)?;
+        }
+        if let Some(ref val) = self.table_status {
+            s.content("TableStatus", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for AnnotationTableConfigurationResult {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut configuration_state: Option<AnnotationConfigurationState> = None;
+        let mut error: Option<ErrorDetails> = None;
+        let mut role: Option<Role> = None;
+        let mut table_arn: Option<S3TablesArn> = None;
+        let mut table_name: Option<S3TablesName> = None;
+        let mut table_status: Option<MetadataTableStatus> = None;
+        d.for_each_element(|d, x| match x {
+            b"ConfigurationState" => {
+                if configuration_state.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                configuration_state = Some(d.content()?);
+                Ok(())
+            }
+            b"Error" => {
+                if error.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                error = Some(d.content()?);
+                Ok(())
+            }
+            b"Role" => {
+                if role.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                role = Some(d.content()?);
+                Ok(())
+            }
+            b"TableArn" => {
+                if table_arn.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                table_arn = Some(d.content()?);
+                Ok(())
+            }
+            b"TableName" => {
+                if table_name.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                table_name = Some(d.content()?);
+                Ok(())
+            }
+            b"TableStatus" => {
+                if table_status.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                table_status = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            configuration_state: configuration_state.ok_or(DeError::MissingField)?,
+            error,
+            role,
+            table_arn,
+            table_name,
+            table_status,
+        })
+    }
+}
+impl SerializeContent for AnnotationTableConfigurationUpdates {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("ConfigurationState", &self.configuration_state)?;
+        if let Some(ref val) = self.encryption_configuration {
+            s.content("EncryptionConfiguration", val)?;
+        }
+        if let Some(ref val) = self.role {
+            s.content("Role", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for AnnotationTableConfigurationUpdates {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut configuration_state: Option<AnnotationConfigurationState> = None;
+        let mut encryption_configuration: Option<MetadataTableEncryptionConfiguration> = None;
+        let mut role: Option<Role> = None;
+        d.for_each_element(|d, x| match x {
+            b"ConfigurationState" => {
+                if configuration_state.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                configuration_state = Some(d.content()?);
+                Ok(())
+            }
+            b"EncryptionConfiguration" => {
+                if encryption_configuration.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                encryption_configuration = Some(d.content()?);
+                Ok(())
+            }
+            b"Role" => {
+                if role.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                role = Some(d.content()?);
+                Ok(())
+            }
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
+        })?;
+        Ok(Self {
+            configuration_state: configuration_state.ok_or(DeError::MissingField)?,
+            encryption_configuration,
+            role,
         })
     }
 }
@@ -3840,6 +4154,57 @@ impl<'xml> DeserializeContent<'xml> for Destination {
         })
     }
 }
+impl SerializeContent for DestinationResult {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.table_bucket_arn {
+            s.content("TableBucketArn", val)?;
+        }
+        if let Some(ref val) = self.table_bucket_type {
+            s.content("TableBucketType", val)?;
+        }
+        if let Some(ref val) = self.table_namespace {
+            s.content("TableNamespace", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for DestinationResult {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut table_bucket_arn: Option<S3TablesBucketArn> = None;
+        let mut table_bucket_type: Option<S3TablesBucketType> = None;
+        let mut table_namespace: Option<S3TablesNamespace> = None;
+        d.for_each_element(|d, x| match x {
+            b"TableBucketArn" => {
+                if table_bucket_arn.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                table_bucket_arn = Some(d.content()?);
+                Ok(())
+            }
+            b"TableBucketType" => {
+                if table_bucket_type.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                table_bucket_type = Some(d.content()?);
+                Ok(())
+            }
+            b"TableNamespace" => {
+                if table_namespace.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                table_namespace = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            table_bucket_arn,
+            table_bucket_type,
+            table_namespace,
+        })
+    }
+}
 impl SerializeContent for EncodingType {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -4104,6 +4469,20 @@ impl<'xml> DeserializeContent<'xml> for ExistingObjectReplicationStatus {
         })
     }
 }
+impl SerializeContent for ExpirationState {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        self.as_str().serialize_content(s)
+    }
+}
+impl<'xml> DeserializeContent<'xml> for ExpirationState {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.text(|s| match s {
+            "DISABLED" => Ok(Self::from_static(ExpirationState::DISABLED)),
+            "ENABLED" => Ok(Self::from_static(ExpirationState::ENABLED)),
+            _ => Ok(Self::from(s.to_owned())),
+        })
+    }
+}
 impl SerializeContent for ExpirationStatus {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -4321,6 +4700,31 @@ impl<'xml> DeserializeContent<'xml> for GetBucketLoggingOutput {
             _ => Err(DeError::UnexpectedTagName),
         })?;
         Ok(Self { logging_enabled })
+    }
+}
+impl SerializeContent for GetBucketMetadataConfigurationResult {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("MetadataConfigurationResult", &self.metadata_configuration_result)?;
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for GetBucketMetadataConfigurationResult {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut metadata_configuration_result: Option<MetadataConfigurationResult> = None;
+        d.for_each_element(|d, x| match x {
+            b"MetadataConfigurationResult" => {
+                if metadata_configuration_result.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                metadata_configuration_result = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            metadata_configuration_result: metadata_configuration_result.ok_or(DeError::MissingField)?,
+        })
     }
 }
 impl SerializeContent for GetBucketMetadataTableConfigurationResult {
@@ -5229,6 +5633,20 @@ impl<'xml> DeserializeContent<'xml> for InventoryConfiguration {
         })
     }
 }
+impl SerializeContent for InventoryConfigurationState {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        self.as_str().serialize_content(s)
+    }
+}
+impl<'xml> DeserializeContent<'xml> for InventoryConfigurationState {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.text(|s| match s {
+            "DISABLED" => Ok(Self::from_static(InventoryConfigurationState::DISABLED)),
+            "ENABLED" => Ok(Self::from_static(InventoryConfigurationState::ENABLED)),
+            _ => Ok(Self::from(s.to_owned())),
+        })
+    }
+}
 impl SerializeContent for InventoryDestination {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         s.content("S3BucketDestination", &self.s3_bucket_destination)?;
@@ -5482,6 +5900,156 @@ impl<'xml> DeserializeContent<'xml> for InventorySchedule {
         })
     }
 }
+impl SerializeContent for InventoryTableConfiguration {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("ConfigurationState", &self.configuration_state)?;
+        if let Some(ref val) = self.encryption_configuration {
+            s.content("EncryptionConfiguration", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for InventoryTableConfiguration {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut configuration_state: Option<InventoryConfigurationState> = None;
+        let mut encryption_configuration: Option<MetadataTableEncryptionConfiguration> = None;
+        d.for_each_element(|d, x| match x {
+            b"ConfigurationState" => {
+                if configuration_state.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                configuration_state = Some(d.content()?);
+                Ok(())
+            }
+            b"EncryptionConfiguration" => {
+                if encryption_configuration.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                encryption_configuration = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            configuration_state: configuration_state.ok_or(DeError::MissingField)?,
+            encryption_configuration,
+        })
+    }
+}
+impl SerializeContent for InventoryTableConfigurationResult {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("ConfigurationState", &self.configuration_state)?;
+        if let Some(ref val) = self.error {
+            s.content("Error", val)?;
+        }
+        if let Some(ref val) = self.table_arn {
+            s.content("TableArn", val)?;
+        }
+        if let Some(ref val) = self.table_name {
+            s.content("TableName", val)?;
+        }
+        if let Some(ref val) = self.table_status {
+            s.content("TableStatus", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for InventoryTableConfigurationResult {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut configuration_state: Option<InventoryConfigurationState> = None;
+        let mut error: Option<ErrorDetails> = None;
+        let mut table_arn: Option<S3TablesArn> = None;
+        let mut table_name: Option<S3TablesName> = None;
+        let mut table_status: Option<MetadataTableStatus> = None;
+        d.for_each_element(|d, x| match x {
+            b"ConfigurationState" => {
+                if configuration_state.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                configuration_state = Some(d.content()?);
+                Ok(())
+            }
+            b"Error" => {
+                if error.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                error = Some(d.content()?);
+                Ok(())
+            }
+            b"TableArn" => {
+                if table_arn.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                table_arn = Some(d.content()?);
+                Ok(())
+            }
+            b"TableName" => {
+                if table_name.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                table_name = Some(d.content()?);
+                Ok(())
+            }
+            b"TableStatus" => {
+                if table_status.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                table_status = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            configuration_state: configuration_state.ok_or(DeError::MissingField)?,
+            error,
+            table_arn,
+            table_name,
+            table_status,
+        })
+    }
+}
+impl SerializeContent for InventoryTableConfigurationUpdates {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("ConfigurationState", &self.configuration_state)?;
+        if let Some(ref val) = self.encryption_configuration {
+            s.content("EncryptionConfiguration", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for InventoryTableConfigurationUpdates {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut configuration_state: Option<InventoryConfigurationState> = None;
+        let mut encryption_configuration: Option<MetadataTableEncryptionConfiguration> = None;
+        d.for_each_element(|d, x| match x {
+            b"ConfigurationState" => {
+                if configuration_state.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                configuration_state = Some(d.content()?);
+                Ok(())
+            }
+            b"EncryptionConfiguration" => {
+                if encryption_configuration.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                encryption_configuration = Some(d.content()?);
+                Ok(())
+            }
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
+        })?;
+        Ok(Self {
+            configuration_state: configuration_state.ok_or(DeError::MissingField)?,
+            encryption_configuration,
+        })
+    }
+}
 impl SerializeContent for JSONInput {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.type_ {
@@ -5543,6 +6111,140 @@ impl<'xml> DeserializeContent<'xml> for JSONType {
             "DOCUMENT" => Ok(Self::from_static(JSONType::DOCUMENT)),
             "LINES" => Ok(Self::from_static(JSONType::LINES)),
             _ => Ok(Self::from(s.to_owned())),
+        })
+    }
+}
+impl SerializeContent for JournalTableConfiguration {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.encryption_configuration {
+            s.content("EncryptionConfiguration", val)?;
+        }
+        s.content("RecordExpiration", &self.record_expiration)?;
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for JournalTableConfiguration {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut encryption_configuration: Option<MetadataTableEncryptionConfiguration> = None;
+        let mut record_expiration: Option<RecordExpiration> = None;
+        d.for_each_element(|d, x| match x {
+            b"EncryptionConfiguration" => {
+                if encryption_configuration.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                encryption_configuration = Some(d.content()?);
+                Ok(())
+            }
+            b"RecordExpiration" => {
+                if record_expiration.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                record_expiration = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            encryption_configuration,
+            record_expiration: record_expiration.ok_or(DeError::MissingField)?,
+        })
+    }
+}
+impl SerializeContent for JournalTableConfigurationResult {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.error {
+            s.content("Error", val)?;
+        }
+        s.content("RecordExpiration", &self.record_expiration)?;
+        if let Some(ref val) = self.table_arn {
+            s.content("TableArn", val)?;
+        }
+        s.content("TableName", &self.table_name)?;
+        s.content("TableStatus", &self.table_status)?;
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for JournalTableConfigurationResult {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut error: Option<ErrorDetails> = None;
+        let mut record_expiration: Option<RecordExpiration> = None;
+        let mut table_arn: Option<S3TablesArn> = None;
+        let mut table_name: Option<S3TablesName> = None;
+        let mut table_status: Option<MetadataTableStatus> = None;
+        d.for_each_element(|d, x| match x {
+            b"Error" => {
+                if error.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                error = Some(d.content()?);
+                Ok(())
+            }
+            b"RecordExpiration" => {
+                if record_expiration.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                record_expiration = Some(d.content()?);
+                Ok(())
+            }
+            b"TableArn" => {
+                if table_arn.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                table_arn = Some(d.content()?);
+                Ok(())
+            }
+            b"TableName" => {
+                if table_name.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                table_name = Some(d.content()?);
+                Ok(())
+            }
+            b"TableStatus" => {
+                if table_status.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                table_status = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            error,
+            record_expiration: record_expiration.ok_or(DeError::MissingField)?,
+            table_arn,
+            table_name: table_name.ok_or(DeError::MissingField)?,
+            table_status: table_status.ok_or(DeError::MissingField)?,
+        })
+    }
+}
+impl SerializeContent for JournalTableConfigurationUpdates {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("RecordExpiration", &self.record_expiration)?;
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for JournalTableConfigurationUpdates {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut record_expiration: Option<RecordExpiration> = None;
+        d.for_each_element(|d, x| match x {
+            b"RecordExpiration" => {
+                if record_expiration.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                record_expiration = Some(d.content()?);
+                Ok(())
+            }
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
+        })?;
+        Ok(Self {
+            record_expiration: record_expiration.ok_or(DeError::MissingField)?,
         })
     }
 }
@@ -6603,6 +7305,119 @@ impl<'xml> DeserializeContent<'xml> for MFADeleteStatus {
         })
     }
 }
+impl SerializeContent for MetadataConfiguration {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.annotation_table_configuration {
+            s.content("AnnotationTableConfiguration", val)?;
+        }
+        if let Some(ref val) = self.inventory_table_configuration {
+            s.content("InventoryTableConfiguration", val)?;
+        }
+        s.content("JournalTableConfiguration", &self.journal_table_configuration)?;
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for MetadataConfiguration {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut annotation_table_configuration: Option<AnnotationTableConfiguration> = None;
+        let mut inventory_table_configuration: Option<InventoryTableConfiguration> = None;
+        let mut journal_table_configuration: Option<JournalTableConfiguration> = None;
+        d.for_each_element(|d, x| match x {
+            b"AnnotationTableConfiguration" => {
+                if annotation_table_configuration.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                annotation_table_configuration = Some(d.content()?);
+                Ok(())
+            }
+            b"InventoryTableConfiguration" => {
+                if inventory_table_configuration.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                inventory_table_configuration = Some(d.content()?);
+                Ok(())
+            }
+            b"JournalTableConfiguration" => {
+                if journal_table_configuration.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                journal_table_configuration = Some(d.content()?);
+                Ok(())
+            }
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
+        })?;
+        Ok(Self {
+            annotation_table_configuration,
+            inventory_table_configuration,
+            journal_table_configuration: journal_table_configuration.ok_or(DeError::MissingField)?,
+        })
+    }
+}
+impl SerializeContent for MetadataConfigurationResult {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.annotation_table_configuration_result {
+            s.content("AnnotationTableConfigurationResult", val)?;
+        }
+        s.content("DestinationResult", &self.destination_result)?;
+        if let Some(ref val) = self.inventory_table_configuration_result {
+            s.content("InventoryTableConfigurationResult", val)?;
+        }
+        if let Some(ref val) = self.journal_table_configuration_result {
+            s.content("JournalTableConfigurationResult", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for MetadataConfigurationResult {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut annotation_table_configuration_result: Option<AnnotationTableConfigurationResult> = None;
+        let mut destination_result: Option<DestinationResult> = None;
+        let mut inventory_table_configuration_result: Option<InventoryTableConfigurationResult> = None;
+        let mut journal_table_configuration_result: Option<JournalTableConfigurationResult> = None;
+        d.for_each_element(|d, x| match x {
+            b"AnnotationTableConfigurationResult" => {
+                if annotation_table_configuration_result.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                annotation_table_configuration_result = Some(d.content()?);
+                Ok(())
+            }
+            b"DestinationResult" => {
+                if destination_result.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                destination_result = Some(d.content()?);
+                Ok(())
+            }
+            b"InventoryTableConfigurationResult" => {
+                if inventory_table_configuration_result.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                inventory_table_configuration_result = Some(d.content()?);
+                Ok(())
+            }
+            b"JournalTableConfigurationResult" => {
+                if journal_table_configuration_result.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                journal_table_configuration_result = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            annotation_table_configuration_result,
+            destination_result: destination_result.ok_or(DeError::MissingField)?,
+            inventory_table_configuration_result,
+            journal_table_configuration_result,
+        })
+    }
+}
 impl SerializeContent for MetadataEntry {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.name {
@@ -6689,6 +7504,43 @@ impl<'xml> DeserializeContent<'xml> for MetadataTableConfigurationResult {
         })?;
         Ok(Self {
             s3_tables_destination_result: s3_tables_destination_result.ok_or(DeError::MissingField)?,
+        })
+    }
+}
+impl SerializeContent for MetadataTableEncryptionConfiguration {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.kms_key_arn {
+            s.content("KmsKeyArn", val)?;
+        }
+        s.content("SseAlgorithm", &self.sse_algorithm)?;
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for MetadataTableEncryptionConfiguration {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut kms_key_arn: Option<KmsKeyArn> = None;
+        let mut sse_algorithm: Option<TableSseAlgorithm> = None;
+        d.for_each_element(|d, x| match x {
+            b"KmsKeyArn" => {
+                if kms_key_arn.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                kms_key_arn = Some(d.content()?);
+                Ok(())
+            }
+            b"SseAlgorithm" => {
+                if sse_algorithm.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                sse_algorithm = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            kms_key_arn,
+            sse_algorithm: sse_algorithm.ok_or(DeError::MissingField)?,
         })
     }
 }
@@ -8544,6 +9396,43 @@ impl<'xml> DeserializeContent<'xml> for QuoteFields {
         })
     }
 }
+impl SerializeContent for RecordExpiration {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.days {
+            s.content("Days", val)?;
+        }
+        s.content("Expiration", &self.expiration)?;
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for RecordExpiration {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut days: Option<RecordExpirationDays> = None;
+        let mut expiration: Option<ExpirationState> = None;
+        d.for_each_element(|d, x| match x {
+            b"Days" => {
+                if days.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                days = Some(d.content()?);
+                Ok(())
+            }
+            b"Expiration" => {
+                if expiration.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                expiration = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            days,
+            expiration: expiration.ok_or(DeError::MissingField)?,
+        })
+    }
+}
 impl SerializeContent for Redirect {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.host_name {
@@ -9396,6 +10285,20 @@ impl<'xml> DeserializeContent<'xml> for S3Location {
         })
     }
 }
+impl SerializeContent for S3TablesBucketType {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        self.as_str().serialize_content(s)
+    }
+}
+impl<'xml> DeserializeContent<'xml> for S3TablesBucketType {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.text(|s| match s {
+            "aws" => Ok(Self::from_static(S3TablesBucketType::AWS)),
+            "customer" => Ok(Self::from_static(S3TablesBucketType::CUSTOMER)),
+            _ => Ok(Self::from(s.to_owned())),
+        })
+    }
+}
 impl SerializeContent for S3TablesDestination {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         s.content("TableBucketArn", &self.table_bucket_arn)?;
@@ -10106,6 +11009,20 @@ impl<'xml> DeserializeContent<'xml> for StorageClassAnalysisSchemaVersion {
     fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
         d.text(|s| match s {
             "V_1" => Ok(Self::from_static(StorageClassAnalysisSchemaVersion::V_1)),
+            _ => Ok(Self::from(s.to_owned())),
+        })
+    }
+}
+impl SerializeContent for TableSseAlgorithm {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        self.as_str().serialize_content(s)
+    }
+}
+impl<'xml> DeserializeContent<'xml> for TableSseAlgorithm {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.text(|s| match s {
+            "AES256" => Ok(Self::from_static(TableSseAlgorithm::AES256)),
+            "aws:kms" => Ok(Self::from_static(TableSseAlgorithm::AWS_KMS)),
             _ => Ok(Self::from(s.to_owned())),
         })
     }

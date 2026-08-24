@@ -27269,6 +27269,113 @@
                 }
             }
         },
+        "com.amazonaws.s3#AnnotationConfigurationState": {
+            "type": "enum",
+            "members": {
+                "ENABLED": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "ENABLED"
+                    }
+                },
+                "DISABLED": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "DISABLED"
+                    }
+                }
+            }
+        },
+        "com.amazonaws.s3#AnnotationTableConfiguration": {
+            "type": "structure",
+            "members": {
+                "ConfigurationState": {
+                    "target": "com.amazonaws.s3#AnnotationConfigurationState",
+                    "traits": {
+                        "smithy.api#documentation": "<p>The state of the annotation table. Valid values are <code>ENABLED</code> and <code>DISABLED</code>.</p>",
+                        "smithy.api#required": {}
+                    }
+                },
+                "EncryptionConfiguration": {
+                    "target": "com.amazonaws.s3#MetadataTableEncryptionConfiguration"
+                },
+                "Role": {
+                    "target": "com.amazonaws.s3#Role",
+                    "traits": {
+                        "smithy.api#documentation": "<p>The ARN of the IAM role used to manage the annotation table.</p>"
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#documentation": "<p>Specifies the configuration for the annotation table associated with a bucket's Amazon S3 Metadata\n      configuration. The annotation table is an Iceberg table that records annotation events for objects\n      in the bucket.</p>"
+            }
+        },
+        "com.amazonaws.s3#AnnotationTableConfigurationResult": {
+            "type": "structure",
+            "members": {
+                "ConfigurationState": {
+                    "target": "com.amazonaws.s3#AnnotationConfigurationState",
+                    "traits": {
+                        "smithy.api#documentation": "<p>The current configuration state of the annotation table.</p>",
+                        "smithy.api#required": {}
+                    }
+                },
+                "TableStatus": {
+                    "target": "com.amazonaws.s3#MetadataTableStatus",
+                    "traits": {
+                        "smithy.api#documentation": "<p>The provisioning status of the annotation table. Possible values: <code>CREATING</code>, <code>BACKFILLING</code>, <code>ACTIVE</code>, <code>FAILED</code>.</p>"
+                    }
+                },
+                "Error": {
+                    "target": "com.amazonaws.s3#ErrorDetails"
+                },
+                "TableName": {
+                    "target": "com.amazonaws.s3#S3TablesName",
+                    "traits": {
+                        "smithy.api#documentation": "<p>The name of the annotation table.</p>"
+                    }
+                },
+                "TableArn": {
+                    "target": "com.amazonaws.s3#S3TablesArn",
+                    "traits": {
+                        "smithy.api#documentation": "<p>The ARN of the annotation table.</p>"
+                    }
+                },
+                "Role": {
+                    "target": "com.amazonaws.s3#Role",
+                    "traits": {
+                        "smithy.api#documentation": "<p>The ARN of the IAM role associated with the annotation table.</p>"
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#documentation": "<p>Contains the current state of the annotation table associated with a bucket's Amazon S3 Metadata\n      configuration, including its provisioning status and identifiers.</p>"
+            }
+        },
+        "com.amazonaws.s3#AnnotationTableConfigurationUpdates": {
+            "type": "structure",
+            "members": {
+                "ConfigurationState": {
+                    "target": "com.amazonaws.s3#AnnotationConfigurationState",
+                    "traits": {
+                        "smithy.api#documentation": "<p>The new configuration state to apply.</p>",
+                        "smithy.api#required": {}
+                    }
+                },
+                "EncryptionConfiguration": {
+                    "target": "com.amazonaws.s3#MetadataTableEncryptionConfiguration"
+                },
+                "Role": {
+                    "target": "com.amazonaws.s3#Role",
+                    "traits": {
+                        "smithy.api#documentation": "<p>The new IAM role ARN to apply.</p>"
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#documentation": "<p>Specifies updates to apply to the annotation table configuration. Used as the request body for\n      <code>UpdateBucketMetadataAnnotationTableConfiguration</code>.</p>"
+            }
+        },
         "com.amazonaws.s3#ArchiveStatus": {
             "type": "enum",
             "members": {
@@ -29438,6 +29545,81 @@
                 "smithy.api#documentation": "<p>The configuration information for the bucket.</p>"
             }
         },
+        "com.amazonaws.s3#CreateBucketMetadataConfiguration": {
+            "type": "operation",
+            "input": {
+                "target": "com.amazonaws.s3#CreateBucketMetadataConfigurationRequest"
+            },
+            "output": {
+                "target": "smithy.api#Unit"
+            },
+            "traits": {
+                "aws.protocols#httpChecksum": {
+                    "requestAlgorithmMember": "ChecksumAlgorithm",
+                    "requestChecksumRequired": true
+                },
+                "smithy.api#documentation": "<p>Creates an S3 Metadata V2 metadata configuration for a general purpose bucket. For more information, see\n      <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/metadata-tables-overview.html\">Accelerating\n        data discovery with S3 Metadata</a> in the <i>Amazon S3 User Guide</i>.</p>\n         <dl>\n            <dt>Permissions</dt>\n            <dd>\n               <p>To use this operation, you must have the following permissions. For more information, see\n            <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/metadata-tables-permissions.html\">Setting up permissions for configuring metadata tables</a> in the\n            <i>Amazon S3 User Guide</i>.</p>\n               <p>If you want to encrypt your metadata tables with server-side encryption with Key Management Service\n            (KMS) keys (SSE-KMS), you need additional permissions in your KMS key policy. For more\n            information, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/metadata-tables-permissions.html\">\n              Setting up permissions for configuring metadata tables</a> in the\n            <i>Amazon S3 User Guide</i>.</p>\n               <p>If you also want to integrate your table bucket with Amazon Web Services analytics services so that you can\n            query your metadata table, you need additional permissions. For more information, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-tables-integrating-aws.html\"> Integrating\n              Amazon S3 Tables with Amazon Web Services analytics services</a> in the\n            <i>Amazon S3 User Guide</i>.</p>\n               <p>To query your metadata tables, you need additional permissions. For more information, see \n            <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/metadata-tables-bucket-query-permissions.html\">\n              Permissions for querying metadata tables</a> in the <i>Amazon S3 User Guide</i>.</p>\n               <ul>\n                  <li>\n                     <p>\n                        <code>s3:CreateBucketMetadataTableConfiguration</code>\n                     </p>\n                     <note>\n                        <p>The IAM policy action name is the same for the V1 and V2 API operations.</p>\n                     </note>\n                  </li>\n                  <li>\n                     <p>\n                        <code>s3tables:CreateTableBucket</code>\n                     </p>\n                  </li>\n                  <li>\n                     <p>\n                        <code>s3tables:CreateNamespace</code>\n                     </p>\n                  </li>\n                  <li>\n                     <p>\n                        <code>s3tables:GetTable</code>\n                     </p>\n                  </li>\n                  <li>\n                     <p>\n                        <code>s3tables:CreateTable</code>\n                     </p>\n                  </li>\n                  <li>\n                     <p>\n                        <code>s3tables:PutTablePolicy</code>\n                     </p>\n                  </li>\n                  <li>\n                     <p>\n                        <code>s3tables:PutTableBucketPolicy</code>\n                     </p>\n                  </li>\n                  <li>\n                     <p>\n                        <code>s3tables:PutTableEncryption</code>\n                     </p>\n                  </li>\n                  <li>\n                     <p>\n                        <code>kms:DescribeKey</code>\n                     </p>\n                  </li>\n                  <li>\n                     <p>\n                        <code>iam:PassRole</code> - required if you include an\n                <code>AnnotationTableConfiguration</code> with an IAM role.</p>\n                  </li>\n               </ul>\n            </dd>\n         </dl>\n         <p>The following operations are related to <code>CreateBucketMetadataConfiguration</code>:</p>\n         <ul>\n            <li>\n               <p>\n                  <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketMetadataConfiguration.html\">DeleteBucketMetadataConfiguration</a>\n               </p>\n            </li>\n            <li>\n               <p>\n                  <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketMetadataConfiguration.html\">GetBucketMetadataConfiguration</a>\n               </p>\n            </li>\n            <li>\n               <p>\n                  <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_UpdateBucketMetadataInventoryTableConfiguration.html\">UpdateBucketMetadataInventoryTableConfiguration</a>\n               </p>\n            </li>\n            <li>\n               <p>\n                  <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_UpdateBucketMetadataJournalTableConfiguration.html\">UpdateBucketMetadataJournalTableConfiguration</a>\n               </p>\n            </li>\n            <li>\n               <p>\n                  <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_UpdateBucketMetadataAnnotationTableConfiguration.html\">UpdateBucketMetadataAnnotationTableConfiguration</a>\n               </p>\n            </li>\n         </ul>\n         <p>If you include an <code>AnnotationTableConfiguration</code> with an IAM role, the role must\n      have a trust policy that allows the Amazon S3 metadata service to assume it, and a permissions policy\n      that grants the actions needed to read annotations from your bucket. The following examples show\n      a trust policy and a permissions policy that you can adapt for your bucket and account.</p>\n         <important>\n            <p>You must URL encode any signed header values that contain spaces. For example, if your header value is <code>my  file.txt</code>, containing two spaces after <code>my</code>, you must URL encode this value to <code>my%20%20file.txt</code>.</p>\n         </important>",
+                "smithy.api#http": {
+                    "method": "POST",
+                    "uri": "/{Bucket}?metadataConfiguration",
+                    "code": 200
+                },
+                "smithy.rules#staticContextParams": {
+                    "UseS3ExpressControlEndpoint": {
+                        "value": true
+                    }
+                }
+            }
+        },
+        "com.amazonaws.s3#CreateBucketMetadataConfigurationRequest": {
+            "type": "structure",
+            "members": {
+                "Bucket": {
+                    "target": "com.amazonaws.s3#BucketName",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The general purpose bucket that you want to create the metadata configuration for.\n    </p>",
+                        "smithy.api#httpLabel": {},
+                        "smithy.api#required": {},
+                        "smithy.rules#contextParam": {
+                            "name": "Bucket"
+                        }
+                    }
+                },
+                "ContentMD5": {
+                    "target": "com.amazonaws.s3#ContentMD5",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The <code>Content-MD5</code> header for the metadata configuration.\n    </p>",
+                        "smithy.api#httpHeader": "Content-MD5"
+                    }
+                },
+                "ChecksumAlgorithm": {
+                    "target": "com.amazonaws.s3#ChecksumAlgorithm",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The checksum algorithm to use with your metadata configuration.\n    </p>",
+                        "smithy.api#httpHeader": "x-amz-sdk-checksum-algorithm"
+                    }
+                },
+                "MetadataConfiguration": {
+                    "target": "com.amazonaws.s3#MetadataConfiguration",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The contents of your metadata configuration.\n    </p>",
+                        "smithy.api#httpPayload": {},
+                        "smithy.api#required": {},
+                        "smithy.api#xmlName": "MetadataConfiguration"
+                    }
+                },
+                "ExpectedBucketOwner": {
+                    "target": "com.amazonaws.s3#AccountId",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The expected owner of the general purpose bucket that corresponds to your metadata configuration.\n    </p>",
+                        "smithy.api#httpHeader": "x-amz-expected-bucket-owner"
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#input": {}
+            }
+        },
         "com.amazonaws.s3#CreateBucketMetadataTableConfiguration": {
             "type": "operation",
             "input": {
@@ -30553,6 +30735,54 @@
                 "smithy.api#input": {}
             }
         },
+        "com.amazonaws.s3#DeleteBucketMetadataConfiguration": {
+            "type": "operation",
+            "input": {
+                "target": "com.amazonaws.s3#DeleteBucketMetadataConfigurationRequest"
+            },
+            "output": {
+                "target": "smithy.api#Unit"
+            },
+            "traits": {
+                "smithy.api#documentation": "<p> Deletes an S3 Metadata configuration from a general purpose bucket. For more information, see\n      <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/metadata-tables-overview.html\">Accelerating\n        data discovery with S3 Metadata</a> in the <i>Amazon S3 User Guide</i>. </p>\n         <note>\n            <p>You can use the V2 <code>DeleteBucketMetadataConfiguration</code> API operation with V1 or V2 \n            metadata configurations. However, if you try to use the V1 \n            <code>DeleteBucketMetadataTableConfiguration</code> API operation with V2 configurations, you\n            will receive an HTTP <code>405 Method Not Allowed</code> error.</p>\n         </note>\n         <dl>\n            <dt>Permissions</dt>\n            <dd>\n               <p>To use this operation, you must have the\n            <code>s3:DeleteBucketMetadataTableConfiguration</code> permission. For more information, see\n            <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/metadata-tables-permissions.html\">Setting up permissions for configuring metadata tables</a> in the\n            <i>Amazon S3 User Guide</i>. </p>\n               <note>\n                  <p>The IAM policy action name is the same for the V1 and V2 API operations.</p>\n               </note>\n            </dd>\n         </dl>\n         <p>The following operations are related to <code>DeleteBucketMetadataConfiguration</code>:</p>\n         <ul>\n            <li>\n               <p>\n                  <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucketMetadataConfiguration.html\">CreateBucketMetadataConfiguration</a>\n               </p>\n            </li>\n            <li>\n               <p>\n                  <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketMetadataConfiguration.html\">GetBucketMetadataConfiguration</a>\n               </p>\n            </li>\n            <li>\n               <p>\n                  <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_UpdateBucketMetadataInventoryTableConfiguration.html\">UpdateBucketMetadataInventoryTableConfiguration</a>\n               </p>\n            </li>\n            <li>\n               <p>\n                  <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_UpdateBucketMetadataJournalTableConfiguration.html\">UpdateBucketMetadataJournalTableConfiguration</a>\n               </p>\n            </li>\n         </ul>\n         <important>\n            <p>You must URL encode any signed header values that contain spaces. For example, if your header value is <code>my  file.txt</code>, containing two spaces after <code>my</code>, you must URL encode this value to <code>my%20%20file.txt</code>.</p>\n         </important>",
+                "smithy.api#http": {
+                    "method": "DELETE",
+                    "uri": "/{Bucket}?metadataConfiguration",
+                    "code": 204
+                },
+                "smithy.rules#staticContextParams": {
+                    "UseS3ExpressControlEndpoint": {
+                        "value": true
+                    }
+                }
+            }
+        },
+        "com.amazonaws.s3#DeleteBucketMetadataConfigurationRequest": {
+            "type": "structure",
+            "members": {
+                "Bucket": {
+                    "target": "com.amazonaws.s3#BucketName",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The general purpose bucket that you want to remove the metadata configuration from.\n    </p>",
+                        "smithy.api#httpLabel": {},
+                        "smithy.api#required": {},
+                        "smithy.rules#contextParam": {
+                            "name": "Bucket"
+                        }
+                    }
+                },
+                "ExpectedBucketOwner": {
+                    "target": "com.amazonaws.s3#AccountId",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The expected bucket owner of the general purpose bucket that you want to remove the metadata table\n      configuration from.\n    </p>",
+                        "smithy.api#httpHeader": "x-amz-expected-bucket-owner"
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#input": {}
+            }
+        },
         "com.amazonaws.s3#DeleteBucketMetadataTableConfiguration": {
             "type": "operation",
             "input": {
@@ -31609,6 +31839,32 @@
                 "smithy.api#documentation": "<p>Specifies information about where to publish analysis or configuration results for an\n         Amazon S3 bucket and S3 Replication Time Control (S3 RTC).</p>"
             }
         },
+        "com.amazonaws.s3#DestinationResult": {
+            "type": "structure",
+            "members": {
+                "TableBucketType": {
+                    "target": "com.amazonaws.s3#S3TablesBucketType",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The type of the table bucket where the metadata configuration is stored. The <code>aws</code> \n      value indicates an Amazon Web Services managed table bucket, and the <code>customer</code> value indicates a \n      customer-managed table bucket. V2 metadata configurations are stored in Amazon Web Services managed table \n      buckets, and V1 metadata configurations are stored in customer-managed table buckets. \n    </p>"
+                    }
+                },
+                "TableBucketArn": {
+                    "target": "com.amazonaws.s3#S3TablesBucketArn",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The Amazon Resource Name (ARN) of the table bucket where the metadata configuration is stored.\n    </p>"
+                    }
+                },
+                "TableNamespace": {
+                    "target": "com.amazonaws.s3#S3TablesNamespace",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The namespace in the table bucket where the metadata tables for a metadata configuration are \n      stored.\n    </p>"
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#documentation": "<p>\n      The destination information for the S3 Metadata configuration.\n    </p>"
+            }
+        },
         "com.amazonaws.s3#DirectoryBucketToken": {
             "type": "string",
             "traits": {
@@ -32000,6 +32256,23 @@
         },
         "com.amazonaws.s3#Expiration": {
             "type": "string"
+        },
+        "com.amazonaws.s3#ExpirationState": {
+            "type": "enum",
+            "members": {
+                "ENABLED": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "ENABLED"
+                    }
+                },
+                "DISABLED": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "DISABLED"
+                    }
+                }
+            }
         },
         "com.amazonaws.s3#ExpirationStatus": {
             "type": "enum",
@@ -32923,6 +33196,84 @@
             },
             "traits": {
                 "smithy.api#input": {}
+            }
+        },
+        "com.amazonaws.s3#GetBucketMetadataConfiguration": {
+            "type": "operation",
+            "input": {
+                "target": "com.amazonaws.s3#GetBucketMetadataConfigurationRequest"
+            },
+            "output": {
+                "target": "com.amazonaws.s3#GetBucketMetadataConfigurationOutput"
+            },
+            "traits": {
+                "smithy.api#documentation": "<p>Retrieves the S3 Metadata configuration for a general purpose bucket. For more information, see\n      <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/metadata-tables-overview.html\">Accelerating\n        data discovery with S3 Metadata</a> in the <i>Amazon S3 User Guide</i>. </p>\n         <note>\n            <p>You can use the V2 <code>GetBucketMetadataConfiguration</code> API operation with V1 or V2 \n            metadata configurations. However, if you try to use the V1 \n            <code>GetBucketMetadataTableConfiguration</code> API operation with V2 configurations, you\n            will receive an HTTP <code>405 Method Not Allowed</code> error.</p>\n         </note>\n         <dl>\n            <dt>Permissions</dt>\n            <dd>\n               <p>To use this operation, you must have the <code>s3:GetBucketMetadataTableConfiguration</code>\n            permission. For more information, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/metadata-tables-permissions.html\">Setting up permissions for\n              configuring metadata tables</a> in the <i>Amazon S3 User Guide</i>. </p>\n               <note>\n                  <p>The IAM policy action name is the same for the V1 and V2 API operations.</p>\n               </note>\n            </dd>\n         </dl>\n         <p>The following operations are related to <code>GetBucketMetadataConfiguration</code>:</p>\n         <ul>\n            <li>\n               <p>\n                  <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucketMetadataConfiguration.html\">CreateBucketMetadataConfiguration</a>\n               </p>\n            </li>\n            <li>\n               <p>\n                  <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketMetadataConfiguration.html\">DeleteBucketMetadataConfiguration</a>\n               </p>\n            </li>\n            <li>\n               <p>\n                  <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_UpdateBucketMetadataInventoryTableConfiguration.html\">UpdateBucketMetadataInventoryTableConfiguration</a>\n               </p>\n            </li>\n            <li>\n               <p>\n                  <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_UpdateBucketMetadataJournalTableConfiguration.html\">UpdateBucketMetadataJournalTableConfiguration</a>\n               </p>\n            </li>\n         </ul>\n         <important>\n            <p>You must URL encode any signed header values that contain spaces. For example, if your header value is <code>my  file.txt</code>, containing two spaces after <code>my</code>, you must URL encode this value to <code>my%20%20file.txt</code>.</p>\n         </important>",
+                "smithy.api#http": {
+                    "method": "GET",
+                    "uri": "/{Bucket}?metadataConfiguration",
+                    "code": 200
+                },
+                "smithy.rules#staticContextParams": {
+                    "UseS3ExpressControlEndpoint": {
+                        "value": true
+                    }
+                }
+            }
+        },
+        "com.amazonaws.s3#GetBucketMetadataConfigurationOutput": {
+            "type": "structure",
+            "members": {
+                "GetBucketMetadataConfigurationResult": {
+                    "target": "com.amazonaws.s3#GetBucketMetadataConfigurationResult",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The metadata configuration for the general purpose bucket.\n    </p>",
+                        "smithy.api#httpPayload": {}
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#output": {}
+            }
+        },
+        "com.amazonaws.s3#GetBucketMetadataConfigurationRequest": {
+            "type": "structure",
+            "members": {
+                "Bucket": {
+                    "target": "com.amazonaws.s3#BucketName",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The general purpose bucket that corresponds to the metadata configuration that you want to\n      retrieve.\n    </p>",
+                        "smithy.api#httpLabel": {},
+                        "smithy.api#required": {},
+                        "smithy.rules#contextParam": {
+                            "name": "Bucket"
+                        }
+                    }
+                },
+                "ExpectedBucketOwner": {
+                    "target": "com.amazonaws.s3#AccountId",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The expected owner of the general purpose bucket that you want to retrieve the metadata table\n      configuration for.\n    </p>",
+                        "smithy.api#httpHeader": "x-amz-expected-bucket-owner"
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#input": {}
+            }
+        },
+        "com.amazonaws.s3#GetBucketMetadataConfigurationResult": {
+            "type": "structure",
+            "members": {
+                "MetadataConfigurationResult": {
+                    "target": "com.amazonaws.s3#MetadataConfigurationResult",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The metadata configuration for a general purpose bucket.\n    </p>",
+                        "smithy.api#required": {}
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#documentation": "<p>\n      The S3 Metadata configuration for a general purpose bucket.\n    </p>"
             }
         },
         "com.amazonaws.s3#GetBucketMetadataTableConfiguration": {
@@ -36287,6 +36638,23 @@
                 "target": "com.amazonaws.s3#InventoryConfiguration"
             }
         },
+        "com.amazonaws.s3#InventoryConfigurationState": {
+            "type": "enum",
+            "members": {
+                "ENABLED": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "ENABLED"
+                    }
+                },
+                "DISABLED": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "DISABLED"
+                    }
+                }
+            }
+        },
         "com.amazonaws.s3#InventoryDestination": {
             "type": "structure",
             "members": {
@@ -36564,6 +36932,84 @@
                 "smithy.api#documentation": "<p>Specifies the schedule for generating inventory results.</p>"
             }
         },
+        "com.amazonaws.s3#InventoryTableConfiguration": {
+            "type": "structure",
+            "members": {
+                "ConfigurationState": {
+                    "target": "com.amazonaws.s3#InventoryConfigurationState",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The configuration state of the inventory table, indicating whether the inventory table is enabled \n      or disabled.\n    </p>",
+                        "smithy.api#required": {}
+                    }
+                },
+                "EncryptionConfiguration": {
+                    "target": "com.amazonaws.s3#MetadataTableEncryptionConfiguration",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The encryption configuration for the inventory table.\n    </p>"
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#documentation": "<p>\n      The inventory table configuration for an S3 Metadata configuration.\n    </p>"
+            }
+        },
+        "com.amazonaws.s3#InventoryTableConfigurationResult": {
+            "type": "structure",
+            "members": {
+                "ConfigurationState": {
+                    "target": "com.amazonaws.s3#InventoryConfigurationState",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The configuration state of the inventory table, indicating whether the inventory table is enabled \n      or disabled.\n    </p>",
+                        "smithy.api#required": {}
+                    }
+                },
+                "TableStatus": {
+                    "target": "com.amazonaws.s3#MetadataTableStatus",
+                    "traits": {
+                        "smithy.api#documentation": "<p> The status of the inventory table. The status values are: </p>\n         <ul>\n            <li>\n               <p>\n                  <code>CREATING</code> - The inventory table is in the process of being created in the specified\n          Amazon Web Services managed table bucket.</p>\n            </li>\n            <li>\n               <p>\n                  <code>BACKFILLING</code> - The inventory table is in the process of being backfilled. When \n          you enable the inventory table for your metadata configuration, the table goes through a \n          process known as backfilling, during which Amazon S3 scans your general purpose bucket to retrieve \n          the initial metadata for all objects in the bucket. Depending on the number of objects in your \n          bucket, this process can take several hours. When the backfilling process is finished, the \n          status of your inventory table changes from <code>BACKFILLING</code> to <code>ACTIVE</code>. \n          After backfilling is completed, updates to your objects are reflected in the inventory table \n          within one hour.</p>\n            </li>\n            <li>\n               <p>\n                  <code>ACTIVE</code> - The inventory table has been created successfully, and records are being\n          delivered to the table. </p>\n            </li>\n            <li>\n               <p>\n                  <code>FAILED</code> - Amazon S3 is unable to create the inventory table, or Amazon S3 is unable to deliver\n          records.</p>\n            </li>\n         </ul>"
+                    }
+                },
+                "Error": {
+                    "target": "com.amazonaws.s3#ErrorDetails"
+                },
+                "TableName": {
+                    "target": "com.amazonaws.s3#S3TablesName",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The name of the inventory table.\n    </p>"
+                    }
+                },
+                "TableArn": {
+                    "target": "com.amazonaws.s3#S3TablesArn",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The Amazon Resource Name (ARN) for the inventory table.\n    </p>"
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#documentation": "<p>\n      The inventory table configuration for an S3 Metadata configuration.\n    </p>"
+            }
+        },
+        "com.amazonaws.s3#InventoryTableConfigurationUpdates": {
+            "type": "structure",
+            "members": {
+                "ConfigurationState": {
+                    "target": "com.amazonaws.s3#InventoryConfigurationState",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The configuration state of the inventory table, indicating whether the inventory table is enabled \n      or disabled.\n    </p>",
+                        "smithy.api#required": {}
+                    }
+                },
+                "EncryptionConfiguration": {
+                    "target": "com.amazonaws.s3#MetadataTableEncryptionConfiguration",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The encryption configuration for the inventory table.\n    </p>"
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#documentation": "<p>\n      The specified updates to the S3 Metadata inventory table configuration.\n    </p>"
+            }
+        },
         "com.amazonaws.s3#IsEnabled": {
             "type": "boolean"
         },
@@ -36624,6 +37070,80 @@
                 }
             }
         },
+        "com.amazonaws.s3#JournalTableConfiguration": {
+            "type": "structure",
+            "members": {
+                "RecordExpiration": {
+                    "target": "com.amazonaws.s3#RecordExpiration",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The journal table record expiration settings for the journal table.\n    </p>",
+                        "smithy.api#required": {}
+                    }
+                },
+                "EncryptionConfiguration": {
+                    "target": "com.amazonaws.s3#MetadataTableEncryptionConfiguration",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The encryption configuration for the journal table.\n    </p>"
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#documentation": "<p>\n      The journal table configuration for an S3 Metadata configuration.\n    </p>"
+            }
+        },
+        "com.amazonaws.s3#JournalTableConfigurationResult": {
+            "type": "structure",
+            "members": {
+                "TableStatus": {
+                    "target": "com.amazonaws.s3#MetadataTableStatus",
+                    "traits": {
+                        "smithy.api#documentation": "<p> The status of the journal table. The status values are: </p>\n         <ul>\n            <li>\n               <p>\n                  <code>CREATING</code> - The journal table is in the process of being created in the specified\n          table bucket.</p>\n            </li>\n            <li>\n               <p>\n                  <code>ACTIVE</code> - The journal table has been created successfully, and records are being\n          delivered to the table. </p>\n            </li>\n            <li>\n               <p>\n                  <code>FAILED</code> - Amazon S3 is unable to create the journal table, or Amazon S3 is unable to deliver\n          records.</p>\n            </li>\n         </ul>",
+                        "smithy.api#required": {}
+                    }
+                },
+                "Error": {
+                    "target": "com.amazonaws.s3#ErrorDetails"
+                },
+                "TableName": {
+                    "target": "com.amazonaws.s3#S3TablesName",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The name of the journal table.\n    </p>",
+                        "smithy.api#required": {}
+                    }
+                },
+                "TableArn": {
+                    "target": "com.amazonaws.s3#S3TablesArn",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The Amazon Resource Name (ARN) for the journal table.\n    </p>"
+                    }
+                },
+                "RecordExpiration": {
+                    "target": "com.amazonaws.s3#RecordExpiration",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The journal table record expiration settings for the journal table.\n    </p>",
+                        "smithy.api#required": {}
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#documentation": "<p>\n      The journal table configuration for the S3 Metadata configuration.\n    </p>"
+            }
+        },
+        "com.amazonaws.s3#JournalTableConfigurationUpdates": {
+            "type": "structure",
+            "members": {
+                "RecordExpiration": {
+                    "target": "com.amazonaws.s3#RecordExpiration",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The journal table record expiration settings for the journal table.\n    </p>",
+                        "smithy.api#required": {}
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#documentation": "<p>\n      The specified updates to the S3 Metadata journal table configuration.\n    </p>"
+            }
+        },
         "com.amazonaws.s3#KMSContext": {
             "type": "string"
         },
@@ -36634,6 +37154,9 @@
             "type": "string"
         },
         "com.amazonaws.s3#KeyPrefixEquals": {
+            "type": "string"
+        },
+        "com.amazonaws.s3#KmsKeyArn": {
             "type": "string"
         },
         "com.amazonaws.s3#LambdaFunctionArn": {
@@ -38778,6 +39301,66 @@
                 "target": "com.amazonaws.s3#MetadataValue"
             }
         },
+        "com.amazonaws.s3#MetadataConfiguration": {
+            "type": "structure",
+            "members": {
+                "JournalTableConfiguration": {
+                    "target": "com.amazonaws.s3#JournalTableConfiguration",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The journal table configuration for a metadata configuration.\n    </p>",
+                        "smithy.api#required": {}
+                    }
+                },
+                "InventoryTableConfiguration": {
+                    "target": "com.amazonaws.s3#InventoryTableConfiguration",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The inventory table configuration for a metadata configuration.\n    </p>"
+                    }
+                },
+                "AnnotationTableConfiguration": {
+                    "target": "com.amazonaws.s3#AnnotationTableConfiguration",
+                    "traits": {
+                        "smithy.api#documentation": "<p>Optional annotation table configuration to include with the metadata configuration.</p>"
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#documentation": "<p>\n      The S3 Metadata configuration for a general purpose bucket.\n    </p>"
+            }
+        },
+        "com.amazonaws.s3#MetadataConfigurationResult": {
+            "type": "structure",
+            "members": {
+                "DestinationResult": {
+                    "target": "com.amazonaws.s3#DestinationResult",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The destination settings for a metadata configuration.\n    </p>",
+                        "smithy.api#required": {}
+                    }
+                },
+                "JournalTableConfigurationResult": {
+                    "target": "com.amazonaws.s3#JournalTableConfigurationResult",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The journal table configuration for a metadata configuration.\n    </p>"
+                    }
+                },
+                "InventoryTableConfigurationResult": {
+                    "target": "com.amazonaws.s3#InventoryTableConfigurationResult",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The inventory table configuration for a metadata configuration.\n    </p>"
+                    }
+                },
+                "AnnotationTableConfigurationResult": {
+                    "target": "com.amazonaws.s3#AnnotationTableConfigurationResult",
+                    "traits": {
+                        "smithy.api#documentation": "<p>The annotation table configuration result, if an annotation table is configured.</p>"
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#documentation": "<p>\n      The S3 Metadata configuration for a general purpose bucket.\n    </p>"
+            }
+        },
         "com.amazonaws.s3#MetadataDirective": {
             "type": "enum",
             "members": {
@@ -38846,6 +39429,27 @@
             },
             "traits": {
                 "smithy.api#documentation": "<p>\n         The metadata table configuration for a general purpose bucket. The destination table bucket\n         must be in the same Region and Amazon Web Services account as the general purpose bucket. The specified metadata\n         table name must be unique within the <code>aws_s3_metadata</code> namespace in the destination \n         table bucket. \n      </p>"
+            }
+        },
+        "com.amazonaws.s3#MetadataTableEncryptionConfiguration": {
+            "type": "structure",
+            "members": {
+                "SseAlgorithm": {
+                    "target": "com.amazonaws.s3#TableSseAlgorithm",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The encryption type specified for a metadata table. To specify server-side encryption with \n      Key Management Service (KMS) keys (SSE-KMS), use the <code>aws:kms</code> value. To specify server-side \n      encryption with Amazon S3 managed keys (SSE-S3), use the <code>AES256</code> value. \n    </p>",
+                        "smithy.api#required": {}
+                    }
+                },
+                "KmsKeyArn": {
+                    "target": "com.amazonaws.s3#KmsKeyArn",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      If server-side encryption with Key Management Service (KMS) keys (SSE-KMS) is specified, you must also\n      specify the KMS key Amazon Resource Name (ARN). You must specify a customer-managed KMS key \n      that's located in the same Region as the general purpose bucket that corresponds to the metadata \n      table configuration.\n    </p>"
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#documentation": "<p>\n      The encryption settings for an S3 Metadata journal table or inventory table configuration.\n    </p>"
             }
         },
         "com.amazonaws.s3#MetadataTableStatus": {
@@ -43384,6 +43988,30 @@
         "com.amazonaws.s3#RecordDelimiter": {
             "type": "string"
         },
+        "com.amazonaws.s3#RecordExpiration": {
+            "type": "structure",
+            "members": {
+                "Expiration": {
+                    "target": "com.amazonaws.s3#ExpirationState",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      Specifies whether journal table record expiration is enabled or disabled.\n    </p>",
+                        "smithy.api#required": {}
+                    }
+                },
+                "Days": {
+                    "target": "com.amazonaws.s3#RecordExpirationDays",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      If you enable journal table record expiration, you can set the number of days to retain your \n      journal table records. Journal table records must be retained for a minimum of 7 days. To set \n      this value, specify any whole number from <code>7</code> to <code>2147483647</code>. For example, \n      to retain your journal table records for one year, set this value to <code>365</code>.\n    </p>"
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#documentation": "<p>\n      The journal table record expiration settings for a journal table in an S3 Metadata configuration.\n    </p>"
+            }
+        },
+        "com.amazonaws.s3#RecordExpirationDays": {
+            "type": "integer"
+        },
         "com.amazonaws.s3#RecordsEvent": {
             "type": "structure",
             "members": {
@@ -44312,6 +44940,23 @@
         "com.amazonaws.s3#S3TablesBucketArn": {
             "type": "string"
         },
+        "com.amazonaws.s3#S3TablesBucketType": {
+            "type": "enum",
+            "members": {
+                "aws": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "aws"
+                    }
+                },
+                "customer": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "customer"
+                    }
+                }
+            }
+        },
         "com.amazonaws.s3#S3TablesDestination": {
             "type": "structure",
             "members": {
@@ -45067,6 +45712,23 @@
         "com.amazonaws.s3#Suffix": {
             "type": "string"
         },
+        "com.amazonaws.s3#TableSseAlgorithm": {
+            "type": "enum",
+            "members": {
+                "aws_kms": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "aws:kms"
+                    }
+                },
+                "AES256": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "AES256"
+                    }
+                }
+            }
+        },
         "com.amazonaws.s3#Tag": {
             "type": "structure",
             "members": {
@@ -45415,6 +46077,231 @@
         },
         "com.amazonaws.s3#URI": {
             "type": "string"
+        },
+        "com.amazonaws.s3#UpdateBucketMetadataAnnotationTableConfiguration": {
+            "type": "operation",
+            "input": {
+                "target": "com.amazonaws.s3#UpdateBucketMetadataAnnotationTableConfigurationRequest"
+            },
+            "output": {
+                "target": "smithy.api#Unit"
+            },
+            "traits": {
+                "aws.protocols#httpChecksum": {
+                    "requestAlgorithmMember": "ChecksumAlgorithm",
+                    "requestChecksumRequired": true
+                },
+                "smithy.api#documentation": "<p>Updates the annotation table configuration for an Amazon S3 bucket's metadata configuration. Use this\n      operation to enable or disable the annotation table, or to update its associated IAM role.</p>\n         <p>An annotation table is a queryable Iceberg table that contains records of all annotations\n      attached to objects in the bucket. To use this operation, the bucket must have an existing Amazon S3\n      Metadata configuration.</p>\n         <p>To use this operation, you must have the\n      <code>s3:UpdateBucketMetadataAnnotationTableConfiguration</code> permission. If you are specifying\n      or changing the IAM role, you must also have <code>iam:PassRole</code> permission for the role.</p>\n         <p>The IAM role must have a trust policy that allows the Amazon S3 metadata service to assume it, and a\n      permissions policy that grants the actions needed to read annotations from your bucket. The\n      following examples show a trust policy and a permissions policy that you can adapt for your bucket\n      and account.</p>\n         <p>The following operations are related to\n      <code>UpdateBucketMetadataAnnotationTableConfiguration</code>:</p>\n         <ul>\n            <li>\n               <p>\n                  <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucketMetadataConfiguration.html\">CreateBucketMetadataConfiguration</a>\n               </p>\n            </li>\n            <li>\n               <p>\n                  <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketMetadataConfiguration.html\">GetBucketMetadataConfiguration</a>\n               </p>\n            </li>\n         </ul>",
+                "smithy.api#http": {
+                    "method": "PUT",
+                    "uri": "/{Bucket}?metadataAnnotationTable",
+                    "code": 200
+                },
+                "smithy.rules#staticContextParams": {
+                    "UseS3ExpressControlEndpoint": {
+                        "value": true
+                    }
+                }
+            }
+        },
+        "com.amazonaws.s3#UpdateBucketMetadataAnnotationTableConfigurationRequest": {
+            "type": "structure",
+            "members": {
+                "Bucket": {
+                    "target": "com.amazonaws.s3#BucketName",
+                    "traits": {
+                        "smithy.api#documentation": "<p>The name of the bucket whose annotation table configuration to update.</p>",
+                        "smithy.api#httpLabel": {},
+                        "smithy.api#required": {},
+                        "smithy.rules#contextParam": {
+                            "name": "Bucket"
+                        }
+                    }
+                },
+                "ContentMD5": {
+                    "target": "com.amazonaws.s3#ContentMD5",
+                    "traits": {
+                        "smithy.api#documentation": "<p>Base64-encoded MD5 digest of the message body.</p>",
+                        "smithy.api#httpHeader": "Content-MD5"
+                    }
+                },
+                "ChecksumAlgorithm": {
+                    "target": "com.amazonaws.s3#ChecksumAlgorithm",
+                    "traits": {
+                        "smithy.api#documentation": "<p>Checksum algorithm for the request payload.</p>",
+                        "smithy.api#httpHeader": "x-amz-sdk-checksum-algorithm"
+                    }
+                },
+                "AnnotationTableConfiguration": {
+                    "target": "com.amazonaws.s3#AnnotationTableConfigurationUpdates",
+                    "traits": {
+                        "smithy.api#documentation": "<p>The annotation table configuration updates to apply.</p>",
+                        "smithy.api#httpPayload": {},
+                        "smithy.api#required": {},
+                        "smithy.api#xmlName": "AnnotationTableConfiguration"
+                    }
+                },
+                "ExpectedBucketOwner": {
+                    "target": "com.amazonaws.s3#AccountId",
+                    "traits": {
+                        "smithy.api#documentation": "<p>The account ID of the expected bucket owner.</p>",
+                        "smithy.api#httpHeader": "x-amz-expected-bucket-owner"
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#input": {}
+            }
+        },
+        "com.amazonaws.s3#UpdateBucketMetadataInventoryTableConfiguration": {
+            "type": "operation",
+            "input": {
+                "target": "com.amazonaws.s3#UpdateBucketMetadataInventoryTableConfigurationRequest"
+            },
+            "output": {
+                "target": "smithy.api#Unit"
+            },
+            "traits": {
+                "aws.protocols#httpChecksum": {
+                    "requestAlgorithmMember": "ChecksumAlgorithm",
+                    "requestChecksumRequired": true
+                },
+                "smithy.api#documentation": "<p>Enables or disables a live inventory table for an S3 Metadata configuration on a general \n      purpose bucket. For more information, see\n      <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/metadata-tables-overview.html\">Accelerating\n        data discovery with S3 Metadata</a> in the <i>Amazon S3 User Guide</i>.</p>\n         <dl>\n            <dt>Permissions</dt>\n            <dd>\n               <p>To use this operation, you must have the following permissions. For more information, see\n            <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/metadata-tables-permissions.html\">Setting up permissions for configuring metadata tables</a> in the\n            <i>Amazon S3 User Guide</i>.</p>\n               <p>If you want to encrypt your inventory table with server-side encryption with Key Management Service\n            (KMS) keys (SSE-KMS), you need additional permissions in your KMS key policy. For more\n            information, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/metadata-tables-permissions.html\">\n              Setting up permissions for configuring metadata tables</a> in the\n            <i>Amazon S3 User Guide</i>.</p>\n               <ul>\n                  <li>\n                     <p>\n                        <code>s3:UpdateBucketMetadataInventoryTableConfiguration</code>\n                     </p>\n                  </li>\n                  <li>\n                     <p>\n                        <code>s3tables:CreateTableBucket</code>\n                     </p>\n                  </li>\n                  <li>\n                     <p>\n                        <code>s3tables:CreateNamespace</code>\n                     </p>\n                  </li>\n                  <li>\n                     <p>\n                        <code>s3tables:GetTable</code>\n                     </p>\n                  </li>\n                  <li>\n                     <p>\n                        <code>s3tables:CreateTable</code>\n                     </p>\n                  </li>\n                  <li>\n                     <p>\n                        <code>s3tables:PutTablePolicy</code>\n                     </p>\n                  </li>\n                  <li>\n                     <p>\n                        <code>s3tables:PutTableEncryption</code>\n                     </p>\n                  </li>\n                  <li>\n                     <p>\n                        <code>kms:DescribeKey</code>\n                     </p>\n                  </li>\n               </ul>\n            </dd>\n         </dl>\n         <p>The following operations are related to <code>UpdateBucketMetadataInventoryTableConfiguration</code>:</p>\n         <ul>\n            <li>\n               <p>\n                  <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucketMetadataConfiguration.html\">CreateBucketMetadataConfiguration</a>\n               </p>\n            </li>\n            <li>\n               <p>\n                  <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketMetadataConfiguration.html\">DeleteBucketMetadataConfiguration</a>\n               </p>\n            </li>\n            <li>\n               <p>\n                  <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketMetadataConfiguration.html\">GetBucketMetadataConfiguration</a>\n               </p>\n            </li>\n            <li>\n               <p>\n                  <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_UpdateBucketMetadataJournalTableConfiguration.html\">UpdateBucketMetadataJournalTableConfiguration</a>\n               </p>\n            </li>\n         </ul>\n         <important>\n            <p>You must URL encode any signed header values that contain spaces. For example, if your header value is <code>my  file.txt</code>, containing two spaces after <code>my</code>, you must URL encode this value to <code>my%20%20file.txt</code>.</p>\n         </important>",
+                "smithy.api#http": {
+                    "method": "PUT",
+                    "uri": "/{Bucket}?metadataInventoryTable",
+                    "code": 200
+                },
+                "smithy.rules#staticContextParams": {
+                    "UseS3ExpressControlEndpoint": {
+                        "value": true
+                    }
+                }
+            }
+        },
+        "com.amazonaws.s3#UpdateBucketMetadataInventoryTableConfigurationRequest": {
+            "type": "structure",
+            "members": {
+                "Bucket": {
+                    "target": "com.amazonaws.s3#BucketName",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The general purpose bucket that corresponds to the metadata configuration that you want to \n      enable or disable an inventory table for.\n    </p>",
+                        "smithy.api#httpLabel": {},
+                        "smithy.api#required": {},
+                        "smithy.rules#contextParam": {
+                            "name": "Bucket"
+                        }
+                    }
+                },
+                "ContentMD5": {
+                    "target": "com.amazonaws.s3#ContentMD5",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The <code>Content-MD5</code> header for the inventory table configuration.\n    </p>",
+                        "smithy.api#httpHeader": "Content-MD5"
+                    }
+                },
+                "ChecksumAlgorithm": {
+                    "target": "com.amazonaws.s3#ChecksumAlgorithm",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The checksum algorithm to use with your inventory table configuration.\n    </p>",
+                        "smithy.api#httpHeader": "x-amz-sdk-checksum-algorithm"
+                    }
+                },
+                "InventoryTableConfiguration": {
+                    "target": "com.amazonaws.s3#InventoryTableConfigurationUpdates",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The contents of your inventory table configuration.      \n    </p>",
+                        "smithy.api#httpPayload": {},
+                        "smithy.api#required": {},
+                        "smithy.api#xmlName": "InventoryTableConfiguration"
+                    }
+                },
+                "ExpectedBucketOwner": {
+                    "target": "com.amazonaws.s3#AccountId",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The expected owner of the general purpose bucket that corresponds to the metadata table \n      configuration that you want to enable or disable an inventory table for.\n    </p>",
+                        "smithy.api#httpHeader": "x-amz-expected-bucket-owner"
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#input": {}
+            }
+        },
+        "com.amazonaws.s3#UpdateBucketMetadataJournalTableConfiguration": {
+            "type": "operation",
+            "input": {
+                "target": "com.amazonaws.s3#UpdateBucketMetadataJournalTableConfigurationRequest"
+            },
+            "output": {
+                "target": "smithy.api#Unit"
+            },
+            "traits": {
+                "aws.protocols#httpChecksum": {
+                    "requestAlgorithmMember": "ChecksumAlgorithm",
+                    "requestChecksumRequired": true
+                },
+                "smithy.api#documentation": "<p>Enables or disables journal table record expiration for an S3 Metadata configuration on a general \n      purpose bucket. For more information, see\n      <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/metadata-tables-overview.html\">Accelerating\n        data discovery with S3 Metadata</a> in the <i>Amazon S3 User Guide</i>.</p>\n         <dl>\n            <dt>Permissions</dt>\n            <dd>\n               <p>To use this operation, you must have the <code>s3:UpdateBucketMetadataJournalTableConfiguration</code>\n            permission. For more information, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/metadata-tables-permissions.html\">Setting up permissions for\n              configuring metadata tables</a> in the <i>Amazon S3 User Guide</i>. </p>\n            </dd>\n         </dl>\n         <p>The following operations are related to <code>UpdateBucketMetadataJournalTableConfiguration</code>:</p>\n         <ul>\n            <li>\n               <p>\n                  <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucketMetadataConfiguration.html\">CreateBucketMetadataConfiguration</a>\n               </p>\n            </li>\n            <li>\n               <p>\n                  <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketMetadataConfiguration.html\">DeleteBucketMetadataConfiguration</a>\n               </p>\n            </li>\n            <li>\n               <p>\n                  <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketMetadataConfiguration.html\">GetBucketMetadataConfiguration</a>\n               </p>\n            </li>\n            <li>\n               <p>\n                  <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_UpdateBucketMetadataInventoryTableConfiguration.html\">UpdateBucketMetadataInventoryTableConfiguration</a>\n               </p>\n            </li>\n         </ul>\n         <important>\n            <p>You must URL encode any signed header values that contain spaces. For example, if your header value is <code>my  file.txt</code>, containing two spaces after <code>my</code>, you must URL encode this value to <code>my%20%20file.txt</code>.</p>\n         </important>",
+                "smithy.api#http": {
+                    "method": "PUT",
+                    "uri": "/{Bucket}?metadataJournalTable",
+                    "code": 200
+                },
+                "smithy.rules#staticContextParams": {
+                    "UseS3ExpressControlEndpoint": {
+                        "value": true
+                    }
+                }
+            }
+        },
+        "com.amazonaws.s3#UpdateBucketMetadataJournalTableConfigurationRequest": {
+            "type": "structure",
+            "members": {
+                "Bucket": {
+                    "target": "com.amazonaws.s3#BucketName",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The general purpose bucket that corresponds to the metadata configuration that you want to \n      enable or disable journal table record expiration for.\n    </p>",
+                        "smithy.api#httpLabel": {},
+                        "smithy.api#required": {},
+                        "smithy.rules#contextParam": {
+                            "name": "Bucket"
+                        }
+                    }
+                },
+                "ContentMD5": {
+                    "target": "com.amazonaws.s3#ContentMD5",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The <code>Content-MD5</code> header for the journal table configuration.\n    </p>",
+                        "smithy.api#httpHeader": "Content-MD5"
+                    }
+                },
+                "ChecksumAlgorithm": {
+                    "target": "com.amazonaws.s3#ChecksumAlgorithm",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The checksum algorithm to use with your journal table configuration.\n    </p>",
+                        "smithy.api#httpHeader": "x-amz-sdk-checksum-algorithm"
+                    }
+                },
+                "JournalTableConfiguration": {
+                    "target": "com.amazonaws.s3#JournalTableConfigurationUpdates",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The contents of your journal table configuration.\n    </p>",
+                        "smithy.api#httpPayload": {},
+                        "smithy.api#required": {},
+                        "smithy.api#xmlName": "JournalTableConfiguration"
+                    }
+                },
+                "ExpectedBucketOwner": {
+                    "target": "com.amazonaws.s3#AccountId",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The expected owner of the general purpose bucket that corresponds to the metadata table \n      configuration that you want to enable or disable journal table record expiration for.      \n    </p>",
+                        "smithy.api#httpHeader": "x-amz-expected-bucket-owner"
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#input": {}
+            }
         },
         "com.amazonaws.s3#UploadIdMarker": {
             "type": "string"

@@ -255,6 +255,92 @@ impl AwsConversion for s3s::dto::AnalyticsS3ExportFileFormat {
     }
 }
 
+impl AwsConversion for s3s::dto::AnnotationConfigurationState {
+    type Target = aws_sdk_s3::types::AnnotationConfigurationState;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(match x {
+            aws_sdk_s3::types::AnnotationConfigurationState::Disabled => Self::from_static(Self::DISABLED),
+            aws_sdk_s3::types::AnnotationConfigurationState::Enabled => Self::from_static(Self::ENABLED),
+            _ => Self::from(x.as_str().to_owned()),
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        Ok(aws_sdk_s3::types::AnnotationConfigurationState::from(x.as_str()))
+    }
+}
+
+impl AwsConversion for s3s::dto::AnnotationTableConfiguration {
+    type Target = aws_sdk_s3::types::AnnotationTableConfiguration;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            configuration_state: try_from_aws(x.configuration_state)?,
+            encryption_configuration: try_from_aws(x.encryption_configuration)?,
+            role: try_from_aws(x.role)?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_configuration_state(Some(try_into_aws(x.configuration_state)?));
+        y = y.set_encryption_configuration(try_into_aws(x.encryption_configuration)?);
+        y = y.set_role(try_into_aws(x.role)?);
+        y.build().map_err(S3Error::internal_error)
+    }
+}
+
+impl AwsConversion for s3s::dto::AnnotationTableConfigurationResult {
+    type Target = aws_sdk_s3::types::AnnotationTableConfigurationResult;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            configuration_state: try_from_aws(x.configuration_state)?,
+            error: try_from_aws(x.error)?,
+            role: try_from_aws(x.role)?,
+            table_arn: try_from_aws(x.table_arn)?,
+            table_name: try_from_aws(x.table_name)?,
+            table_status: try_from_aws(x.table_status)?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_configuration_state(Some(try_into_aws(x.configuration_state)?));
+        y = y.set_error(try_into_aws(x.error)?);
+        y = y.set_role(try_into_aws(x.role)?);
+        y = y.set_table_arn(try_into_aws(x.table_arn)?);
+        y = y.set_table_name(try_into_aws(x.table_name)?);
+        y = y.set_table_status(try_into_aws(x.table_status)?);
+        y.build().map_err(S3Error::internal_error)
+    }
+}
+
+impl AwsConversion for s3s::dto::AnnotationTableConfigurationUpdates {
+    type Target = aws_sdk_s3::types::AnnotationTableConfigurationUpdates;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            configuration_state: try_from_aws(x.configuration_state)?,
+            encryption_configuration: try_from_aws(x.encryption_configuration)?,
+            role: try_from_aws(x.role)?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_configuration_state(Some(try_into_aws(x.configuration_state)?));
+        y = y.set_encryption_configuration(try_into_aws(x.encryption_configuration)?);
+        y = y.set_role(try_into_aws(x.role)?);
+        y.build().map_err(S3Error::internal_error)
+    }
+}
+
 impl AwsConversion for s3s::dto::ArchiveStatus {
     type Target = aws_sdk_s3::types::ArchiveStatus;
     type Error = S3Error;
@@ -1262,6 +1348,47 @@ impl AwsConversion for s3s::dto::CreateBucketInput {
     }
 }
 
+impl AwsConversion for s3s::dto::CreateBucketMetadataConfigurationInput {
+    type Target = aws_sdk_s3::operation::create_bucket_metadata_configuration::CreateBucketMetadataConfigurationInput;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            bucket: unwrap_from_aws(x.bucket, "bucket")?,
+            checksum_algorithm: try_from_aws(x.checksum_algorithm)?,
+            content_md5: try_from_aws(x.content_md5)?,
+            expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
+            metadata_configuration: unwrap_from_aws(x.metadata_configuration, "metadata_configuration")?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_bucket(Some(try_into_aws(x.bucket)?));
+        y = y.set_checksum_algorithm(try_into_aws(x.checksum_algorithm)?);
+        y = y.set_content_md5(try_into_aws(x.content_md5)?);
+        y = y.set_expected_bucket_owner(try_into_aws(x.expected_bucket_owner)?);
+        y = y.set_metadata_configuration(Some(try_into_aws(x.metadata_configuration)?));
+        y.build().map_err(S3Error::internal_error)
+    }
+}
+
+impl AwsConversion for s3s::dto::CreateBucketMetadataConfigurationOutput {
+    type Target = aws_sdk_s3::operation::create_bucket_metadata_configuration::CreateBucketMetadataConfigurationOutput;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        let _ = x;
+        Ok(Self {})
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let _ = x;
+        let y = Self::Target::builder();
+        Ok(y.build())
+    }
+}
+
 impl AwsConversion for s3s::dto::CreateBucketMetadataTableConfigurationInput {
     type Target = aws_sdk_s3::operation::create_bucket_metadata_table_configuration::CreateBucketMetadataTableConfigurationInput;
     type Error = S3Error;
@@ -1772,6 +1899,41 @@ impl AwsConversion for s3s::dto::DeleteBucketLifecycleInput {
 
 impl AwsConversion for s3s::dto::DeleteBucketLifecycleOutput {
     type Target = aws_sdk_s3::operation::delete_bucket_lifecycle::DeleteBucketLifecycleOutput;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        let _ = x;
+        Ok(Self {})
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let _ = x;
+        let y = Self::Target::builder();
+        Ok(y.build())
+    }
+}
+
+impl AwsConversion for s3s::dto::DeleteBucketMetadataConfigurationInput {
+    type Target = aws_sdk_s3::operation::delete_bucket_metadata_configuration::DeleteBucketMetadataConfigurationInput;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            bucket: unwrap_from_aws(x.bucket, "bucket")?,
+            expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_bucket(Some(try_into_aws(x.bucket)?));
+        y = y.set_expected_bucket_owner(try_into_aws(x.expected_bucket_owner)?);
+        y.build().map_err(S3Error::internal_error)
+    }
+}
+
+impl AwsConversion for s3s::dto::DeleteBucketMetadataConfigurationOutput {
+    type Target = aws_sdk_s3::operation::delete_bucket_metadata_configuration::DeleteBucketMetadataConfigurationOutput;
     type Error = S3Error;
 
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
@@ -2341,6 +2503,27 @@ impl AwsConversion for s3s::dto::Destination {
     }
 }
 
+impl AwsConversion for s3s::dto::DestinationResult {
+    type Target = aws_sdk_s3::types::DestinationResult;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            table_bucket_arn: try_from_aws(x.table_bucket_arn)?,
+            table_bucket_type: try_from_aws(x.table_bucket_type)?,
+            table_namespace: try_from_aws(x.table_namespace)?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_table_bucket_arn(try_into_aws(x.table_bucket_arn)?);
+        y = y.set_table_bucket_type(try_into_aws(x.table_bucket_type)?);
+        y = y.set_table_namespace(try_into_aws(x.table_namespace)?);
+        Ok(y.build())
+    }
+}
+
 impl AwsConversion for s3s::dto::EncodingType {
     type Target = aws_sdk_s3::types::EncodingType;
     type Error = S3Error;
@@ -2533,6 +2716,23 @@ impl AwsConversion for s3s::dto::ExistingObjectReplicationStatus {
 
     fn try_into_aws(x: Self) -> S3Result<Self::Target> {
         Ok(aws_sdk_s3::types::ExistingObjectReplicationStatus::from(x.as_str()))
+    }
+}
+
+impl AwsConversion for s3s::dto::ExpirationState {
+    type Target = aws_sdk_s3::types::ExpirationState;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(match x {
+            aws_sdk_s3::types::ExpirationState::Disabled => Self::from_static(Self::DISABLED),
+            aws_sdk_s3::types::ExpirationState::Enabled => Self::from_static(Self::ENABLED),
+            _ => Self::from(x.as_str().to_owned()),
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        Ok(aws_sdk_s3::types::ExpirationState::from(x.as_str()))
     }
 }
 
@@ -3031,6 +3231,59 @@ impl AwsConversion for s3s::dto::GetBucketLoggingOutput {
     fn try_into_aws(x: Self) -> S3Result<Self::Target> {
         let mut y = Self::Target::builder();
         y = y.set_logging_enabled(try_into_aws(x.logging_enabled)?);
+        Ok(y.build())
+    }
+}
+
+impl AwsConversion for s3s::dto::GetBucketMetadataConfigurationInput {
+    type Target = aws_sdk_s3::operation::get_bucket_metadata_configuration::GetBucketMetadataConfigurationInput;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            bucket: unwrap_from_aws(x.bucket, "bucket")?,
+            expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_bucket(Some(try_into_aws(x.bucket)?));
+        y = y.set_expected_bucket_owner(try_into_aws(x.expected_bucket_owner)?);
+        y.build().map_err(S3Error::internal_error)
+    }
+}
+
+impl AwsConversion for s3s::dto::GetBucketMetadataConfigurationOutput {
+    type Target = aws_sdk_s3::operation::get_bucket_metadata_configuration::GetBucketMetadataConfigurationOutput;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            get_bucket_metadata_configuration_result: try_from_aws(x.get_bucket_metadata_configuration_result)?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_get_bucket_metadata_configuration_result(try_into_aws(x.get_bucket_metadata_configuration_result)?);
+        Ok(y.build())
+    }
+}
+
+impl AwsConversion for s3s::dto::GetBucketMetadataConfigurationResult {
+    type Target = aws_sdk_s3::types::GetBucketMetadataConfigurationResult;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            metadata_configuration_result: unwrap_from_aws(x.metadata_configuration_result, "metadata_configuration_result")?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_metadata_configuration_result(Some(try_into_aws(x.metadata_configuration_result)?));
         Ok(y.build())
     }
 }
@@ -4529,6 +4782,23 @@ impl AwsConversion for s3s::dto::InventoryConfiguration {
     }
 }
 
+impl AwsConversion for s3s::dto::InventoryConfigurationState {
+    type Target = aws_sdk_s3::types::InventoryConfigurationState;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(match x {
+            aws_sdk_s3::types::InventoryConfigurationState::Disabled => Self::from_static(Self::DISABLED),
+            aws_sdk_s3::types::InventoryConfigurationState::Enabled => Self::from_static(Self::ENABLED),
+            _ => Self::from(x.as_str().to_owned()),
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        Ok(aws_sdk_s3::types::InventoryConfigurationState::from(x.as_str()))
+    }
+}
+
 impl AwsConversion for s3s::dto::InventoryDestination {
     type Target = aws_sdk_s3::types::InventoryDestination;
     type Error = S3Error;
@@ -4717,6 +4987,69 @@ impl AwsConversion for s3s::dto::InventorySchedule {
     }
 }
 
+impl AwsConversion for s3s::dto::InventoryTableConfiguration {
+    type Target = aws_sdk_s3::types::InventoryTableConfiguration;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            configuration_state: try_from_aws(x.configuration_state)?,
+            encryption_configuration: try_from_aws(x.encryption_configuration)?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_configuration_state(Some(try_into_aws(x.configuration_state)?));
+        y = y.set_encryption_configuration(try_into_aws(x.encryption_configuration)?);
+        y.build().map_err(S3Error::internal_error)
+    }
+}
+
+impl AwsConversion for s3s::dto::InventoryTableConfigurationResult {
+    type Target = aws_sdk_s3::types::InventoryTableConfigurationResult;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            configuration_state: try_from_aws(x.configuration_state)?,
+            error: try_from_aws(x.error)?,
+            table_arn: try_from_aws(x.table_arn)?,
+            table_name: try_from_aws(x.table_name)?,
+            table_status: try_from_aws(x.table_status)?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_configuration_state(Some(try_into_aws(x.configuration_state)?));
+        y = y.set_error(try_into_aws(x.error)?);
+        y = y.set_table_arn(try_into_aws(x.table_arn)?);
+        y = y.set_table_name(try_into_aws(x.table_name)?);
+        y = y.set_table_status(try_into_aws(x.table_status)?);
+        y.build().map_err(S3Error::internal_error)
+    }
+}
+
+impl AwsConversion for s3s::dto::InventoryTableConfigurationUpdates {
+    type Target = aws_sdk_s3::types::InventoryTableConfigurationUpdates;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            configuration_state: try_from_aws(x.configuration_state)?,
+            encryption_configuration: try_from_aws(x.encryption_configuration)?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_configuration_state(Some(try_into_aws(x.configuration_state)?));
+        y = y.set_encryption_configuration(try_into_aws(x.encryption_configuration)?);
+        y.build().map_err(S3Error::internal_error)
+    }
+}
+
 impl AwsConversion for s3s::dto::JSONInput {
     type Target = aws_sdk_s3::types::JsonInput;
     type Error = S3Error;
@@ -4765,6 +5098,67 @@ impl AwsConversion for s3s::dto::JSONType {
 
     fn try_into_aws(x: Self) -> S3Result<Self::Target> {
         Ok(aws_sdk_s3::types::JsonType::from(x.as_str()))
+    }
+}
+
+impl AwsConversion for s3s::dto::JournalTableConfiguration {
+    type Target = aws_sdk_s3::types::JournalTableConfiguration;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            encryption_configuration: try_from_aws(x.encryption_configuration)?,
+            record_expiration: unwrap_from_aws(x.record_expiration, "record_expiration")?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_encryption_configuration(try_into_aws(x.encryption_configuration)?);
+        y = y.set_record_expiration(Some(try_into_aws(x.record_expiration)?));
+        Ok(y.build())
+    }
+}
+
+impl AwsConversion for s3s::dto::JournalTableConfigurationResult {
+    type Target = aws_sdk_s3::types::JournalTableConfigurationResult;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            error: try_from_aws(x.error)?,
+            record_expiration: unwrap_from_aws(x.record_expiration, "record_expiration")?,
+            table_arn: try_from_aws(x.table_arn)?,
+            table_name: try_from_aws(x.table_name)?,
+            table_status: try_from_aws(x.table_status)?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_error(try_into_aws(x.error)?);
+        y = y.set_record_expiration(Some(try_into_aws(x.record_expiration)?));
+        y = y.set_table_arn(try_into_aws(x.table_arn)?);
+        y = y.set_table_name(Some(try_into_aws(x.table_name)?));
+        y = y.set_table_status(Some(try_into_aws(x.table_status)?));
+        y.build().map_err(S3Error::internal_error)
+    }
+}
+
+impl AwsConversion for s3s::dto::JournalTableConfigurationUpdates {
+    type Target = aws_sdk_s3::types::JournalTableConfigurationUpdates;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            record_expiration: unwrap_from_aws(x.record_expiration, "record_expiration")?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_record_expiration(Some(try_into_aws(x.record_expiration)?));
+        Ok(y.build())
     }
 }
 
@@ -5632,6 +6026,50 @@ impl AwsConversion for s3s::dto::MFADeleteStatus {
     }
 }
 
+impl AwsConversion for s3s::dto::MetadataConfiguration {
+    type Target = aws_sdk_s3::types::MetadataConfiguration;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            annotation_table_configuration: try_from_aws(x.annotation_table_configuration)?,
+            inventory_table_configuration: try_from_aws(x.inventory_table_configuration)?,
+            journal_table_configuration: unwrap_from_aws(x.journal_table_configuration, "journal_table_configuration")?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_annotation_table_configuration(try_into_aws(x.annotation_table_configuration)?);
+        y = y.set_inventory_table_configuration(try_into_aws(x.inventory_table_configuration)?);
+        y = y.set_journal_table_configuration(Some(try_into_aws(x.journal_table_configuration)?));
+        Ok(y.build())
+    }
+}
+
+impl AwsConversion for s3s::dto::MetadataConfigurationResult {
+    type Target = aws_sdk_s3::types::MetadataConfigurationResult;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            annotation_table_configuration_result: try_from_aws(x.annotation_table_configuration_result)?,
+            destination_result: unwrap_from_aws(x.destination_result, "destination_result")?,
+            inventory_table_configuration_result: try_from_aws(x.inventory_table_configuration_result)?,
+            journal_table_configuration_result: try_from_aws(x.journal_table_configuration_result)?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_annotation_table_configuration_result(try_into_aws(x.annotation_table_configuration_result)?);
+        y = y.set_destination_result(Some(try_into_aws(x.destination_result)?));
+        y = y.set_inventory_table_configuration_result(try_into_aws(x.inventory_table_configuration_result)?);
+        y = y.set_journal_table_configuration_result(try_into_aws(x.journal_table_configuration_result)?);
+        Ok(y.build())
+    }
+}
+
 impl AwsConversion for s3s::dto::MetadataDirective {
     type Target = aws_sdk_s3::types::MetadataDirective;
     type Error = S3Error;
@@ -5699,6 +6137,25 @@ impl AwsConversion for s3s::dto::MetadataTableConfigurationResult {
         let mut y = Self::Target::builder();
         y = y.set_s3_tables_destination_result(Some(try_into_aws(x.s3_tables_destination_result)?));
         Ok(y.build())
+    }
+}
+
+impl AwsConversion for s3s::dto::MetadataTableEncryptionConfiguration {
+    type Target = aws_sdk_s3::types::MetadataTableEncryptionConfiguration;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            kms_key_arn: try_from_aws(x.kms_key_arn)?,
+            sse_algorithm: try_from_aws(x.sse_algorithm)?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_kms_key_arn(try_into_aws(x.kms_key_arn)?);
+        y = y.set_sse_algorithm(Some(try_into_aws(x.sse_algorithm)?));
+        y.build().map_err(S3Error::internal_error)
     }
 }
 
@@ -8029,6 +8486,25 @@ impl AwsConversion for s3s::dto::QuoteFields {
     }
 }
 
+impl AwsConversion for s3s::dto::RecordExpiration {
+    type Target = aws_sdk_s3::types::RecordExpiration;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            days: try_from_aws(x.days)?,
+            expiration: try_from_aws(x.expiration)?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_days(try_into_aws(x.days)?);
+        y = y.set_expiration(Some(try_into_aws(x.expiration)?));
+        y.build().map_err(S3Error::internal_error)
+    }
+}
+
 impl AwsConversion for s3s::dto::RecordsEvent {
     type Target = aws_sdk_s3::types::RecordsEvent;
     type Error = S3Error;
@@ -8608,6 +9084,23 @@ impl AwsConversion for s3s::dto::S3Location {
     }
 }
 
+impl AwsConversion for s3s::dto::S3TablesBucketType {
+    type Target = aws_sdk_s3::types::S3TablesBucketType;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(match x {
+            aws_sdk_s3::types::S3TablesBucketType::Aws => Self::from_static(Self::AWS),
+            aws_sdk_s3::types::S3TablesBucketType::Customer => Self::from_static(Self::CUSTOMER),
+            _ => Self::from(x.as_str().to_owned()),
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        Ok(aws_sdk_s3::types::S3TablesBucketType::from(x.as_str()))
+    }
+}
+
 impl AwsConversion for s3s::dto::S3TablesDestination {
     type Target = aws_sdk_s3::types::S3TablesDestination;
     type Error = S3Error;
@@ -9070,6 +9563,23 @@ impl AwsConversion for s3s::dto::StorageClassAnalysisSchemaVersion {
     }
 }
 
+impl AwsConversion for s3s::dto::TableSseAlgorithm {
+    type Target = aws_sdk_s3::types::TableSseAlgorithm;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(match x {
+            aws_sdk_s3::types::TableSseAlgorithm::Aes256 => Self::from_static(Self::AES256),
+            aws_sdk_s3::types::TableSseAlgorithm::AwsKms => Self::from_static(Self::AWS_KMS),
+            _ => Self::from(x.as_str().to_owned()),
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        Ok(aws_sdk_s3::types::TableSseAlgorithm::from(x.as_str()))
+    }
+}
+
 impl AwsConversion for s3s::dto::Tagging {
     type Target = aws_sdk_s3::types::Tagging;
     type Error = S3Error;
@@ -9296,6 +9806,129 @@ impl AwsConversion for s3s::dto::Type {
 
     fn try_into_aws(x: Self) -> S3Result<Self::Target> {
         Ok(aws_sdk_s3::types::Type::from(x.as_str()))
+    }
+}
+
+impl AwsConversion for s3s::dto::UpdateBucketMetadataAnnotationTableConfigurationInput {
+    type Target = aws_sdk_s3::operation::update_bucket_metadata_annotation_table_configuration::UpdateBucketMetadataAnnotationTableConfigurationInput;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            annotation_table_configuration: unwrap_from_aws(x.annotation_table_configuration, "annotation_table_configuration")?,
+            bucket: unwrap_from_aws(x.bucket, "bucket")?,
+            checksum_algorithm: try_from_aws(x.checksum_algorithm)?,
+            content_md5: try_from_aws(x.content_md5)?,
+            expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_annotation_table_configuration(Some(try_into_aws(x.annotation_table_configuration)?));
+        y = y.set_bucket(Some(try_into_aws(x.bucket)?));
+        y = y.set_checksum_algorithm(try_into_aws(x.checksum_algorithm)?);
+        y = y.set_content_md5(try_into_aws(x.content_md5)?);
+        y = y.set_expected_bucket_owner(try_into_aws(x.expected_bucket_owner)?);
+        y.build().map_err(S3Error::internal_error)
+    }
+}
+
+impl AwsConversion for s3s::dto::UpdateBucketMetadataAnnotationTableConfigurationOutput {
+    type Target = aws_sdk_s3::operation::update_bucket_metadata_annotation_table_configuration::UpdateBucketMetadataAnnotationTableConfigurationOutput;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        let _ = x;
+        Ok(Self {})
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let _ = x;
+        let y = Self::Target::builder();
+        Ok(y.build())
+    }
+}
+
+impl AwsConversion for s3s::dto::UpdateBucketMetadataInventoryTableConfigurationInput {
+    type Target = aws_sdk_s3::operation::update_bucket_metadata_inventory_table_configuration::UpdateBucketMetadataInventoryTableConfigurationInput;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            bucket: unwrap_from_aws(x.bucket, "bucket")?,
+            checksum_algorithm: try_from_aws(x.checksum_algorithm)?,
+            content_md5: try_from_aws(x.content_md5)?,
+            expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
+            inventory_table_configuration: unwrap_from_aws(x.inventory_table_configuration, "inventory_table_configuration")?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_bucket(Some(try_into_aws(x.bucket)?));
+        y = y.set_checksum_algorithm(try_into_aws(x.checksum_algorithm)?);
+        y = y.set_content_md5(try_into_aws(x.content_md5)?);
+        y = y.set_expected_bucket_owner(try_into_aws(x.expected_bucket_owner)?);
+        y = y.set_inventory_table_configuration(Some(try_into_aws(x.inventory_table_configuration)?));
+        y.build().map_err(S3Error::internal_error)
+    }
+}
+
+impl AwsConversion for s3s::dto::UpdateBucketMetadataInventoryTableConfigurationOutput {
+    type Target = aws_sdk_s3::operation::update_bucket_metadata_inventory_table_configuration::UpdateBucketMetadataInventoryTableConfigurationOutput;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        let _ = x;
+        Ok(Self {})
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let _ = x;
+        let y = Self::Target::builder();
+        Ok(y.build())
+    }
+}
+
+impl AwsConversion for s3s::dto::UpdateBucketMetadataJournalTableConfigurationInput {
+    type Target = aws_sdk_s3::operation::update_bucket_metadata_journal_table_configuration::UpdateBucketMetadataJournalTableConfigurationInput;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            bucket: unwrap_from_aws(x.bucket, "bucket")?,
+            checksum_algorithm: try_from_aws(x.checksum_algorithm)?,
+            content_md5: try_from_aws(x.content_md5)?,
+            expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
+            journal_table_configuration: unwrap_from_aws(x.journal_table_configuration, "journal_table_configuration")?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_bucket(Some(try_into_aws(x.bucket)?));
+        y = y.set_checksum_algorithm(try_into_aws(x.checksum_algorithm)?);
+        y = y.set_content_md5(try_into_aws(x.content_md5)?);
+        y = y.set_expected_bucket_owner(try_into_aws(x.expected_bucket_owner)?);
+        y = y.set_journal_table_configuration(Some(try_into_aws(x.journal_table_configuration)?));
+        y.build().map_err(S3Error::internal_error)
+    }
+}
+
+impl AwsConversion for s3s::dto::UpdateBucketMetadataJournalTableConfigurationOutput {
+    type Target = aws_sdk_s3::operation::update_bucket_metadata_journal_table_configuration::UpdateBucketMetadataJournalTableConfigurationOutput;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        let _ = x;
+        Ok(Self {})
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let _ = x;
+        let y = Self::Target::builder();
+        Ok(y.build())
     }
 }
 

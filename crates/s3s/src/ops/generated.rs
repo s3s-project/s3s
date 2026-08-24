@@ -7,6 +7,7 @@
 // CompleteMultipartUpload
 // CopyObject
 // CreateBucket
+// CreateBucketMetadataConfiguration
 // CreateBucketMetadataTableConfiguration
 // CreateMultipartUpload
 // CreateSession
@@ -17,6 +18,7 @@
 // DeleteBucketIntelligentTieringConfiguration
 // DeleteBucketInventoryConfiguration
 // DeleteBucketLifecycle
+// DeleteBucketMetadataConfiguration
 // DeleteBucketMetadataTableConfiguration
 // DeleteBucketMetricsConfiguration
 // DeleteBucketOwnershipControls
@@ -39,6 +41,7 @@
 // GetBucketLifecycleConfiguration
 // GetBucketLocation
 // GetBucketLogging
+// GetBucketMetadataConfiguration
 // GetBucketMetadataTableConfiguration
 // GetBucketMetricsConfiguration
 // GetBucketNotificationConfiguration
@@ -102,6 +105,9 @@
 // RenameObject
 // RestoreObject
 // SelectObjectContent
+// UpdateBucketMetadataAnnotationTableConfiguration
+// UpdateBucketMetadataInventoryTableConfiguration
+// UpdateBucketMetadataJournalTableConfiguration
 // UploadPart
 // UploadPartCopy
 // WriteGetObjectResponse
@@ -960,6 +966,63 @@ impl super::Operation for CreateBucket {
     }
 }
 
+pub struct CreateBucketMetadataConfiguration;
+
+impl CreateBucketMetadataConfiguration {
+    pub fn deserialize_http(req: &mut http::Request) -> S3Result<CreateBucketMetadataConfigurationInput> {
+        let bucket = http::unwrap_bucket(req);
+
+        let checksum_algorithm: Option<ChecksumAlgorithm> = http::parse_checksum_algorithm_header(req)?;
+
+        let content_md5: Option<ContentMD5> = http::parse_opt_header(req, &CONTENT_MD5)?;
+
+        let expected_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_EXPECTED_BUCKET_OWNER)?;
+
+        let metadata_configuration: MetadataConfiguration = http::take_xml_body(req)?;
+
+        Ok(CreateBucketMetadataConfigurationInput {
+            bucket,
+            checksum_algorithm,
+            content_md5,
+            expected_bucket_owner,
+            metadata_configuration,
+        })
+    }
+
+    pub fn serialize_http(_: CreateBucketMetadataConfigurationOutput) -> S3Result<http::Response> {
+        Ok(http::Response::with_status(http::StatusCode::OK))
+    }
+}
+
+#[async_trait::async_trait]
+impl super::Operation for CreateBucketMetadataConfiguration {
+    fn name(&self) -> &'static str {
+        "CreateBucketMetadataConfiguration"
+    }
+
+    fn needs_full_body(&self) -> bool {
+        true
+    }
+
+    async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
+        let input = Self::deserialize_http(req)?;
+        let mut s3_req = super::build_s3_request(input, req);
+        let s3 = ccx.s3;
+        if let Some(access) = ccx.access {
+            access.create_bucket_metadata_configuration(&mut s3_req).await?;
+        }
+        let result = s3.create_bucket_metadata_configuration(s3_req).await;
+        let s3_resp = match result {
+            Ok(val) => val,
+            Err(err) => return super::serialize_error(err, false),
+        };
+        let mut resp = Self::serialize_http(s3_resp.output)?;
+        resp.headers.extend(s3_resp.headers);
+        resp.extensions.extend(s3_resp.extensions);
+        Ok(resp)
+    }
+}
+
 pub struct CreateBucketMetadataTableConfiguration;
 
 impl CreateBucketMetadataTableConfiguration {
@@ -1572,6 +1635,54 @@ impl super::Operation for DeleteBucketLifecycle {
             access.delete_bucket_lifecycle(&mut s3_req).await?;
         }
         let result = s3.delete_bucket_lifecycle(s3_req).await;
+        let s3_resp = match result {
+            Ok(val) => val,
+            Err(err) => return super::serialize_error(err, false),
+        };
+        let mut resp = Self::serialize_http(s3_resp.output)?;
+        resp.headers.extend(s3_resp.headers);
+        resp.extensions.extend(s3_resp.extensions);
+        Ok(resp)
+    }
+}
+
+pub struct DeleteBucketMetadataConfiguration;
+
+impl DeleteBucketMetadataConfiguration {
+    pub fn deserialize_http(req: &mut http::Request) -> S3Result<DeleteBucketMetadataConfigurationInput> {
+        let bucket = http::unwrap_bucket(req);
+
+        let expected_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_EXPECTED_BUCKET_OWNER)?;
+
+        Ok(DeleteBucketMetadataConfigurationInput {
+            bucket,
+            expected_bucket_owner,
+        })
+    }
+
+    pub fn serialize_http(_: DeleteBucketMetadataConfigurationOutput) -> S3Result<http::Response> {
+        Ok(http::Response::with_status(http::StatusCode::NO_CONTENT))
+    }
+}
+
+#[async_trait::async_trait]
+impl super::Operation for DeleteBucketMetadataConfiguration {
+    fn name(&self) -> &'static str {
+        "DeleteBucketMetadataConfiguration"
+    }
+
+    fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
+        let input = Self::deserialize_http(req)?;
+        let mut s3_req = super::build_s3_request(input, req);
+        let s3 = ccx.s3;
+        if let Some(access) = ccx.access {
+            access.delete_bucket_metadata_configuration(&mut s3_req).await?;
+        }
+        let result = s3.delete_bucket_metadata_configuration(s3_req).await;
         let s3_resp = match result {
             Ok(val) => val,
             Err(err) => return super::serialize_error(err, false),
@@ -2734,6 +2845,58 @@ impl super::Operation for GetBucketLogging {
             access.get_bucket_logging(&mut s3_req).await?;
         }
         let result = s3.get_bucket_logging(s3_req).await;
+        let s3_resp = match result {
+            Ok(val) => val,
+            Err(err) => return super::serialize_error(err, false),
+        };
+        let mut resp = Self::serialize_http(s3_resp.output)?;
+        resp.headers.extend(s3_resp.headers);
+        resp.extensions.extend(s3_resp.extensions);
+        Ok(resp)
+    }
+}
+
+pub struct GetBucketMetadataConfiguration;
+
+impl GetBucketMetadataConfiguration {
+    pub fn deserialize_http(req: &mut http::Request) -> S3Result<GetBucketMetadataConfigurationInput> {
+        let bucket = http::unwrap_bucket(req);
+
+        let expected_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_EXPECTED_BUCKET_OWNER)?;
+
+        Ok(GetBucketMetadataConfigurationInput {
+            bucket,
+            expected_bucket_owner,
+        })
+    }
+
+    pub fn serialize_http(x: GetBucketMetadataConfigurationOutput) -> S3Result<http::Response> {
+        let mut res = http::Response::with_status(http::StatusCode::OK);
+        if let Some(ref val) = x.get_bucket_metadata_configuration_result {
+            http::set_xml_body(&mut res, val)?;
+        }
+        Ok(res)
+    }
+}
+
+#[async_trait::async_trait]
+impl super::Operation for GetBucketMetadataConfiguration {
+    fn name(&self) -> &'static str {
+        "GetBucketMetadataConfiguration"
+    }
+
+    fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
+        let input = Self::deserialize_http(req)?;
+        let mut s3_req = super::build_s3_request(input, req);
+        let s3 = ccx.s3;
+        if let Some(access) = ccx.access {
+            access.get_bucket_metadata_configuration(&mut s3_req).await?;
+        }
+        let result = s3.get_bucket_metadata_configuration(s3_req).await;
         let s3_resp = match result {
             Ok(val) => val,
             Err(err) => return super::serialize_error(err, false),
@@ -6969,6 +7132,181 @@ impl super::Operation for SelectObjectContent {
     }
 }
 
+pub struct UpdateBucketMetadataAnnotationTableConfiguration;
+
+impl UpdateBucketMetadataAnnotationTableConfiguration {
+    pub fn deserialize_http(req: &mut http::Request) -> S3Result<UpdateBucketMetadataAnnotationTableConfigurationInput> {
+        let bucket = http::unwrap_bucket(req);
+
+        let annotation_table_configuration: AnnotationTableConfigurationUpdates = http::take_xml_body(req)?;
+
+        let checksum_algorithm: Option<ChecksumAlgorithm> = http::parse_checksum_algorithm_header(req)?;
+
+        let content_md5: Option<ContentMD5> = http::parse_opt_header(req, &CONTENT_MD5)?;
+
+        let expected_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_EXPECTED_BUCKET_OWNER)?;
+
+        Ok(UpdateBucketMetadataAnnotationTableConfigurationInput {
+            annotation_table_configuration,
+            bucket,
+            checksum_algorithm,
+            content_md5,
+            expected_bucket_owner,
+        })
+    }
+
+    pub fn serialize_http(_: UpdateBucketMetadataAnnotationTableConfigurationOutput) -> S3Result<http::Response> {
+        Ok(http::Response::with_status(http::StatusCode::OK))
+    }
+}
+
+#[async_trait::async_trait]
+impl super::Operation for UpdateBucketMetadataAnnotationTableConfiguration {
+    fn name(&self) -> &'static str {
+        "UpdateBucketMetadataAnnotationTableConfiguration"
+    }
+
+    fn needs_full_body(&self) -> bool {
+        true
+    }
+
+    async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
+        let input = Self::deserialize_http(req)?;
+        let mut s3_req = super::build_s3_request(input, req);
+        let s3 = ccx.s3;
+        if let Some(access) = ccx.access {
+            access
+                .update_bucket_metadata_annotation_table_configuration(&mut s3_req)
+                .await?;
+        }
+        let result = s3.update_bucket_metadata_annotation_table_configuration(s3_req).await;
+        let s3_resp = match result {
+            Ok(val) => val,
+            Err(err) => return super::serialize_error(err, false),
+        };
+        let mut resp = Self::serialize_http(s3_resp.output)?;
+        resp.headers.extend(s3_resp.headers);
+        resp.extensions.extend(s3_resp.extensions);
+        Ok(resp)
+    }
+}
+
+pub struct UpdateBucketMetadataInventoryTableConfiguration;
+
+impl UpdateBucketMetadataInventoryTableConfiguration {
+    pub fn deserialize_http(req: &mut http::Request) -> S3Result<UpdateBucketMetadataInventoryTableConfigurationInput> {
+        let bucket = http::unwrap_bucket(req);
+
+        let checksum_algorithm: Option<ChecksumAlgorithm> = http::parse_checksum_algorithm_header(req)?;
+
+        let content_md5: Option<ContentMD5> = http::parse_opt_header(req, &CONTENT_MD5)?;
+
+        let expected_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_EXPECTED_BUCKET_OWNER)?;
+
+        let inventory_table_configuration: InventoryTableConfigurationUpdates = http::take_xml_body(req)?;
+
+        Ok(UpdateBucketMetadataInventoryTableConfigurationInput {
+            bucket,
+            checksum_algorithm,
+            content_md5,
+            expected_bucket_owner,
+            inventory_table_configuration,
+        })
+    }
+
+    pub fn serialize_http(_: UpdateBucketMetadataInventoryTableConfigurationOutput) -> S3Result<http::Response> {
+        Ok(http::Response::with_status(http::StatusCode::OK))
+    }
+}
+
+#[async_trait::async_trait]
+impl super::Operation for UpdateBucketMetadataInventoryTableConfiguration {
+    fn name(&self) -> &'static str {
+        "UpdateBucketMetadataInventoryTableConfiguration"
+    }
+
+    fn needs_full_body(&self) -> bool {
+        true
+    }
+
+    async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
+        let input = Self::deserialize_http(req)?;
+        let mut s3_req = super::build_s3_request(input, req);
+        let s3 = ccx.s3;
+        if let Some(access) = ccx.access {
+            access
+                .update_bucket_metadata_inventory_table_configuration(&mut s3_req)
+                .await?;
+        }
+        let result = s3.update_bucket_metadata_inventory_table_configuration(s3_req).await;
+        let s3_resp = match result {
+            Ok(val) => val,
+            Err(err) => return super::serialize_error(err, false),
+        };
+        let mut resp = Self::serialize_http(s3_resp.output)?;
+        resp.headers.extend(s3_resp.headers);
+        resp.extensions.extend(s3_resp.extensions);
+        Ok(resp)
+    }
+}
+
+pub struct UpdateBucketMetadataJournalTableConfiguration;
+
+impl UpdateBucketMetadataJournalTableConfiguration {
+    pub fn deserialize_http(req: &mut http::Request) -> S3Result<UpdateBucketMetadataJournalTableConfigurationInput> {
+        let bucket = http::unwrap_bucket(req);
+
+        let checksum_algorithm: Option<ChecksumAlgorithm> = http::parse_checksum_algorithm_header(req)?;
+
+        let content_md5: Option<ContentMD5> = http::parse_opt_header(req, &CONTENT_MD5)?;
+
+        let expected_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_EXPECTED_BUCKET_OWNER)?;
+
+        let journal_table_configuration: JournalTableConfigurationUpdates = http::take_xml_body(req)?;
+
+        Ok(UpdateBucketMetadataJournalTableConfigurationInput {
+            bucket,
+            checksum_algorithm,
+            content_md5,
+            expected_bucket_owner,
+            journal_table_configuration,
+        })
+    }
+
+    pub fn serialize_http(_: UpdateBucketMetadataJournalTableConfigurationOutput) -> S3Result<http::Response> {
+        Ok(http::Response::with_status(http::StatusCode::OK))
+    }
+}
+
+#[async_trait::async_trait]
+impl super::Operation for UpdateBucketMetadataJournalTableConfiguration {
+    fn name(&self) -> &'static str {
+        "UpdateBucketMetadataJournalTableConfiguration"
+    }
+
+    fn needs_full_body(&self) -> bool {
+        true
+    }
+
+    async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
+        let input = Self::deserialize_http(req)?;
+        let mut s3_req = super::build_s3_request(input, req);
+        let s3 = ccx.s3;
+        if let Some(access) = ccx.access {
+            access.update_bucket_metadata_journal_table_configuration(&mut s3_req).await?;
+        }
+        let result = s3.update_bucket_metadata_journal_table_configuration(s3_req).await;
+        let s3_resp = match result {
+            Ok(val) => val,
+            Err(err) => return super::serialize_error(err, false),
+        };
+        let mut resp = Self::serialize_http(s3_resp.output)?;
+        resp.headers.extend(s3_resp.headers);
+        resp.extensions.extend(s3_resp.extensions);
+        Ok(resp)
+    }
+}
+
 pub struct UploadPart;
 
 impl UploadPart {
@@ -7601,6 +7939,9 @@ pub fn resolve_route(
                     if qs.has("logging") {
                         return Ok(&GetBucketLogging as &'static dyn super::Operation);
                     }
+                    if qs.has("metadataConfiguration") {
+                        return Ok(&GetBucketMetadataConfiguration as &'static dyn super::Operation);
+                    }
                     if qs.has("metadataTable") {
                         return Ok(&GetBucketMetadataTableConfiguration as &'static dyn super::Operation);
                     }
@@ -7694,6 +8035,9 @@ pub fn resolve_route(
             S3Path::Root => Err(super::unknown_operation()),
             S3Path::Bucket { .. } => {
                 if let Some(qs) = qs {
+                    if qs.has("metadataConfiguration") {
+                        return Ok(&CreateBucketMetadataConfiguration as &'static dyn super::Operation);
+                    }
                     if qs.has("metadataTable") {
                         return Ok(&CreateBucketMetadataTableConfiguration as &'static dyn super::Operation);
                     }
@@ -7793,6 +8137,15 @@ pub fn resolve_route(
                     if qs.has("publicAccessBlock") {
                         return Ok(&PutPublicAccessBlock as &'static dyn super::Operation);
                     }
+                    if qs.has("metadataAnnotationTable") {
+                        return Ok(&UpdateBucketMetadataAnnotationTableConfiguration as &'static dyn super::Operation);
+                    }
+                    if qs.has("metadataInventoryTable") {
+                        return Ok(&UpdateBucketMetadataInventoryTableConfiguration as &'static dyn super::Operation);
+                    }
+                    if qs.has("metadataJournalTable") {
+                        return Ok(&UpdateBucketMetadataJournalTableConfiguration as &'static dyn super::Operation);
+                    }
                 }
                 Ok(&CreateBucket as &'static dyn super::Operation)
             }
@@ -7857,6 +8210,9 @@ pub fn resolve_route(
                     }
                     if qs.has("lifecycle") {
                         return Ok(&DeleteBucketLifecycle as &'static dyn super::Operation);
+                    }
+                    if qs.has("metadataConfiguration") {
+                        return Ok(&DeleteBucketMetadataConfiguration as &'static dyn super::Operation);
                     }
                     if qs.has("metadataTable") {
                         return Ok(&DeleteBucketMetadataTableConfiguration as &'static dyn super::Operation);
