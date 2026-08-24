@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+[Unreleased]: https://github.com/s3s-project/s3s/compare/v0.15.0...HEAD
+
+## [v0.15.0] - 2026-08-25
+
+[v0.15.0]: https://github.com/s3s-project/s3s/compare/v0.14.1...v0.15.0
+
 MSRV of this minor version: 1.96.0
 
 ### s3s
@@ -19,6 +25,12 @@ MSRV of this minor version: 1.96.0
 + Validate the configured SigV4 region ([#650](https://github.com/s3s-project/s3s/pull/650))
 + Accept base64 REST payload checksums ([#631](https://github.com/s3s-project/s3s/pull/631))
 
+**aws-chunked:**
++ Fix aws-chunked streaming to cap the signed chunk size ([#709](https://github.com/s3s-project/s3s/pull/709))
++ Stream unsigned aws-chunked chunks without buffering ([#705](https://github.com/s3s-project/s3s/pull/705))
++ Cache the derived signing key in the aws-chunked stream ([#703](https://github.com/s3s-project/s3s/pull/703))
++ Verify aws-chunked signatures as raw bytes without hex decoding ([#699](https://github.com/s3s-project/s3s/pull/699))
+
 **Host:**
 + Restrict and configure the CNAME-style fallback ([#667](https://github.com/s3s-project/s3s/pull/667)) (fixes [#643](https://github.com/s3s-project/s3s/issues/643))
 + Require a label boundary in the `MultiDomain` overlap check ([#649](https://github.com/s3s-project/s3s/pull/649)) (fixes [#648](https://github.com/s3s-project/s3s/issues/648))
@@ -30,7 +42,12 @@ MSRV of this minor version: 1.96.0
 + Serialize ETag without quotes in `GetObjectAttributesOutput` XML body ([#632](https://github.com/s3s-project/s3s/pull/632)) (fixes [#629](https://github.com/s3s-project/s3s/issues/629))
 + Preserve single-chunk streaming blobs ([#677](https://github.com/s3s-project/s3s/pull/677))
 
+**POST Object:**
++ Stream multipart POST object uploads with the exact content length ([#691](https://github.com/s3s-project/s3s/pull/691))
++ Generalize the post object body stream and length handling ([#684](https://github.com/s3s-project/s3s/pull/684))
+
 **Performance:**
++ Optimize SelectObjectContent event payload framing to avoid copying ([#696](https://github.com/s3s-project/s3s/pull/696))
 + Avoid path decode allocation in request preparation ([#668](https://github.com/s3s-project/s3s/pull/668))
 
 **Error handling:**
@@ -47,11 +64,24 @@ MSRV of this minor version: 1.96.0
 + Split GET output path attribution ([#664](https://github.com/s3s-project/s3s/pull/664))
 + Expand GET serialization attribution bench ([#669](https://github.com/s3s-project/s3s/pull/669))
 + Close the remaining coverage gaps in `host.rs` ([#675](https://github.com/s3s-project/s3s/pull/675))
++ Add route equivalence fixtures captured from the current router ([#694](https://github.com/s3s-project/s3s/pull/694))
++ Add ignored micro-benchmarks for `resolve_route` ([#692](https://github.com/s3s-project/s3s/pull/692))
++ Assert error values instead of matching them ([#685](https://github.com/s3s-project/s3s/pull/685))
 
 ### s3s-fs
 
 **Testing:**
 + Recover `opendal` integration tests by updating to `opendal` 0.58, which drops the vulnerable `rsa` transitive dependency chain removed in [#624](https://github.com/s3s-project/s3s/pull/624) ([#665](https://github.com/s3s-project/s3s/pull/665)) (fixes [#627](https://github.com/s3s-project/s3s/issues/627))
+
+### s3s-model
+
++ Refresh the S3 Smithy model from aws-sdk-rust, adding new bucket regions, FSx storage classes, and service-level traits ([#698](https://github.com/s3s-project/s3s/pull/698))
++ Refresh the STS Smithy model from aws-sdk-rust, gaining `GetDelegatedAccessToken` and `GetWebIdentityToken` operations ([#695](https://github.com/s3s-project/s3s/pull/695))
++ Add `RenameObject` operation to the S3 model ([#702](https://github.com/s3s-project/s3s/pull/702))
++ Add ABAC operations and the bucket namespace to the S3 model ([#704](https://github.com/s3s-project/s3s/pull/704))
++ Add bucket metadata configuration operations to the S3 model ([#707](https://github.com/s3s-project/s3s/pull/707))
++ Sync leftover operation traits in the S3 model ([#708](https://github.com/s3s-project/s3s/pull/708))
++ Sink `needs_full_body` into the `Operation` trait in codegen ([#697](https://github.com/s3s-project/s3s/pull/697))
 
 ### Documentation
 
@@ -63,19 +93,28 @@ MSRV of this minor version: 1.96.0
 + Update CI MSRV toolchain to 1.96.0 in [#637](https://github.com/s3s-project/s3s/pull/637)
 + Update dependabot schedule from monthly to weekly ([#638](https://github.com/s3s-project/s3s/pull/638))
 + Drop stale audit ignores and document the `lru` advisory ([#660](https://github.com/s3s-project/s3s/pull/660))
++ Make the nightly toolchain leg non-blocking and drop the unused Mergify config ([#689](https://github.com/s3s-project/s3s/pull/689))
++ Temporarily pin the nightly toolchain to 2026-08-20 to work around an upstream ICE ([#690](https://github.com/s3s-project/s3s/pull/690))
 
 ### Data
 
 + Resolve ruff 0.16.0 lint failures across scripts and tests ([#644](https://github.com/s3s-project/s3s/pull/644))
 
+### License
+
++ Complete Apache-2.0 compliance artifacts: LICENSE, NOTICE, and SPDX headers ([#688](https://github.com/s3s-project/s3s/pull/688))
+
+### Testing
+
++ Add rclone S3 integration coverage ([#686](https://github.com/s3s-project/s3s/pull/686))
+
 ### Dependencies
 
 + Update `h2` to 0.4.16, fixing [RUSTSEC-2026-0258] (unbounded empty DATA frames) in [#678](https://github.com/s3s-project/s3s/pull/678)
++ Update `aws-sdk-s3` to 1.143.0 as part of the S3 model refresh ([#698](https://github.com/s3s-project/s3s/pull/698))
 + Upgrade workspace Rust dependencies and refresh `Cargo.lock` in [#637](https://github.com/s3s-project/s3s/pull/637)
 + Multiple dependabot dependency group updates ([#639](https://github.com/s3s-project/s3s/pull/639), [#647](https://github.com/s3s-project/s3s/pull/647), [#657](https://github.com/s3s-project/s3s/pull/657), [#672](https://github.com/s3s-project/s3s/pull/672))
 + Bump `soupsieve` from 2.6 to 2.8.4 in [#630](https://github.com/s3s-project/s3s/pull/630)
-
-[Unreleased]: https://github.com/s3s-project/s3s/compare/v0.14.1...HEAD
 
 ## [v0.14.1] - 2026-07-03
 
