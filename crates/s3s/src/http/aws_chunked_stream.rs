@@ -623,6 +623,21 @@ fn trim_ascii_whitespace(mut s: &[u8]) -> &[u8] {
 mod tests {
     use super::*;
 
+    #[test]
+    fn signature_ctx_debug_redacts_signing_key() {
+        let ctx = SignatureCtx {
+            amz_date: AmzDate::parse("20130524T000000Z").unwrap(),
+            region: "us-east-1".into(),
+            service: "s3".into(),
+            signing_key: Zeroizing::new([0xAA; 32]),
+            prev_signature: Sha256Sum::from_hex("4f232c4386841ef735655705268965c44a0e4690baa4adea153f7db9fa80a0a9").unwrap(),
+        };
+
+        let text = format!("{ctx:?}");
+        assert!(text.contains("signing_key: \"[REDACTED]\""));
+        assert!(!text.contains("signing_key: ["));
+    }
+
     fn join(bytes: &[&[u8]]) -> Bytes {
         let mut buf = Vec::new();
         for b in bytes {
