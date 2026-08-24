@@ -715,6 +715,79 @@ mod tests {
         assert_eq!(parsed_payload.unwrap(), [1, 2, 3, 4]);
     }
 
+    #[tokio::test]
+    async fn into_byte_stream_empty_payload_yields_single_chunk() {
+        let events: Vec<S3Result<SelectObjectContentEvent>> = vec![Ok(SelectObjectContentEvent::Records(RecordsEvent {
+            payload: Some(Bytes::new()),
+        }))];
+        let stream = SelectObjectContentEventStream::new(futures::stream::iter(events));
+        let mut byte_stream = stream.into_byte_stream();
+
+        let frame = byte_stream.next().await.unwrap().unwrap();
+        assert!(byte_stream.next().await.is_none());
+
+        // byte-identical to a message without payload
+        let none_events: Vec<S3Result<SelectObjectContentEvent>> =
+            vec![Ok(SelectObjectContentEvent::Records(RecordsEvent { payload: None }))];
+        let mut none_stream = SelectObjectContentEventStream::new(futures::stream::iter(none_events)).into_byte_stream();
+        let none_frame = none_stream.next().await.unwrap().unwrap();
+        assert_eq!(frame, none_frame);
+
+        let (_headers, payload) = parse_message(&frame);
+        assert!(payload.is_none());
+    }
+
+    #[test]
+    fn event_into_bytes_propagates_serialization_error() {
+        // an error code exceeding the u16 header-value limit forces IntOverflow during serialization
+        let err = S3Error::with_message(
+            S3ErrorCode::Custom(bytestring::ByteString::from("x".repeat(u16::MAX as usize + 1))),
+            "serialization overflow",
+        );
+        let error = event_into_bytes(Err(err)).expect_err("serialization must overflow");
+        assert!(error.to_string().contains("IntOverflow"));
+    }
+
+    #[tokio::test]
+    async fn into_byte_stream_propagates_serialization_error() {
+        let err = S3Error::with_message(
+            S3ErrorCode::Custom(bytestring::ByteString::from("x".repeat(u16::MAX as usize + 1))),
+            "serialization overflow",
+        );
+        let events: Vec<S3Result<SelectObjectContentEvent>> = vec![Err(err)];
+        let stream = SelectObjectContentEventStream::new(futures::stream::iter(events));
+        let mut byte_stream = stream.into_byte_stream();
+
+        let item = byte_stream.next().await.expect("one error item");
+        assert!(item.is_err(), "serialization overflow must surface as a stream error");
+        assert!(byte_stream.next().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn into_byte_stream_polls_pending_inner() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let events = futures::stream::poll_fn({
+            let calls = Arc::clone(&calls);
+            move |cx| {
+                if calls.fetch_add(1, Ordering::Relaxed) == 0 {
+                    cx.waker().wake_by_ref();
+                    Poll::Pending
+                } else {
+                    Poll::Ready(Some(Ok(SelectObjectContentEvent::End(EndEvent {}))))
+                }
+            }
+        });
+        let stream = SelectObjectContentEventStream::new(events);
+        let mut byte_stream = stream.into_byte_stream();
+
+        let frame = byte_stream.next().await.unwrap().unwrap();
+        let (_headers, payload) = parse_message(&frame);
+        assert!(payload.is_none());
+    }
+
     #[test]
     fn ser_error_display() {
         let e = SerError::LengthOverflow;
