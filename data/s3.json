@@ -28101,6 +28101,9 @@
                 }
             }
         },
+        "com.amazonaws.s3#ClientToken": {
+            "type": "string"
+        },
         "com.amazonaws.s3#Code": {
             "type": "string"
         },
@@ -35842,6 +35845,15 @@
         "com.amazonaws.s3#ID": {
             "type": "string"
         },
+        "com.amazonaws.s3#IdempotencyParameterMismatch": {
+            "type": "structure",
+            "members": {},
+            "traits": {
+                "smithy.api#documentation": "<p>Parameters on this idempotent request are inconsistent with parameters used in previous request(s). </p>\n         <p>For a list of error codes and more information on Amazon S3 errors, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html#ErrorCodeList\">Error codes</a>.</p>\n         <note>\n            <p>Idempotency ensures that an API request completes no more than one time. With an idempotent\n        request, if the original request completes successfully, any subsequent retries complete successfully\n        without performing any further actions.</p>\n         </note>",
+                "smithy.api#error": "client",
+                "smithy.api#httpError": 400
+            }
+        },
         "com.amazonaws.s3#IfMatch": {
             "type": "string"
         },
@@ -43271,6 +43283,161 @@
                     "min": 0,
                     "max": 20
                 }
+            }
+        },
+        "com.amazonaws.s3#RenameObject": {
+            "type": "operation",
+            "input": {
+                "target": "com.amazonaws.s3#RenameObjectRequest"
+            },
+            "output": {
+                "target": "com.amazonaws.s3#RenameObjectOutput"
+            },
+            "errors": [
+                {
+                    "target": "com.amazonaws.s3#IdempotencyParameterMismatch"
+                }
+            ],
+            "traits": {
+                "smithy.api#documentation": "<p>Renames an existing object in a directory bucket that uses the S3 Express One Zone storage class.\n      You can use <code>RenameObject</code> by specifying an existing object’s name as the source and the new\n      name of the object as the destination within the same directory bucket.</p>\n         <note>\n            <p>\n               <code>RenameObject</code> is only supported for objects stored in the S3 Express One Zone storage\n        class.</p>\n         </note>\n         <p> To prevent overwriting an object, you can use the <code>If-None-Match</code> conditional\n      header.</p>\n         <ul>\n            <li>\n               <p>\n                  <b>If-None-Match</b> - Renames the object only if an object\n          with the specified name does not already exist in the directory bucket. If you don't want to\n          overwrite an existing object, you can add the <code>If-None-Match</code> conditional header with the\n          value <code>‘*’</code> in the <code>RenameObject</code> request. Amazon S3 then returns a <code>412\n            Precondition Failed</code> error if the object with the specified name already exists. For more\n          information, see <a href=\"https://datatracker.ietf.org/doc/rfc7232/\">RFC 7232</a>.</p>\n            </li>\n         </ul>\n         <dl>\n            <dt>Permissions</dt>\n            <dd>\n               <p> To grant access to the <code>RenameObject</code> operation on a directory bucket, we\n            recommend that you use the <code>CreateSession</code> operation for session-based authorization.\n            Specifically, you grant the <code>s3express:CreateSession</code> permission to the directory\n            bucket in a bucket policy or an IAM identity-based policy. Then, you make the\n              <code>CreateSession</code> API call on the directory bucket to obtain a session token. With the\n            session token in your request header, you can make API requests to this operation. After the\n            session token expires, you make another <code>CreateSession</code> API call to generate a new\n            session token for use. The Amazon Web Services CLI and SDKs will create and manage your session including\n            refreshing the session token automatically to avoid service interruptions when a session expires.\n            In your bucket policy, you can specify the <code>s3express:SessionMode</code> condition key to\n            control who can create a <code>ReadWrite</code> or <code>ReadOnly</code> session. A\n              <code>ReadWrite</code> session is required for executing all the Zonal endpoint API operations,\n            including <code>RenameObject</code>. For more information about authorization, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateSession.html\">\n                     <code>CreateSession</code>\n                  </a>. To learn more about Zonal endpoint API operations, see\n              <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-express-create-session.html\">Authorizing Zonal endpoint API operations with CreateSession</a> in the <i>Amazon S3 User\n              Guide</i>. </p>\n            </dd>\n            <dt>HTTP Host header syntax</dt>\n            <dd>\n               <p>\n                  <b>Directory buckets </b> - The HTTP Host header syntax is <code>\n                     <i>Bucket-name</i>.s3express-<i>zone-id</i>.<i>region-code</i>.amazonaws.com</code>.</p>\n            </dd>\n         </dl>\n         <important>\n            <p>You must URL encode any signed header values that contain spaces. For example, if your header value is <code>my  file.txt</code>, containing two spaces after <code>my</code>, you must URL encode this value to <code>my%20%20file.txt</code>.</p>\n         </important>",
+                "smithy.api#http": {
+                    "method": "PUT",
+                    "uri": "/{Bucket}/{Key+}?renameObject",
+                    "code": 200
+                }
+            }
+        },
+        "com.amazonaws.s3#RenameObjectOutput": {
+            "type": "structure",
+            "members": {},
+            "traits": {
+                "smithy.api#output": {}
+            }
+        },
+        "com.amazonaws.s3#RenameObjectRequest": {
+            "type": "structure",
+            "members": {
+                "Bucket": {
+                    "target": "com.amazonaws.s3#BucketName",
+                    "traits": {
+                        "smithy.api#documentation": "<p>The bucket name of the directory bucket containing the object.</p>\n         <p> You must use virtual-hosted-style requests in the format\n        <code>Bucket-name.s3express-zone-id.region-code.amazonaws.com</code>. Path-style requests are not\n      supported. Directory bucket names must be unique in the chosen Availability Zone. Bucket names must\n      follow the format <code>bucket-base-name--zone-id--x-s3 </code> (for example,\n        <code>amzn-s3-demo-bucket--usw2-az1--x-s3</code>). For information about bucket naming restrictions, see\n        <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/directory-bucket-naming-rules.html\">Directory bucket naming rules</a> in the <i>Amazon S3 User Guide</i>.</p>",
+                        "smithy.api#httpLabel": {},
+                        "smithy.api#required": {},
+                        "smithy.rules#contextParam": {
+                            "name": "Bucket"
+                        }
+                    }
+                },
+                "Key": {
+                    "target": "com.amazonaws.s3#ObjectKey",
+                    "traits": {
+                        "smithy.api#documentation": "<p>Key name of the object to rename.</p>",
+                        "smithy.api#httpLabel": {},
+                        "smithy.api#required": {},
+                        "smithy.rules#contextParam": {
+                            "name": "Key"
+                        }
+                    }
+                },
+                "RenameSource": {
+                    "target": "com.amazonaws.s3#RenameSource",
+                    "traits": {
+                        "smithy.api#documentation": "<p>Specifies the source for the rename operation. The value must be URL encoded.</p>",
+                        "smithy.api#httpHeader": "x-amz-rename-source",
+                        "smithy.api#required": {}
+                    }
+                },
+                "DestinationIfMatch": {
+                    "target": "com.amazonaws.s3#IfMatch",
+                    "traits": {
+                        "smithy.api#documentation": "<p>Renames the object only if the ETag (entity tag) value provided during the operation matches the\n      ETag of the object in S3. The <code>If-Match</code> header field makes the request method conditional on\n      ETags. If the ETag values do not match, the operation returns a <code>412 Precondition Failed</code>\n      error.</p>\n         <p>Expects the ETag value as a string.</p>",
+                        "smithy.api#httpHeader": "If-Match"
+                    }
+                },
+                "DestinationIfNoneMatch": {
+                    "target": "com.amazonaws.s3#IfNoneMatch",
+                    "traits": {
+                        "smithy.api#documentation": "<p> Renames the object only if the destination does not already exist in the specified directory\n      bucket. If the object does exist when you send a request with <code>If-None-Match:*</code>, the S3 API\n      will return a <code>412 Precondition Failed</code> error, preventing an overwrite. The\n        <code>If-None-Match</code> header prevents overwrites of existing data by validating that there's not\n      an object with the same key name already in your directory bucket.</p>\n         <p> Expects the <code>*</code> character (asterisk).</p>",
+                        "smithy.api#httpHeader": "If-None-Match"
+                    }
+                },
+                "DestinationIfModifiedSince": {
+                    "target": "com.amazonaws.s3#IfModifiedSince",
+                    "traits": {
+                        "smithy.api#documentation": "<p>Renames the object if the destination exists and if it has been modified since the specified\n      time.</p>",
+                        "smithy.api#httpHeader": "If-Modified-Since"
+                    }
+                },
+                "DestinationIfUnmodifiedSince": {
+                    "target": "com.amazonaws.s3#IfUnmodifiedSince",
+                    "traits": {
+                        "smithy.api#documentation": "<p>Renames the object if it hasn't been modified since the specified time.</p>",
+                        "smithy.api#httpHeader": "If-Unmodified-Since"
+                    }
+                },
+                "SourceIfMatch": {
+                    "target": "com.amazonaws.s3#RenameSourceIfMatch",
+                    "traits": {
+                        "smithy.api#documentation": "<p>Renames the object if the source exists and if its entity tag (ETag) matches the specified ETag.\n    </p>",
+                        "smithy.api#httpHeader": "x-amz-rename-source-if-match"
+                    }
+                },
+                "SourceIfNoneMatch": {
+                    "target": "com.amazonaws.s3#RenameSourceIfNoneMatch",
+                    "traits": {
+                        "smithy.api#documentation": "<p>Renames the object if the source exists and if its entity tag (ETag) is different than the specified\n      ETag. If an asterisk (<code>*</code>) character is provided, the operation will fail and return a\n        <code>412 Precondition Failed</code> error. </p>",
+                        "smithy.api#httpHeader": "x-amz-rename-source-if-none-match"
+                    }
+                },
+                "SourceIfModifiedSince": {
+                    "target": "com.amazonaws.s3#RenameSourceIfModifiedSince",
+                    "traits": {
+                        "smithy.api#documentation": "<p>Renames the object if the source exists and if it has been modified since the specified time.</p>",
+                        "smithy.api#httpHeader": "x-amz-rename-source-if-modified-since"
+                    }
+                },
+                "SourceIfUnmodifiedSince": {
+                    "target": "com.amazonaws.s3#RenameSourceIfUnmodifiedSince",
+                    "traits": {
+                        "smithy.api#documentation": "<p>Renames the object if the source exists and hasn't been modified since the specified time.</p>",
+                        "smithy.api#httpHeader": "x-amz-rename-source-if-unmodified-since"
+                    }
+                },
+                "ClientToken": {
+                    "target": "com.amazonaws.s3#ClientToken",
+                    "traits": {
+                        "smithy.api#documentation": "<p> A unique string with a max of 64 ASCII characters in the ASCII range of 33 - 126.</p>\n         <note>\n            <p>\n               <code>RenameObject</code> supports idempotency using a client token. To make an idempotent API request\n        using <code>RenameObject</code>, specify a client token in the request. You should not reuse the same\n        client token for other API requests. If you retry a request that completed successfully using the same\n        client token and the same parameters, the retry succeeds without performing any further actions. If\n        you retry a successful request using the same client token, but one or more of the parameters are\n        different, the retry fails and an <code>IdempotentParameterMismatch</code> error is returned. </p>\n         </note>",
+                        "smithy.api#httpHeader": "x-amz-client-token",
+                        "smithy.api#idempotencyToken": {}
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#input": {}
+            }
+        },
+        "com.amazonaws.s3#RenameSource": {
+            "type": "string",
+            "traits": {
+                "smithy.api#pattern": "^\\/?.+\\/.+$"
+            }
+        },
+        "com.amazonaws.s3#RenameSourceIfMatch": {
+            "type": "string"
+        },
+        "com.amazonaws.s3#RenameSourceIfModifiedSince": {
+            "type": "timestamp",
+            "traits": {
+                "smithy.api#timestampFormat": "http-date"
+            }
+        },
+        "com.amazonaws.s3#RenameSourceIfNoneMatch": {
+            "type": "string"
+        },
+        "com.amazonaws.s3#RenameSourceIfUnmodifiedSince": {
+            "type": "timestamp",
+            "traits": {
+                "smithy.api#timestampFormat": "http-date"
             }
         },
         "com.amazonaws.s3#ReplaceKeyPrefixWith": {

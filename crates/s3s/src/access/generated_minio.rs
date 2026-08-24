@@ -757,6 +757,13 @@ pub trait S3Access: Send + Sync + 'static {
         Ok(())
     }
 
+    /// Checks whether the RenameObject request has accesses to the resources.
+    ///
+    /// This method returns `Ok(())` by default.
+    async fn rename_object(&self, _req: &mut S3Request<RenameObjectInput>) -> S3Result<()> {
+        Ok(())
+    }
+
     /// Checks whether the RestoreObject request has accesses to the resources.
     ///
     /// This method returns `Ok(())` by default.

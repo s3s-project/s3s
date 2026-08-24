@@ -95,6 +95,8 @@ pub const X_AMZ_CHECKSUM_XXHASH3: HeaderName = HeaderName::from_static("x-amz-ch
 
 pub const X_AMZ_CHECKSUM_XXHASH64: HeaderName = HeaderName::from_static("x-amz-checksum-xxhash64");
 
+pub const X_AMZ_CLIENT_TOKEN: HeaderName = HeaderName::from_static("x-amz-client-token");
+
 pub const X_AMZ_CONFIRM_REMOVE_SELF_BUCKET_ACCESS: HeaderName =
     HeaderName::from_static("x-amz-confirm-remove-self-bucket-access");
 
@@ -275,6 +277,17 @@ pub const X_AMZ_OBJECT_SIZE: HeaderName = HeaderName::from_static("x-amz-object-
 pub const X_AMZ_OPTIONAL_OBJECT_ATTRIBUTES: HeaderName = HeaderName::from_static("x-amz-optional-object-attributes");
 
 pub const X_AMZ_PART_NUMBER_MARKER: HeaderName = HeaderName::from_static("x-amz-part-number-marker");
+
+pub const X_AMZ_RENAME_SOURCE: HeaderName = HeaderName::from_static("x-amz-rename-source");
+
+pub const X_AMZ_RENAME_SOURCE_IF_MATCH: HeaderName = HeaderName::from_static("x-amz-rename-source-if-match");
+
+pub const X_AMZ_RENAME_SOURCE_IF_MODIFIED_SINCE: HeaderName = HeaderName::from_static("x-amz-rename-source-if-modified-since");
+
+pub const X_AMZ_RENAME_SOURCE_IF_NONE_MATCH: HeaderName = HeaderName::from_static("x-amz-rename-source-if-none-match");
+
+pub const X_AMZ_RENAME_SOURCE_IF_UNMODIFIED_SINCE: HeaderName =
+    HeaderName::from_static("x-amz-rename-source-if-unmodified-since");
 
 pub const X_AMZ_REPLICATION_STATUS: HeaderName = HeaderName::from_static("x-amz-replication-status");
 

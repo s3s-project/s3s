@@ -2423,6 +2423,38 @@ impl S3 for Proxy {
     }
 
     #[tracing::instrument(skip(self, req))]
+    async fn rename_object(
+        &self,
+        req: S3Request<s3s::dto::RenameObjectInput>,
+    ) -> S3Result<S3Response<s3s::dto::RenameObjectOutput>> {
+        let input = req.input;
+        debug!(?input);
+        let mut b = self.0.rename_object();
+        b = b.set_bucket(Some(try_into_aws(input.bucket)?));
+        b = b.set_client_token(try_into_aws(input.client_token)?);
+        b = b.set_destination_if_match(try_into_aws(input.destination_if_match)?);
+        b = b.set_destination_if_modified_since(try_into_aws(input.destination_if_modified_since)?);
+        b = b.set_destination_if_none_match(try_into_aws(input.destination_if_none_match)?);
+        b = b.set_destination_if_unmodified_since(try_into_aws(input.destination_if_unmodified_since)?);
+        b = b.set_key(Some(try_into_aws(input.key)?));
+        b = b.set_rename_source(Some(try_into_aws(input.rename_source)?));
+        b = b.set_source_if_match(try_into_aws(input.source_if_match)?);
+        b = b.set_source_if_modified_since(try_into_aws(input.source_if_modified_since)?);
+        b = b.set_source_if_none_match(try_into_aws(input.source_if_none_match)?);
+        b = b.set_source_if_unmodified_since(try_into_aws(input.source_if_unmodified_since)?);
+        let result = b.send().await;
+        match result {
+            Ok(output) => {
+                let headers = super::meta::build_headers(&output)?;
+                let output = try_from_aws(output)?;
+                debug!(?output);
+                Ok(S3Response::with_headers(output, headers))
+            }
+            Err(e) => Err(wrap_sdk_error!(e)),
+        }
+    }
+
+    #[tracing::instrument(skip(self, req))]
     async fn restore_object(
         &self,
         req: S3Request<s3s::dto::RestoreObjectInput>,

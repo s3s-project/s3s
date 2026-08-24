@@ -4188,6 +4188,22 @@ impl AwsConversion for s3s::dto::HeadObjectOutput {
     }
 }
 
+impl AwsConversion for s3s::dto::IdempotencyParameterMismatch {
+    type Target = aws_sdk_s3::types::error::IdempotencyParameterMismatch;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        let _ = x;
+        Ok(Self {})
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let _ = x;
+        let y = Self::Target::builder();
+        Ok(y.build())
+    }
+}
+
 impl AwsConversion for s3s::dto::IndexDocument {
     type Target = aws_sdk_s3::types::IndexDocument;
     type Error = S3Error;
@@ -7941,6 +7957,61 @@ impl AwsConversion for s3s::dto::RedirectAllRequestsTo {
         y = y.set_host_name(Some(try_into_aws(x.host_name)?));
         y = y.set_protocol(try_into_aws(x.protocol)?);
         y.build().map_err(S3Error::internal_error)
+    }
+}
+
+impl AwsConversion for s3s::dto::RenameObjectInput {
+    type Target = aws_sdk_s3::operation::rename_object::RenameObjectInput;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            bucket: unwrap_from_aws(x.bucket, "bucket")?,
+            client_token: try_from_aws(x.client_token)?,
+            destination_if_match: try_from_aws(x.destination_if_match)?,
+            destination_if_modified_since: try_from_aws(x.destination_if_modified_since)?,
+            destination_if_none_match: try_from_aws(x.destination_if_none_match)?,
+            destination_if_unmodified_since: try_from_aws(x.destination_if_unmodified_since)?,
+            key: unwrap_from_aws(x.key, "key")?,
+            rename_source: unwrap_from_aws(x.rename_source, "rename_source")?,
+            source_if_match: try_from_aws(x.source_if_match)?,
+            source_if_modified_since: try_from_aws(x.source_if_modified_since)?,
+            source_if_none_match: try_from_aws(x.source_if_none_match)?,
+            source_if_unmodified_since: try_from_aws(x.source_if_unmodified_since)?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_bucket(Some(try_into_aws(x.bucket)?));
+        y = y.set_client_token(try_into_aws(x.client_token)?);
+        y = y.set_destination_if_match(try_into_aws(x.destination_if_match)?);
+        y = y.set_destination_if_modified_since(try_into_aws(x.destination_if_modified_since)?);
+        y = y.set_destination_if_none_match(try_into_aws(x.destination_if_none_match)?);
+        y = y.set_destination_if_unmodified_since(try_into_aws(x.destination_if_unmodified_since)?);
+        y = y.set_key(Some(try_into_aws(x.key)?));
+        y = y.set_rename_source(Some(try_into_aws(x.rename_source)?));
+        y = y.set_source_if_match(try_into_aws(x.source_if_match)?);
+        y = y.set_source_if_modified_since(try_into_aws(x.source_if_modified_since)?);
+        y = y.set_source_if_none_match(try_into_aws(x.source_if_none_match)?);
+        y = y.set_source_if_unmodified_since(try_into_aws(x.source_if_unmodified_since)?);
+        y.build().map_err(S3Error::internal_error)
+    }
+}
+
+impl AwsConversion for s3s::dto::RenameObjectOutput {
+    type Target = aws_sdk_s3::operation::rename_object::RenameObjectOutput;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        let _ = x;
+        Ok(Self {})
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let _ = x;
+        let y = Self::Target::builder();
+        Ok(y.build())
     }
 }
 
