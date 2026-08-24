@@ -191,6 +191,7 @@ impl AwsChunkedStream {
                 let mut prev_bytes = Bytes::new();
                 let mut buf: Vec<u8> = Vec::new();
                 let signing_key = Zeroizing::new(sig_v4::derive_signing_key(&secret_key, &amz_date, &region, &service));
+                drop(secret_key);
                 let mut ctx = SignatureCtx {
                     amz_date,
                     region,
