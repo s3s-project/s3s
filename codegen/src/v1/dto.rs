@@ -188,7 +188,7 @@ pub fn collect_rust_types(model: &smithy::Model, ops: &Operations) -> RustTypes 
                     let is_op_input = rs_shape_name.strip_suffix("Request").is_some_and(|op| ops.contains_key(op));
 
                     let option_type = 'optional: {
-                        if field_type == "StreamingBlob" && default_value.as_ref().unwrap() == "" {
+                        if field_type == "StreamingBlob" {
                             break 'optional true;
                         }
                         if is_op_input && is_required.not() {

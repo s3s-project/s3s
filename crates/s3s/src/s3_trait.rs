@@ -1993,6 +1993,44 @@ pub trait S3: Send + Sync + 'static {
         Err(s3_error!(NotImplemented, "DeleteObject is not implemented yet"))
     }
 
+    /// <p>Deletes a specific annotation from an Amazon S3 object. Use the <code>x-amz-object-if-match</code>
+    /// header to perform a conditional delete that only succeeds if the object's ETag matches the
+    /// provided value, preventing race conditions during concurrent updates.</p>
+    /// <p>Deleting an annotation is permanent. Annotations are not independently versioned, so there is no
+    /// delete marker or way to recover a deleted annotation.</p>
+    /// <p>To use this operation, you must have the <code>s3:DeleteObjectAnnotation</code> permission. If
+    /// the object is protected by Object Lock in governance mode, you must also include the
+    /// <code>x-amz-bypass-governance-retention</code> header.</p>
+    /// <note>
+    /// <p>Annotations are not supported by the following features: S3 Inventory Reports,
+    /// API Gateway, S3 Storage Lens, Amazon S3 File Gateway, Amazon FSx, S3 on Outposts, and
+    /// S3 Express One Zone (directory buckets).</p>
+    /// </note>
+    /// <p>The following operations are related to <code>DeleteObjectAnnotation</code>:</p>
+    /// <ul>
+    /// <li>
+    /// <p>
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObjectAnnotation.html">PutObjectAnnotation</a>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObjectAnnotation.html">GetObjectAnnotation</a>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjectAnnotations.html">ListObjectAnnotations</a>
+    /// </p>
+    /// </li>
+    /// </ul>
+    async fn delete_object_annotation(
+        &self,
+        _req: S3Request<DeleteObjectAnnotationInput>,
+    ) -> S3Result<S3Response<DeleteObjectAnnotationOutput>> {
+        Err(s3_error!(NotImplemented, "DeleteObjectAnnotation is not implemented yet"))
+    }
+
     /// <note>
     /// <p>This operation is not supported for directory buckets.</p>
     /// </note>
@@ -3332,6 +3370,40 @@ pub trait S3: Send + Sync + 'static {
         Err(s3_error!(NotImplemented, "GetObjectAcl is not implemented yet"))
     }
 
+    /// <p>Retrieves an annotation from an Amazon S3 object. To use this operation, you must have the
+    /// <code>s3:GetObjectAnnotation</code> permission.</p>
+    /// <p>If checksum mode is enabled via the <code>x-amz-checksum-mode</code> header, Amazon S3
+    /// returns the stored checksum in the response headers for client-side validation.</p>
+    /// <note>
+    /// <p>Annotations are not supported by the following features: S3 Inventory Reports,
+    /// API Gateway, S3 Storage Lens, Amazon S3 File Gateway, Amazon FSx, S3 on Outposts, and
+    /// S3 Express One Zone (directory buckets).</p>
+    /// </note>
+    /// <p>The following operations are related to <code>GetObjectAnnotation</code>:</p>
+    /// <ul>
+    /// <li>
+    /// <p>
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObjectAnnotation.html">PutObjectAnnotation</a>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjectAnnotations.html">ListObjectAnnotations</a>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteObjectAnnotation.html">DeleteObjectAnnotation</a>
+    /// </p>
+    /// </li>
+    /// </ul>
+    async fn get_object_annotation(
+        &self,
+        _req: S3Request<GetObjectAnnotationInput>,
+    ) -> S3Result<S3Response<GetObjectAnnotationOutput>> {
+        Err(s3_error!(NotImplemented, "GetObjectAnnotation is not implemented yet"))
+    }
+
     /// <p>Retrieves all the metadata from an object without returning the object itself. This
     /// operation is useful if you're interested only in an object's metadata. </p>
     /// <p>
@@ -4357,6 +4429,40 @@ pub trait S3: Send + Sync + 'static {
         _req: S3Request<ListMultipartUploadsInput>,
     ) -> S3Result<S3Response<ListMultipartUploadsOutput>> {
         Err(s3_error!(NotImplemented, "ListMultipartUploads is not implemented yet"))
+    }
+
+    /// <p>Lists the annotations attached to an Amazon S3 object. Results are paginated, with a maximum of
+    /// 1,000 annotations per object. Use the <code>AnnotationPrefix</code> parameter to filter the
+    /// results by name prefix.</p>
+    /// <p>To use this operation, you must have the <code>s3:ListObjectAnnotations</code> permission.</p>
+    /// <note>
+    /// <p>Annotations are not supported by the following features: S3 Inventory Reports,
+    /// API Gateway, S3 Storage Lens, Amazon S3 File Gateway, Amazon FSx, S3 on Outposts, and
+    /// S3 Express One Zone (directory buckets).</p>
+    /// </note>
+    /// <p>The following operations are related to <code>ListObjectAnnotations</code>:</p>
+    /// <ul>
+    /// <li>
+    /// <p>
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObjectAnnotation.html">PutObjectAnnotation</a>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObjectAnnotation.html">GetObjectAnnotation</a>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteObjectAnnotation.html">DeleteObjectAnnotation</a>
+    /// </p>
+    /// </li>
+    /// </ul>
+    async fn list_object_annotations(
+        &self,
+        _req: S3Request<ListObjectAnnotationsInput>,
+    ) -> S3Result<S3Response<ListObjectAnnotationsOutput>> {
+        Err(s3_error!(NotImplemented, "ListObjectAnnotations is not implemented yet"))
     }
 
     /// <note>
@@ -6571,6 +6677,46 @@ pub trait S3: Send + Sync + 'static {
     /// </ul>
     async fn put_object_acl(&self, _req: S3Request<PutObjectAclInput>) -> S3Result<S3Response<PutObjectAclOutput>> {
         Err(s3_error!(NotImplemented, "PutObjectAcl is not implemented yet"))
+    }
+
+    /// <p>Attaches an annotation to an Amazon S3 object. An annotation is a named payload of 1 byte to 1 MiB
+    /// that you can associate with a specific object or object version. Each object can have up to 1,000
+    /// annotations.</p>
+    /// <p>For annotation naming rules and restrictions, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/annotations-overview.html">Annotation naming guidelines</a>
+    /// in the <i>Amazon S3 User Guide</i>.</p>
+    /// <p>Annotations inherit the encryption of their parent object. For objects without server-side
+    /// encryption, annotations are encrypted with SSE-S3 (the default for new objects). Objects
+    /// encrypted with SSE-C cannot have annotations.</p>
+    /// <p>To use this operation, you must have the <code>s3:PutObjectAnnotation</code> permission. If the
+    /// bucket has Requester Pays enabled, you must include the <code>x-amz-request-payer</code> header.</p>
+    /// <note>
+    /// <p>Annotations are not supported by the following features: S3 Inventory Reports,
+    /// API Gateway, S3 Storage Lens, Amazon S3 File Gateway, Amazon FSx, S3 on Outposts, and
+    /// S3 Express One Zone (directory buckets).</p>
+    /// </note>
+    /// <p>The following operations are related to <code>PutObjectAnnotation</code>:</p>
+    /// <ul>
+    /// <li>
+    /// <p>
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObjectAnnotation.html">GetObjectAnnotation</a>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjectAnnotations.html">ListObjectAnnotations</a>
+    /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteObjectAnnotation.html">DeleteObjectAnnotation</a>
+    /// </p>
+    /// </li>
+    /// </ul>
+    async fn put_object_annotation(
+        &self,
+        _req: S3Request<PutObjectAnnotationInput>,
+    ) -> S3Result<S3Response<PutObjectAnnotationOutput>> {
+        Err(s3_error!(NotImplemented, "PutObjectAnnotation is not implemented yet"))
     }
 
     /// <note>

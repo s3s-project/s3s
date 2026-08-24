@@ -89,6 +89,7 @@ use std::io::Write;
 //   Serialize: ListDirectoryBucketsOutput
 // Deserialize: ListDirectoryBucketsOutput
 //   Serialize: ListMultipartUploadsOutput
+//   Serialize: ListObjectAnnotationsOutput
 //   Serialize: ListObjectVersionsOutput
 //   Serialize: ListObjectsOutput
 //   Serialize: ListObjectsV2Output
@@ -117,6 +118,7 @@ use std::io::Write;
 // Deserialize: Progress
 //   Serialize: PublicAccessBlockConfiguration
 // Deserialize: PublicAccessBlockConfiguration
+//   Serialize: PutObjectAnnotationOutput
 //   Serialize: ReplicationConfiguration
 // Deserialize: ReplicationConfiguration
 //   Serialize: RequestPaymentConfiguration
@@ -180,6 +182,14 @@ use std::io::Write;
 // DeserializeContent: AnalyticsS3ExportFileFormat
 //   SerializeContent: AnnotationConfigurationState
 // DeserializeContent: AnnotationConfigurationState
+//   SerializeContent: AnnotationCount
+// DeserializeContent: AnnotationCount
+//   SerializeContent: AnnotationEntry
+// DeserializeContent: AnnotationEntry
+//   SerializeContent: AnnotationName
+// DeserializeContent: AnnotationName
+//   SerializeContent: AnnotationPrefix
+// DeserializeContent: AnnotationPrefix
 //   SerializeContent: AnnotationTableConfiguration
 // DeserializeContent: AnnotationTableConfiguration
 //   SerializeContent: AnnotationTableConfigurationResult
@@ -539,6 +549,7 @@ use std::io::Write;
 //   SerializeContent: ListDirectoryBucketsOutput
 // DeserializeContent: ListDirectoryBucketsOutput
 //   SerializeContent: ListMultipartUploadsOutput
+//   SerializeContent: ListObjectAnnotationsOutput
 //   SerializeContent: ListObjectVersionsOutput
 //   SerializeContent: ListObjectsOutput
 //   SerializeContent: ListObjectsV2Output
@@ -563,6 +574,8 @@ use std::io::Write;
 // DeserializeContent: Marker
 //   SerializeContent: MaxAgeSeconds
 // DeserializeContent: MaxAgeSeconds
+//   SerializeContent: MaxAnnotationResults
+// DeserializeContent: MaxAnnotationResults
 //   SerializeContent: MaxKeys
 // DeserializeContent: MaxKeys
 //   SerializeContent: MaxParts
@@ -717,6 +730,7 @@ use std::io::Write;
 // DeserializeContent: Protocol
 //   SerializeContent: PublicAccessBlockConfiguration
 // DeserializeContent: PublicAccessBlockConfiguration
+//   SerializeContent: PutObjectAnnotationOutput
 //   SerializeContent: QueueArn
 // DeserializeContent: QueueArn
 //   SerializeContent: QueueConfiguration
@@ -759,6 +773,8 @@ use std::io::Write;
 // DeserializeContent: ReplicationRuleFilter
 //   SerializeContent: ReplicationRuleStatus
 // DeserializeContent: ReplicationRuleStatus
+//   SerializeContent: ReplicationStatus
+// DeserializeContent: ReplicationStatus
 //   SerializeContent: ReplicationTime
 // DeserializeContent: ReplicationTime
 //   SerializeContent: ReplicationTimeStatus
@@ -3261,6 +3277,42 @@ impl SerializeContent for ListMultipartUploadsOutput {
     }
 }
 
+impl Serialize for ListObjectAnnotationsOutput {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content_with_ns("ListObjectAnnotationsOutput", XMLNS_S3, self)
+    }
+}
+
+impl SerializeContent for ListObjectAnnotationsOutput {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.annotation_count {
+            s.content("AnnotationCount", val)?;
+        }
+        if let Some(ref val) = self.annotation_prefix {
+            s.content("AnnotationPrefix", val)?;
+        }
+        if let Some(iter) = &self.annotations {
+            s.list("Annotations", "AnnotationEntry", iter)?;
+        }
+        if let Some(ref val) = self.bucket {
+            s.content("Bucket", val)?;
+        }
+        if let Some(ref val) = self.continuation_token {
+            s.content("ContinuationToken", val)?;
+        }
+        if let Some(ref val) = self.key {
+            s.content("Key", val)?;
+        }
+        if let Some(ref val) = self.max_annotation_results {
+            s.content("MaxAnnotationResults", val)?;
+        }
+        if let Some(ref val) = self.next_continuation_token {
+            s.content("NextContinuationToken", val)?;
+        }
+        Ok(())
+    }
+}
+
 impl Serialize for ListObjectVersionsOutput {
     fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         s.content_with_ns("ListVersionsResult", XMLNS_S3, self)
@@ -4076,6 +4128,23 @@ impl<'xml> DeserializeContent<'xml> for PublicAccessBlockConfiguration {
             ignore_public_acls,
             restrict_public_buckets,
         })
+    }
+}
+
+impl Serialize for PutObjectAnnotationOutput {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content_with_ns("PutObjectAnnotationOutput", XMLNS_S3, self)
+    }
+}
+impl SerializeContent for PutObjectAnnotationOutput {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.annotation_name {
+            s.content("AnnotationName", val)?;
+        }
+        if let Some(ref val) = self.key {
+            s.content("Key", val)?;
+        }
+        Ok(())
     }
 }
 
@@ -4937,6 +5006,86 @@ impl<'xml> DeserializeContent<'xml> for AnnotationConfigurationState {
             "DISABLED" => Ok(Self::from_static(AnnotationConfigurationState::DISABLED)),
             "ENABLED" => Ok(Self::from_static(AnnotationConfigurationState::ENABLED)),
             _ => Ok(Self::from(s.to_owned())),
+        })
+    }
+}
+
+impl SerializeContent for AnnotationEntry {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("AnnotationName", &self.annotation_name)?;
+        if let Some(iter) = &self.checksum_algorithm {
+            s.flattened_list("ChecksumAlgorithm", iter)?;
+        }
+        if let Some(ref val) = self.e_tag {
+            s.content("ETag", val)?;
+        }
+        s.timestamp("LastModified", &self.last_modified, TimestampFormat::DateTime)?;
+        if let Some(ref val) = self.replication_status {
+            s.content("ReplicationStatus", val)?;
+        }
+        s.content("Size", &self.size)?;
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for AnnotationEntry {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut annotation_name: Option<AnnotationName> = None;
+        let mut checksum_algorithm: Option<ChecksumAlgorithmList> = None;
+        let mut e_tag: Option<ETag> = None;
+        let mut last_modified: Option<LastModified> = None;
+        let mut replication_status: Option<ReplicationStatus> = None;
+        let mut size: Option<Size> = None;
+        d.for_each_element(|d, x| match x {
+            b"AnnotationName" => {
+                if annotation_name.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                annotation_name = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumAlgorithm" => {
+                let ans: ChecksumAlgorithm = d.content()?;
+                checksum_algorithm.get_or_insert_with(List::new).push(ans);
+                Ok(())
+            }
+            b"ETag" => {
+                if e_tag.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                e_tag = Some(d.content()?);
+                Ok(())
+            }
+            b"LastModified" => {
+                if last_modified.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                last_modified = Some(d.timestamp(TimestampFormat::DateTime)?);
+                Ok(())
+            }
+            b"ReplicationStatus" => {
+                if replication_status.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                replication_status = Some(d.content()?);
+                Ok(())
+            }
+            b"Size" => {
+                if size.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                size = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            annotation_name: annotation_name.ok_or(DeError::MissingField)?,
+            checksum_algorithm,
+            e_tag,
+            last_modified: last_modified.ok_or(DeError::MissingField)?,
+            replication_status,
+            size: size.ok_or(DeError::MissingField)?,
         })
     }
 }
@@ -11111,6 +11260,24 @@ impl<'xml> DeserializeContent<'xml> for ReplicationRuleStatus {
         d.text(|s| match s {
             "Disabled" => Ok(Self::from_static(ReplicationRuleStatus::DISABLED)),
             "Enabled" => Ok(Self::from_static(ReplicationRuleStatus::ENABLED)),
+            _ => Ok(Self::from(s.to_owned())),
+        })
+    }
+}
+
+impl SerializeContent for ReplicationStatus {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        self.as_str().serialize_content(s)
+    }
+}
+impl<'xml> DeserializeContent<'xml> for ReplicationStatus {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.text(|s| match s {
+            "COMPLETE" => Ok(Self::from_static(ReplicationStatus::COMPLETE)),
+            "COMPLETED" => Ok(Self::from_static(ReplicationStatus::COMPLETED)),
+            "FAILED" => Ok(Self::from_static(ReplicationStatus::FAILED)),
+            "PENDING" => Ok(Self::from_static(ReplicationStatus::PENDING)),
+            "REPLICA" => Ok(Self::from_static(ReplicationStatus::REPLICA)),
             _ => Ok(Self::from(s.to_owned())),
         })
     }

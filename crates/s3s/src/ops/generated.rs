@@ -27,6 +27,7 @@
 // DeleteBucketTagging
 // DeleteBucketWebsite
 // DeleteObject
+// DeleteObjectAnnotation
 // DeleteObjectTagging
 // DeleteObjects
 // DeletePublicAccessBlock
@@ -55,6 +56,7 @@
 // GetBucketWebsite
 // GetObject
 // GetObjectAcl
+// GetObjectAnnotation
 // GetObjectAttributes
 // GetObjectLegalHold
 // GetObjectLockConfiguration
@@ -71,6 +73,7 @@
 // ListBuckets
 // ListDirectoryBuckets
 // ListMultipartUploads
+// ListObjectAnnotations
 // ListObjectVersions
 // ListObjects
 // ListObjectsV2
@@ -97,6 +100,7 @@
 // PutBucketWebsite
 // PutObject
 // PutObjectAcl
+// PutObjectAnnotation
 // PutObjectLegalHold
 // PutObjectLockConfiguration
 // PutObjectRetention
@@ -133,6 +137,24 @@ use crate::ops::CallContext;
 use crate::path::S3Path;
 
 use std::borrow::Cow;
+
+impl http::TryIntoHeaderValue for AnnotationDirective {
+    type Error = http::InvalidHeaderValue;
+    fn try_into_header_value(self) -> Result<http::HeaderValue, Self::Error> {
+        match Cow::from(self) {
+            Cow::Borrowed(s) => http::HeaderValue::try_from(s),
+            Cow::Owned(s) => http::HeaderValue::try_from(s),
+        }
+    }
+}
+
+impl http::TryFromHeaderValue for AnnotationDirective {
+    type Error = http::ParseHeaderError;
+    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
+        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
+        Ok(Self::from(val.to_owned()))
+    }
+}
 
 impl http::TryIntoHeaderValue for ArchiveStatus {
     type Error = http::InvalidHeaderValue;
@@ -728,6 +750,8 @@ impl CopyObject {
 
         let acl: Option<ObjectCannedACL> = http::parse_opt_header(req, &X_AMZ_ACL)?;
 
+        let annotation_directive: Option<AnnotationDirective> = http::parse_opt_header(req, &X_AMZ_OBJECT_ANNOTATION_DIRECTIVE)?;
+
         let bucket_key_enabled: Option<BucketKeyEnabled> =
             http::parse_opt_header(req, &X_AMZ_SERVER_SIDE_ENCRYPTION_BUCKET_KEY_ENABLED)?;
 
@@ -778,6 +802,10 @@ impl CopyObject {
         let grant_read_acp: Option<GrantReadACP> = http::parse_opt_header(req, &X_AMZ_GRANT_READ_ACP)?;
 
         let grant_write_acp: Option<GrantWriteACP> = http::parse_opt_header(req, &X_AMZ_GRANT_WRITE_ACP)?;
+
+        let if_match: Option<IfMatch> = http::parse_opt_header(req, &IF_MATCH)?;
+
+        let if_none_match: Option<IfNoneMatch> = http::parse_opt_header(req, &IF_NONE_MATCH)?;
 
         let metadata: Option<Metadata> = http::parse_opt_metadata(req)?;
 
@@ -819,6 +847,7 @@ impl CopyObject {
 
         Ok(CopyObjectInput {
             acl,
+            annotation_directive,
             bucket,
             bucket_key_enabled,
             cache_control,
@@ -842,6 +871,8 @@ impl CopyObject {
             grant_read,
             grant_read_acp,
             grant_write_acp,
+            if_match,
+            if_none_match,
             key,
             metadata,
             metadata_directive,
@@ -867,6 +898,8 @@ impl CopyObject {
         let (bucket, key) = http::unwrap_object(req);
 
         let acl: Option<ObjectCannedACL> = http::parse_opt_header(req, &X_AMZ_ACL)?;
+
+        let annotation_directive: Option<AnnotationDirective> = http::parse_opt_header(req, &X_AMZ_OBJECT_ANNOTATION_DIRECTIVE)?;
 
         let bucket_key_enabled: Option<BucketKeyEnabled> =
             http::parse_opt_header(req, &X_AMZ_SERVER_SIDE_ENCRYPTION_BUCKET_KEY_ENABLED)?;
@@ -918,6 +951,10 @@ impl CopyObject {
         let grant_read_acp: Option<GrantReadACP> = http::parse_opt_header(req, &X_AMZ_GRANT_READ_ACP)?;
 
         let grant_write_acp: Option<GrantWriteACP> = http::parse_opt_header(req, &X_AMZ_GRANT_WRITE_ACP)?;
+
+        let if_match: Option<IfMatch> = http::parse_opt_header(req, &IF_MATCH)?;
+
+        let if_none_match: Option<IfNoneMatch> = http::parse_opt_header(req, &IF_NONE_MATCH)?;
 
         let metadata: Option<Metadata> = http::parse_opt_metadata(req)?;
 
@@ -961,6 +998,7 @@ impl CopyObject {
 
         Ok(CopyObjectInput {
             acl,
+            annotation_directive,
             bucket,
             bucket_key_enabled,
             cache_control,
@@ -984,6 +1022,8 @@ impl CopyObject {
             grant_read,
             grant_read_acp,
             grant_write_acp,
+            if_match,
+            if_none_match,
             key,
             metadata,
             metadata_directive,
@@ -2561,6 +2601,78 @@ impl super::Operation for DeleteObject {
             access.delete_object(&mut s3_req).await?;
         }
         let result = s3.delete_object(s3_req).await;
+        let s3_resp = match result {
+            Ok(val) => val,
+            Err(err) => return super::serialize_error(err, false),
+        };
+        let mut resp = Self::serialize_http(s3_resp.output)?;
+        resp.headers.extend(s3_resp.headers);
+        resp.extensions.extend(s3_resp.extensions);
+        Ok(resp)
+    }
+}
+
+pub struct DeleteObjectAnnotation;
+
+impl DeleteObjectAnnotation {
+    pub fn deserialize_http(req: &mut http::Request) -> S3Result<DeleteObjectAnnotationInput> {
+        let (bucket, key) = http::unwrap_object(req);
+
+        let annotation_name: AnnotationName = http::parse_query(req, "annotationName")?;
+
+        let expected_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_EXPECTED_BUCKET_OWNER)?;
+
+        let object_if_match: Option<ObjectIfMatch> = http::parse_opt_header(req, &X_AMZ_OBJECT_IF_MATCH)?;
+
+        let request_payer: Option<RequestPayer> = http::parse_opt_header(req, &X_AMZ_REQUEST_PAYER)?;
+
+        let version_id: Option<ObjectVersionId> = http::parse_opt_query(req, "versionId")?;
+
+        Ok(DeleteObjectAnnotationInput {
+            annotation_name,
+            bucket,
+            expected_bucket_owner,
+            key,
+            object_if_match,
+            request_payer,
+            version_id,
+        })
+    }
+
+    pub fn serialize_http(x: DeleteObjectAnnotationOutput) -> S3Result<http::Response> {
+        let mut res = http::Response::with_status(http::StatusCode::NO_CONTENT);
+        http::add_opt_header(&mut res, X_AMZ_OBJECT_VERSION_ID, x.object_version_id)?;
+        http::add_opt_header(&mut res, X_AMZ_REQUEST_CHARGED, x.request_charged)?;
+        Ok(res)
+    }
+}
+
+#[async_trait::async_trait]
+impl super::Operation for DeleteObjectAnnotation {
+    fn name(&self) -> &'static str {
+        "DeleteObjectAnnotation"
+    }
+
+    fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
+    fn has_streaming_body(&self) -> bool {
+        false
+    }
+
+    async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
+        let input = Self::deserialize_http(req)?;
+        let mut s3_req = super::build_s3_request(input, req);
+        let s3 = ccx.s3;
+        if let Some(access) = ccx.access {
+            access.delete_object_annotation(&mut s3_req).await?;
+        }
+        let result = s3.delete_object_annotation(s3_req).await;
         let s3_resp = match result {
             Ok(val) => val,
             Err(err) => return super::serialize_error(err, false),
@@ -4383,6 +4495,97 @@ impl super::Operation for GetObjectAcl {
     }
 }
 
+pub struct GetObjectAnnotation;
+
+impl GetObjectAnnotation {
+    pub fn deserialize_http(req: &mut http::Request) -> S3Result<GetObjectAnnotationInput> {
+        let (bucket, key) = http::unwrap_object(req);
+
+        let annotation_name: AnnotationName = http::parse_query(req, "annotationName")?;
+
+        let checksum_mode: Option<ChecksumMode> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_MODE)?;
+
+        let expected_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_EXPECTED_BUCKET_OWNER)?;
+
+        let request_payer: Option<RequestPayer> = http::parse_opt_header(req, &X_AMZ_REQUEST_PAYER)?;
+
+        let version_id: Option<ObjectVersionId> = http::parse_opt_query(req, "versionId")?;
+
+        Ok(GetObjectAnnotationInput {
+            annotation_name,
+            bucket,
+            checksum_mode,
+            expected_bucket_owner,
+            key,
+            request_payer,
+            version_id,
+        })
+    }
+
+    pub fn serialize_http(x: GetObjectAnnotationOutput) -> S3Result<http::Response> {
+        let mut res = http::Response::with_status(http::StatusCode::OK);
+        if let Some(val) = x.annotation_payload {
+            http::set_stream_body(&mut res, val);
+        }
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_CRC32, x.checksum_crc32)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_CRC32C, x.checksum_crc32c)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_CRC64NVME, x.checksum_crc64nvme)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_MD5, x.checksum_md5)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_SHA1, x.checksum_sha1)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_SHA256, x.checksum_sha256)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_SHA512, x.checksum_sha512)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_TYPE, x.checksum_type)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_XXHASH128, x.checksum_xxhash128)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_XXHASH3, x.checksum_xxhash3)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_XXHASH64, x.checksum_xxhash64)?;
+        http::add_opt_header(&mut res, CONTENT_LENGTH, x.content_length)?;
+        http::add_opt_header(&mut res, ETAG, x.e_tag)?;
+        http::add_opt_header_timestamp(&mut res, LAST_MODIFIED, x.last_modified, TimestampFormat::HttpDate)?;
+        http::add_opt_header(&mut res, X_AMZ_OBJECT_VERSION_ID, x.object_version_id)?;
+        http::add_opt_header(&mut res, X_AMZ_REPLICATION_STATUS, x.replication_status)?;
+        http::add_opt_header(&mut res, X_AMZ_REQUEST_CHARGED, x.request_charged)?;
+        http::add_opt_header(&mut res, X_AMZ_SERVER_SIDE_ENCRYPTION, x.server_side_encryption)?;
+        Ok(res)
+    }
+}
+
+#[async_trait::async_trait]
+impl super::Operation for GetObjectAnnotation {
+    fn name(&self) -> &'static str {
+        "GetObjectAnnotation"
+    }
+
+    fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
+    fn has_streaming_body(&self) -> bool {
+        false
+    }
+
+    async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
+        let input = Self::deserialize_http(req)?;
+        let mut s3_req = super::build_s3_request(input, req);
+        let s3 = ccx.s3;
+        if let Some(access) = ccx.access {
+            access.get_object_annotation(&mut s3_req).await?;
+        }
+        let result = s3.get_object_annotation(s3_req).await;
+        let s3_resp = match result {
+            Ok(val) => val,
+            Err(err) => return super::serialize_error(err, false),
+        };
+        let mut resp = Self::serialize_http(s3_resp.output)?;
+        resp.headers.extend(s3_resp.headers);
+        resp.extensions.extend(s3_resp.extensions);
+        Ok(resp)
+    }
+}
+
 pub struct GetObjectAttributes;
 
 impl GetObjectAttributes {
@@ -5518,6 +5721,82 @@ impl super::Operation for ListMultipartUploads {
             access.list_multipart_uploads(&mut s3_req).await?;
         }
         let result = s3.list_multipart_uploads(s3_req).await;
+        let s3_resp = match result {
+            Ok(val) => val,
+            Err(err) => return super::serialize_error(err, false),
+        };
+        let mut resp = Self::serialize_http(s3_resp.output)?;
+        resp.headers.extend(s3_resp.headers);
+        resp.extensions.extend(s3_resp.extensions);
+        Ok(resp)
+    }
+}
+
+pub struct ListObjectAnnotations;
+
+impl ListObjectAnnotations {
+    pub fn deserialize_http(req: &mut http::Request) -> S3Result<ListObjectAnnotationsInput> {
+        let (bucket, key) = http::unwrap_object(req);
+
+        let annotation_prefix: Option<AnnotationPrefix> = http::parse_opt_query(req, "annotation-prefix")?;
+
+        let continuation_token: Option<Token> = http::parse_opt_query(req, "continuation-token")?;
+
+        let expected_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_EXPECTED_BUCKET_OWNER)?;
+
+        let max_annotation_results: Option<MaxAnnotationResults> = http::parse_opt_query(req, "max-annotation-results")?;
+
+        let request_payer: Option<RequestPayer> = http::parse_opt_header(req, &X_AMZ_REQUEST_PAYER)?;
+
+        let version_id: Option<ObjectVersionId> = http::parse_opt_query(req, "versionId")?;
+
+        Ok(ListObjectAnnotationsInput {
+            annotation_prefix,
+            bucket,
+            continuation_token,
+            expected_bucket_owner,
+            key,
+            max_annotation_results,
+            request_payer,
+            version_id,
+        })
+    }
+
+    pub fn serialize_http(x: ListObjectAnnotationsOutput) -> S3Result<http::Response> {
+        let mut res = http::Response::with_status(http::StatusCode::OK);
+        http::set_xml_body(&mut res, &x)?;
+        http::add_opt_header(&mut res, X_AMZ_OBJECT_VERSION_ID, x.object_version_id)?;
+        http::add_opt_header(&mut res, X_AMZ_REQUEST_CHARGED, x.request_charged)?;
+        Ok(res)
+    }
+}
+
+#[async_trait::async_trait]
+impl super::Operation for ListObjectAnnotations {
+    fn name(&self) -> &'static str {
+        "ListObjectAnnotations"
+    }
+
+    fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
+    fn has_streaming_body(&self) -> bool {
+        false
+    }
+
+    async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
+        let input = Self::deserialize_http(req)?;
+        let mut s3_req = super::build_s3_request(input, req);
+        let s3 = ccx.s3;
+        if let Some(access) = ccx.access {
+            access.list_object_annotations(&mut s3_req).await?;
+        }
+        let result = s3.list_object_annotations(s3_req).await;
         let s3_resp = match result {
             Ok(val) => val,
             Err(err) => return super::serialize_error(err, false),
@@ -8030,6 +8309,131 @@ impl super::Operation for PutObjectAcl {
     }
 }
 
+pub struct PutObjectAnnotation;
+
+impl PutObjectAnnotation {
+    pub fn deserialize_http(req: &mut http::Request) -> S3Result<PutObjectAnnotationInput> {
+        let (bucket, key) = http::unwrap_object(req);
+
+        let annotation_name: AnnotationName = http::parse_query(req, "annotationName")?;
+
+        let annotation_payload: Option<StreamingBlob> = Some(http::take_stream_body(req));
+
+        let checksum_algorithm: Option<ChecksumAlgorithm> = http::parse_checksum_algorithm_header(req)?;
+
+        let checksum_crc32: Option<ChecksumCRC32> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_CRC32)?;
+
+        let checksum_crc32c: Option<ChecksumCRC32C> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_CRC32C)?;
+
+        let checksum_crc64nvme: Option<ChecksumCRC64NVME> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_CRC64NVME)?;
+
+        let checksum_md5: Option<ChecksumMD5> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_MD5)?;
+
+        let checksum_sha1: Option<ChecksumSHA1> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_SHA1)?;
+
+        let checksum_sha256: Option<ChecksumSHA256> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_SHA256)?;
+
+        let checksum_sha512: Option<ChecksumSHA512> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_SHA512)?;
+
+        let checksum_xxhash128: Option<ChecksumXXHASH128> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_XXHASH128)?;
+
+        let checksum_xxhash3: Option<ChecksumXXHASH3> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_XXHASH3)?;
+
+        let checksum_xxhash64: Option<ChecksumXXHASH64> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_XXHASH64)?;
+
+        let content_md5: Option<ContentMD5> = http::parse_opt_header(req, &CONTENT_MD5)?;
+
+        let expected_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_EXPECTED_BUCKET_OWNER)?;
+
+        let object_if_match: Option<ObjectIfMatch> = http::parse_opt_header(req, &X_AMZ_OBJECT_IF_MATCH)?;
+
+        let request_payer: Option<RequestPayer> = http::parse_opt_header(req, &X_AMZ_REQUEST_PAYER)?;
+
+        let version_id: Option<ObjectVersionId> = http::parse_opt_query(req, "versionId")?;
+
+        Ok(PutObjectAnnotationInput {
+            annotation_name,
+            annotation_payload,
+            bucket,
+            checksum_algorithm,
+            checksum_crc32,
+            checksum_crc32c,
+            checksum_crc64nvme,
+            checksum_md5,
+            checksum_sha1,
+            checksum_sha256,
+            checksum_sha512,
+            checksum_xxhash128,
+            checksum_xxhash3,
+            checksum_xxhash64,
+            content_md5,
+            expected_bucket_owner,
+            key,
+            object_if_match,
+            request_payer,
+            version_id,
+        })
+    }
+
+    pub fn serialize_http(x: PutObjectAnnotationOutput) -> S3Result<http::Response> {
+        let mut res = http::Response::with_status(http::StatusCode::OK);
+        http::set_xml_body(&mut res, &x)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_CRC32, x.checksum_crc32)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_CRC32C, x.checksum_crc32c)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_CRC64NVME, x.checksum_crc64nvme)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_MD5, x.checksum_md5)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_SHA1, x.checksum_sha1)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_SHA256, x.checksum_sha256)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_SHA512, x.checksum_sha512)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_TYPE, x.checksum_type)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_XXHASH128, x.checksum_xxhash128)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_XXHASH3, x.checksum_xxhash3)?;
+        http::add_opt_header(&mut res, X_AMZ_CHECKSUM_XXHASH64, x.checksum_xxhash64)?;
+        http::add_opt_header(&mut res, ETAG, x.e_tag)?;
+        http::add_opt_header(&mut res, X_AMZ_OBJECT_VERSION_ID, x.object_version_id)?;
+        http::add_opt_header(&mut res, X_AMZ_REQUEST_CHARGED, x.request_charged)?;
+        http::add_opt_header(&mut res, X_AMZ_SERVER_SIDE_ENCRYPTION, x.server_side_encryption)?;
+        Ok(res)
+    }
+}
+
+#[async_trait::async_trait]
+impl super::Operation for PutObjectAnnotation {
+    fn name(&self) -> &'static str {
+        "PutObjectAnnotation"
+    }
+
+    fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    fn has_request_payload(&self) -> bool {
+        true
+    }
+
+    fn has_streaming_body(&self) -> bool {
+        true
+    }
+
+    async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
+        let input = Self::deserialize_http(req)?;
+        let mut s3_req = super::build_s3_request(input, req);
+        let s3 = ccx.s3;
+        if let Some(access) = ccx.access {
+            access.put_object_annotation(&mut s3_req).await?;
+        }
+        let result = s3.put_object_annotation(s3_req).await;
+        let s3_resp = match result {
+            Ok(val) => val,
+            Err(err) => return super::serialize_error(err, false),
+        };
+        let mut resp = Self::serialize_http(s3_resp.output)?;
+        resp.headers.extend(s3_resp.headers);
+        resp.extensions.extend(s3_resp.extensions);
+        Ok(resp)
+    }
+}
+
 pub struct PutObjectLegalHold;
 
 impl PutObjectLegalHold {
@@ -9650,16 +10054,16 @@ pub fn resolve_route(
                     if qs.has("publicAccessBlock") {
                         return Ok(&GetPublicAccessBlock as &'static dyn super::Operation);
                     }
-                    if qs.has("analytics") && !qs.has("id") {
+                    if qs.has("analytics") {
                         return Ok(&ListBucketAnalyticsConfigurations as &'static dyn super::Operation);
                     }
-                    if qs.has("intelligent-tiering") && !qs.has("id") {
+                    if qs.has("intelligent-tiering") {
                         return Ok(&ListBucketIntelligentTieringConfigurations as &'static dyn super::Operation);
                     }
-                    if qs.has("inventory") && !qs.has("id") {
+                    if qs.has("inventory") {
                         return Ok(&ListBucketInventoryConfigurations as &'static dyn super::Operation);
                     }
-                    if qs.has("metrics") && !qs.has("id") {
+                    if qs.has("metrics") {
                         return Ok(&ListBucketMetricsConfigurations as &'static dyn super::Operation);
                     }
                     if qs.has("uploads") {
@@ -9676,6 +10080,9 @@ pub fn resolve_route(
             }
             S3Path::Object { .. } => {
                 if let Some(qs) = qs {
+                    if qs.has("annotation") && qs.has("annotationName") {
+                        return Ok(&GetObjectAnnotation as &'static dyn super::Operation);
+                    }
                     if qs.has("attributes") {
                         return Ok(&GetObjectAttributes as &'static dyn super::Operation);
                     }
@@ -9693,6 +10100,9 @@ pub fn resolve_route(
                     }
                     if qs.has("torrent") {
                         return Ok(&GetObjectTorrent as &'static dyn super::Operation);
+                    }
+                    if qs.has("annotation") {
+                        return Ok(&ListObjectAnnotations as &'static dyn super::Operation);
                     }
                 }
                 if let Some(qs) = qs
@@ -9823,6 +10233,9 @@ pub fn resolve_route(
             }
             S3Path::Object { .. } => {
                 if let Some(qs) = qs {
+                    if qs.has("annotation") {
+                        return Ok(&PutObjectAnnotation as &'static dyn super::Operation);
+                    }
                     if qs.has("renameObject") {
                         return Ok(&RenameObject as &'static dyn super::Operation);
                     }
@@ -9915,6 +10328,9 @@ pub fn resolve_route(
             }
             S3Path::Object { .. } => {
                 if let Some(qs) = qs {
+                    if qs.has("annotation") {
+                        return Ok(&DeleteObjectAnnotation as &'static dyn super::Operation);
+                    }
                     if qs.has("tagging") {
                         return Ok(&DeleteObjectTagging as &'static dyn super::Operation);
                     }
@@ -10032,16 +10448,16 @@ pub fn resolve_route(
                     if qs.has("publicAccessBlock") {
                         return Ok(&GetPublicAccessBlock as &'static dyn super::Operation);
                     }
-                    if qs.has("analytics") && !qs.has("id") {
+                    if qs.has("analytics") {
                         return Ok(&ListBucketAnalyticsConfigurations as &'static dyn super::Operation);
                     }
-                    if qs.has("intelligent-tiering") && !qs.has("id") {
+                    if qs.has("intelligent-tiering") {
                         return Ok(&ListBucketIntelligentTieringConfigurations as &'static dyn super::Operation);
                     }
-                    if qs.has("inventory") && !qs.has("id") {
+                    if qs.has("inventory") {
                         return Ok(&ListBucketInventoryConfigurations as &'static dyn super::Operation);
                     }
-                    if qs.has("metrics") && !qs.has("id") {
+                    if qs.has("metrics") {
                         return Ok(&ListBucketMetricsConfigurations as &'static dyn super::Operation);
                     }
                     if qs.has("uploads") {
@@ -10061,6 +10477,9 @@ pub fn resolve_route(
             }
             S3Path::Object { .. } => {
                 if let Some(qs) = qs {
+                    if qs.has("annotation") && qs.has("annotationName") {
+                        return Ok(&GetObjectAnnotation as &'static dyn super::Operation);
+                    }
                     if qs.has("attributes") {
                         return Ok(&GetObjectAttributes as &'static dyn super::Operation);
                     }
@@ -10078,6 +10497,9 @@ pub fn resolve_route(
                     }
                     if qs.has("torrent") {
                         return Ok(&GetObjectTorrent as &'static dyn super::Operation);
+                    }
+                    if qs.has("annotation") {
+                        return Ok(&ListObjectAnnotations as &'static dyn super::Operation);
                     }
                 }
                 if let Some(qs) = qs
@@ -10208,6 +10630,9 @@ pub fn resolve_route(
             }
             S3Path::Object { .. } => {
                 if let Some(qs) = qs {
+                    if qs.has("annotation") {
+                        return Ok(&PutObjectAnnotation as &'static dyn super::Operation);
+                    }
                     if qs.has("renameObject") {
                         return Ok(&RenameObject as &'static dyn super::Operation);
                     }
@@ -10300,6 +10725,9 @@ pub fn resolve_route(
             }
             S3Path::Object { .. } => {
                 if let Some(qs) = qs {
+                    if qs.has("annotation") {
+                        return Ok(&DeleteObjectAnnotation as &'static dyn super::Operation);
+                    }
                     if qs.has("tagging") {
                         return Ok(&DeleteObjectTagging as &'static dyn super::Operation);
                     }

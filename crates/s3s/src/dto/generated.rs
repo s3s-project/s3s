@@ -489,6 +489,12 @@ impl From<AnnotationConfigurationState> for Cow<'static, str> {
     }
 }
 
+impl From<AnnotationDirective> for Cow<'static, str> {
+    fn from(s: AnnotationDirective) -> Self {
+        s.0
+    }
+}
+
 impl From<ArchiveStatus> for Cow<'static, str> {
     fn from(s: ArchiveStatus) -> Self {
         s.0
@@ -953,6 +959,115 @@ impl FromStr for AnnotationConfigurationState {
         Ok(Self::from(s.to_owned()))
     }
 }
+
+pub type AnnotationCount = i32;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AnnotationDirective(Cow<'static, str>);
+
+impl AnnotationDirective {
+    pub const COPY: &'static str = "COPY";
+
+    pub const EXCLUDE: &'static str = "EXCLUDE";
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    #[must_use]
+    pub fn from_static(s: &'static str) -> Self {
+        Self(Cow::from(s))
+    }
+}
+
+impl From<String> for AnnotationDirective {
+    fn from(s: String) -> Self {
+        Self(Cow::from(s))
+    }
+}
+
+impl FromStr for AnnotationDirective {
+    type Err = Infallible;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(s.to_owned()))
+    }
+}
+
+/// <p>Describes a single annotation attached to an object, including its name, last modified time,
+/// size, ETag, checksum algorithm, and replication status. Returned in the response from
+/// <code>ListObjectAnnotations</code>.</p>
+#[derive(Clone, PartialEq)]
+pub struct AnnotationEntry {
+    /// <p>The name of the annotation.</p>
+    pub annotation_name: AnnotationName,
+    /// <p>The checksum algorithm used for the annotation.</p>
+    pub checksum_algorithm: Option<ChecksumAlgorithmList>,
+    /// <p>The entity tag of the annotation.</p>
+    pub e_tag: Option<ETag>,
+    /// <p>The date and time the annotation was last modified.</p>
+    pub last_modified: LastModified,
+    /// <p>The replication status of the annotation.</p>
+    pub replication_status: Option<ReplicationStatus>,
+    /// <p>The size of the annotation payload, in bytes.</p>
+    pub size: Size,
+}
+
+impl fmt::Debug for AnnotationEntry {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("AnnotationEntry");
+        d.field("annotation_name", &self.annotation_name);
+        if let Some(ref val) = self.checksum_algorithm {
+            d.field("checksum_algorithm", val);
+        }
+        if let Some(ref val) = self.e_tag {
+            d.field("e_tag", val);
+        }
+        d.field("last_modified", &self.last_modified);
+        if let Some(ref val) = self.replication_status {
+            d.field("replication_status", val);
+        }
+        d.field("size", &self.size);
+        d.finish_non_exhaustive()
+    }
+}
+impl DtoExt for AnnotationEntry {
+    fn ignore_empty_strings(&mut self) {
+        if let Some(ref val) = self.replication_status
+            && val.as_str() == ""
+        {
+            self.replication_status = None;
+        }
+    }
+}
+
+/// <p>The request would exceed the maximum number of annotations allowed per object.</p>
+#[derive(Clone, Default, PartialEq)]
+pub struct AnnotationLimitExceeded {}
+
+impl fmt::Debug for AnnotationLimitExceeded {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("AnnotationLimitExceeded");
+        d.finish_non_exhaustive()
+    }
+}
+
+pub type AnnotationList = List<AnnotationEntry>;
+
+pub type AnnotationName = String;
+
+/// <p>The annotation name exceeds 512 bytes.</p>
+#[derive(Clone, Default, PartialEq)]
+pub struct AnnotationNameTooLong {}
+
+impl fmt::Debug for AnnotationNameTooLong {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("AnnotationNameTooLong");
+        d.finish_non_exhaustive()
+    }
+}
+
+pub type AnnotationPrefix = String;
 
 /// <p>Specifies the configuration for the annotation table associated with a bucket's Amazon S3 Metadata
 /// configuration. The annotation table is an Iceberg table that records annotation events for objects
@@ -3151,23 +3266,20 @@ impl fmt::Debug for ContinuationEvent {
 #[cfg(not(feature = "minio"))]
 pub struct CopyObjectInput {
     /// <p>The canned access control list (ACL) to apply to the object.</p>
-    /// <p>When you copy an object, the ACL metadata is not preserved and is set to
-    /// <code>private</code> by default. Only the owner has full access control. To override the
-    /// default ACL setting, specify a new ACL when you generate a copy request. For more
-    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3_ACLs_UsingACLs.html">Using ACLs</a>. </p>
-    /// <p>If the destination bucket that you're copying objects to uses the bucket owner enforced
-    /// setting for S3 Object Ownership, ACLs are disabled and no longer affect permissions.
-    /// Buckets that use this setting only accept <code>PUT</code> requests that don't specify an
-    /// ACL or <code>PUT</code> requests that specify bucket owner full control ACLs, such as the
-    /// <code>bucket-owner-full-control</code> canned ACL or an equivalent form of this ACL
-    /// expressed in the XML format. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/about-object-ownership.html">Controlling ownership of
-    /// objects and disabling ACLs</a> in the <i>Amazon S3 User Guide</i>.</p>
+    /// <p>When you copy an object, the ACL metadata is not preserved and is set to <code>private</code> by
+    /// default. Only the owner has full access control. To override the default ACL setting, specify a new ACL
+    /// when you generate a copy request. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3_ACLs_UsingACLs.html">Using ACLs</a>. </p>
+    /// <p>If the destination bucket that you're copying objects to uses the bucket owner enforced setting for
+    /// S3 Object Ownership, ACLs are disabled and no longer affect permissions. Buckets that use this setting
+    /// only accept <code>PUT</code> requests that don't specify an ACL or <code>PUT</code> requests that
+    /// specify bucket owner full control ACLs, such as the <code>bucket-owner-full-control</code> canned ACL or
+    /// an equivalent form of this ACL expressed in the XML format. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/about-object-ownership.html">Controlling ownership
+    /// of objects and disabling ACLs</a> in the <i>Amazon S3 User Guide</i>.</p>
     /// <note>
     /// <ul>
     /// <li>
-    /// <p>If your destination bucket uses the bucket owner enforced setting for Object
-    /// Ownership, all objects written to the bucket by any account will be owned by the
-    /// bucket owner.</p>
+    /// <p>If your destination bucket uses the bucket owner enforced setting for Object Ownership, all
+    /// objects written to the bucket by any account will be owned by the bucket owner.</p>
     /// </li>
     /// <li>
     /// <p>This functionality is not supported for directory buckets.</p>
@@ -3178,6 +3290,31 @@ pub struct CopyObjectInput {
     /// </ul>
     /// </note>
     pub acl: Option<ObjectCannedACL>,
+    /// <p>Specifies whether you want to copy annotations from the source object or exclude them. If this
+    /// header isn't specified, <code>COPY</code> is the default behavior.</p>
+    /// <p>Valid Values: <code>COPY | EXCLUDE</code>
+    /// </p>
+    /// <p>You can specify this directive as either an HTTP header
+    /// (<code>x-amz-object-annotation-directive</code>) or as a query string parameter. Use the query
+    /// string form when generating presigned URLs that need to control annotation copy behavior.</p>
+    /// <p>When set to <code>COPY</code>, you must have <code>s3:GetObjectAnnotation</code> permission on
+    /// the source object and <code>s3:PutObjectAnnotation</code> permission on the destination. Each
+    /// annotation copied is billed as a separate PUT request. If annotations on the source are modified
+    /// during the copy, Amazon S3 returns a retryable error.</p>
+    /// <note>
+    /// <p>For directory buckets, annotations are not supported. Use <code>EXCLUDE</code> to copy
+    /// objects to directory buckets without errors. If you specify <code>COPY</code> for a directory
+    /// bucket, the request returns HTTP 501 (Not Implemented).</p>
+    /// </note>
+    /// <note>
+    /// <p>When you copy objects using multipart upload (for example, when the Amazon Web Services CLI or Amazon Web Services SDKs
+    /// use Transfer Manager for objects larger than approximately 8 MB), annotations are not copied by
+    /// default. To include annotations, specify <code>--copy-props default</code> in the Amazon Web Services CLI or the
+    /// equivalent SDK configuration. With this opt-in, the SDK reads source annotations, completes the
+    /// multipart upload, and then writes each annotation to the destination. Between the upload completion
+    /// and the last annotation write, the destination object exists without all its annotations.</p>
+    /// </note>
+    pub annotation_directive: Option<AnnotationDirective>,
     /// <p>The name of the destination bucket.</p>
     /// <p>
     /// <b>Directory buckets</b> - When you use this operation with a directory bucket, you must use virtual-hosted-style requests in the format <code>
@@ -3187,32 +3324,36 @@ pub struct CopyObjectInput {
     /// restrictions, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/directory-bucket-naming-rules.html">Directory bucket naming
     /// rules</a> in the <i>Amazon S3 User Guide</i>.</p>
     /// <note>
-    /// <p>Copying objects across different Amazon Web Services Regions isn't supported when the source or destination bucket is in Amazon Web Services Local Zones. The source and destination buckets must have the same parent Amazon Web Services Region. Otherwise,
-    /// you get an HTTP <code>400 Bad Request</code> error with the error code <code>InvalidRequest</code>.</p>
+    /// <p>Copying objects across different Amazon Web Services Regions isn't supported when the source or destination
+    /// bucket is in Amazon Web Services Local Zones. The source and destination buckets must have the same parent Amazon Web Services Region.
+    /// Otherwise, you get an HTTP <code>400 Bad Request</code> error with the error code
+    /// <code>InvalidRequest</code>.</p>
     /// </note>
     /// <p>
-    /// <b>Access points</b> - When you use this action with an access point, you must provide the alias of the access point in place of the bucket name or specify the access point ARN. When using the access point ARN, you must direct requests to the access point hostname. The access point hostname takes the form <i>AccessPointName</i>-<i>AccountId</i>.s3-accesspoint.<i>Region</i>.amazonaws.com. When using this action with an access point through the Amazon Web Services SDKs, you provide the access point ARN in place of the bucket name. For more information about access point ARNs, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-access-points.html">Using access points</a> in the <i>Amazon S3 User Guide</i>.</p>
+    /// <b>Access points</b> - When you use this action with an access point for general purpose buckets, you must provide the alias of the access point in place of the bucket name or specify the access point ARN. When you use this action with an access point for directory buckets, you must provide the access point name in place of the bucket name. When using the access point ARN, you must direct requests to the access point hostname. The access point hostname takes the form <i>AccessPointName</i>-<i>AccountId</i>.s3-accesspoint.<i>Region</i>.amazonaws.com. When using this action with an access point through the Amazon Web Services SDKs, you provide the access point ARN in place of the bucket name. For more information about access point ARNs, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-access-points.html">Using access points</a> in the <i>Amazon S3 User Guide</i>.</p>
     /// <note>
-    /// <p>Access points and Object Lambda access points are not supported by directory buckets.</p>
+    /// <p>Object Lambda access points are not supported by directory buckets.</p>
     /// </note>
     /// <p>
-    /// <b>S3 on Outposts</b> - When you use this action with S3 on Outposts, you must use the Outpost bucket access point ARN or the access point alias for the destination bucket.
-    ///
-    /// You can only copy objects within the same Outpost bucket. It's not supported to copy objects across different Amazon Web Services Outposts, between buckets on the same Outposts, or between Outposts buckets and any other bucket types.
-    /// For more information about S3 on Outposts, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/S3onOutposts.html">What is S3 on Outposts?</a> in the <i>S3 on Outposts guide</i>.
-    /// When you use this action with S3 on Outposts through the REST API, you must direct requests to the S3 on Outposts hostname, in the format
+    /// <b>S3 on Outposts</b> - When you use this action with S3 on Outposts,
+    /// you must use the Outpost bucket access point ARN or the access point alias for the destination bucket.
+    /// You can only copy objects within the same Outpost bucket. It's not supported to copy objects across
+    /// different Amazon Web Services Outposts, between buckets on the same Outposts, or between Outposts buckets and any
+    /// other bucket types. For more information about S3 on Outposts, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/S3onOutposts.html">What is S3 on Outposts?</a> in the
+    /// <i>S3 on Outposts guide</i>. When you use this action with S3 on Outposts through the REST
+    /// API, you must direct requests to the S3 on Outposts hostname, in the format
     /// <code>
-    /// <i>AccessPointName</i>-<i>AccountId</i>.<i>outpostID</i>.s3-outposts.<i>Region</i>.amazonaws.com</code>. The hostname isn't required when you use the Amazon Web Services CLI or SDKs.
-    /// </p>
+    /// <i>AccessPointName</i>-<i>AccountId</i>.<i>outpostID</i>.s3-outposts.<i>Region</i>.amazonaws.com</code>.
+    /// The hostname isn't required when you use the Amazon Web Services CLI or SDKs. </p>
     pub bucket: BucketName,
-    /// <p>Specifies whether Amazon S3 should use an S3 Bucket Key for object encryption with
-    /// server-side encryption using Key Management Service (KMS) keys (SSE-KMS). If a target object uses
-    /// SSE-KMS, you can enable an S3 Bucket Key for the object.</p>
-    /// <p>Setting this header to <code>true</code> causes Amazon S3 to use an S3 Bucket Key for object
-    /// encryption with SSE-KMS. Specifying this header with a COPY action doesn’t affect
-    /// bucket-level settings for S3 Bucket Key.</p>
-    /// <p>For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/bucket-key.html">Amazon S3 Bucket Keys</a> in the
-    /// <i>Amazon S3 User Guide</i>.</p>
+    /// <p>Specifies whether Amazon S3 should use an S3 Bucket Key for object encryption with server-side encryption
+    /// using Key Management Service (KMS) keys (SSE-KMS). If a target object uses SSE-KMS, you can enable an S3 Bucket Key
+    /// for the object.</p>
+    /// <p>Setting this header to <code>true</code> causes Amazon S3 to use an S3 Bucket Key for object encryption
+    /// with SSE-KMS. Specifying this header with a COPY action doesn’t affect bucket-level settings for S3
+    /// Bucket Key.</p>
+    /// <p>For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/bucket-key.html">Amazon S3
+    /// Bucket Keys</a> in the <i>Amazon S3 User Guide</i>.</p>
     /// <note>
     /// <p>
     /// <b>Directory buckets</b> -
@@ -3225,24 +3366,22 @@ pub struct CopyObjectInput {
     /// <p>Indicates the algorithm that you want Amazon S3 to use to create the checksum for the object. For more information, see
     /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
     /// the <i>Amazon S3 User Guide</i>.</p>
-    /// <p>When you copy an object, if the source object has a checksum, that checksum value will
-    /// be copied to the new object by default. If the <code>CopyObject</code> request does not
-    /// include this <code>x-amz-checksum-algorithm</code> header, the checksum algorithm will be
-    /// copied from the source object to the destination object (if it's present on the source
-    /// object). You can optionally specify a different checksum algorithm to use with the
-    /// <code>x-amz-checksum-algorithm</code> header. Unrecognized or unsupported values will
-    /// respond with the HTTP status code <code>400 Bad Request</code>.</p>
+    /// <p>When you copy an object, if the source object has a checksum, that checksum value will be copied to
+    /// the new object by default. If the <code>CopyObject</code> request does not include this
+    /// <code>x-amz-checksum-algorithm</code> header, the checksum algorithm will be copied from the source
+    /// object to the destination object (if it's present on the source object). You can optionally specify a
+    /// different checksum algorithm to use with the <code>x-amz-checksum-algorithm</code> header. Unrecognized
+    /// or unsupported values will respond with the HTTP status code <code>400 Bad Request</code>.</p>
     /// <note>
     /// <p>For directory buckets, when you use Amazon Web Services SDKs, <code>CRC32</code> is the default checksum algorithm that's used for performance.</p>
     /// </note>
     pub checksum_algorithm: Option<ChecksumAlgorithm>,
-    /// <p>Specifies presentational information for the object. Indicates whether an object should
-    /// be displayed in a web browser or downloaded as a file. It allows specifying the desired
-    /// filename for the downloaded file.</p>
+    /// <p>Specifies presentational information for the object. Indicates whether an object should be displayed
+    /// in a web browser or downloaded as a file. It allows specifying the desired filename for the downloaded
+    /// file.</p>
     pub content_disposition: Option<ContentDisposition>,
-    /// <p>Specifies what content encodings have been applied to the object and thus what decoding
-    /// mechanisms must be applied to obtain the media-type referenced by the Content-Type header
-    /// field.</p>
+    /// <p>Specifies what content encodings have been applied to the object and thus what decoding mechanisms
+    /// must be applied to obtain the media-type referenced by the Content-Type header field.</p>
     /// <note>
     /// <p>For directory buckets, only the <code>aws-chunked</code> value is supported in this header field.</p>
     /// </note>
@@ -3251,23 +3390,21 @@ pub struct CopyObjectInput {
     pub content_language: Option<ContentLanguage>,
     /// <p>A standard MIME type that describes the format of the object data.</p>
     pub content_type: Option<ContentType>,
-    /// <p>Specifies the source object for the copy operation. The source object can be up to 5 GB.
-    /// If the source object is an object that was uploaded by using a multipart upload, the object
-    /// copy will be a single part object after the source object is copied to the destination
-    /// bucket.</p>
-    /// <p>You specify the value of the copy source in one of two formats, depending on whether you
-    /// want to access the source object through an <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-points.html">access point</a>:</p>
+    /// <p>Specifies the source object for the copy operation. The source object can be up to 5 GB. If the
+    /// source object is an object that was uploaded by using a multipart upload, the object copy will be a
+    /// single part object after the source object is copied to the destination bucket.</p>
+    /// <p>You specify the value of the copy source in one of two formats, depending on whether you want to
+    /// access the source object through an <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-points.html">access point</a>:</p>
     /// <ul>
     /// <li>
-    /// <p>For objects not accessed through an access point, specify the name of the source bucket
-    /// and the key of the source object, separated by a slash (/). For example, to copy the
-    /// object <code>reports/january.pdf</code> from the general purpose bucket
-    /// <code>awsexamplebucket</code>, use
-    /// <code>awsexamplebucket/reports/january.pdf</code>. The value must be URL-encoded.
-    /// To copy the object <code>reports/january.pdf</code> from the directory bucket
+    /// <p>For objects not accessed through an access point, specify the name of the source bucket and the key of
+    /// the source object, separated by a slash (/). For example, to copy the object
+    /// <code>reports/january.pdf</code> from the general purpose bucket <code>awsexamplebucket</code>, use
+    /// <code>awsexamplebucket/reports/january.pdf</code>. The value must be URL-encoded. To copy the
+    /// object <code>reports/january.pdf</code> from the directory bucket
     /// <code>awsexamplebucket--use1-az5--x-s3</code>, use
-    /// <code>awsexamplebucket--use1-az5--x-s3/reports/january.pdf</code>. The value must
-    /// be URL-encoded.</p>
+    /// <code>awsexamplebucket--use1-az5--x-s3/reports/january.pdf</code>. The value must be
+    /// URL-encoded.</p>
     /// </li>
     /// <li>
     /// <p>For objects accessed through access points, specify the Amazon Resource Name (ARN) of the object as accessed through the access point, in the format <code>arn:aws:s3:&lt;Region&gt;:&lt;account-id&gt;:accesspoint/&lt;access-point-name&gt;/object/&lt;key&gt;</code>. For example, to copy the object <code>reports/january.pdf</code> through access point <code>my-access-point</code> owned by account <code>123456789012</code> in Region <code>us-west-2</code>, use the URL encoding of <code>arn:aws:s3:us-west-2:123456789012:accesspoint/my-access-point/object/reports/january.pdf</code>. The value must be URL encoded.</p>
@@ -3284,31 +3421,27 @@ pub struct CopyObjectInput {
     /// <p>Alternatively, for objects accessed through Amazon S3 on Outposts, specify the ARN of the object as accessed in the format <code>arn:aws:s3-outposts:&lt;Region&gt;:&lt;account-id&gt;:outpost/&lt;outpost-id&gt;/object/&lt;key&gt;</code>. For example, to copy the object <code>reports/january.pdf</code> through outpost <code>my-outpost</code> owned by account <code>123456789012</code> in Region <code>us-west-2</code>, use the URL encoding of <code>arn:aws:s3-outposts:us-west-2:123456789012:outpost/my-outpost/object/reports/january.pdf</code>. The value must be URL-encoded.  </p>
     /// </li>
     /// </ul>
-    /// <p>If your source bucket versioning is enabled, the <code>x-amz-copy-source</code> header
-    /// by default identifies the current version of an object to copy. If the current version is a
-    /// delete marker, Amazon S3 behaves as if the object was deleted. To copy a different version, use
-    /// the <code>versionId</code> query parameter. Specifically, append
-    /// <code>?versionId=&lt;version-id&gt;</code> to the value (for example,
-    /// <code>awsexamplebucket/reports/january.pdf?versionId=QUpfdndhfd8438MNFDN93jdnJFkdmqnh893</code>).
-    /// If you don't specify a version ID, Amazon S3 copies the latest version of the source
-    /// object.</p>
-    /// <p>If you enable versioning on the destination bucket, Amazon S3 generates a unique version ID
-    /// for the copied object. This version ID is different from the version ID of the source
-    /// object. Amazon S3 returns the version ID of the copied object in the
-    /// <code>x-amz-version-id</code> response header in the response.</p>
-    /// <p>If you do not enable versioning or suspend it on the destination bucket, the version ID
-    /// that Amazon S3 generates in the <code>x-amz-version-id</code> response header is always
-    /// null.</p>
+    /// <p>If your source bucket versioning is enabled, the <code>x-amz-copy-source</code> header by default
+    /// identifies the current version of an object to copy. If the current version is a delete marker, Amazon S3
+    /// behaves as if the object was deleted. To copy a different version, use the <code>versionId</code> query
+    /// parameter. Specifically, append <code>?versionId=&lt;version-id&gt;</code> to the value (for example,
+    /// <code>awsexamplebucket/reports/january.pdf?versionId=QUpfdndhfd8438MNFDN93jdnJFkdmqnh893</code>). If
+    /// you don't specify a version ID, Amazon S3 copies the latest version of the source object.</p>
+    /// <p>If you enable versioning on the destination bucket, Amazon S3 generates a unique version ID for the
+    /// copied object. This version ID is different from the version ID of the source object. Amazon S3 returns the
+    /// version ID of the copied object in the <code>x-amz-version-id</code> response header in the
+    /// response.</p>
+    /// <p>If you do not enable versioning or suspend it on the destination bucket, the version ID that Amazon S3
+    /// generates in the <code>x-amz-version-id</code> response header is always null.</p>
     /// <note>
     /// <p>
-    /// <b>Directory buckets</b> -
-    /// S3 Versioning isn't enabled and supported for directory buckets.</p>
+    /// <b>Directory buckets</b> - S3 Versioning isn't enabled and supported for directory buckets.</p>
     /// </note>
     pub copy_source: CopySource,
     /// <p>Copies the object if its entity tag (ETag) matches the specified tag.</p>
     /// <p> If both the <code>x-amz-copy-source-if-match</code> and
-    /// <code>x-amz-copy-source-if-unmodified-since</code> headers are present in the request
-    /// and evaluate as follows, Amazon S3 returns <code>200 OK</code> and copies the data:</p>
+    /// <code>x-amz-copy-source-if-unmodified-since</code> headers are present in the request and evaluate as
+    /// follows, Amazon S3 returns <code>200 OK</code> and copies the data:</p>
     /// <ul>
     /// <li>
     /// <p>
@@ -3316,16 +3449,14 @@ pub struct CopyObjectInput {
     /// </li>
     /// <li>
     /// <p>
-    /// <code>x-amz-copy-source-if-unmodified-since</code> condition evaluates to
-    /// false</p>
+    /// <code>x-amz-copy-source-if-unmodified-since</code> condition evaluates to false</p>
     /// </li>
     /// </ul>
     pub copy_source_if_match: Option<CopySourceIfMatch>,
     /// <p>Copies the object if it has been modified since the specified time.</p>
     /// <p>If both the <code>x-amz-copy-source-if-none-match</code> and
-    /// <code>x-amz-copy-source-if-modified-since</code> headers are present in the request and
-    /// evaluate as follows, Amazon S3 returns the <code>412 Precondition Failed</code> response
-    /// code:</p>
+    /// <code>x-amz-copy-source-if-modified-since</code> headers are present in the request and evaluate as
+    /// follows, Amazon S3 returns the <code>412 Precondition Failed</code> response code:</p>
     /// <ul>
     /// <li>
     /// <p>
@@ -3333,16 +3464,14 @@ pub struct CopyObjectInput {
     /// </li>
     /// <li>
     /// <p>
-    /// <code>x-amz-copy-source-if-modified-since</code> condition evaluates to
-    /// true</p>
+    /// <code>x-amz-copy-source-if-modified-since</code> condition evaluates to true</p>
     /// </li>
     /// </ul>
     pub copy_source_if_modified_since: Option<CopySourceIfModifiedSince>,
     /// <p>Copies the object if its entity tag (ETag) is different than the specified ETag.</p>
     /// <p>If both the <code>x-amz-copy-source-if-none-match</code> and
-    /// <code>x-amz-copy-source-if-modified-since</code> headers are present in the request and
-    /// evaluate as follows, Amazon S3 returns the <code>412 Precondition Failed</code> response
-    /// code:</p>
+    /// <code>x-amz-copy-source-if-modified-since</code> headers are present in the request and evaluate as
+    /// follows, Amazon S3 returns the <code>412 Precondition Failed</code> response code:</p>
     /// <ul>
     /// <li>
     /// <p>
@@ -3350,15 +3479,14 @@ pub struct CopyObjectInput {
     /// </li>
     /// <li>
     /// <p>
-    /// <code>x-amz-copy-source-if-modified-since</code> condition evaluates to
-    /// true</p>
+    /// <code>x-amz-copy-source-if-modified-since</code> condition evaluates to true</p>
     /// </li>
     /// </ul>
     pub copy_source_if_none_match: Option<CopySourceIfNoneMatch>,
     /// <p>Copies the object if it hasn't been modified since the specified time.</p>
     /// <p> If both the <code>x-amz-copy-source-if-match</code> and
-    /// <code>x-amz-copy-source-if-unmodified-since</code> headers are present in the request
-    /// and evaluate as follows, Amazon S3 returns <code>200 OK</code> and copies the data:</p>
+    /// <code>x-amz-copy-source-if-unmodified-since</code> headers are present in the request and evaluate as
+    /// follows, Amazon S3 returns <code>200 OK</code> and copies the data:</p>
     /// <ul>
     /// <li>
     /// <p>
@@ -3366,36 +3494,31 @@ pub struct CopyObjectInput {
     /// </li>
     /// <li>
     /// <p>
-    /// <code>x-amz-copy-source-if-unmodified-since</code> condition evaluates to
-    /// false</p>
+    /// <code>x-amz-copy-source-if-unmodified-since</code> condition evaluates to false</p>
     /// </li>
     /// </ul>
     pub copy_source_if_unmodified_since: Option<CopySourceIfUnmodifiedSince>,
     /// <p>Specifies the algorithm to use when decrypting the source object (for example,
     /// <code>AES256</code>).</p>
-    /// <p>If the source object for the copy is stored in Amazon S3 using SSE-C, you must provide the
-    /// necessary encryption information in your request so that Amazon S3 can decrypt the object for
-    /// copying.</p>
+    /// <p>If the source object for the copy is stored in Amazon S3 using SSE-C, you must provide the necessary
+    /// encryption information in your request so that Amazon S3 can decrypt the object for copying.</p>
     /// <note>
     /// <p>This functionality is not supported when the source object is in a directory bucket.</p>
     /// </note>
     pub copy_source_sse_customer_algorithm: Option<CopySourceSSECustomerAlgorithm>,
-    /// <p>Specifies the customer-provided encryption key for Amazon S3 to use to decrypt the source
-    /// object. The encryption key provided in this header must be the same one that was used when
-    /// the source object was created.</p>
-    /// <p>If the source object for the copy is stored in Amazon S3 using SSE-C, you must provide the
-    /// necessary encryption information in your request so that Amazon S3 can decrypt the object for
-    /// copying.</p>
+    /// <p>Specifies the customer-provided encryption key for Amazon S3 to use to decrypt the source object. The
+    /// encryption key provided in this header must be the same one that was used when the source object was
+    /// created.</p>
+    /// <p>If the source object for the copy is stored in Amazon S3 using SSE-C, you must provide the necessary
+    /// encryption information in your request so that Amazon S3 can decrypt the object for copying.</p>
     /// <note>
     /// <p>This functionality is not supported when the source object is in a directory bucket.</p>
     /// </note>
     pub copy_source_sse_customer_key: Option<CopySourceSSECustomerKey>,
-    /// <p>Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses
-    /// this header for a message integrity check to ensure that the encryption key was transmitted
-    /// without error.</p>
-    /// <p>If the source object for the copy is stored in Amazon S3 using SSE-C, you must provide the
-    /// necessary encryption information in your request so that Amazon S3 can decrypt the object for
-    /// copying.</p>
+    /// <p>Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header
+    /// for a message integrity check to ensure that the encryption key was transmitted without error.</p>
+    /// <p>If the source object for the copy is stored in Amazon S3 using SSE-C, you must provide the necessary
+    /// encryption information in your request so that Amazon S3 can decrypt the object for copying.</p>
     /// <note>
     /// <p>This functionality is not supported when the source object is in a directory bucket.</p>
     /// </note>
@@ -3454,26 +3577,38 @@ pub struct CopyObjectInput {
     /// </ul>
     /// </note>
     pub grant_write_acp: Option<GrantWriteACP>,
+    /// <p>Copies the object if the entity tag (ETag) of the destination object matches the specified
+    /// tag. If the ETag values do not match, the operation returns a <code>412 Precondition
+    /// Failed</code> error. If a concurrent operation occurs during the upload S3 returns a
+    /// <code>409 ConditionalRequestConflict</code> response. On a 409 failure you should fetch the
+    /// object's ETag and retry the upload.</p>
+    /// <p>Expects the ETag value as a string.</p>
+    /// <p>For more information about conditional requests, see <a href="https://tools.ietf.org/html/rfc7232">RFC 7232</a>.</p>
+    pub if_match: Option<IfMatch>,
+    /// <p>Copies the object only if the object key name at the destination does not already exist in
+    /// the bucket specified. Otherwise, Amazon S3 returns a <code>412 Precondition Failed</code> error. If a
+    /// concurrent operation occurs during the upload S3 returns a <code>409 ConditionalRequestConflict</code>
+    /// response. On a 409 failure you should retry the upload.</p>
+    /// <p>Expects the '*' (asterisk) character.</p>
+    /// <p>For more information about conditional requests, see <a href="https://tools.ietf.org/html/rfc7232">RFC 7232</a>.</p>
+    pub if_none_match: Option<IfNoneMatch>,
     /// <p>The key of the destination object.</p>
     pub key: ObjectKey,
     /// <p>A map of metadata to store with the object in S3.</p>
     pub metadata: Option<Metadata>,
-    /// <p>Specifies whether the metadata is copied from the source object or replaced with
-    /// metadata that's provided in the request. When copying an object, you can preserve all
-    /// metadata (the default) or specify new metadata. If this header isn’t specified,
-    /// <code>COPY</code> is the default behavior. </p>
+    /// <p>Specifies whether the metadata is copied from the source object or replaced with metadata that's
+    /// provided in the request. When copying an object, you can preserve all metadata (the default) or specify
+    /// new metadata. If this header isn’t specified, <code>COPY</code> is the default behavior. </p>
     /// <p>
-    /// <b>General purpose bucket</b> - For general purpose buckets, when you
-    /// grant permissions, you can use the <code>s3:x-amz-metadata-directive</code> condition key
-    /// to enforce certain metadata behavior when objects are uploaded. For more information, see
-    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/amazon-s3-policy-keys.html">Amazon S3
-    /// condition key examples</a> in the <i>Amazon S3 User Guide</i>.</p>
+    /// <b>General purpose bucket</b> - For general purpose buckets, when you grant
+    /// permissions, you can use the <code>s3:x-amz-metadata-directive</code> condition key to enforce certain
+    /// metadata behavior when objects are uploaded. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/amazon-s3-policy-keys.html">Amazon S3 condition key examples</a> in the
+    /// <i>Amazon S3 User Guide</i>.</p>
     /// <note>
     /// <p>
-    /// <code>x-amz-website-redirect-location</code> is unique to each object and is not
-    /// copied when using the <code>x-amz-metadata-directive</code> header. To copy the value,
-    /// you must specify <code>x-amz-website-redirect-location</code> in the request
-    /// header.</p>
+    /// <code>x-amz-website-redirect-location</code> is unique to each object and is not copied when using
+    /// the <code>x-amz-metadata-directive</code> header. To copy the value, you must specify
+    /// <code>x-amz-website-redirect-location</code> in the request header.</p>
     /// </note>
     pub metadata_directive: Option<MetadataDirective>,
     /// <p>Specifies whether you want to apply a legal hold to the object copy.</p>
@@ -3492,50 +3627,46 @@ pub struct CopyObjectInput {
     /// </note>
     pub object_lock_retain_until_date: Option<ObjectLockRetainUntilDate>,
     pub request_payer: Option<RequestPayer>,
-    /// <p>Specifies the algorithm to use when encrypting the object (for example,
-    /// <code>AES256</code>).</p>
-    /// <p>When you perform a <code>CopyObject</code> operation, if you want to use a different
-    /// type of encryption setting for the target object, you can specify appropriate
-    /// encryption-related headers to encrypt the target object with an Amazon S3 managed key, a
-    /// KMS key, or a customer-provided key. If the encryption setting in your request is
-    /// different from the default encryption configuration of the destination bucket, the
-    /// encryption setting in your request takes precedence. </p>
+    /// <p>Specifies the algorithm to use when encrypting the object (for example, <code>AES256</code>).</p>
+    /// <p>When you perform a <code>CopyObject</code> operation, if you want to use a different type of
+    /// encryption setting for the target object, you can specify appropriate encryption-related headers to
+    /// encrypt the target object with an Amazon S3 managed key, a KMS key, or a customer-provided key. If the
+    /// encryption setting in your request is different from the default encryption configuration of the
+    /// destination bucket, the encryption setting in your request takes precedence. </p>
     /// <note>
     /// <p>This functionality is not supported when the destination bucket is a directory bucket.</p>
     /// </note>
     pub sse_customer_algorithm: Option<SSECustomerAlgorithm>,
-    /// <p>Specifies the customer-provided encryption key for Amazon S3 to use in encrypting data. This
-    /// value is used to store the object and then it is discarded. Amazon S3 does not store the
-    /// encryption key. The key must be appropriate for use with the algorithm specified in the
+    /// <p>Specifies the customer-provided encryption key for Amazon S3 to use in encrypting data. This value is
+    /// used to store the object and then it is discarded. Amazon S3 does not store the encryption key. The key must
+    /// be appropriate for use with the algorithm specified in the
     /// <code>x-amz-server-side-encryption-customer-algorithm</code> header.</p>
     /// <note>
     /// <p>This functionality is not supported when the destination bucket is a directory bucket.</p>
     /// </note>
     pub sse_customer_key: Option<SSECustomerKey>,
-    /// <p>Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses
-    /// this header for a message integrity check to ensure that the encryption key was transmitted
-    /// without error.</p>
+    /// <p>Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header
+    /// for a message integrity check to ensure that the encryption key was transmitted without error.</p>
     /// <note>
     /// <p>This functionality is not supported when the destination bucket is a directory bucket.</p>
     /// </note>
     pub sse_customer_key_md5: Option<SSECustomerKeyMD5>,
-    /// <p>Specifies the Amazon Web Services KMS Encryption Context as an additional encryption context to use
-    /// for the destination object encryption. The value of this header is a base64-encoded UTF-8 string holding JSON with the encryption context key-value pairs.</p>
+    /// <p>Specifies the Amazon Web Services KMS Encryption Context as an additional encryption context to use for the
+    /// destination object encryption. The value of this header is a base64-encoded UTF-8 string holding JSON
+    /// with the encryption context key-value pairs.</p>
     /// <p>
-    /// <b>General purpose buckets</b> - This value must be explicitly
-    /// added to specify encryption context for <code>CopyObject</code> requests if you want an
-    /// additional encryption context for your destination object. The additional encryption
-    /// context of the source object won't be copied to the destination object. For more
-    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingKMSEncryption.html#encryption-context">Encryption
-    /// context</a> in the <i>Amazon S3 User Guide</i>.</p>
+    /// <b>General purpose buckets</b> - This value must be explicitly added to
+    /// specify encryption context for <code>CopyObject</code> requests if you want an additional encryption
+    /// context for your destination object. The additional encryption context of the source object won't be
+    /// copied to the destination object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingKMSEncryption.html#encryption-context">Encryption context</a>
+    /// in the <i>Amazon S3 User Guide</i>.</p>
     /// <p>
     /// <b>Directory buckets</b> - You can optionally provide an explicit encryption context value. The value must match the default encryption context - the bucket Amazon Resource Name (ARN). An additional encryption context value is not supported. </p>
     pub ssekms_encryption_context: Option<SSEKMSEncryptionContext>,
-    /// <p>Specifies the KMS key ID (Key ID, Key ARN, or Key Alias) to use for object encryption.
-    /// All GET and PUT requests for an object protected by KMS will fail if they're not made via
-    /// SSL or using SigV4. For information about configuring any of the officially supported Amazon Web Services
-    /// SDKs and Amazon Web Services CLI, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingAWSSDK.html#specify-signature-version">Specifying the
-    /// Signature Version in Request Authentication</a> in the
+    /// <p>Specifies the KMS key ID (Key ID, Key ARN, or Key Alias) to use for object encryption. All GET and
+    /// PUT requests for an object protected by KMS will fail if they're not made via SSL or using SigV4. For
+    /// information about configuring any of the officially supported Amazon Web Services SDKs and Amazon Web Services CLI, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingAWSSDK.html#specify-signature-version">Specifying
+    /// the Signature Version in Request Authentication</a> in the
     /// <i>Amazon S3 User Guide</i>.</p>
     /// <p>
     /// <b>Directory buckets</b> -
@@ -3547,37 +3678,35 @@ pub struct CopyObjectInput {
     ///
     /// Incorrect key specification results in an HTTP <code>400 Bad Request</code> error. </p>
     pub ssekms_key_id: Option<SSEKMSKeyId>,
-    /// <p>The server-side encryption algorithm used when storing this object in Amazon S3. Unrecognized
-    /// or unsupported values won’t write a destination object and will receive a <code>400 Bad
-    /// Request</code> response. </p>
-    /// <p>Amazon S3 automatically encrypts all new objects that are copied to an S3 bucket. When
-    /// copying an object, if you don't specify encryption information in your copy request, the
-    /// encryption setting of the target object is set to the default encryption configuration of
-    /// the destination bucket. By default, all buckets have a base level of encryption
-    /// configuration that uses server-side encryption with Amazon S3 managed keys (SSE-S3). If the
-    /// destination bucket has a different default encryption configuration, Amazon S3 uses the
+    /// <p>The server-side encryption algorithm used when storing this object in Amazon S3. Unrecognized or
+    /// unsupported values won’t write a destination object and will receive a <code>400 Bad Request</code>
+    /// response. </p>
+    /// <p>Amazon S3 automatically encrypts all new objects that are copied to an S3 bucket. When copying an object,
+    /// if you don't specify encryption information in your copy request, the encryption setting of the target
+    /// object is set to the default encryption configuration of the destination bucket. By default, all buckets
+    /// have a base level of encryption configuration that uses server-side encryption with Amazon S3 managed keys
+    /// (SSE-S3). If the destination bucket has a different default encryption configuration, Amazon S3 uses the
     /// corresponding encryption key to encrypt the target object copy.</p>
-    /// <p>With server-side encryption, Amazon S3 encrypts your data as it writes your data to disks in
-    /// its data centers and decrypts the data when you access it. For more information about
-    /// server-side encryption, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/serv-side-encryption.html">Using Server-Side Encryption</a>
-    /// in the <i>Amazon S3 User Guide</i>.</p>
+    /// <p>With server-side encryption, Amazon S3 encrypts your data as it writes your data to disks in its data
+    /// centers and decrypts the data when you access it. For more information about server-side encryption, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/serv-side-encryption.html">Using Server-Side
+    /// Encryption</a> in the <i>Amazon S3 User Guide</i>.</p>
     /// <p>
     /// <b>General purpose buckets </b>
     /// </p>
     /// <ul>
     /// <li>
-    /// <p>For general purpose buckets, there are the following supported options for server-side
-    /// encryption: server-side encryption with Key Management Service (KMS) keys (SSE-KMS), dual-layer
-    /// server-side encryption with Amazon Web Services KMS keys (DSSE-KMS), and server-side encryption
-    /// with customer-provided encryption keys (SSE-C). Amazon S3 uses the corresponding
-    /// KMS key, or a customer-provided key to encrypt the target object copy.</p>
+    /// <p>For general purpose buckets, there are the following supported options for server-side encryption:
+    /// server-side encryption with Key Management Service (KMS) keys (SSE-KMS), dual-layer server-side encryption with
+    /// Amazon Web Services KMS keys (DSSE-KMS), and server-side encryption with customer-provided encryption keys
+    /// (SSE-C). Amazon S3 uses the corresponding KMS key, or a customer-provided key to encrypt the target
+    /// object copy.</p>
     /// </li>
     /// <li>
-    /// <p>When you perform a <code>CopyObject</code> operation, if you want to use a
-    /// different type of encryption setting for the target object, you can specify
-    /// appropriate encryption-related headers to encrypt the target object with an Amazon S3
-    /// managed key, a KMS key, or a customer-provided key. If the encryption setting in
-    /// your request is different from the default encryption configuration of the
+    /// <p>When you perform a <code>CopyObject</code> operation, if you want to use a different type of
+    /// encryption setting for the target object, you can specify appropriate encryption-related headers to
+    /// encrypt the target object with an Amazon S3 managed key, a KMS key, or a customer-provided key. If the
+    /// encryption setting in your request is different from the default encryption configuration of the
     /// destination bucket, the encryption setting in your request takes precedence. </p>
     /// </li>
     /// </ul>
@@ -3592,67 +3721,73 @@ pub struct CopyObjectInput {
     /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-express-serv-side-encryption.html">Protecting data with server-side encryption</a> in the <i>Amazon S3 User Guide</i>. For more information about the encryption overriding behaviors in directory buckets, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-express-specifying-kms-encryption.html">Specifying server-side encryption with KMS for new object uploads</a>.</p>
     /// </li>
     /// <li>
-    /// <p>To encrypt new object copies to a directory bucket with SSE-KMS, we recommend you
-    /// specify SSE-KMS as the directory bucket's default encryption configuration with
-    /// a KMS key (specifically, a <a href="https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#customer-cmk">customer managed key</a>).
-    /// The <a href="https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#aws-managed-cmk">Amazon Web Services managed key</a> (<code>aws/s3</code>) isn't supported. Your SSE-KMS
-    /// configuration can only support 1 <a href="https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#customer-cmk">customer managed key</a> per
-    /// directory bucket for the lifetime of the bucket. After you specify a customer managed key for
-    /// SSE-KMS, you can't override the customer managed key for the bucket's SSE-KMS
-    /// configuration. Then, when you perform a <code>CopyObject</code> operation and want to
-    /// specify server-side encryption settings for new object copies with SSE-KMS in the
-    /// encryption-related request headers, you must ensure the encryption key is the same
-    /// customer managed key that you specified for the directory bucket's default encryption
-    /// configuration.
+    /// <p>To encrypt new object copies to a directory bucket with SSE-KMS, we recommend you specify
+    /// SSE-KMS as the directory bucket's default encryption configuration with a KMS key
+    /// (specifically, a <a href="https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#customer-cmk">customer managed key</a>). The <a href="https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#aws-managed-cmk">Amazon Web Services managed key</a> (<code>aws/s3</code>) isn't supported. Your SSE-KMS configuration can
+    /// only support 1 <a href="https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#customer-cmk">customer managed key</a> per
+    /// directory bucket for the lifetime of the bucket. After you specify a customer managed key for SSE-KMS, you
+    /// can't override the customer managed key for the bucket's SSE-KMS configuration. Then, when you
+    /// perform a <code>CopyObject</code> operation and want to specify server-side encryption settings for
+    /// new object copies with SSE-KMS in the encryption-related request headers, you must ensure the
+    /// encryption key is the same customer managed key that you specified for the directory bucket's default
+    /// encryption configuration.
     /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <b>S3 access points for Amazon FSx </b> - When accessing data stored in
+    /// Amazon FSx file systems using S3 access points, the only valid server side encryption option is
+    /// <code>aws:fsx</code>. All Amazon FSx file systems have encryption configured by default and are
+    /// encrypted at rest. Data is automatically encrypted before being written to the file system, and
+    /// automatically decrypted as it is read. These processes are handled transparently by Amazon FSx.</p>
     /// </li>
     /// </ul>
     pub server_side_encryption: Option<ServerSideEncryption>,
-    /// <p>If the <code>x-amz-storage-class</code> header is not used, the copied object will be
-    /// stored in the <code>STANDARD</code> Storage Class by default. The <code>STANDARD</code>
-    /// storage class provides high durability and high availability. Depending on performance
-    /// needs, you can specify a different Storage Class. </p>
+    /// <p>If the <code>x-amz-storage-class</code> header is not used, the copied object will be stored in the
+    /// <code>STANDARD</code> Storage Class by default. The <code>STANDARD</code> storage class provides high
+    /// durability and high availability. Depending on performance needs, you can specify a different Storage
+    /// Class. </p>
     /// <note>
     /// <ul>
     /// <li>
     /// <p>
     /// <b>Directory buckets </b> -
-    /// For directory buckets, only the S3 Express One Zone storage class is supported to store newly created objects.
+    /// Directory buckets only support <code>EXPRESS_ONEZONE</code> (the S3 Express One Zone storage class) in Availability Zones and <code>ONEZONE_IA</code> (the S3 One Zone-Infrequent Access storage class) in Dedicated Local Zones.  
     /// Unsupported storage class values won't write a destination object and will respond with the HTTP status code <code>400 Bad Request</code>.</p>
     /// </li>
     /// <li>
     /// <p>
-    /// <b>Amazon S3 on Outposts </b> - S3 on Outposts only
-    /// uses the <code>OUTPOSTS</code> Storage Class.</p>
+    /// <b>Amazon S3 on Outposts </b> - S3 on Outposts only uses the
+    /// <code>OUTPOSTS</code> Storage Class.</p>
     /// </li>
     /// </ul>
     /// </note>
-    /// <p>You can use the <code>CopyObject</code> action to change the storage class of an object
-    /// that is already stored in Amazon S3 by using the <code>x-amz-storage-class</code> header. For
-    /// more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/storage-class-intro.html">Storage Classes</a> in the
-    /// <i>Amazon S3 User Guide</i>.</p>
-    /// <p>Before using an object as a source object for the copy operation, you must restore a
-    /// copy of it if it meets any of the following conditions:</p>
+    /// <p>You can use the <code>CopyObject</code> action to change the storage class of an object that is
+    /// already stored in Amazon S3 by using the <code>x-amz-storage-class</code> header. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/storage-class-intro.html">Storage Classes</a>
+    /// in the <i>Amazon S3 User Guide</i>.</p>
+    /// <p>Before using an object as a source object for the copy operation, you must restore a copy of it if
+    /// it meets any of the following conditions:</p>
     /// <ul>
     /// <li>
     /// <p>The storage class of the source object is <code>GLACIER</code> or
     /// <code>DEEP_ARCHIVE</code>.</p>
     /// </li>
     /// <li>
-    /// <p>The storage class of the source object is <code>INTELLIGENT_TIERING</code> and
-    /// it's <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/intelligent-tiering-overview.html#intel-tiering-tier-definition">S3 Intelligent-Tiering access tier</a> is <code>Archive Access</code> or
-    /// <code>Deep Archive Access</code>.</p>
+    /// <p>The storage class of the source object is <code>INTELLIGENT_TIERING</code> and it's <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/intelligent-tiering-overview.html#intel-tiering-tier-definition">S3
+    /// Intelligent-Tiering access tier</a> is <code>Archive Access</code> or <code>Deep Archive
+    /// Access</code>.</p>
     /// </li>
     /// </ul>
-    /// <p>For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_RestoreObject.html">RestoreObject</a> and <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/CopyingObjectsExamples.html">Copying
-    /// Objects</a> in the <i>Amazon S3 User Guide</i>.</p>
+    /// <p>For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_RestoreObject.html">RestoreObject</a> and <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/CopyingObjectsExamples.html">Copying Objects</a> in the
+    /// <i>Amazon S3 User Guide</i>.</p>
     pub storage_class: Option<StorageClass>,
-    /// <p>The tag-set for the object copy in the destination bucket. This value must be used in
-    /// conjunction with the <code>x-amz-tagging-directive</code> if you choose
-    /// <code>REPLACE</code> for the <code>x-amz-tagging-directive</code>. If you choose
-    /// <code>COPY</code> for the <code>x-amz-tagging-directive</code>, you don't need to set
-    /// the <code>x-amz-tagging</code> header, because the tag-set will be copied from the source
-    /// object directly. The tag-set must be encoded as URL Query parameters.</p>
+    /// <p>The tag-set for the object copy in the destination bucket. This value must be used in conjunction
+    /// with the <code>x-amz-tagging-directive</code> if you choose <code>REPLACE</code> for the
+    /// <code>x-amz-tagging-directive</code>. If you choose <code>COPY</code> for the
+    /// <code>x-amz-tagging-directive</code>, you don't need to set the <code>x-amz-tagging</code> header,
+    /// because the tag-set will be copied from the source object directly. The tag-set must be encoded as URL
+    /// Query parameters.</p>
     /// <p>The default value is the empty value.</p>
     /// <note>
     /// <p>
@@ -3686,8 +3821,8 @@ pub struct CopyObjectInput {
     /// </ul>
     /// </note>
     pub tagging: Option<TaggingHeader>,
-    /// <p>Specifies whether the object tag-set is copied from the source object or replaced with
-    /// the tag-set that's provided in the request.</p>
+    /// <p>Specifies whether the object tag-set is copied from the source object or replaced with the tag-set
+    /// that's provided in the request.</p>
     /// <p>The default value is <code>COPY</code>.</p>
     /// <note>
     /// <p>
@@ -3721,12 +3856,11 @@ pub struct CopyObjectInput {
     /// </ul>
     /// </note>
     pub tagging_directive: Option<TaggingDirective>,
-    /// <p>If the destination bucket is configured as a website, redirects requests for this object
-    /// copy to another object in the same bucket or to an external URL. Amazon S3 stores the value of
-    /// this header in the object metadata. This value is unique to each object and is not copied
-    /// when using the <code>x-amz-metadata-directive</code> header. Instead, you may opt to
-    /// provide this header in combination with the <code>x-amz-metadata-directive</code>
-    /// header.</p>
+    /// <p>If the destination bucket is configured as a website, redirects requests for this object copy to
+    /// another object in the same bucket or to an external URL. Amazon S3 stores the value of this header in the
+    /// object metadata. This value is unique to each object and is not copied when using the
+    /// <code>x-amz-metadata-directive</code> header. Instead, you may opt to provide this header in
+    /// combination with the <code>x-amz-metadata-directive</code> header.</p>
     /// <note>
     /// <p>This functionality is not supported for directory buckets.</p>
     /// </note>
@@ -3737,23 +3871,20 @@ pub struct CopyObjectInput {
 #[cfg(feature = "minio")]
 pub struct CopyObjectInput {
     /// <p>The canned access control list (ACL) to apply to the object.</p>
-    /// <p>When you copy an object, the ACL metadata is not preserved and is set to
-    /// <code>private</code> by default. Only the owner has full access control. To override the
-    /// default ACL setting, specify a new ACL when you generate a copy request. For more
-    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3_ACLs_UsingACLs.html">Using ACLs</a>. </p>
-    /// <p>If the destination bucket that you're copying objects to uses the bucket owner enforced
-    /// setting for S3 Object Ownership, ACLs are disabled and no longer affect permissions.
-    /// Buckets that use this setting only accept <code>PUT</code> requests that don't specify an
-    /// ACL or <code>PUT</code> requests that specify bucket owner full control ACLs, such as the
-    /// <code>bucket-owner-full-control</code> canned ACL or an equivalent form of this ACL
-    /// expressed in the XML format. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/about-object-ownership.html">Controlling ownership of
-    /// objects and disabling ACLs</a> in the <i>Amazon S3 User Guide</i>.</p>
+    /// <p>When you copy an object, the ACL metadata is not preserved and is set to <code>private</code> by
+    /// default. Only the owner has full access control. To override the default ACL setting, specify a new ACL
+    /// when you generate a copy request. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3_ACLs_UsingACLs.html">Using ACLs</a>. </p>
+    /// <p>If the destination bucket that you're copying objects to uses the bucket owner enforced setting for
+    /// S3 Object Ownership, ACLs are disabled and no longer affect permissions. Buckets that use this setting
+    /// only accept <code>PUT</code> requests that don't specify an ACL or <code>PUT</code> requests that
+    /// specify bucket owner full control ACLs, such as the <code>bucket-owner-full-control</code> canned ACL or
+    /// an equivalent form of this ACL expressed in the XML format. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/about-object-ownership.html">Controlling ownership
+    /// of objects and disabling ACLs</a> in the <i>Amazon S3 User Guide</i>.</p>
     /// <note>
     /// <ul>
     /// <li>
-    /// <p>If your destination bucket uses the bucket owner enforced setting for Object
-    /// Ownership, all objects written to the bucket by any account will be owned by the
-    /// bucket owner.</p>
+    /// <p>If your destination bucket uses the bucket owner enforced setting for Object Ownership, all
+    /// objects written to the bucket by any account will be owned by the bucket owner.</p>
     /// </li>
     /// <li>
     /// <p>This functionality is not supported for directory buckets.</p>
@@ -3764,6 +3895,31 @@ pub struct CopyObjectInput {
     /// </ul>
     /// </note>
     pub acl: Option<ObjectCannedACL>,
+    /// <p>Specifies whether you want to copy annotations from the source object or exclude them. If this
+    /// header isn't specified, <code>COPY</code> is the default behavior.</p>
+    /// <p>Valid Values: <code>COPY | EXCLUDE</code>
+    /// </p>
+    /// <p>You can specify this directive as either an HTTP header
+    /// (<code>x-amz-object-annotation-directive</code>) or as a query string parameter. Use the query
+    /// string form when generating presigned URLs that need to control annotation copy behavior.</p>
+    /// <p>When set to <code>COPY</code>, you must have <code>s3:GetObjectAnnotation</code> permission on
+    /// the source object and <code>s3:PutObjectAnnotation</code> permission on the destination. Each
+    /// annotation copied is billed as a separate PUT request. If annotations on the source are modified
+    /// during the copy, Amazon S3 returns a retryable error.</p>
+    /// <note>
+    /// <p>For directory buckets, annotations are not supported. Use <code>EXCLUDE</code> to copy
+    /// objects to directory buckets without errors. If you specify <code>COPY</code> for a directory
+    /// bucket, the request returns HTTP 501 (Not Implemented).</p>
+    /// </note>
+    /// <note>
+    /// <p>When you copy objects using multipart upload (for example, when the Amazon Web Services CLI or Amazon Web Services SDKs
+    /// use Transfer Manager for objects larger than approximately 8 MB), annotations are not copied by
+    /// default. To include annotations, specify <code>--copy-props default</code> in the Amazon Web Services CLI or the
+    /// equivalent SDK configuration. With this opt-in, the SDK reads source annotations, completes the
+    /// multipart upload, and then writes each annotation to the destination. Between the upload completion
+    /// and the last annotation write, the destination object exists without all its annotations.</p>
+    /// </note>
+    pub annotation_directive: Option<AnnotationDirective>,
     /// <p>The name of the destination bucket.</p>
     /// <p>
     /// <b>Directory buckets</b> - When you use this operation with a directory bucket, you must use virtual-hosted-style requests in the format <code>
@@ -3773,32 +3929,36 @@ pub struct CopyObjectInput {
     /// restrictions, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/directory-bucket-naming-rules.html">Directory bucket naming
     /// rules</a> in the <i>Amazon S3 User Guide</i>.</p>
     /// <note>
-    /// <p>Copying objects across different Amazon Web Services Regions isn't supported when the source or destination bucket is in Amazon Web Services Local Zones. The source and destination buckets must have the same parent Amazon Web Services Region. Otherwise,
-    /// you get an HTTP <code>400 Bad Request</code> error with the error code <code>InvalidRequest</code>.</p>
+    /// <p>Copying objects across different Amazon Web Services Regions isn't supported when the source or destination
+    /// bucket is in Amazon Web Services Local Zones. The source and destination buckets must have the same parent Amazon Web Services Region.
+    /// Otherwise, you get an HTTP <code>400 Bad Request</code> error with the error code
+    /// <code>InvalidRequest</code>.</p>
     /// </note>
     /// <p>
-    /// <b>Access points</b> - When you use this action with an access point, you must provide the alias of the access point in place of the bucket name or specify the access point ARN. When using the access point ARN, you must direct requests to the access point hostname. The access point hostname takes the form <i>AccessPointName</i>-<i>AccountId</i>.s3-accesspoint.<i>Region</i>.amazonaws.com. When using this action with an access point through the Amazon Web Services SDKs, you provide the access point ARN in place of the bucket name. For more information about access point ARNs, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-access-points.html">Using access points</a> in the <i>Amazon S3 User Guide</i>.</p>
+    /// <b>Access points</b> - When you use this action with an access point for general purpose buckets, you must provide the alias of the access point in place of the bucket name or specify the access point ARN. When you use this action with an access point for directory buckets, you must provide the access point name in place of the bucket name. When using the access point ARN, you must direct requests to the access point hostname. The access point hostname takes the form <i>AccessPointName</i>-<i>AccountId</i>.s3-accesspoint.<i>Region</i>.amazonaws.com. When using this action with an access point through the Amazon Web Services SDKs, you provide the access point ARN in place of the bucket name. For more information about access point ARNs, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-access-points.html">Using access points</a> in the <i>Amazon S3 User Guide</i>.</p>
     /// <note>
-    /// <p>Access points and Object Lambda access points are not supported by directory buckets.</p>
+    /// <p>Object Lambda access points are not supported by directory buckets.</p>
     /// </note>
     /// <p>
-    /// <b>S3 on Outposts</b> - When you use this action with S3 on Outposts, you must use the Outpost bucket access point ARN or the access point alias for the destination bucket.
-    ///
-    /// You can only copy objects within the same Outpost bucket. It's not supported to copy objects across different Amazon Web Services Outposts, between buckets on the same Outposts, or between Outposts buckets and any other bucket types.
-    /// For more information about S3 on Outposts, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/S3onOutposts.html">What is S3 on Outposts?</a> in the <i>S3 on Outposts guide</i>.
-    /// When you use this action with S3 on Outposts through the REST API, you must direct requests to the S3 on Outposts hostname, in the format
+    /// <b>S3 on Outposts</b> - When you use this action with S3 on Outposts,
+    /// you must use the Outpost bucket access point ARN or the access point alias for the destination bucket.
+    /// You can only copy objects within the same Outpost bucket. It's not supported to copy objects across
+    /// different Amazon Web Services Outposts, between buckets on the same Outposts, or between Outposts buckets and any
+    /// other bucket types. For more information about S3 on Outposts, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/S3onOutposts.html">What is S3 on Outposts?</a> in the
+    /// <i>S3 on Outposts guide</i>. When you use this action with S3 on Outposts through the REST
+    /// API, you must direct requests to the S3 on Outposts hostname, in the format
     /// <code>
-    /// <i>AccessPointName</i>-<i>AccountId</i>.<i>outpostID</i>.s3-outposts.<i>Region</i>.amazonaws.com</code>. The hostname isn't required when you use the Amazon Web Services CLI or SDKs.
-    /// </p>
+    /// <i>AccessPointName</i>-<i>AccountId</i>.<i>outpostID</i>.s3-outposts.<i>Region</i>.amazonaws.com</code>.
+    /// The hostname isn't required when you use the Amazon Web Services CLI or SDKs. </p>
     pub bucket: BucketName,
-    /// <p>Specifies whether Amazon S3 should use an S3 Bucket Key for object encryption with
-    /// server-side encryption using Key Management Service (KMS) keys (SSE-KMS). If a target object uses
-    /// SSE-KMS, you can enable an S3 Bucket Key for the object.</p>
-    /// <p>Setting this header to <code>true</code> causes Amazon S3 to use an S3 Bucket Key for object
-    /// encryption with SSE-KMS. Specifying this header with a COPY action doesn’t affect
-    /// bucket-level settings for S3 Bucket Key.</p>
-    /// <p>For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/bucket-key.html">Amazon S3 Bucket Keys</a> in the
-    /// <i>Amazon S3 User Guide</i>.</p>
+    /// <p>Specifies whether Amazon S3 should use an S3 Bucket Key for object encryption with server-side encryption
+    /// using Key Management Service (KMS) keys (SSE-KMS). If a target object uses SSE-KMS, you can enable an S3 Bucket Key
+    /// for the object.</p>
+    /// <p>Setting this header to <code>true</code> causes Amazon S3 to use an S3 Bucket Key for object encryption
+    /// with SSE-KMS. Specifying this header with a COPY action doesn’t affect bucket-level settings for S3
+    /// Bucket Key.</p>
+    /// <p>For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/bucket-key.html">Amazon S3
+    /// Bucket Keys</a> in the <i>Amazon S3 User Guide</i>.</p>
     /// <note>
     /// <p>
     /// <b>Directory buckets</b> -
@@ -3811,24 +3971,22 @@ pub struct CopyObjectInput {
     /// <p>Indicates the algorithm that you want Amazon S3 to use to create the checksum for the object. For more information, see
     /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in
     /// the <i>Amazon S3 User Guide</i>.</p>
-    /// <p>When you copy an object, if the source object has a checksum, that checksum value will
-    /// be copied to the new object by default. If the <code>CopyObject</code> request does not
-    /// include this <code>x-amz-checksum-algorithm</code> header, the checksum algorithm will be
-    /// copied from the source object to the destination object (if it's present on the source
-    /// object). You can optionally specify a different checksum algorithm to use with the
-    /// <code>x-amz-checksum-algorithm</code> header. Unrecognized or unsupported values will
-    /// respond with the HTTP status code <code>400 Bad Request</code>.</p>
+    /// <p>When you copy an object, if the source object has a checksum, that checksum value will be copied to
+    /// the new object by default. If the <code>CopyObject</code> request does not include this
+    /// <code>x-amz-checksum-algorithm</code> header, the checksum algorithm will be copied from the source
+    /// object to the destination object (if it's present on the source object). You can optionally specify a
+    /// different checksum algorithm to use with the <code>x-amz-checksum-algorithm</code> header. Unrecognized
+    /// or unsupported values will respond with the HTTP status code <code>400 Bad Request</code>.</p>
     /// <note>
     /// <p>For directory buckets, when you use Amazon Web Services SDKs, <code>CRC32</code> is the default checksum algorithm that's used for performance.</p>
     /// </note>
     pub checksum_algorithm: Option<ChecksumAlgorithm>,
-    /// <p>Specifies presentational information for the object. Indicates whether an object should
-    /// be displayed in a web browser or downloaded as a file. It allows specifying the desired
-    /// filename for the downloaded file.</p>
+    /// <p>Specifies presentational information for the object. Indicates whether an object should be displayed
+    /// in a web browser or downloaded as a file. It allows specifying the desired filename for the downloaded
+    /// file.</p>
     pub content_disposition: Option<ContentDisposition>,
-    /// <p>Specifies what content encodings have been applied to the object and thus what decoding
-    /// mechanisms must be applied to obtain the media-type referenced by the Content-Type header
-    /// field.</p>
+    /// <p>Specifies what content encodings have been applied to the object and thus what decoding mechanisms
+    /// must be applied to obtain the media-type referenced by the Content-Type header field.</p>
     /// <note>
     /// <p>For directory buckets, only the <code>aws-chunked</code> value is supported in this header field.</p>
     /// </note>
@@ -3837,23 +3995,21 @@ pub struct CopyObjectInput {
     pub content_language: Option<ContentLanguage>,
     /// <p>A standard MIME type that describes the format of the object data.</p>
     pub content_type: Option<ContentType>,
-    /// <p>Specifies the source object for the copy operation. The source object can be up to 5 GB.
-    /// If the source object is an object that was uploaded by using a multipart upload, the object
-    /// copy will be a single part object after the source object is copied to the destination
-    /// bucket.</p>
-    /// <p>You specify the value of the copy source in one of two formats, depending on whether you
-    /// want to access the source object through an <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-points.html">access point</a>:</p>
+    /// <p>Specifies the source object for the copy operation. The source object can be up to 5 GB. If the
+    /// source object is an object that was uploaded by using a multipart upload, the object copy will be a
+    /// single part object after the source object is copied to the destination bucket.</p>
+    /// <p>You specify the value of the copy source in one of two formats, depending on whether you want to
+    /// access the source object through an <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-points.html">access point</a>:</p>
     /// <ul>
     /// <li>
-    /// <p>For objects not accessed through an access point, specify the name of the source bucket
-    /// and the key of the source object, separated by a slash (/). For example, to copy the
-    /// object <code>reports/january.pdf</code> from the general purpose bucket
-    /// <code>awsexamplebucket</code>, use
-    /// <code>awsexamplebucket/reports/january.pdf</code>. The value must be URL-encoded.
-    /// To copy the object <code>reports/january.pdf</code> from the directory bucket
+    /// <p>For objects not accessed through an access point, specify the name of the source bucket and the key of
+    /// the source object, separated by a slash (/). For example, to copy the object
+    /// <code>reports/january.pdf</code> from the general purpose bucket <code>awsexamplebucket</code>, use
+    /// <code>awsexamplebucket/reports/january.pdf</code>. The value must be URL-encoded. To copy the
+    /// object <code>reports/january.pdf</code> from the directory bucket
     /// <code>awsexamplebucket--use1-az5--x-s3</code>, use
-    /// <code>awsexamplebucket--use1-az5--x-s3/reports/january.pdf</code>. The value must
-    /// be URL-encoded.</p>
+    /// <code>awsexamplebucket--use1-az5--x-s3/reports/january.pdf</code>. The value must be
+    /// URL-encoded.</p>
     /// </li>
     /// <li>
     /// <p>For objects accessed through access points, specify the Amazon Resource Name (ARN) of the object as accessed through the access point, in the format <code>arn:aws:s3:&lt;Region&gt;:&lt;account-id&gt;:accesspoint/&lt;access-point-name&gt;/object/&lt;key&gt;</code>. For example, to copy the object <code>reports/january.pdf</code> through access point <code>my-access-point</code> owned by account <code>123456789012</code> in Region <code>us-west-2</code>, use the URL encoding of <code>arn:aws:s3:us-west-2:123456789012:accesspoint/my-access-point/object/reports/january.pdf</code>. The value must be URL encoded.</p>
@@ -3870,31 +4026,27 @@ pub struct CopyObjectInput {
     /// <p>Alternatively, for objects accessed through Amazon S3 on Outposts, specify the ARN of the object as accessed in the format <code>arn:aws:s3-outposts:&lt;Region&gt;:&lt;account-id&gt;:outpost/&lt;outpost-id&gt;/object/&lt;key&gt;</code>. For example, to copy the object <code>reports/january.pdf</code> through outpost <code>my-outpost</code> owned by account <code>123456789012</code> in Region <code>us-west-2</code>, use the URL encoding of <code>arn:aws:s3-outposts:us-west-2:123456789012:outpost/my-outpost/object/reports/january.pdf</code>. The value must be URL-encoded.  </p>
     /// </li>
     /// </ul>
-    /// <p>If your source bucket versioning is enabled, the <code>x-amz-copy-source</code> header
-    /// by default identifies the current version of an object to copy. If the current version is a
-    /// delete marker, Amazon S3 behaves as if the object was deleted. To copy a different version, use
-    /// the <code>versionId</code> query parameter. Specifically, append
-    /// <code>?versionId=&lt;version-id&gt;</code> to the value (for example,
-    /// <code>awsexamplebucket/reports/january.pdf?versionId=QUpfdndhfd8438MNFDN93jdnJFkdmqnh893</code>).
-    /// If you don't specify a version ID, Amazon S3 copies the latest version of the source
-    /// object.</p>
-    /// <p>If you enable versioning on the destination bucket, Amazon S3 generates a unique version ID
-    /// for the copied object. This version ID is different from the version ID of the source
-    /// object. Amazon S3 returns the version ID of the copied object in the
-    /// <code>x-amz-version-id</code> response header in the response.</p>
-    /// <p>If you do not enable versioning or suspend it on the destination bucket, the version ID
-    /// that Amazon S3 generates in the <code>x-amz-version-id</code> response header is always
-    /// null.</p>
+    /// <p>If your source bucket versioning is enabled, the <code>x-amz-copy-source</code> header by default
+    /// identifies the current version of an object to copy. If the current version is a delete marker, Amazon S3
+    /// behaves as if the object was deleted. To copy a different version, use the <code>versionId</code> query
+    /// parameter. Specifically, append <code>?versionId=&lt;version-id&gt;</code> to the value (for example,
+    /// <code>awsexamplebucket/reports/january.pdf?versionId=QUpfdndhfd8438MNFDN93jdnJFkdmqnh893</code>). If
+    /// you don't specify a version ID, Amazon S3 copies the latest version of the source object.</p>
+    /// <p>If you enable versioning on the destination bucket, Amazon S3 generates a unique version ID for the
+    /// copied object. This version ID is different from the version ID of the source object. Amazon S3 returns the
+    /// version ID of the copied object in the <code>x-amz-version-id</code> response header in the
+    /// response.</p>
+    /// <p>If you do not enable versioning or suspend it on the destination bucket, the version ID that Amazon S3
+    /// generates in the <code>x-amz-version-id</code> response header is always null.</p>
     /// <note>
     /// <p>
-    /// <b>Directory buckets</b> -
-    /// S3 Versioning isn't enabled and supported for directory buckets.</p>
+    /// <b>Directory buckets</b> - S3 Versioning isn't enabled and supported for directory buckets.</p>
     /// </note>
     pub copy_source: CopySource,
     /// <p>Copies the object if its entity tag (ETag) matches the specified tag.</p>
     /// <p> If both the <code>x-amz-copy-source-if-match</code> and
-    /// <code>x-amz-copy-source-if-unmodified-since</code> headers are present in the request
-    /// and evaluate as follows, Amazon S3 returns <code>200 OK</code> and copies the data:</p>
+    /// <code>x-amz-copy-source-if-unmodified-since</code> headers are present in the request and evaluate as
+    /// follows, Amazon S3 returns <code>200 OK</code> and copies the data:</p>
     /// <ul>
     /// <li>
     /// <p>
@@ -3902,16 +4054,14 @@ pub struct CopyObjectInput {
     /// </li>
     /// <li>
     /// <p>
-    /// <code>x-amz-copy-source-if-unmodified-since</code> condition evaluates to
-    /// false</p>
+    /// <code>x-amz-copy-source-if-unmodified-since</code> condition evaluates to false</p>
     /// </li>
     /// </ul>
     pub copy_source_if_match: Option<CopySourceIfMatch>,
     /// <p>Copies the object if it has been modified since the specified time.</p>
     /// <p>If both the <code>x-amz-copy-source-if-none-match</code> and
-    /// <code>x-amz-copy-source-if-modified-since</code> headers are present in the request and
-    /// evaluate as follows, Amazon S3 returns the <code>412 Precondition Failed</code> response
-    /// code:</p>
+    /// <code>x-amz-copy-source-if-modified-since</code> headers are present in the request and evaluate as
+    /// follows, Amazon S3 returns the <code>412 Precondition Failed</code> response code:</p>
     /// <ul>
     /// <li>
     /// <p>
@@ -3919,16 +4069,14 @@ pub struct CopyObjectInput {
     /// </li>
     /// <li>
     /// <p>
-    /// <code>x-amz-copy-source-if-modified-since</code> condition evaluates to
-    /// true</p>
+    /// <code>x-amz-copy-source-if-modified-since</code> condition evaluates to true</p>
     /// </li>
     /// </ul>
     pub copy_source_if_modified_since: Option<CopySourceIfModifiedSince>,
     /// <p>Copies the object if its entity tag (ETag) is different than the specified ETag.</p>
     /// <p>If both the <code>x-amz-copy-source-if-none-match</code> and
-    /// <code>x-amz-copy-source-if-modified-since</code> headers are present in the request and
-    /// evaluate as follows, Amazon S3 returns the <code>412 Precondition Failed</code> response
-    /// code:</p>
+    /// <code>x-amz-copy-source-if-modified-since</code> headers are present in the request and evaluate as
+    /// follows, Amazon S3 returns the <code>412 Precondition Failed</code> response code:</p>
     /// <ul>
     /// <li>
     /// <p>
@@ -3936,15 +4084,14 @@ pub struct CopyObjectInput {
     /// </li>
     /// <li>
     /// <p>
-    /// <code>x-amz-copy-source-if-modified-since</code> condition evaluates to
-    /// true</p>
+    /// <code>x-amz-copy-source-if-modified-since</code> condition evaluates to true</p>
     /// </li>
     /// </ul>
     pub copy_source_if_none_match: Option<CopySourceIfNoneMatch>,
     /// <p>Copies the object if it hasn't been modified since the specified time.</p>
     /// <p> If both the <code>x-amz-copy-source-if-match</code> and
-    /// <code>x-amz-copy-source-if-unmodified-since</code> headers are present in the request
-    /// and evaluate as follows, Amazon S3 returns <code>200 OK</code> and copies the data:</p>
+    /// <code>x-amz-copy-source-if-unmodified-since</code> headers are present in the request and evaluate as
+    /// follows, Amazon S3 returns <code>200 OK</code> and copies the data:</p>
     /// <ul>
     /// <li>
     /// <p>
@@ -3952,36 +4099,31 @@ pub struct CopyObjectInput {
     /// </li>
     /// <li>
     /// <p>
-    /// <code>x-amz-copy-source-if-unmodified-since</code> condition evaluates to
-    /// false</p>
+    /// <code>x-amz-copy-source-if-unmodified-since</code> condition evaluates to false</p>
     /// </li>
     /// </ul>
     pub copy_source_if_unmodified_since: Option<CopySourceIfUnmodifiedSince>,
     /// <p>Specifies the algorithm to use when decrypting the source object (for example,
     /// <code>AES256</code>).</p>
-    /// <p>If the source object for the copy is stored in Amazon S3 using SSE-C, you must provide the
-    /// necessary encryption information in your request so that Amazon S3 can decrypt the object for
-    /// copying.</p>
+    /// <p>If the source object for the copy is stored in Amazon S3 using SSE-C, you must provide the necessary
+    /// encryption information in your request so that Amazon S3 can decrypt the object for copying.</p>
     /// <note>
     /// <p>This functionality is not supported when the source object is in a directory bucket.</p>
     /// </note>
     pub copy_source_sse_customer_algorithm: Option<CopySourceSSECustomerAlgorithm>,
-    /// <p>Specifies the customer-provided encryption key for Amazon S3 to use to decrypt the source
-    /// object. The encryption key provided in this header must be the same one that was used when
-    /// the source object was created.</p>
-    /// <p>If the source object for the copy is stored in Amazon S3 using SSE-C, you must provide the
-    /// necessary encryption information in your request so that Amazon S3 can decrypt the object for
-    /// copying.</p>
+    /// <p>Specifies the customer-provided encryption key for Amazon S3 to use to decrypt the source object. The
+    /// encryption key provided in this header must be the same one that was used when the source object was
+    /// created.</p>
+    /// <p>If the source object for the copy is stored in Amazon S3 using SSE-C, you must provide the necessary
+    /// encryption information in your request so that Amazon S3 can decrypt the object for copying.</p>
     /// <note>
     /// <p>This functionality is not supported when the source object is in a directory bucket.</p>
     /// </note>
     pub copy_source_sse_customer_key: Option<CopySourceSSECustomerKey>,
-    /// <p>Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses
-    /// this header for a message integrity check to ensure that the encryption key was transmitted
-    /// without error.</p>
-    /// <p>If the source object for the copy is stored in Amazon S3 using SSE-C, you must provide the
-    /// necessary encryption information in your request so that Amazon S3 can decrypt the object for
-    /// copying.</p>
+    /// <p>Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header
+    /// for a message integrity check to ensure that the encryption key was transmitted without error.</p>
+    /// <p>If the source object for the copy is stored in Amazon S3 using SSE-C, you must provide the necessary
+    /// encryption information in your request so that Amazon S3 can decrypt the object for copying.</p>
     /// <note>
     /// <p>This functionality is not supported when the source object is in a directory bucket.</p>
     /// </note>
@@ -4040,26 +4182,38 @@ pub struct CopyObjectInput {
     /// </ul>
     /// </note>
     pub grant_write_acp: Option<GrantWriteACP>,
+    /// <p>Copies the object if the entity tag (ETag) of the destination object matches the specified
+    /// tag. If the ETag values do not match, the operation returns a <code>412 Precondition
+    /// Failed</code> error. If a concurrent operation occurs during the upload S3 returns a
+    /// <code>409 ConditionalRequestConflict</code> response. On a 409 failure you should fetch the
+    /// object's ETag and retry the upload.</p>
+    /// <p>Expects the ETag value as a string.</p>
+    /// <p>For more information about conditional requests, see <a href="https://tools.ietf.org/html/rfc7232">RFC 7232</a>.</p>
+    pub if_match: Option<IfMatch>,
+    /// <p>Copies the object only if the object key name at the destination does not already exist in
+    /// the bucket specified. Otherwise, Amazon S3 returns a <code>412 Precondition Failed</code> error. If a
+    /// concurrent operation occurs during the upload S3 returns a <code>409 ConditionalRequestConflict</code>
+    /// response. On a 409 failure you should retry the upload.</p>
+    /// <p>Expects the '*' (asterisk) character.</p>
+    /// <p>For more information about conditional requests, see <a href="https://tools.ietf.org/html/rfc7232">RFC 7232</a>.</p>
+    pub if_none_match: Option<IfNoneMatch>,
     /// <p>The key of the destination object.</p>
     pub key: ObjectKey,
     /// <p>A map of metadata to store with the object in S3.</p>
     pub metadata: Option<Metadata>,
-    /// <p>Specifies whether the metadata is copied from the source object or replaced with
-    /// metadata that's provided in the request. When copying an object, you can preserve all
-    /// metadata (the default) or specify new metadata. If this header isn’t specified,
-    /// <code>COPY</code> is the default behavior. </p>
+    /// <p>Specifies whether the metadata is copied from the source object or replaced with metadata that's
+    /// provided in the request. When copying an object, you can preserve all metadata (the default) or specify
+    /// new metadata. If this header isn’t specified, <code>COPY</code> is the default behavior. </p>
     /// <p>
-    /// <b>General purpose bucket</b> - For general purpose buckets, when you
-    /// grant permissions, you can use the <code>s3:x-amz-metadata-directive</code> condition key
-    /// to enforce certain metadata behavior when objects are uploaded. For more information, see
-    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/amazon-s3-policy-keys.html">Amazon S3
-    /// condition key examples</a> in the <i>Amazon S3 User Guide</i>.</p>
+    /// <b>General purpose bucket</b> - For general purpose buckets, when you grant
+    /// permissions, you can use the <code>s3:x-amz-metadata-directive</code> condition key to enforce certain
+    /// metadata behavior when objects are uploaded. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/amazon-s3-policy-keys.html">Amazon S3 condition key examples</a> in the
+    /// <i>Amazon S3 User Guide</i>.</p>
     /// <note>
     /// <p>
-    /// <code>x-amz-website-redirect-location</code> is unique to each object and is not
-    /// copied when using the <code>x-amz-metadata-directive</code> header. To copy the value,
-    /// you must specify <code>x-amz-website-redirect-location</code> in the request
-    /// header.</p>
+    /// <code>x-amz-website-redirect-location</code> is unique to each object and is not copied when using
+    /// the <code>x-amz-metadata-directive</code> header. To copy the value, you must specify
+    /// <code>x-amz-website-redirect-location</code> in the request header.</p>
     /// </note>
     pub metadata_directive: Option<MetadataDirective>,
     /// <p>Specifies whether you want to apply a legal hold to the object copy.</p>
@@ -4078,50 +4232,46 @@ pub struct CopyObjectInput {
     /// </note>
     pub object_lock_retain_until_date: Option<ObjectLockRetainUntilDate>,
     pub request_payer: Option<RequestPayer>,
-    /// <p>Specifies the algorithm to use when encrypting the object (for example,
-    /// <code>AES256</code>).</p>
-    /// <p>When you perform a <code>CopyObject</code> operation, if you want to use a different
-    /// type of encryption setting for the target object, you can specify appropriate
-    /// encryption-related headers to encrypt the target object with an Amazon S3 managed key, a
-    /// KMS key, or a customer-provided key. If the encryption setting in your request is
-    /// different from the default encryption configuration of the destination bucket, the
-    /// encryption setting in your request takes precedence. </p>
+    /// <p>Specifies the algorithm to use when encrypting the object (for example, <code>AES256</code>).</p>
+    /// <p>When you perform a <code>CopyObject</code> operation, if you want to use a different type of
+    /// encryption setting for the target object, you can specify appropriate encryption-related headers to
+    /// encrypt the target object with an Amazon S3 managed key, a KMS key, or a customer-provided key. If the
+    /// encryption setting in your request is different from the default encryption configuration of the
+    /// destination bucket, the encryption setting in your request takes precedence. </p>
     /// <note>
     /// <p>This functionality is not supported when the destination bucket is a directory bucket.</p>
     /// </note>
     pub sse_customer_algorithm: Option<SSECustomerAlgorithm>,
-    /// <p>Specifies the customer-provided encryption key for Amazon S3 to use in encrypting data. This
-    /// value is used to store the object and then it is discarded. Amazon S3 does not store the
-    /// encryption key. The key must be appropriate for use with the algorithm specified in the
+    /// <p>Specifies the customer-provided encryption key for Amazon S3 to use in encrypting data. This value is
+    /// used to store the object and then it is discarded. Amazon S3 does not store the encryption key. The key must
+    /// be appropriate for use with the algorithm specified in the
     /// <code>x-amz-server-side-encryption-customer-algorithm</code> header.</p>
     /// <note>
     /// <p>This functionality is not supported when the destination bucket is a directory bucket.</p>
     /// </note>
     pub sse_customer_key: Option<SSECustomerKey>,
-    /// <p>Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses
-    /// this header for a message integrity check to ensure that the encryption key was transmitted
-    /// without error.</p>
+    /// <p>Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header
+    /// for a message integrity check to ensure that the encryption key was transmitted without error.</p>
     /// <note>
     /// <p>This functionality is not supported when the destination bucket is a directory bucket.</p>
     /// </note>
     pub sse_customer_key_md5: Option<SSECustomerKeyMD5>,
-    /// <p>Specifies the Amazon Web Services KMS Encryption Context as an additional encryption context to use
-    /// for the destination object encryption. The value of this header is a base64-encoded UTF-8 string holding JSON with the encryption context key-value pairs.</p>
+    /// <p>Specifies the Amazon Web Services KMS Encryption Context as an additional encryption context to use for the
+    /// destination object encryption. The value of this header is a base64-encoded UTF-8 string holding JSON
+    /// with the encryption context key-value pairs.</p>
     /// <p>
-    /// <b>General purpose buckets</b> - This value must be explicitly
-    /// added to specify encryption context for <code>CopyObject</code> requests if you want an
-    /// additional encryption context for your destination object. The additional encryption
-    /// context of the source object won't be copied to the destination object. For more
-    /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingKMSEncryption.html#encryption-context">Encryption
-    /// context</a> in the <i>Amazon S3 User Guide</i>.</p>
+    /// <b>General purpose buckets</b> - This value must be explicitly added to
+    /// specify encryption context for <code>CopyObject</code> requests if you want an additional encryption
+    /// context for your destination object. The additional encryption context of the source object won't be
+    /// copied to the destination object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingKMSEncryption.html#encryption-context">Encryption context</a>
+    /// in the <i>Amazon S3 User Guide</i>.</p>
     /// <p>
     /// <b>Directory buckets</b> - You can optionally provide an explicit encryption context value. The value must match the default encryption context - the bucket Amazon Resource Name (ARN). An additional encryption context value is not supported. </p>
     pub ssekms_encryption_context: Option<SSEKMSEncryptionContext>,
-    /// <p>Specifies the KMS key ID (Key ID, Key ARN, or Key Alias) to use for object encryption.
-    /// All GET and PUT requests for an object protected by KMS will fail if they're not made via
-    /// SSL or using SigV4. For information about configuring any of the officially supported Amazon Web Services
-    /// SDKs and Amazon Web Services CLI, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingAWSSDK.html#specify-signature-version">Specifying the
-    /// Signature Version in Request Authentication</a> in the
+    /// <p>Specifies the KMS key ID (Key ID, Key ARN, or Key Alias) to use for object encryption. All GET and
+    /// PUT requests for an object protected by KMS will fail if they're not made via SSL or using SigV4. For
+    /// information about configuring any of the officially supported Amazon Web Services SDKs and Amazon Web Services CLI, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingAWSSDK.html#specify-signature-version">Specifying
+    /// the Signature Version in Request Authentication</a> in the
     /// <i>Amazon S3 User Guide</i>.</p>
     /// <p>
     /// <b>Directory buckets</b> -
@@ -4133,37 +4283,35 @@ pub struct CopyObjectInput {
     ///
     /// Incorrect key specification results in an HTTP <code>400 Bad Request</code> error. </p>
     pub ssekms_key_id: Option<SSEKMSKeyId>,
-    /// <p>The server-side encryption algorithm used when storing this object in Amazon S3. Unrecognized
-    /// or unsupported values won’t write a destination object and will receive a <code>400 Bad
-    /// Request</code> response. </p>
-    /// <p>Amazon S3 automatically encrypts all new objects that are copied to an S3 bucket. When
-    /// copying an object, if you don't specify encryption information in your copy request, the
-    /// encryption setting of the target object is set to the default encryption configuration of
-    /// the destination bucket. By default, all buckets have a base level of encryption
-    /// configuration that uses server-side encryption with Amazon S3 managed keys (SSE-S3). If the
-    /// destination bucket has a different default encryption configuration, Amazon S3 uses the
+    /// <p>The server-side encryption algorithm used when storing this object in Amazon S3. Unrecognized or
+    /// unsupported values won’t write a destination object and will receive a <code>400 Bad Request</code>
+    /// response. </p>
+    /// <p>Amazon S3 automatically encrypts all new objects that are copied to an S3 bucket. When copying an object,
+    /// if you don't specify encryption information in your copy request, the encryption setting of the target
+    /// object is set to the default encryption configuration of the destination bucket. By default, all buckets
+    /// have a base level of encryption configuration that uses server-side encryption with Amazon S3 managed keys
+    /// (SSE-S3). If the destination bucket has a different default encryption configuration, Amazon S3 uses the
     /// corresponding encryption key to encrypt the target object copy.</p>
-    /// <p>With server-side encryption, Amazon S3 encrypts your data as it writes your data to disks in
-    /// its data centers and decrypts the data when you access it. For more information about
-    /// server-side encryption, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/serv-side-encryption.html">Using Server-Side Encryption</a>
-    /// in the <i>Amazon S3 User Guide</i>.</p>
+    /// <p>With server-side encryption, Amazon S3 encrypts your data as it writes your data to disks in its data
+    /// centers and decrypts the data when you access it. For more information about server-side encryption, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/serv-side-encryption.html">Using Server-Side
+    /// Encryption</a> in the <i>Amazon S3 User Guide</i>.</p>
     /// <p>
     /// <b>General purpose buckets </b>
     /// </p>
     /// <ul>
     /// <li>
-    /// <p>For general purpose buckets, there are the following supported options for server-side
-    /// encryption: server-side encryption with Key Management Service (KMS) keys (SSE-KMS), dual-layer
-    /// server-side encryption with Amazon Web Services KMS keys (DSSE-KMS), and server-side encryption
-    /// with customer-provided encryption keys (SSE-C). Amazon S3 uses the corresponding
-    /// KMS key, or a customer-provided key to encrypt the target object copy.</p>
+    /// <p>For general purpose buckets, there are the following supported options for server-side encryption:
+    /// server-side encryption with Key Management Service (KMS) keys (SSE-KMS), dual-layer server-side encryption with
+    /// Amazon Web Services KMS keys (DSSE-KMS), and server-side encryption with customer-provided encryption keys
+    /// (SSE-C). Amazon S3 uses the corresponding KMS key, or a customer-provided key to encrypt the target
+    /// object copy.</p>
     /// </li>
     /// <li>
-    /// <p>When you perform a <code>CopyObject</code> operation, if you want to use a
-    /// different type of encryption setting for the target object, you can specify
-    /// appropriate encryption-related headers to encrypt the target object with an Amazon S3
-    /// managed key, a KMS key, or a customer-provided key. If the encryption setting in
-    /// your request is different from the default encryption configuration of the
+    /// <p>When you perform a <code>CopyObject</code> operation, if you want to use a different type of
+    /// encryption setting for the target object, you can specify appropriate encryption-related headers to
+    /// encrypt the target object with an Amazon S3 managed key, a KMS key, or a customer-provided key. If the
+    /// encryption setting in your request is different from the default encryption configuration of the
     /// destination bucket, the encryption setting in your request takes precedence. </p>
     /// </li>
     /// </ul>
@@ -4178,67 +4326,73 @@ pub struct CopyObjectInput {
     /// information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-express-serv-side-encryption.html">Protecting data with server-side encryption</a> in the <i>Amazon S3 User Guide</i>. For more information about the encryption overriding behaviors in directory buckets, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-express-specifying-kms-encryption.html">Specifying server-side encryption with KMS for new object uploads</a>.</p>
     /// </li>
     /// <li>
-    /// <p>To encrypt new object copies to a directory bucket with SSE-KMS, we recommend you
-    /// specify SSE-KMS as the directory bucket's default encryption configuration with
-    /// a KMS key (specifically, a <a href="https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#customer-cmk">customer managed key</a>).
-    /// The <a href="https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#aws-managed-cmk">Amazon Web Services managed key</a> (<code>aws/s3</code>) isn't supported. Your SSE-KMS
-    /// configuration can only support 1 <a href="https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#customer-cmk">customer managed key</a> per
-    /// directory bucket for the lifetime of the bucket. After you specify a customer managed key for
-    /// SSE-KMS, you can't override the customer managed key for the bucket's SSE-KMS
-    /// configuration. Then, when you perform a <code>CopyObject</code> operation and want to
-    /// specify server-side encryption settings for new object copies with SSE-KMS in the
-    /// encryption-related request headers, you must ensure the encryption key is the same
-    /// customer managed key that you specified for the directory bucket's default encryption
-    /// configuration.
+    /// <p>To encrypt new object copies to a directory bucket with SSE-KMS, we recommend you specify
+    /// SSE-KMS as the directory bucket's default encryption configuration with a KMS key
+    /// (specifically, a <a href="https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#customer-cmk">customer managed key</a>). The <a href="https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#aws-managed-cmk">Amazon Web Services managed key</a> (<code>aws/s3</code>) isn't supported. Your SSE-KMS configuration can
+    /// only support 1 <a href="https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#customer-cmk">customer managed key</a> per
+    /// directory bucket for the lifetime of the bucket. After you specify a customer managed key for SSE-KMS, you
+    /// can't override the customer managed key for the bucket's SSE-KMS configuration. Then, when you
+    /// perform a <code>CopyObject</code> operation and want to specify server-side encryption settings for
+    /// new object copies with SSE-KMS in the encryption-related request headers, you must ensure the
+    /// encryption key is the same customer managed key that you specified for the directory bucket's default
+    /// encryption configuration.
     /// </p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <b>S3 access points for Amazon FSx </b> - When accessing data stored in
+    /// Amazon FSx file systems using S3 access points, the only valid server side encryption option is
+    /// <code>aws:fsx</code>. All Amazon FSx file systems have encryption configured by default and are
+    /// encrypted at rest. Data is automatically encrypted before being written to the file system, and
+    /// automatically decrypted as it is read. These processes are handled transparently by Amazon FSx.</p>
     /// </li>
     /// </ul>
     pub server_side_encryption: Option<ServerSideEncryption>,
-    /// <p>If the <code>x-amz-storage-class</code> header is not used, the copied object will be
-    /// stored in the <code>STANDARD</code> Storage Class by default. The <code>STANDARD</code>
-    /// storage class provides high durability and high availability. Depending on performance
-    /// needs, you can specify a different Storage Class. </p>
+    /// <p>If the <code>x-amz-storage-class</code> header is not used, the copied object will be stored in the
+    /// <code>STANDARD</code> Storage Class by default. The <code>STANDARD</code> storage class provides high
+    /// durability and high availability. Depending on performance needs, you can specify a different Storage
+    /// Class. </p>
     /// <note>
     /// <ul>
     /// <li>
     /// <p>
     /// <b>Directory buckets </b> -
-    /// For directory buckets, only the S3 Express One Zone storage class is supported to store newly created objects.
+    /// Directory buckets only support <code>EXPRESS_ONEZONE</code> (the S3 Express One Zone storage class) in Availability Zones and <code>ONEZONE_IA</code> (the S3 One Zone-Infrequent Access storage class) in Dedicated Local Zones.  
     /// Unsupported storage class values won't write a destination object and will respond with the HTTP status code <code>400 Bad Request</code>.</p>
     /// </li>
     /// <li>
     /// <p>
-    /// <b>Amazon S3 on Outposts </b> - S3 on Outposts only
-    /// uses the <code>OUTPOSTS</code> Storage Class.</p>
+    /// <b>Amazon S3 on Outposts </b> - S3 on Outposts only uses the
+    /// <code>OUTPOSTS</code> Storage Class.</p>
     /// </li>
     /// </ul>
     /// </note>
-    /// <p>You can use the <code>CopyObject</code> action to change the storage class of an object
-    /// that is already stored in Amazon S3 by using the <code>x-amz-storage-class</code> header. For
-    /// more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/storage-class-intro.html">Storage Classes</a> in the
-    /// <i>Amazon S3 User Guide</i>.</p>
-    /// <p>Before using an object as a source object for the copy operation, you must restore a
-    /// copy of it if it meets any of the following conditions:</p>
+    /// <p>You can use the <code>CopyObject</code> action to change the storage class of an object that is
+    /// already stored in Amazon S3 by using the <code>x-amz-storage-class</code> header. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/storage-class-intro.html">Storage Classes</a>
+    /// in the <i>Amazon S3 User Guide</i>.</p>
+    /// <p>Before using an object as a source object for the copy operation, you must restore a copy of it if
+    /// it meets any of the following conditions:</p>
     /// <ul>
     /// <li>
     /// <p>The storage class of the source object is <code>GLACIER</code> or
     /// <code>DEEP_ARCHIVE</code>.</p>
     /// </li>
     /// <li>
-    /// <p>The storage class of the source object is <code>INTELLIGENT_TIERING</code> and
-    /// it's <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/intelligent-tiering-overview.html#intel-tiering-tier-definition">S3 Intelligent-Tiering access tier</a> is <code>Archive Access</code> or
-    /// <code>Deep Archive Access</code>.</p>
+    /// <p>The storage class of the source object is <code>INTELLIGENT_TIERING</code> and it's <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/intelligent-tiering-overview.html#intel-tiering-tier-definition">S3
+    /// Intelligent-Tiering access tier</a> is <code>Archive Access</code> or <code>Deep Archive
+    /// Access</code>.</p>
     /// </li>
     /// </ul>
-    /// <p>For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_RestoreObject.html">RestoreObject</a> and <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/CopyingObjectsExamples.html">Copying
-    /// Objects</a> in the <i>Amazon S3 User Guide</i>.</p>
+    /// <p>For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_RestoreObject.html">RestoreObject</a> and <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/CopyingObjectsExamples.html">Copying Objects</a> in the
+    /// <i>Amazon S3 User Guide</i>.</p>
     pub storage_class: Option<StorageClass>,
-    /// <p>The tag-set for the object copy in the destination bucket. This value must be used in
-    /// conjunction with the <code>x-amz-tagging-directive</code> if you choose
-    /// <code>REPLACE</code> for the <code>x-amz-tagging-directive</code>. If you choose
-    /// <code>COPY</code> for the <code>x-amz-tagging-directive</code>, you don't need to set
-    /// the <code>x-amz-tagging</code> header, because the tag-set will be copied from the source
-    /// object directly. The tag-set must be encoded as URL Query parameters.</p>
+    /// <p>The tag-set for the object copy in the destination bucket. This value must be used in conjunction
+    /// with the <code>x-amz-tagging-directive</code> if you choose <code>REPLACE</code> for the
+    /// <code>x-amz-tagging-directive</code>. If you choose <code>COPY</code> for the
+    /// <code>x-amz-tagging-directive</code>, you don't need to set the <code>x-amz-tagging</code> header,
+    /// because the tag-set will be copied from the source object directly. The tag-set must be encoded as URL
+    /// Query parameters.</p>
     /// <p>The default value is the empty value.</p>
     /// <note>
     /// <p>
@@ -4272,8 +4426,8 @@ pub struct CopyObjectInput {
     /// </ul>
     /// </note>
     pub tagging: Option<TaggingHeader>,
-    /// <p>Specifies whether the object tag-set is copied from the source object or replaced with
-    /// the tag-set that's provided in the request.</p>
+    /// <p>Specifies whether the object tag-set is copied from the source object or replaced with the tag-set
+    /// that's provided in the request.</p>
     /// <p>The default value is <code>COPY</code>.</p>
     /// <note>
     /// <p>
@@ -4308,12 +4462,11 @@ pub struct CopyObjectInput {
     /// </note>
     pub tagging_directive: Option<TaggingDirective>,
     pub version_id: Option<ObjectVersionId>,
-    /// <p>If the destination bucket is configured as a website, redirects requests for this object
-    /// copy to another object in the same bucket or to an external URL. Amazon S3 stores the value of
-    /// this header in the object metadata. This value is unique to each object and is not copied
-    /// when using the <code>x-amz-metadata-directive</code> header. Instead, you may opt to
-    /// provide this header in combination with the <code>x-amz-metadata-directive</code>
-    /// header.</p>
+    /// <p>If the destination bucket is configured as a website, redirects requests for this object copy to
+    /// another object in the same bucket or to an external URL. Amazon S3 stores the value of this header in the
+    /// object metadata. This value is unique to each object and is not copied when using the
+    /// <code>x-amz-metadata-directive</code> header. Instead, you may opt to provide this header in
+    /// combination with the <code>x-amz-metadata-directive</code> header.</p>
     /// <note>
     /// <p>This functionality is not supported for directory buckets.</p>
     /// </note>
@@ -4325,6 +4478,9 @@ impl fmt::Debug for CopyObjectInput {
         let mut d = f.debug_struct("CopyObjectInput");
         if let Some(ref val) = self.acl {
             d.field("acl", val);
+        }
+        if let Some(ref val) = self.annotation_directive {
+            d.field("annotation_directive", val);
         }
         d.field("bucket", &self.bucket);
         if let Some(ref val) = self.bucket_key_enabled {
@@ -4390,6 +4546,12 @@ impl fmt::Debug for CopyObjectInput {
         }
         if let Some(ref val) = self.grant_write_acp {
             d.field("grant_write_acp", val);
+        }
+        if let Some(ref val) = self.if_match {
+            d.field("if_match", val);
+        }
+        if let Some(ref val) = self.if_none_match {
+            d.field("if_none_match", val);
         }
         d.field("key", &self.key);
         if let Some(ref val) = self.metadata {
@@ -4449,6 +4611,9 @@ impl fmt::Debug for CopyObjectInput {
         if let Some(ref val) = self.acl {
             d.field("acl", val);
         }
+        if let Some(ref val) = self.annotation_directive {
+            d.field("annotation_directive", val);
+        }
         d.field("bucket", &self.bucket);
         if let Some(ref val) = self.bucket_key_enabled {
             d.field("bucket_key_enabled", val);
@@ -4513,6 +4678,12 @@ impl fmt::Debug for CopyObjectInput {
         }
         if let Some(ref val) = self.grant_write_acp {
             d.field("grant_write_acp", val);
+        }
+        if let Some(ref val) = self.if_match {
+            d.field("if_match", val);
+        }
+        if let Some(ref val) = self.if_none_match {
+            d.field("if_none_match", val);
         }
         d.field("key", &self.key);
         if let Some(ref val) = self.metadata {
@@ -4583,6 +4754,11 @@ impl DtoExt for CopyObjectInput {
             && val.as_str() == ""
         {
             self.acl = None;
+        }
+        if let Some(ref val) = self.annotation_directive
+            && val.as_str() == ""
+        {
+            self.annotation_directive = None;
         }
         if self.cache_control.as_deref() == Some("") {
             self.cache_control = None;
@@ -4692,6 +4868,11 @@ impl DtoExt for CopyObjectInput {
             && val.as_str() == ""
         {
             self.acl = None;
+        }
+        if let Some(ref val) = self.annotation_directive
+            && val.as_str() == ""
+        {
+            self.annotation_directive = None;
         }
         if self.cache_control.as_deref() == Some("") {
             self.cache_control = None;
@@ -8323,6 +8504,104 @@ impl FromStr for DeleteMarkerReplicationStatus {
 pub type DeleteMarkerVersionId = String;
 
 pub type DeleteMarkers = List<DeleteMarkerEntry>;
+
+#[derive(Clone, Default, PartialEq)]
+pub struct DeleteObjectAnnotationInput {
+    /// <p>The name of the annotation to delete. Annotation names are UTF-8 encoded and cannot start with
+    /// <code>aws</code> or <code>s3</code> (case-insensitive).</p>
+    /// <p>Length Constraints: Minimum length of 1. Maximum length of 512 bytes.</p>
+    pub annotation_name: AnnotationName,
+    /// <p>The name of the bucket that contains the object.</p>
+    pub bucket: BucketName,
+    /// <p>The account ID of the expected bucket owner.</p>
+    pub expected_bucket_owner: Option<AccountId>,
+    /// <p>The object key.</p>
+    pub key: ObjectKey,
+    /// <p>If specified, the operation only succeeds if the object's ETag matches the provided value.</p>
+    pub object_if_match: Option<ObjectIfMatch>,
+    pub request_payer: Option<RequestPayer>,
+    /// <p>The version ID of the object.</p>
+    pub version_id: Option<ObjectVersionId>,
+}
+
+impl fmt::Debug for DeleteObjectAnnotationInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("DeleteObjectAnnotationInput");
+        d.field("annotation_name", &self.annotation_name);
+        d.field("bucket", &self.bucket);
+        if let Some(ref val) = self.expected_bucket_owner {
+            d.field("expected_bucket_owner", val);
+        }
+        d.field("key", &self.key);
+        if let Some(ref val) = self.object_if_match {
+            d.field("object_if_match", val);
+        }
+        if let Some(ref val) = self.request_payer {
+            d.field("request_payer", val);
+        }
+        if let Some(ref val) = self.version_id {
+            d.field("version_id", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+
+impl DeleteObjectAnnotationInput {
+    #[must_use]
+    pub fn builder() -> builders::DeleteObjectAnnotationInputBuilder {
+        default()
+    }
+}
+impl DtoExt for DeleteObjectAnnotationInput {
+    fn ignore_empty_strings(&mut self) {
+        if self.expected_bucket_owner.as_deref() == Some("") {
+            self.expected_bucket_owner = None;
+        }
+        if self.object_if_match.as_deref() == Some("") {
+            self.object_if_match = None;
+        }
+        if let Some(ref val) = self.request_payer
+            && val.as_str() == ""
+        {
+            self.request_payer = None;
+        }
+        if self.version_id.as_deref() == Some("") {
+            self.version_id = None;
+        }
+    }
+}
+
+#[derive(Clone, Default, PartialEq)]
+pub struct DeleteObjectAnnotationOutput {
+    /// <p>The version ID of the object that the annotation was deleted from.</p>
+    pub object_version_id: Option<ObjectVersionId>,
+    pub request_charged: Option<RequestCharged>,
+}
+
+impl fmt::Debug for DeleteObjectAnnotationOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("DeleteObjectAnnotationOutput");
+        if let Some(ref val) = self.object_version_id {
+            d.field("object_version_id", val);
+        }
+        if let Some(ref val) = self.request_charged {
+            d.field("request_charged", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+impl DtoExt for DeleteObjectAnnotationOutput {
+    fn ignore_empty_strings(&mut self) {
+        if self.object_version_id.as_deref() == Some("") {
+            self.object_version_id = None;
+        }
+        if let Some(ref val) = self.request_charged
+            && val.as_str() == ""
+        {
+            self.request_charged = None;
+        }
+    }
+}
 
 #[derive(Clone, Default, PartialEq)]
 pub struct DeleteObjectInput {
@@ -13315,6 +13594,235 @@ impl DtoExt for GetObjectAclOutput {
 }
 
 #[derive(Clone, Default, PartialEq)]
+pub struct GetObjectAnnotationInput {
+    /// <p>The name of the annotation to retrieve.</p>
+    /// <p>Length Constraints: Minimum length of 1. Maximum length of 512 bytes.</p>
+    pub annotation_name: AnnotationName,
+    /// <p>The name of the bucket that contains the object.</p>
+    pub bucket: BucketName,
+    /// <p>Set to <code>ENABLED</code> to validate the checksum of the annotation payload on retrieval.</p>
+    pub checksum_mode: Option<ChecksumMode>,
+    /// <p>The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with an HTTP 403 (Access Denied) error.</p>
+    pub expected_bucket_owner: Option<AccountId>,
+    /// <p>The object key.</p>
+    pub key: ObjectKey,
+    pub request_payer: Option<RequestPayer>,
+    /// <p>The version ID of the object.</p>
+    pub version_id: Option<ObjectVersionId>,
+}
+
+impl fmt::Debug for GetObjectAnnotationInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("GetObjectAnnotationInput");
+        d.field("annotation_name", &self.annotation_name);
+        d.field("bucket", &self.bucket);
+        if let Some(ref val) = self.checksum_mode {
+            d.field("checksum_mode", val);
+        }
+        if let Some(ref val) = self.expected_bucket_owner {
+            d.field("expected_bucket_owner", val);
+        }
+        d.field("key", &self.key);
+        if let Some(ref val) = self.request_payer {
+            d.field("request_payer", val);
+        }
+        if let Some(ref val) = self.version_id {
+            d.field("version_id", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+
+impl GetObjectAnnotationInput {
+    #[must_use]
+    pub fn builder() -> builders::GetObjectAnnotationInputBuilder {
+        default()
+    }
+}
+impl DtoExt for GetObjectAnnotationInput {
+    fn ignore_empty_strings(&mut self) {
+        if let Some(ref val) = self.checksum_mode
+            && val.as_str() == ""
+        {
+            self.checksum_mode = None;
+        }
+        if self.expected_bucket_owner.as_deref() == Some("") {
+            self.expected_bucket_owner = None;
+        }
+        if let Some(ref val) = self.request_payer
+            && val.as_str() == ""
+        {
+            self.request_payer = None;
+        }
+        if self.version_id.as_deref() == Some("") {
+            self.version_id = None;
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct GetObjectAnnotationOutput {
+    /// <p>The annotation payload.</p>
+    pub annotation_payload: Option<StreamingBlob>,
+    /// <p>The CRC32 checksum of the annotation payload.</p>
+    pub checksum_crc32: Option<ChecksumCRC32>,
+    /// <p>The CRC32C checksum of the annotation payload.</p>
+    pub checksum_crc32c: Option<ChecksumCRC32C>,
+    /// <p>The CRC64NVME checksum of the annotation payload.</p>
+    pub checksum_crc64nvme: Option<ChecksumCRC64NVME>,
+    /// <p>The MD5 checksum of the annotation payload.</p>
+    pub checksum_md5: Option<ChecksumMD5>,
+    /// <p>The SHA1 checksum of the annotation payload.</p>
+    pub checksum_sha1: Option<ChecksumSHA1>,
+    /// <p>The SHA256 checksum of the annotation payload.</p>
+    pub checksum_sha256: Option<ChecksumSHA256>,
+    /// <p>The SHA512 checksum of the annotation payload.</p>
+    pub checksum_sha512: Option<ChecksumSHA512>,
+    /// <p>The type of checksum used.</p>
+    pub checksum_type: Option<ChecksumType>,
+    /// <p>The XXHASH128 checksum of the annotation payload.</p>
+    pub checksum_xxhash128: Option<ChecksumXXHASH128>,
+    /// <p>The XXHASH3 checksum of the annotation payload.</p>
+    pub checksum_xxhash3: Option<ChecksumXXHASH3>,
+    /// <p>The XXHASH64 checksum of the annotation payload.</p>
+    pub checksum_xxhash64: Option<ChecksumXXHASH64>,
+    /// <p>The size of the annotation payload, in bytes.</p>
+    pub content_length: Option<ContentLength>,
+    /// <p>The entity tag of the annotation.</p>
+    pub e_tag: Option<ETag>,
+    /// <p>The date and time the annotation was last modified.</p>
+    pub last_modified: Option<LastModified>,
+    /// <p>The version ID of the object that the annotation is attached to.</p>
+    pub object_version_id: Option<ObjectVersionId>,
+    /// <p>The replication status of the annotation. Possible values include <code>PENDING</code>, <code>COMPLETED</code>, <code>FAILED</code>, and <code>REPLICA</code>.</p>
+    pub replication_status: Option<ReplicationStatus>,
+    pub request_charged: Option<RequestCharged>,
+    /// <p>The server-side encryption algorithm used.</p>
+    pub server_side_encryption: Option<ServerSideEncryption>,
+}
+
+impl fmt::Debug for GetObjectAnnotationOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("GetObjectAnnotationOutput");
+        if let Some(ref val) = self.annotation_payload {
+            d.field("annotation_payload", val);
+        }
+        if let Some(ref val) = self.checksum_crc32 {
+            d.field("checksum_crc32", val);
+        }
+        if let Some(ref val) = self.checksum_crc32c {
+            d.field("checksum_crc32c", val);
+        }
+        if let Some(ref val) = self.checksum_crc64nvme {
+            d.field("checksum_crc64nvme", val);
+        }
+        if let Some(ref val) = self.checksum_md5 {
+            d.field("checksum_md5", val);
+        }
+        if let Some(ref val) = self.checksum_sha1 {
+            d.field("checksum_sha1", val);
+        }
+        if let Some(ref val) = self.checksum_sha256 {
+            d.field("checksum_sha256", val);
+        }
+        if let Some(ref val) = self.checksum_sha512 {
+            d.field("checksum_sha512", val);
+        }
+        if let Some(ref val) = self.checksum_type {
+            d.field("checksum_type", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash128 {
+            d.field("checksum_xxhash128", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash3 {
+            d.field("checksum_xxhash3", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash64 {
+            d.field("checksum_xxhash64", val);
+        }
+        if let Some(ref val) = self.content_length {
+            d.field("content_length", val);
+        }
+        if let Some(ref val) = self.e_tag {
+            d.field("e_tag", val);
+        }
+        if let Some(ref val) = self.last_modified {
+            d.field("last_modified", val);
+        }
+        if let Some(ref val) = self.object_version_id {
+            d.field("object_version_id", val);
+        }
+        if let Some(ref val) = self.replication_status {
+            d.field("replication_status", val);
+        }
+        if let Some(ref val) = self.request_charged {
+            d.field("request_charged", val);
+        }
+        if let Some(ref val) = self.server_side_encryption {
+            d.field("server_side_encryption", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+impl DtoExt for GetObjectAnnotationOutput {
+    fn ignore_empty_strings(&mut self) {
+        if self.checksum_crc32.as_deref() == Some("") {
+            self.checksum_crc32 = None;
+        }
+        if self.checksum_crc32c.as_deref() == Some("") {
+            self.checksum_crc32c = None;
+        }
+        if self.checksum_crc64nvme.as_deref() == Some("") {
+            self.checksum_crc64nvme = None;
+        }
+        if self.checksum_md5.as_deref() == Some("") {
+            self.checksum_md5 = None;
+        }
+        if self.checksum_sha1.as_deref() == Some("") {
+            self.checksum_sha1 = None;
+        }
+        if self.checksum_sha256.as_deref() == Some("") {
+            self.checksum_sha256 = None;
+        }
+        if self.checksum_sha512.as_deref() == Some("") {
+            self.checksum_sha512 = None;
+        }
+        if let Some(ref val) = self.checksum_type
+            && val.as_str() == ""
+        {
+            self.checksum_type = None;
+        }
+        if self.checksum_xxhash128.as_deref() == Some("") {
+            self.checksum_xxhash128 = None;
+        }
+        if self.checksum_xxhash3.as_deref() == Some("") {
+            self.checksum_xxhash3 = None;
+        }
+        if self.checksum_xxhash64.as_deref() == Some("") {
+            self.checksum_xxhash64 = None;
+        }
+        if self.object_version_id.as_deref() == Some("") {
+            self.object_version_id = None;
+        }
+        if let Some(ref val) = self.replication_status
+            && val.as_str() == ""
+        {
+            self.replication_status = None;
+        }
+        if let Some(ref val) = self.request_charged
+            && val.as_str() == ""
+        {
+            self.request_charged = None;
+        }
+        if let Some(ref val) = self.server_side_encryption
+            && val.as_str() == ""
+        {
+            self.server_side_encryption = None;
+        }
+    }
+}
+
+#[derive(Clone, Default, PartialEq)]
 pub struct GetObjectAttributesInput {
     /// <p>The name of the bucket that contains the object.</p>
     /// <p>
@@ -16174,6 +16682,17 @@ impl FromStr for IntelligentTieringStatus {
     }
 }
 
+/// <p>The annotation name you provided is invalid.</p>
+#[derive(Clone, Default, PartialEq)]
+pub struct InvalidAnnotationName {}
+
+impl fmt::Debug for InvalidAnnotationName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("InvalidAnnotationName");
+        d.finish_non_exhaustive()
+    }
+}
+
 /// <p>Object is archived and inaccessible until restored.</p>
 /// <p>If the object you are retrieving is stored in the S3 Glacier Flexible Retrieval storage
 /// class, the S3 Glacier Deep Archive storage class, the S3 Intelligent-Tiering Archive Access
@@ -16212,6 +16731,17 @@ impl DtoExt for InvalidObjectState {
         {
             self.storage_class = None;
         }
+    }
+}
+
+/// <p>The annotation prefix you provided is invalid.</p>
+#[derive(Clone, Default, PartialEq)]
+pub struct InvalidPrefix {}
+
+impl fmt::Debug for InvalidPrefix {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("InvalidPrefix");
+        d.finish_non_exhaustive()
     }
 }
 
@@ -18510,6 +19040,167 @@ impl DtoExt for ListMultipartUploadsOutput {
 }
 
 #[derive(Clone, Default, PartialEq)]
+pub struct ListObjectAnnotationsInput {
+    /// <p>Filter results to annotations whose name begins with the specified prefix.</p>
+    pub annotation_prefix: Option<AnnotationPrefix>,
+    /// <p>The name of the bucket that contains the object.</p>
+    pub bucket: BucketName,
+    /// <p>Continuation token returned by a previous request to retrieve the next page.</p>
+    pub continuation_token: Option<Token>,
+    /// <p>The account ID of the expected bucket owner.</p>
+    pub expected_bucket_owner: Option<AccountId>,
+    /// <p>The object key.</p>
+    pub key: ObjectKey,
+    /// <p>The maximum number of annotations to return in the response. Maximum is 1,000.</p>
+    pub max_annotation_results: Option<MaxAnnotationResults>,
+    pub request_payer: Option<RequestPayer>,
+    /// <p>The version ID of the object.</p>
+    pub version_id: Option<ObjectVersionId>,
+}
+
+impl fmt::Debug for ListObjectAnnotationsInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("ListObjectAnnotationsInput");
+        if let Some(ref val) = self.annotation_prefix {
+            d.field("annotation_prefix", val);
+        }
+        d.field("bucket", &self.bucket);
+        if let Some(ref val) = self.continuation_token {
+            d.field("continuation_token", val);
+        }
+        if let Some(ref val) = self.expected_bucket_owner {
+            d.field("expected_bucket_owner", val);
+        }
+        d.field("key", &self.key);
+        if let Some(ref val) = self.max_annotation_results {
+            d.field("max_annotation_results", val);
+        }
+        if let Some(ref val) = self.request_payer {
+            d.field("request_payer", val);
+        }
+        if let Some(ref val) = self.version_id {
+            d.field("version_id", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+
+impl ListObjectAnnotationsInput {
+    #[must_use]
+    pub fn builder() -> builders::ListObjectAnnotationsInputBuilder {
+        default()
+    }
+}
+impl DtoExt for ListObjectAnnotationsInput {
+    fn ignore_empty_strings(&mut self) {
+        if self.annotation_prefix.as_deref() == Some("") {
+            self.annotation_prefix = None;
+        }
+        if self.continuation_token.as_deref() == Some("") {
+            self.continuation_token = None;
+        }
+        if self.expected_bucket_owner.as_deref() == Some("") {
+            self.expected_bucket_owner = None;
+        }
+        if let Some(ref val) = self.request_payer
+            && val.as_str() == ""
+        {
+            self.request_payer = None;
+        }
+        if self.version_id.as_deref() == Some("") {
+            self.version_id = None;
+        }
+    }
+}
+
+#[derive(Clone, Default, PartialEq)]
+pub struct ListObjectAnnotationsOutput {
+    /// <p>The number of annotations returned.</p>
+    pub annotation_count: Option<AnnotationCount>,
+    /// <p>The prefix used to filter the response.</p>
+    pub annotation_prefix: Option<AnnotationPrefix>,
+    /// <p>The list of annotations attached to the object.</p>
+    pub annotations: Option<AnnotationList>,
+    /// <p>The bucket name.</p>
+    pub bucket: Option<BucketName>,
+    /// <p>The continuation token used in this request.</p>
+    pub continuation_token: Option<Token>,
+    /// <p>The object key.</p>
+    pub key: Option<ObjectKey>,
+    /// <p>The maximum number of annotations returned in the response.</p>
+    pub max_annotation_results: Option<MaxAnnotationResults>,
+    /// <p>The continuation token to use to retrieve the next page of results.</p>
+    pub next_continuation_token: Option<NextToken>,
+    /// <p>The version ID of the object.</p>
+    pub object_version_id: Option<ObjectVersionId>,
+    pub request_charged: Option<RequestCharged>,
+}
+
+impl fmt::Debug for ListObjectAnnotationsOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("ListObjectAnnotationsOutput");
+        if let Some(ref val) = self.annotation_count {
+            d.field("annotation_count", val);
+        }
+        if let Some(ref val) = self.annotation_prefix {
+            d.field("annotation_prefix", val);
+        }
+        if let Some(ref val) = self.annotations {
+            d.field("annotations", val);
+        }
+        if let Some(ref val) = self.bucket {
+            d.field("bucket", val);
+        }
+        if let Some(ref val) = self.continuation_token {
+            d.field("continuation_token", val);
+        }
+        if let Some(ref val) = self.key {
+            d.field("key", val);
+        }
+        if let Some(ref val) = self.max_annotation_results {
+            d.field("max_annotation_results", val);
+        }
+        if let Some(ref val) = self.next_continuation_token {
+            d.field("next_continuation_token", val);
+        }
+        if let Some(ref val) = self.object_version_id {
+            d.field("object_version_id", val);
+        }
+        if let Some(ref val) = self.request_charged {
+            d.field("request_charged", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+impl DtoExt for ListObjectAnnotationsOutput {
+    fn ignore_empty_strings(&mut self) {
+        if self.annotation_prefix.as_deref() == Some("") {
+            self.annotation_prefix = None;
+        }
+        if self.bucket.as_deref() == Some("") {
+            self.bucket = None;
+        }
+        if self.continuation_token.as_deref() == Some("") {
+            self.continuation_token = None;
+        }
+        if self.key.as_deref() == Some("") {
+            self.key = None;
+        }
+        if self.next_continuation_token.as_deref() == Some("") {
+            self.next_continuation_token = None;
+        }
+        if self.object_version_id.as_deref() == Some("") {
+            self.object_version_id = None;
+        }
+        if let Some(ref val) = self.request_charged
+            && val.as_str() == ""
+        {
+            self.request_charged = None;
+        }
+    }
+}
+
+#[derive(Clone, Default, PartialEq)]
 pub struct ListObjectVersionsInput {
     /// <p>The bucket name that contains the objects. </p>
     pub bucket: BucketName,
@@ -19906,6 +20597,8 @@ pub type Marker = String;
 
 pub type MaxAgeSeconds = i32;
 
+pub type MaxAnnotationResults = i32;
+
 pub type MaxBuckets = i32;
 
 pub type MaxDirectoryBuckets = i32;
@@ -20475,6 +21168,17 @@ pub type NextUploadIdMarker = String;
 
 pub type NextVersionIdMarker = String;
 
+/// <p>The specified annotation does not exist on this object.</p>
+#[derive(Clone, Default, PartialEq)]
+pub struct NoSuchAnnotation {}
+
+impl fmt::Debug for NoSuchAnnotation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("NoSuchAnnotation");
+        d.finish_non_exhaustive()
+    }
+}
+
 /// <p>The specified bucket does not exist.</p>
 #[derive(Clone, Default, PartialEq)]
 pub struct NoSuchBucket {}
@@ -20991,6 +21695,8 @@ impl DtoExt for ObjectIdentifier {
 }
 
 pub type ObjectIdentifierList = List<ObjectIdentifier>;
+
+pub type ObjectIfMatch = String;
 
 pub type ObjectKey = String;
 
@@ -25693,6 +26399,330 @@ impl DtoExt for PutObjectAclOutput {
             && val.as_str() == ""
         {
             self.request_charged = None;
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct PutObjectAnnotationInput {
+    /// <p>The name of the annotation.</p>
+    /// <p>Length Constraints: Minimum length of 1. Maximum length of 512 bytes.</p>
+    pub annotation_name: AnnotationName,
+    /// <p>The annotation payload. Must be between 1 byte and 1 MiB in size, and must be valid UTF-8
+    /// encoded text. If the payload contains invalid UTF-8 bytes, the request fails with HTTP 415
+    /// (Unsupported Media Type). To store binary data, encode the payload using Base64 before
+    /// uploading.</p>
+    pub annotation_payload: Option<StreamingBlob>,
+    /// <p>The name of the bucket that contains the object.</p>
+    pub bucket: BucketName,
+    /// <p>The checksum algorithm to use. Supported values: <code>CRC32</code>, <code>CRC32C</code>, <code>CRC64NVME</code>, <code>SHA1</code>, <code>SHA256</code>, <code>SHA512</code>, <code>MD5</code>, <code>XXHASH64</code>, <code>XXHASH3</code>, <code>XXHASH128</code>.</p>
+    pub checksum_algorithm: Option<ChecksumAlgorithm>,
+    /// <p>Base64-encoded CRC32 checksum of the annotation payload.</p>
+    pub checksum_crc32: Option<ChecksumCRC32>,
+    /// <p>Base64-encoded CRC32C checksum of the annotation payload.</p>
+    pub checksum_crc32c: Option<ChecksumCRC32C>,
+    /// <p>Base64-encoded CRC64NVME checksum of the annotation payload.</p>
+    pub checksum_crc64nvme: Option<ChecksumCRC64NVME>,
+    /// <p>Base64-encoded MD5 checksum of the annotation payload.</p>
+    pub checksum_md5: Option<ChecksumMD5>,
+    /// <p>Base64-encoded SHA1 checksum of the annotation payload.</p>
+    pub checksum_sha1: Option<ChecksumSHA1>,
+    /// <p>Base64-encoded SHA256 checksum of the annotation payload.</p>
+    pub checksum_sha256: Option<ChecksumSHA256>,
+    /// <p>Base64-encoded SHA512 checksum of the annotation payload.</p>
+    pub checksum_sha512: Option<ChecksumSHA512>,
+    /// <p>Base64-encoded XXHASH128 checksum of the annotation payload.</p>
+    pub checksum_xxhash128: Option<ChecksumXXHASH128>,
+    /// <p>Base64-encoded XXHASH3 checksum of the annotation payload.</p>
+    pub checksum_xxhash3: Option<ChecksumXXHASH3>,
+    /// <p>Base64-encoded XXHASH64 checksum of the annotation payload.</p>
+    pub checksum_xxhash64: Option<ChecksumXXHASH64>,
+    /// <p>Base64-encoded MD5 digest of the message.</p>
+    pub content_md5: Option<ContentMD5>,
+    /// <p>The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with an HTTP 403 (Access Denied) error.</p>
+    pub expected_bucket_owner: Option<AccountId>,
+    /// <p>The object key.</p>
+    pub key: ObjectKey,
+    /// <p>If specified, the operation only succeeds if the object's ETag matches the provided value.</p>
+    pub object_if_match: Option<ObjectIfMatch>,
+    pub request_payer: Option<RequestPayer>,
+    /// <p>The version ID of the object to attach the annotation to.</p>
+    pub version_id: Option<ObjectVersionId>,
+}
+
+impl fmt::Debug for PutObjectAnnotationInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("PutObjectAnnotationInput");
+        d.field("annotation_name", &self.annotation_name);
+        if let Some(ref val) = self.annotation_payload {
+            d.field("annotation_payload", val);
+        }
+        d.field("bucket", &self.bucket);
+        if let Some(ref val) = self.checksum_algorithm {
+            d.field("checksum_algorithm", val);
+        }
+        if let Some(ref val) = self.checksum_crc32 {
+            d.field("checksum_crc32", val);
+        }
+        if let Some(ref val) = self.checksum_crc32c {
+            d.field("checksum_crc32c", val);
+        }
+        if let Some(ref val) = self.checksum_crc64nvme {
+            d.field("checksum_crc64nvme", val);
+        }
+        if let Some(ref val) = self.checksum_md5 {
+            d.field("checksum_md5", val);
+        }
+        if let Some(ref val) = self.checksum_sha1 {
+            d.field("checksum_sha1", val);
+        }
+        if let Some(ref val) = self.checksum_sha256 {
+            d.field("checksum_sha256", val);
+        }
+        if let Some(ref val) = self.checksum_sha512 {
+            d.field("checksum_sha512", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash128 {
+            d.field("checksum_xxhash128", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash3 {
+            d.field("checksum_xxhash3", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash64 {
+            d.field("checksum_xxhash64", val);
+        }
+        if let Some(ref val) = self.content_md5 {
+            d.field("content_md5", val);
+        }
+        if let Some(ref val) = self.expected_bucket_owner {
+            d.field("expected_bucket_owner", val);
+        }
+        d.field("key", &self.key);
+        if let Some(ref val) = self.object_if_match {
+            d.field("object_if_match", val);
+        }
+        if let Some(ref val) = self.request_payer {
+            d.field("request_payer", val);
+        }
+        if let Some(ref val) = self.version_id {
+            d.field("version_id", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+
+impl PutObjectAnnotationInput {
+    #[must_use]
+    pub fn builder() -> builders::PutObjectAnnotationInputBuilder {
+        default()
+    }
+}
+impl DtoExt for PutObjectAnnotationInput {
+    fn ignore_empty_strings(&mut self) {
+        if let Some(ref val) = self.checksum_algorithm
+            && val.as_str() == ""
+        {
+            self.checksum_algorithm = None;
+        }
+        if self.checksum_crc32.as_deref() == Some("") {
+            self.checksum_crc32 = None;
+        }
+        if self.checksum_crc32c.as_deref() == Some("") {
+            self.checksum_crc32c = None;
+        }
+        if self.checksum_crc64nvme.as_deref() == Some("") {
+            self.checksum_crc64nvme = None;
+        }
+        if self.checksum_md5.as_deref() == Some("") {
+            self.checksum_md5 = None;
+        }
+        if self.checksum_sha1.as_deref() == Some("") {
+            self.checksum_sha1 = None;
+        }
+        if self.checksum_sha256.as_deref() == Some("") {
+            self.checksum_sha256 = None;
+        }
+        if self.checksum_sha512.as_deref() == Some("") {
+            self.checksum_sha512 = None;
+        }
+        if self.checksum_xxhash128.as_deref() == Some("") {
+            self.checksum_xxhash128 = None;
+        }
+        if self.checksum_xxhash3.as_deref() == Some("") {
+            self.checksum_xxhash3 = None;
+        }
+        if self.checksum_xxhash64.as_deref() == Some("") {
+            self.checksum_xxhash64 = None;
+        }
+        if self.content_md5.as_deref() == Some("") {
+            self.content_md5 = None;
+        }
+        if self.expected_bucket_owner.as_deref() == Some("") {
+            self.expected_bucket_owner = None;
+        }
+        if self.object_if_match.as_deref() == Some("") {
+            self.object_if_match = None;
+        }
+        if let Some(ref val) = self.request_payer
+            && val.as_str() == ""
+        {
+            self.request_payer = None;
+        }
+        if self.version_id.as_deref() == Some("") {
+            self.version_id = None;
+        }
+    }
+}
+
+#[derive(Clone, Default, PartialEq)]
+pub struct PutObjectAnnotationOutput {
+    /// <p>The name of the annotation.</p>
+    pub annotation_name: Option<AnnotationName>,
+    /// <p>The CRC32 checksum of the stored annotation.</p>
+    pub checksum_crc32: Option<ChecksumCRC32>,
+    /// <p>The CRC32C checksum of the stored annotation.</p>
+    pub checksum_crc32c: Option<ChecksumCRC32C>,
+    /// <p>The CRC64NVME checksum of the stored annotation.</p>
+    pub checksum_crc64nvme: Option<ChecksumCRC64NVME>,
+    /// <p>The MD5 checksum of the stored annotation.</p>
+    pub checksum_md5: Option<ChecksumMD5>,
+    /// <p>The SHA1 checksum of the stored annotation.</p>
+    pub checksum_sha1: Option<ChecksumSHA1>,
+    /// <p>The SHA256 checksum of the stored annotation.</p>
+    pub checksum_sha256: Option<ChecksumSHA256>,
+    /// <p>The SHA512 checksum of the stored annotation.</p>
+    pub checksum_sha512: Option<ChecksumSHA512>,
+    /// <p>The type of checksum used.</p>
+    pub checksum_type: Option<ChecksumType>,
+    /// <p>The XXHASH128 checksum of the stored annotation.</p>
+    pub checksum_xxhash128: Option<ChecksumXXHASH128>,
+    /// <p>The XXHASH3 checksum of the stored annotation.</p>
+    pub checksum_xxhash3: Option<ChecksumXXHASH3>,
+    /// <p>The XXHASH64 checksum of the stored annotation.</p>
+    pub checksum_xxhash64: Option<ChecksumXXHASH64>,
+    /// <p>The entity tag of the annotation.</p>
+    pub e_tag: Option<ETag>,
+    /// <p>The object key.</p>
+    pub key: Option<ObjectKey>,
+    /// <p>The version ID of the object that the annotation was attached to.</p>
+    pub object_version_id: Option<ObjectVersionId>,
+    pub request_charged: Option<RequestCharged>,
+    /// <p>The server-side encryption algorithm used to encrypt the annotation.</p>
+    pub server_side_encryption: Option<ServerSideEncryption>,
+}
+
+impl fmt::Debug for PutObjectAnnotationOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("PutObjectAnnotationOutput");
+        if let Some(ref val) = self.annotation_name {
+            d.field("annotation_name", val);
+        }
+        if let Some(ref val) = self.checksum_crc32 {
+            d.field("checksum_crc32", val);
+        }
+        if let Some(ref val) = self.checksum_crc32c {
+            d.field("checksum_crc32c", val);
+        }
+        if let Some(ref val) = self.checksum_crc64nvme {
+            d.field("checksum_crc64nvme", val);
+        }
+        if let Some(ref val) = self.checksum_md5 {
+            d.field("checksum_md5", val);
+        }
+        if let Some(ref val) = self.checksum_sha1 {
+            d.field("checksum_sha1", val);
+        }
+        if let Some(ref val) = self.checksum_sha256 {
+            d.field("checksum_sha256", val);
+        }
+        if let Some(ref val) = self.checksum_sha512 {
+            d.field("checksum_sha512", val);
+        }
+        if let Some(ref val) = self.checksum_type {
+            d.field("checksum_type", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash128 {
+            d.field("checksum_xxhash128", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash3 {
+            d.field("checksum_xxhash3", val);
+        }
+        if let Some(ref val) = self.checksum_xxhash64 {
+            d.field("checksum_xxhash64", val);
+        }
+        if let Some(ref val) = self.e_tag {
+            d.field("e_tag", val);
+        }
+        if let Some(ref val) = self.key {
+            d.field("key", val);
+        }
+        if let Some(ref val) = self.object_version_id {
+            d.field("object_version_id", val);
+        }
+        if let Some(ref val) = self.request_charged {
+            d.field("request_charged", val);
+        }
+        if let Some(ref val) = self.server_side_encryption {
+            d.field("server_side_encryption", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+impl DtoExt for PutObjectAnnotationOutput {
+    fn ignore_empty_strings(&mut self) {
+        if self.annotation_name.as_deref() == Some("") {
+            self.annotation_name = None;
+        }
+        if self.checksum_crc32.as_deref() == Some("") {
+            self.checksum_crc32 = None;
+        }
+        if self.checksum_crc32c.as_deref() == Some("") {
+            self.checksum_crc32c = None;
+        }
+        if self.checksum_crc64nvme.as_deref() == Some("") {
+            self.checksum_crc64nvme = None;
+        }
+        if self.checksum_md5.as_deref() == Some("") {
+            self.checksum_md5 = None;
+        }
+        if self.checksum_sha1.as_deref() == Some("") {
+            self.checksum_sha1 = None;
+        }
+        if self.checksum_sha256.as_deref() == Some("") {
+            self.checksum_sha256 = None;
+        }
+        if self.checksum_sha512.as_deref() == Some("") {
+            self.checksum_sha512 = None;
+        }
+        if let Some(ref val) = self.checksum_type
+            && val.as_str() == ""
+        {
+            self.checksum_type = None;
+        }
+        if self.checksum_xxhash128.as_deref() == Some("") {
+            self.checksum_xxhash128 = None;
+        }
+        if self.checksum_xxhash3.as_deref() == Some("") {
+            self.checksum_xxhash3 = None;
+        }
+        if self.checksum_xxhash64.as_deref() == Some("") {
+            self.checksum_xxhash64 = None;
+        }
+        if self.key.as_deref() == Some("") {
+            self.key = None;
+        }
+        if self.object_version_id.as_deref() == Some("") {
+            self.object_version_id = None;
+        }
+        if let Some(ref val) = self.request_charged
+            && val.as_str() == ""
+        {
+            self.request_charged = None;
+        }
+        if let Some(ref val) = self.server_side_encryption
+            && val.as_str() == ""
+        {
+            self.server_side_encryption = None;
         }
     }
 }
@@ -31075,6 +32105,17 @@ impl FromStr for Type {
 
 pub type URI = String;
 
+/// <p>The annotation payload is not valid UTF-8 encoded text.</p>
+#[derive(Clone, Default, PartialEq)]
+pub struct UnsupportedMediaType {}
+
+impl fmt::Debug for UnsupportedMediaType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("UnsupportedMediaType");
+        d.finish_non_exhaustive()
+    }
+}
+
 #[derive(Clone, PartialEq)]
 pub struct UpdateBucketMetadataAnnotationTableConfigurationInput {
     /// <p>The annotation table configuration updates to apply.</p>
@@ -32930,6 +33971,7 @@ mod tests {
         require_default::<DeleteBucketTaggingOutput>();
         require_default::<DeleteBucketWebsiteOutput>();
         require_default::<DeleteObjectOutput>();
+        require_default::<DeleteObjectAnnotationOutput>();
         require_default::<DeleteObjectTaggingOutput>();
         require_default::<DeleteObjectsOutput>();
         require_default::<DeletePublicAccessBlockOutput>();
@@ -32958,6 +34000,7 @@ mod tests {
         require_default::<GetBucketWebsiteOutput>();
         require_default::<GetObjectOutput>();
         require_default::<GetObjectAclOutput>();
+        require_default::<GetObjectAnnotationOutput>();
         require_default::<GetObjectAttributesOutput>();
         require_default::<GetObjectLegalHoldOutput>();
         require_default::<GetObjectLockConfigurationOutput>();
@@ -32974,6 +34017,7 @@ mod tests {
         require_default::<ListBucketsOutput>();
         require_default::<ListDirectoryBucketsOutput>();
         require_default::<ListMultipartUploadsOutput>();
+        require_default::<ListObjectAnnotationsOutput>();
         require_default::<ListObjectVersionsOutput>();
         require_default::<ListObjectsOutput>();
         require_default::<ListObjectsV2Output>();
@@ -33000,6 +34044,7 @@ mod tests {
         require_default::<PutBucketWebsiteOutput>();
         require_default::<PutObjectOutput>();
         require_default::<PutObjectAclOutput>();
+        require_default::<PutObjectAnnotationOutput>();
         require_default::<PutObjectLegalHoldOutput>();
         require_default::<PutObjectLockConfigurationOutput>();
         require_default::<PutObjectRetentionOutput>();
@@ -33065,6 +34110,8 @@ mod tests {
         require_clone::<DeleteBucketWebsiteOutput>();
         require_clone::<DeleteObjectInput>();
         require_clone::<DeleteObjectOutput>();
+        require_clone::<DeleteObjectAnnotationInput>();
+        require_clone::<DeleteObjectAnnotationOutput>();
         require_clone::<DeleteObjectTaggingInput>();
         require_clone::<DeleteObjectTaggingOutput>();
         require_clone::<DeleteObjectsInput>();
@@ -33120,6 +34167,7 @@ mod tests {
         require_clone::<GetObjectInput>();
         require_clone::<GetObjectAclInput>();
         require_clone::<GetObjectAclOutput>();
+        require_clone::<GetObjectAnnotationInput>();
         require_clone::<GetObjectAttributesInput>();
         require_clone::<GetObjectAttributesOutput>();
         require_clone::<GetObjectLegalHoldInput>();
@@ -33151,6 +34199,8 @@ mod tests {
         require_clone::<ListDirectoryBucketsOutput>();
         require_clone::<ListMultipartUploadsInput>();
         require_clone::<ListMultipartUploadsOutput>();
+        require_clone::<ListObjectAnnotationsInput>();
+        require_clone::<ListObjectAnnotationsOutput>();
         require_clone::<ListObjectVersionsInput>();
         require_clone::<ListObjectVersionsOutput>();
         require_clone::<ListObjectsInput>();
@@ -33201,6 +34251,7 @@ mod tests {
         require_clone::<PutObjectOutput>();
         require_clone::<PutObjectAclInput>();
         require_clone::<PutObjectAclOutput>();
+        require_clone::<PutObjectAnnotationOutput>();
         require_clone::<PutObjectLegalHoldInput>();
         require_clone::<PutObjectLegalHoldOutput>();
         require_clone::<PutObjectLockConfigurationInput>();
@@ -33265,6 +34316,7 @@ mod tests {
         require_default::<DeleteBucketTaggingOutput>();
         require_default::<DeleteBucketWebsiteOutput>();
         require_default::<DeleteObjectOutput>();
+        require_default::<DeleteObjectAnnotationOutput>();
         require_default::<DeleteObjectTaggingOutput>();
         require_default::<DeleteObjectsOutput>();
         require_default::<DeletePublicAccessBlockOutput>();
@@ -33293,6 +34345,7 @@ mod tests {
         require_default::<GetBucketWebsiteOutput>();
         require_default::<GetObjectOutput>();
         require_default::<GetObjectAclOutput>();
+        require_default::<GetObjectAnnotationOutput>();
         require_default::<GetObjectAttributesOutput>();
         require_default::<GetObjectLegalHoldOutput>();
         require_default::<GetObjectLockConfigurationOutput>();
@@ -33309,6 +34362,7 @@ mod tests {
         require_default::<ListBucketsOutput>();
         require_default::<ListDirectoryBucketsOutput>();
         require_default::<ListMultipartUploadsOutput>();
+        require_default::<ListObjectAnnotationsOutput>();
         require_default::<ListObjectVersionsOutput>();
         require_default::<ListObjectsOutput>();
         require_default::<ListObjectsV2Output>();
@@ -33336,6 +34390,7 @@ mod tests {
         require_default::<PutBucketWebsiteOutput>();
         require_default::<PutObjectOutput>();
         require_default::<PutObjectAclOutput>();
+        require_default::<PutObjectAnnotationOutput>();
         require_default::<PutObjectLegalHoldOutput>();
         require_default::<PutObjectLockConfigurationOutput>();
         require_default::<PutObjectRetentionOutput>();
@@ -33401,6 +34456,8 @@ mod tests {
         require_clone::<DeleteBucketWebsiteOutput>();
         require_clone::<DeleteObjectInput>();
         require_clone::<DeleteObjectOutput>();
+        require_clone::<DeleteObjectAnnotationInput>();
+        require_clone::<DeleteObjectAnnotationOutput>();
         require_clone::<DeleteObjectTaggingInput>();
         require_clone::<DeleteObjectTaggingOutput>();
         require_clone::<DeleteObjectsInput>();
@@ -33456,6 +34513,7 @@ mod tests {
         require_clone::<GetObjectInput>();
         require_clone::<GetObjectAclInput>();
         require_clone::<GetObjectAclOutput>();
+        require_clone::<GetObjectAnnotationInput>();
         require_clone::<GetObjectAttributesInput>();
         require_clone::<GetObjectAttributesOutput>();
         require_clone::<GetObjectLegalHoldInput>();
@@ -33487,6 +34545,8 @@ mod tests {
         require_clone::<ListDirectoryBucketsOutput>();
         require_clone::<ListMultipartUploadsInput>();
         require_clone::<ListMultipartUploadsOutput>();
+        require_clone::<ListObjectAnnotationsInput>();
+        require_clone::<ListObjectAnnotationsOutput>();
         require_clone::<ListObjectVersionsInput>();
         require_clone::<ListObjectVersionsOutput>();
         require_clone::<ListObjectsInput>();
@@ -33538,6 +34598,7 @@ mod tests {
         require_clone::<PutObjectOutput>();
         require_clone::<PutObjectAclInput>();
         require_clone::<PutObjectAclOutput>();
+        require_clone::<PutObjectAnnotationOutput>();
         require_clone::<PutObjectLegalHoldInput>();
         require_clone::<PutObjectLegalHoldOutput>();
         require_clone::<PutObjectLockConfigurationInput>();
@@ -34037,6 +35098,8 @@ pub mod builders {
     pub struct CopyObjectInputBuilder {
         acl: Option<ObjectCannedACL>,
 
+        annotation_directive: Option<AnnotationDirective>,
+
         bucket: Option<BucketName>,
 
         bucket_key_enabled: Option<BucketKeyEnabled>,
@@ -34083,6 +35146,10 @@ pub mod builders {
 
         grant_write_acp: Option<GrantWriteACP>,
 
+        if_match: Option<IfMatch>,
+
+        if_none_match: Option<IfNoneMatch>,
+
         key: Option<ObjectKey>,
 
         metadata: Option<Metadata>,
@@ -34121,6 +35188,11 @@ pub mod builders {
     impl CopyObjectInputBuilder {
         pub fn set_acl(&mut self, field: Option<ObjectCannedACL>) -> &mut Self {
             self.acl = field;
+            self
+        }
+
+        pub fn set_annotation_directive(&mut self, field: Option<AnnotationDirective>) -> &mut Self {
+            self.annotation_directive = field;
             self
         }
 
@@ -34239,6 +35311,16 @@ pub mod builders {
             self
         }
 
+        pub fn set_if_match(&mut self, field: Option<IfMatch>) -> &mut Self {
+            self.if_match = field;
+            self
+        }
+
+        pub fn set_if_none_match(&mut self, field: Option<IfNoneMatch>) -> &mut Self {
+            self.if_none_match = field;
+            self
+        }
+
         pub fn set_key(&mut self, field: ObjectKey) -> &mut Self {
             self.key = Some(field);
             self
@@ -34327,6 +35409,12 @@ pub mod builders {
         #[must_use]
         pub fn acl(mut self, field: Option<ObjectCannedACL>) -> Self {
             self.acl = field;
+            self
+        }
+
+        #[must_use]
+        pub fn annotation_directive(mut self, field: Option<AnnotationDirective>) -> Self {
+            self.annotation_directive = field;
             self
         }
 
@@ -34469,6 +35557,18 @@ pub mod builders {
         }
 
         #[must_use]
+        pub fn if_match(mut self, field: Option<IfMatch>) -> Self {
+            self.if_match = field;
+            self
+        }
+
+        #[must_use]
+        pub fn if_none_match(mut self, field: Option<IfNoneMatch>) -> Self {
+            self.if_none_match = field;
+            self
+        }
+
+        #[must_use]
         pub fn key(mut self, field: ObjectKey) -> Self {
             self.key = Some(field);
             self
@@ -34572,6 +35672,7 @@ pub mod builders {
 
         pub fn build(self) -> Result<CopyObjectInput, BuildError> {
             let acl = self.acl;
+            let annotation_directive = self.annotation_directive;
             let bucket = self.bucket.ok_or_else(|| BuildError::missing_field("bucket"))?;
             let bucket_key_enabled = self.bucket_key_enabled;
             let cache_control = self.cache_control;
@@ -34595,6 +35696,8 @@ pub mod builders {
             let grant_read = self.grant_read;
             let grant_read_acp = self.grant_read_acp;
             let grant_write_acp = self.grant_write_acp;
+            let if_match = self.if_match;
+            let if_none_match = self.if_none_match;
             let key = self.key.ok_or_else(|| BuildError::missing_field("key"))?;
             let metadata = self.metadata;
             let metadata_directive = self.metadata_directive;
@@ -34614,6 +35717,7 @@ pub mod builders {
             let website_redirect_location = self.website_redirect_location;
             Ok(CopyObjectInput {
                 acl,
+                annotation_directive,
                 bucket,
                 bucket_key_enabled,
                 cache_control,
@@ -34637,6 +35741,8 @@ pub mod builders {
                 grant_read,
                 grant_read_acp,
                 grant_write_acp,
+                if_match,
+                if_none_match,
                 key,
                 metadata,
                 metadata_directive,
@@ -36423,6 +37529,124 @@ pub mod builders {
         }
     }
 
+    /// A builder for [`DeleteObjectAnnotationInput`]
+    #[derive(Default)]
+    pub struct DeleteObjectAnnotationInputBuilder {
+        annotation_name: Option<AnnotationName>,
+
+        bucket: Option<BucketName>,
+
+        expected_bucket_owner: Option<AccountId>,
+
+        key: Option<ObjectKey>,
+
+        object_if_match: Option<ObjectIfMatch>,
+
+        request_payer: Option<RequestPayer>,
+
+        version_id: Option<ObjectVersionId>,
+    }
+
+    impl DeleteObjectAnnotationInputBuilder {
+        pub fn set_annotation_name(&mut self, field: AnnotationName) -> &mut Self {
+            self.annotation_name = Some(field);
+            self
+        }
+
+        pub fn set_bucket(&mut self, field: BucketName) -> &mut Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        pub fn set_expected_bucket_owner(&mut self, field: Option<AccountId>) -> &mut Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        pub fn set_key(&mut self, field: ObjectKey) -> &mut Self {
+            self.key = Some(field);
+            self
+        }
+
+        pub fn set_object_if_match(&mut self, field: Option<ObjectIfMatch>) -> &mut Self {
+            self.object_if_match = field;
+            self
+        }
+
+        pub fn set_request_payer(&mut self, field: Option<RequestPayer>) -> &mut Self {
+            self.request_payer = field;
+            self
+        }
+
+        pub fn set_version_id(&mut self, field: Option<ObjectVersionId>) -> &mut Self {
+            self.version_id = field;
+            self
+        }
+
+        #[must_use]
+        pub fn annotation_name(mut self, field: AnnotationName) -> Self {
+            self.annotation_name = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn bucket(mut self, field: BucketName) -> Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn expected_bucket_owner(mut self, field: Option<AccountId>) -> Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        #[must_use]
+        pub fn key(mut self, field: ObjectKey) -> Self {
+            self.key = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn object_if_match(mut self, field: Option<ObjectIfMatch>) -> Self {
+            self.object_if_match = field;
+            self
+        }
+
+        #[must_use]
+        pub fn request_payer(mut self, field: Option<RequestPayer>) -> Self {
+            self.request_payer = field;
+            self
+        }
+
+        #[must_use]
+        pub fn version_id(mut self, field: Option<ObjectVersionId>) -> Self {
+            self.version_id = field;
+            self
+        }
+
+        pub fn build(self) -> Result<DeleteObjectAnnotationInput, BuildError> {
+            let annotation_name = self
+                .annotation_name
+                .ok_or_else(|| BuildError::missing_field("annotation_name"))?;
+            let bucket = self.bucket.ok_or_else(|| BuildError::missing_field("bucket"))?;
+            let expected_bucket_owner = self.expected_bucket_owner;
+            let key = self.key.ok_or_else(|| BuildError::missing_field("key"))?;
+            let object_if_match = self.object_if_match;
+            let request_payer = self.request_payer;
+            let version_id = self.version_id;
+            Ok(DeleteObjectAnnotationInput {
+                annotation_name,
+                bucket,
+                expected_bucket_owner,
+                key,
+                object_if_match,
+                request_payer,
+                version_id,
+            })
+        }
+    }
+
     /// A builder for [`DeleteObjectTaggingInput`]
     #[derive(Default)]
     pub struct DeleteObjectTaggingInputBuilder {
@@ -38081,6 +39305,124 @@ pub mod builders {
         }
     }
 
+    /// A builder for [`GetObjectAnnotationInput`]
+    #[derive(Default)]
+    pub struct GetObjectAnnotationInputBuilder {
+        annotation_name: Option<AnnotationName>,
+
+        bucket: Option<BucketName>,
+
+        checksum_mode: Option<ChecksumMode>,
+
+        expected_bucket_owner: Option<AccountId>,
+
+        key: Option<ObjectKey>,
+
+        request_payer: Option<RequestPayer>,
+
+        version_id: Option<ObjectVersionId>,
+    }
+
+    impl GetObjectAnnotationInputBuilder {
+        pub fn set_annotation_name(&mut self, field: AnnotationName) -> &mut Self {
+            self.annotation_name = Some(field);
+            self
+        }
+
+        pub fn set_bucket(&mut self, field: BucketName) -> &mut Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        pub fn set_checksum_mode(&mut self, field: Option<ChecksumMode>) -> &mut Self {
+            self.checksum_mode = field;
+            self
+        }
+
+        pub fn set_expected_bucket_owner(&mut self, field: Option<AccountId>) -> &mut Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        pub fn set_key(&mut self, field: ObjectKey) -> &mut Self {
+            self.key = Some(field);
+            self
+        }
+
+        pub fn set_request_payer(&mut self, field: Option<RequestPayer>) -> &mut Self {
+            self.request_payer = field;
+            self
+        }
+
+        pub fn set_version_id(&mut self, field: Option<ObjectVersionId>) -> &mut Self {
+            self.version_id = field;
+            self
+        }
+
+        #[must_use]
+        pub fn annotation_name(mut self, field: AnnotationName) -> Self {
+            self.annotation_name = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn bucket(mut self, field: BucketName) -> Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_mode(mut self, field: Option<ChecksumMode>) -> Self {
+            self.checksum_mode = field;
+            self
+        }
+
+        #[must_use]
+        pub fn expected_bucket_owner(mut self, field: Option<AccountId>) -> Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        #[must_use]
+        pub fn key(mut self, field: ObjectKey) -> Self {
+            self.key = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn request_payer(mut self, field: Option<RequestPayer>) -> Self {
+            self.request_payer = field;
+            self
+        }
+
+        #[must_use]
+        pub fn version_id(mut self, field: Option<ObjectVersionId>) -> Self {
+            self.version_id = field;
+            self
+        }
+
+        pub fn build(self) -> Result<GetObjectAnnotationInput, BuildError> {
+            let annotation_name = self
+                .annotation_name
+                .ok_or_else(|| BuildError::missing_field("annotation_name"))?;
+            let bucket = self.bucket.ok_or_else(|| BuildError::missing_field("bucket"))?;
+            let checksum_mode = self.checksum_mode;
+            let expected_bucket_owner = self.expected_bucket_owner;
+            let key = self.key.ok_or_else(|| BuildError::missing_field("key"))?;
+            let request_payer = self.request_payer;
+            let version_id = self.version_id;
+            Ok(GetObjectAnnotationInput {
+                annotation_name,
+                bucket,
+                checksum_mode,
+                expected_bucket_owner,
+                key,
+                request_payer,
+                version_id,
+            })
+        }
+    }
+
     /// A builder for [`GetObjectAttributesInput`]
     #[derive(Default)]
     pub struct GetObjectAttributesInputBuilder {
@@ -39513,6 +40855,137 @@ pub mod builders {
                 prefix,
                 request_payer,
                 upload_id_marker,
+            })
+        }
+    }
+
+    /// A builder for [`ListObjectAnnotationsInput`]
+    #[derive(Default)]
+    pub struct ListObjectAnnotationsInputBuilder {
+        annotation_prefix: Option<AnnotationPrefix>,
+
+        bucket: Option<BucketName>,
+
+        continuation_token: Option<Token>,
+
+        expected_bucket_owner: Option<AccountId>,
+
+        key: Option<ObjectKey>,
+
+        max_annotation_results: Option<MaxAnnotationResults>,
+
+        request_payer: Option<RequestPayer>,
+
+        version_id: Option<ObjectVersionId>,
+    }
+
+    impl ListObjectAnnotationsInputBuilder {
+        pub fn set_annotation_prefix(&mut self, field: Option<AnnotationPrefix>) -> &mut Self {
+            self.annotation_prefix = field;
+            self
+        }
+
+        pub fn set_bucket(&mut self, field: BucketName) -> &mut Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        pub fn set_continuation_token(&mut self, field: Option<Token>) -> &mut Self {
+            self.continuation_token = field;
+            self
+        }
+
+        pub fn set_expected_bucket_owner(&mut self, field: Option<AccountId>) -> &mut Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        pub fn set_key(&mut self, field: ObjectKey) -> &mut Self {
+            self.key = Some(field);
+            self
+        }
+
+        pub fn set_max_annotation_results(&mut self, field: Option<MaxAnnotationResults>) -> &mut Self {
+            self.max_annotation_results = field;
+            self
+        }
+
+        pub fn set_request_payer(&mut self, field: Option<RequestPayer>) -> &mut Self {
+            self.request_payer = field;
+            self
+        }
+
+        pub fn set_version_id(&mut self, field: Option<ObjectVersionId>) -> &mut Self {
+            self.version_id = field;
+            self
+        }
+
+        #[must_use]
+        pub fn annotation_prefix(mut self, field: Option<AnnotationPrefix>) -> Self {
+            self.annotation_prefix = field;
+            self
+        }
+
+        #[must_use]
+        pub fn bucket(mut self, field: BucketName) -> Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn continuation_token(mut self, field: Option<Token>) -> Self {
+            self.continuation_token = field;
+            self
+        }
+
+        #[must_use]
+        pub fn expected_bucket_owner(mut self, field: Option<AccountId>) -> Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        #[must_use]
+        pub fn key(mut self, field: ObjectKey) -> Self {
+            self.key = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn max_annotation_results(mut self, field: Option<MaxAnnotationResults>) -> Self {
+            self.max_annotation_results = field;
+            self
+        }
+
+        #[must_use]
+        pub fn request_payer(mut self, field: Option<RequestPayer>) -> Self {
+            self.request_payer = field;
+            self
+        }
+
+        #[must_use]
+        pub fn version_id(mut self, field: Option<ObjectVersionId>) -> Self {
+            self.version_id = field;
+            self
+        }
+
+        pub fn build(self) -> Result<ListObjectAnnotationsInput, BuildError> {
+            let annotation_prefix = self.annotation_prefix;
+            let bucket = self.bucket.ok_or_else(|| BuildError::missing_field("bucket"))?;
+            let continuation_token = self.continuation_token;
+            let expected_bucket_owner = self.expected_bucket_owner;
+            let key = self.key.ok_or_else(|| BuildError::missing_field("key"))?;
+            let max_annotation_results = self.max_annotation_results;
+            let request_payer = self.request_payer;
+            let version_id = self.version_id;
+            Ok(ListObjectAnnotationsInput {
+                annotation_prefix,
+                bucket,
+                continuation_token,
+                expected_bucket_owner,
+                key,
+                max_annotation_results,
+                request_payer,
+                version_id,
             })
         }
     }
@@ -43539,6 +45012,319 @@ pub mod builders {
         }
     }
 
+    /// A builder for [`PutObjectAnnotationInput`]
+    #[derive(Default)]
+    pub struct PutObjectAnnotationInputBuilder {
+        annotation_name: Option<AnnotationName>,
+
+        annotation_payload: Option<StreamingBlob>,
+
+        bucket: Option<BucketName>,
+
+        checksum_algorithm: Option<ChecksumAlgorithm>,
+
+        checksum_crc32: Option<ChecksumCRC32>,
+
+        checksum_crc32c: Option<ChecksumCRC32C>,
+
+        checksum_crc64nvme: Option<ChecksumCRC64NVME>,
+
+        checksum_md5: Option<ChecksumMD5>,
+
+        checksum_sha1: Option<ChecksumSHA1>,
+
+        checksum_sha256: Option<ChecksumSHA256>,
+
+        checksum_sha512: Option<ChecksumSHA512>,
+
+        checksum_xxhash128: Option<ChecksumXXHASH128>,
+
+        checksum_xxhash3: Option<ChecksumXXHASH3>,
+
+        checksum_xxhash64: Option<ChecksumXXHASH64>,
+
+        content_md5: Option<ContentMD5>,
+
+        expected_bucket_owner: Option<AccountId>,
+
+        key: Option<ObjectKey>,
+
+        object_if_match: Option<ObjectIfMatch>,
+
+        request_payer: Option<RequestPayer>,
+
+        version_id: Option<ObjectVersionId>,
+    }
+
+    impl PutObjectAnnotationInputBuilder {
+        pub fn set_annotation_name(&mut self, field: AnnotationName) -> &mut Self {
+            self.annotation_name = Some(field);
+            self
+        }
+
+        pub fn set_annotation_payload(&mut self, field: Option<StreamingBlob>) -> &mut Self {
+            self.annotation_payload = field;
+            self
+        }
+
+        pub fn set_bucket(&mut self, field: BucketName) -> &mut Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        pub fn set_checksum_algorithm(&mut self, field: Option<ChecksumAlgorithm>) -> &mut Self {
+            self.checksum_algorithm = field;
+            self
+        }
+
+        pub fn set_checksum_crc32(&mut self, field: Option<ChecksumCRC32>) -> &mut Self {
+            self.checksum_crc32 = field;
+            self
+        }
+
+        pub fn set_checksum_crc32c(&mut self, field: Option<ChecksumCRC32C>) -> &mut Self {
+            self.checksum_crc32c = field;
+            self
+        }
+
+        pub fn set_checksum_crc64nvme(&mut self, field: Option<ChecksumCRC64NVME>) -> &mut Self {
+            self.checksum_crc64nvme = field;
+            self
+        }
+
+        pub fn set_checksum_md5(&mut self, field: Option<ChecksumMD5>) -> &mut Self {
+            self.checksum_md5 = field;
+            self
+        }
+
+        pub fn set_checksum_sha1(&mut self, field: Option<ChecksumSHA1>) -> &mut Self {
+            self.checksum_sha1 = field;
+            self
+        }
+
+        pub fn set_checksum_sha256(&mut self, field: Option<ChecksumSHA256>) -> &mut Self {
+            self.checksum_sha256 = field;
+            self
+        }
+
+        pub fn set_checksum_sha512(&mut self, field: Option<ChecksumSHA512>) -> &mut Self {
+            self.checksum_sha512 = field;
+            self
+        }
+
+        pub fn set_checksum_xxhash128(&mut self, field: Option<ChecksumXXHASH128>) -> &mut Self {
+            self.checksum_xxhash128 = field;
+            self
+        }
+
+        pub fn set_checksum_xxhash3(&mut self, field: Option<ChecksumXXHASH3>) -> &mut Self {
+            self.checksum_xxhash3 = field;
+            self
+        }
+
+        pub fn set_checksum_xxhash64(&mut self, field: Option<ChecksumXXHASH64>) -> &mut Self {
+            self.checksum_xxhash64 = field;
+            self
+        }
+
+        pub fn set_content_md5(&mut self, field: Option<ContentMD5>) -> &mut Self {
+            self.content_md5 = field;
+            self
+        }
+
+        pub fn set_expected_bucket_owner(&mut self, field: Option<AccountId>) -> &mut Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        pub fn set_key(&mut self, field: ObjectKey) -> &mut Self {
+            self.key = Some(field);
+            self
+        }
+
+        pub fn set_object_if_match(&mut self, field: Option<ObjectIfMatch>) -> &mut Self {
+            self.object_if_match = field;
+            self
+        }
+
+        pub fn set_request_payer(&mut self, field: Option<RequestPayer>) -> &mut Self {
+            self.request_payer = field;
+            self
+        }
+
+        pub fn set_version_id(&mut self, field: Option<ObjectVersionId>) -> &mut Self {
+            self.version_id = field;
+            self
+        }
+
+        #[must_use]
+        pub fn annotation_name(mut self, field: AnnotationName) -> Self {
+            self.annotation_name = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn annotation_payload(mut self, field: Option<StreamingBlob>) -> Self {
+            self.annotation_payload = field;
+            self
+        }
+
+        #[must_use]
+        pub fn bucket(mut self, field: BucketName) -> Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_algorithm(mut self, field: Option<ChecksumAlgorithm>) -> Self {
+            self.checksum_algorithm = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_crc32(mut self, field: Option<ChecksumCRC32>) -> Self {
+            self.checksum_crc32 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_crc32c(mut self, field: Option<ChecksumCRC32C>) -> Self {
+            self.checksum_crc32c = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_crc64nvme(mut self, field: Option<ChecksumCRC64NVME>) -> Self {
+            self.checksum_crc64nvme = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_md5(mut self, field: Option<ChecksumMD5>) -> Self {
+            self.checksum_md5 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_sha1(mut self, field: Option<ChecksumSHA1>) -> Self {
+            self.checksum_sha1 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_sha256(mut self, field: Option<ChecksumSHA256>) -> Self {
+            self.checksum_sha256 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_sha512(mut self, field: Option<ChecksumSHA512>) -> Self {
+            self.checksum_sha512 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_xxhash128(mut self, field: Option<ChecksumXXHASH128>) -> Self {
+            self.checksum_xxhash128 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_xxhash3(mut self, field: Option<ChecksumXXHASH3>) -> Self {
+            self.checksum_xxhash3 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_xxhash64(mut self, field: Option<ChecksumXXHASH64>) -> Self {
+            self.checksum_xxhash64 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn content_md5(mut self, field: Option<ContentMD5>) -> Self {
+            self.content_md5 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn expected_bucket_owner(mut self, field: Option<AccountId>) -> Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        #[must_use]
+        pub fn key(mut self, field: ObjectKey) -> Self {
+            self.key = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn object_if_match(mut self, field: Option<ObjectIfMatch>) -> Self {
+            self.object_if_match = field;
+            self
+        }
+
+        #[must_use]
+        pub fn request_payer(mut self, field: Option<RequestPayer>) -> Self {
+            self.request_payer = field;
+            self
+        }
+
+        #[must_use]
+        pub fn version_id(mut self, field: Option<ObjectVersionId>) -> Self {
+            self.version_id = field;
+            self
+        }
+
+        pub fn build(self) -> Result<PutObjectAnnotationInput, BuildError> {
+            let annotation_name = self
+                .annotation_name
+                .ok_or_else(|| BuildError::missing_field("annotation_name"))?;
+            let annotation_payload = self.annotation_payload;
+            let bucket = self.bucket.ok_or_else(|| BuildError::missing_field("bucket"))?;
+            let checksum_algorithm = self.checksum_algorithm;
+            let checksum_crc32 = self.checksum_crc32;
+            let checksum_crc32c = self.checksum_crc32c;
+            let checksum_crc64nvme = self.checksum_crc64nvme;
+            let checksum_md5 = self.checksum_md5;
+            let checksum_sha1 = self.checksum_sha1;
+            let checksum_sha256 = self.checksum_sha256;
+            let checksum_sha512 = self.checksum_sha512;
+            let checksum_xxhash128 = self.checksum_xxhash128;
+            let checksum_xxhash3 = self.checksum_xxhash3;
+            let checksum_xxhash64 = self.checksum_xxhash64;
+            let content_md5 = self.content_md5;
+            let expected_bucket_owner = self.expected_bucket_owner;
+            let key = self.key.ok_or_else(|| BuildError::missing_field("key"))?;
+            let object_if_match = self.object_if_match;
+            let request_payer = self.request_payer;
+            let version_id = self.version_id;
+            Ok(PutObjectAnnotationInput {
+                annotation_name,
+                annotation_payload,
+                bucket,
+                checksum_algorithm,
+                checksum_crc32,
+                checksum_crc32c,
+                checksum_crc64nvme,
+                checksum_md5,
+                checksum_sha1,
+                checksum_sha256,
+                checksum_sha512,
+                checksum_xxhash128,
+                checksum_xxhash3,
+                checksum_xxhash64,
+                content_md5,
+                expected_bucket_owner,
+                key,
+                object_if_match,
+                request_payer,
+                version_id,
+            })
+        }
+    }
+
     /// A builder for [`PutObjectLegalHoldInput`]
     #[derive(Default)]
     pub struct PutObjectLegalHoldInputBuilder {
@@ -46794,6 +48580,8 @@ pub mod builders {
     pub struct CopyObjectInputBuilder {
         acl: Option<ObjectCannedACL>,
 
+        annotation_directive: Option<AnnotationDirective>,
+
         bucket: Option<BucketName>,
 
         bucket_key_enabled: Option<BucketKeyEnabled>,
@@ -46840,6 +48628,10 @@ pub mod builders {
 
         grant_write_acp: Option<GrantWriteACP>,
 
+        if_match: Option<IfMatch>,
+
+        if_none_match: Option<IfNoneMatch>,
+
         key: Option<ObjectKey>,
 
         metadata: Option<Metadata>,
@@ -46880,6 +48672,11 @@ pub mod builders {
     impl CopyObjectInputBuilder {
         pub fn set_acl(&mut self, field: Option<ObjectCannedACL>) -> &mut Self {
             self.acl = field;
+            self
+        }
+
+        pub fn set_annotation_directive(&mut self, field: Option<AnnotationDirective>) -> &mut Self {
+            self.annotation_directive = field;
             self
         }
 
@@ -46998,6 +48795,16 @@ pub mod builders {
             self
         }
 
+        pub fn set_if_match(&mut self, field: Option<IfMatch>) -> &mut Self {
+            self.if_match = field;
+            self
+        }
+
+        pub fn set_if_none_match(&mut self, field: Option<IfNoneMatch>) -> &mut Self {
+            self.if_none_match = field;
+            self
+        }
+
         pub fn set_key(&mut self, field: ObjectKey) -> &mut Self {
             self.key = Some(field);
             self
@@ -47091,6 +48898,12 @@ pub mod builders {
         #[must_use]
         pub fn acl(mut self, field: Option<ObjectCannedACL>) -> Self {
             self.acl = field;
+            self
+        }
+
+        #[must_use]
+        pub fn annotation_directive(mut self, field: Option<AnnotationDirective>) -> Self {
+            self.annotation_directive = field;
             self
         }
 
@@ -47233,6 +49046,18 @@ pub mod builders {
         }
 
         #[must_use]
+        pub fn if_match(mut self, field: Option<IfMatch>) -> Self {
+            self.if_match = field;
+            self
+        }
+
+        #[must_use]
+        pub fn if_none_match(mut self, field: Option<IfNoneMatch>) -> Self {
+            self.if_none_match = field;
+            self
+        }
+
+        #[must_use]
         pub fn key(mut self, field: ObjectKey) -> Self {
             self.key = Some(field);
             self
@@ -47342,6 +49167,7 @@ pub mod builders {
 
         pub fn build(self) -> Result<CopyObjectInput, BuildError> {
             let acl = self.acl;
+            let annotation_directive = self.annotation_directive;
             let bucket = self.bucket.ok_or_else(|| BuildError::missing_field("bucket"))?;
             let bucket_key_enabled = self.bucket_key_enabled;
             let cache_control = self.cache_control;
@@ -47365,6 +49191,8 @@ pub mod builders {
             let grant_read = self.grant_read;
             let grant_read_acp = self.grant_read_acp;
             let grant_write_acp = self.grant_write_acp;
+            let if_match = self.if_match;
+            let if_none_match = self.if_none_match;
             let key = self.key.ok_or_else(|| BuildError::missing_field("key"))?;
             let metadata = self.metadata;
             let metadata_directive = self.metadata_directive;
@@ -47385,6 +49213,7 @@ pub mod builders {
             let website_redirect_location = self.website_redirect_location;
             Ok(CopyObjectInput {
                 acl,
+                annotation_directive,
                 bucket,
                 bucket_key_enabled,
                 cache_control,
@@ -47408,6 +49237,8 @@ pub mod builders {
                 grant_read,
                 grant_read_acp,
                 grant_write_acp,
+                if_match,
+                if_none_match,
                 key,
                 metadata,
                 metadata_directive,
@@ -49225,6 +51056,124 @@ pub mod builders {
         }
     }
 
+    /// A builder for [`DeleteObjectAnnotationInput`]
+    #[derive(Default)]
+    pub struct DeleteObjectAnnotationInputBuilder {
+        annotation_name: Option<AnnotationName>,
+
+        bucket: Option<BucketName>,
+
+        expected_bucket_owner: Option<AccountId>,
+
+        key: Option<ObjectKey>,
+
+        object_if_match: Option<ObjectIfMatch>,
+
+        request_payer: Option<RequestPayer>,
+
+        version_id: Option<ObjectVersionId>,
+    }
+
+    impl DeleteObjectAnnotationInputBuilder {
+        pub fn set_annotation_name(&mut self, field: AnnotationName) -> &mut Self {
+            self.annotation_name = Some(field);
+            self
+        }
+
+        pub fn set_bucket(&mut self, field: BucketName) -> &mut Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        pub fn set_expected_bucket_owner(&mut self, field: Option<AccountId>) -> &mut Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        pub fn set_key(&mut self, field: ObjectKey) -> &mut Self {
+            self.key = Some(field);
+            self
+        }
+
+        pub fn set_object_if_match(&mut self, field: Option<ObjectIfMatch>) -> &mut Self {
+            self.object_if_match = field;
+            self
+        }
+
+        pub fn set_request_payer(&mut self, field: Option<RequestPayer>) -> &mut Self {
+            self.request_payer = field;
+            self
+        }
+
+        pub fn set_version_id(&mut self, field: Option<ObjectVersionId>) -> &mut Self {
+            self.version_id = field;
+            self
+        }
+
+        #[must_use]
+        pub fn annotation_name(mut self, field: AnnotationName) -> Self {
+            self.annotation_name = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn bucket(mut self, field: BucketName) -> Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn expected_bucket_owner(mut self, field: Option<AccountId>) -> Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        #[must_use]
+        pub fn key(mut self, field: ObjectKey) -> Self {
+            self.key = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn object_if_match(mut self, field: Option<ObjectIfMatch>) -> Self {
+            self.object_if_match = field;
+            self
+        }
+
+        #[must_use]
+        pub fn request_payer(mut self, field: Option<RequestPayer>) -> Self {
+            self.request_payer = field;
+            self
+        }
+
+        #[must_use]
+        pub fn version_id(mut self, field: Option<ObjectVersionId>) -> Self {
+            self.version_id = field;
+            self
+        }
+
+        pub fn build(self) -> Result<DeleteObjectAnnotationInput, BuildError> {
+            let annotation_name = self
+                .annotation_name
+                .ok_or_else(|| BuildError::missing_field("annotation_name"))?;
+            let bucket = self.bucket.ok_or_else(|| BuildError::missing_field("bucket"))?;
+            let expected_bucket_owner = self.expected_bucket_owner;
+            let key = self.key.ok_or_else(|| BuildError::missing_field("key"))?;
+            let object_if_match = self.object_if_match;
+            let request_payer = self.request_payer;
+            let version_id = self.version_id;
+            Ok(DeleteObjectAnnotationInput {
+                annotation_name,
+                bucket,
+                expected_bucket_owner,
+                key,
+                object_if_match,
+                request_payer,
+                version_id,
+            })
+        }
+    }
+
     /// A builder for [`DeleteObjectTaggingInput`]
     #[derive(Default)]
     pub struct DeleteObjectTaggingInputBuilder {
@@ -50883,6 +52832,124 @@ pub mod builders {
         }
     }
 
+    /// A builder for [`GetObjectAnnotationInput`]
+    #[derive(Default)]
+    pub struct GetObjectAnnotationInputBuilder {
+        annotation_name: Option<AnnotationName>,
+
+        bucket: Option<BucketName>,
+
+        checksum_mode: Option<ChecksumMode>,
+
+        expected_bucket_owner: Option<AccountId>,
+
+        key: Option<ObjectKey>,
+
+        request_payer: Option<RequestPayer>,
+
+        version_id: Option<ObjectVersionId>,
+    }
+
+    impl GetObjectAnnotationInputBuilder {
+        pub fn set_annotation_name(&mut self, field: AnnotationName) -> &mut Self {
+            self.annotation_name = Some(field);
+            self
+        }
+
+        pub fn set_bucket(&mut self, field: BucketName) -> &mut Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        pub fn set_checksum_mode(&mut self, field: Option<ChecksumMode>) -> &mut Self {
+            self.checksum_mode = field;
+            self
+        }
+
+        pub fn set_expected_bucket_owner(&mut self, field: Option<AccountId>) -> &mut Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        pub fn set_key(&mut self, field: ObjectKey) -> &mut Self {
+            self.key = Some(field);
+            self
+        }
+
+        pub fn set_request_payer(&mut self, field: Option<RequestPayer>) -> &mut Self {
+            self.request_payer = field;
+            self
+        }
+
+        pub fn set_version_id(&mut self, field: Option<ObjectVersionId>) -> &mut Self {
+            self.version_id = field;
+            self
+        }
+
+        #[must_use]
+        pub fn annotation_name(mut self, field: AnnotationName) -> Self {
+            self.annotation_name = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn bucket(mut self, field: BucketName) -> Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_mode(mut self, field: Option<ChecksumMode>) -> Self {
+            self.checksum_mode = field;
+            self
+        }
+
+        #[must_use]
+        pub fn expected_bucket_owner(mut self, field: Option<AccountId>) -> Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        #[must_use]
+        pub fn key(mut self, field: ObjectKey) -> Self {
+            self.key = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn request_payer(mut self, field: Option<RequestPayer>) -> Self {
+            self.request_payer = field;
+            self
+        }
+
+        #[must_use]
+        pub fn version_id(mut self, field: Option<ObjectVersionId>) -> Self {
+            self.version_id = field;
+            self
+        }
+
+        pub fn build(self) -> Result<GetObjectAnnotationInput, BuildError> {
+            let annotation_name = self
+                .annotation_name
+                .ok_or_else(|| BuildError::missing_field("annotation_name"))?;
+            let bucket = self.bucket.ok_or_else(|| BuildError::missing_field("bucket"))?;
+            let checksum_mode = self.checksum_mode;
+            let expected_bucket_owner = self.expected_bucket_owner;
+            let key = self.key.ok_or_else(|| BuildError::missing_field("key"))?;
+            let request_payer = self.request_payer;
+            let version_id = self.version_id;
+            Ok(GetObjectAnnotationInput {
+                annotation_name,
+                bucket,
+                checksum_mode,
+                expected_bucket_owner,
+                key,
+                request_payer,
+                version_id,
+            })
+        }
+    }
+
     /// A builder for [`GetObjectAttributesInput`]
     #[derive(Default)]
     pub struct GetObjectAttributesInputBuilder {
@@ -52315,6 +54382,137 @@ pub mod builders {
                 prefix,
                 request_payer,
                 upload_id_marker,
+            })
+        }
+    }
+
+    /// A builder for [`ListObjectAnnotationsInput`]
+    #[derive(Default)]
+    pub struct ListObjectAnnotationsInputBuilder {
+        annotation_prefix: Option<AnnotationPrefix>,
+
+        bucket: Option<BucketName>,
+
+        continuation_token: Option<Token>,
+
+        expected_bucket_owner: Option<AccountId>,
+
+        key: Option<ObjectKey>,
+
+        max_annotation_results: Option<MaxAnnotationResults>,
+
+        request_payer: Option<RequestPayer>,
+
+        version_id: Option<ObjectVersionId>,
+    }
+
+    impl ListObjectAnnotationsInputBuilder {
+        pub fn set_annotation_prefix(&mut self, field: Option<AnnotationPrefix>) -> &mut Self {
+            self.annotation_prefix = field;
+            self
+        }
+
+        pub fn set_bucket(&mut self, field: BucketName) -> &mut Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        pub fn set_continuation_token(&mut self, field: Option<Token>) -> &mut Self {
+            self.continuation_token = field;
+            self
+        }
+
+        pub fn set_expected_bucket_owner(&mut self, field: Option<AccountId>) -> &mut Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        pub fn set_key(&mut self, field: ObjectKey) -> &mut Self {
+            self.key = Some(field);
+            self
+        }
+
+        pub fn set_max_annotation_results(&mut self, field: Option<MaxAnnotationResults>) -> &mut Self {
+            self.max_annotation_results = field;
+            self
+        }
+
+        pub fn set_request_payer(&mut self, field: Option<RequestPayer>) -> &mut Self {
+            self.request_payer = field;
+            self
+        }
+
+        pub fn set_version_id(&mut self, field: Option<ObjectVersionId>) -> &mut Self {
+            self.version_id = field;
+            self
+        }
+
+        #[must_use]
+        pub fn annotation_prefix(mut self, field: Option<AnnotationPrefix>) -> Self {
+            self.annotation_prefix = field;
+            self
+        }
+
+        #[must_use]
+        pub fn bucket(mut self, field: BucketName) -> Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn continuation_token(mut self, field: Option<Token>) -> Self {
+            self.continuation_token = field;
+            self
+        }
+
+        #[must_use]
+        pub fn expected_bucket_owner(mut self, field: Option<AccountId>) -> Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        #[must_use]
+        pub fn key(mut self, field: ObjectKey) -> Self {
+            self.key = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn max_annotation_results(mut self, field: Option<MaxAnnotationResults>) -> Self {
+            self.max_annotation_results = field;
+            self
+        }
+
+        #[must_use]
+        pub fn request_payer(mut self, field: Option<RequestPayer>) -> Self {
+            self.request_payer = field;
+            self
+        }
+
+        #[must_use]
+        pub fn version_id(mut self, field: Option<ObjectVersionId>) -> Self {
+            self.version_id = field;
+            self
+        }
+
+        pub fn build(self) -> Result<ListObjectAnnotationsInput, BuildError> {
+            let annotation_prefix = self.annotation_prefix;
+            let bucket = self.bucket.ok_or_else(|| BuildError::missing_field("bucket"))?;
+            let continuation_token = self.continuation_token;
+            let expected_bucket_owner = self.expected_bucket_owner;
+            let key = self.key.ok_or_else(|| BuildError::missing_field("key"))?;
+            let max_annotation_results = self.max_annotation_results;
+            let request_payer = self.request_payer;
+            let version_id = self.version_id;
+            Ok(ListObjectAnnotationsInput {
+                annotation_prefix,
+                bucket,
+                continuation_token,
+                expected_bucket_owner,
+                key,
+                max_annotation_results,
+                request_payer,
+                version_id,
             })
         }
     }
@@ -56436,6 +58634,319 @@ pub mod builders {
                 grant_write,
                 grant_write_acp,
                 key,
+                request_payer,
+                version_id,
+            })
+        }
+    }
+
+    /// A builder for [`PutObjectAnnotationInput`]
+    #[derive(Default)]
+    pub struct PutObjectAnnotationInputBuilder {
+        annotation_name: Option<AnnotationName>,
+
+        annotation_payload: Option<StreamingBlob>,
+
+        bucket: Option<BucketName>,
+
+        checksum_algorithm: Option<ChecksumAlgorithm>,
+
+        checksum_crc32: Option<ChecksumCRC32>,
+
+        checksum_crc32c: Option<ChecksumCRC32C>,
+
+        checksum_crc64nvme: Option<ChecksumCRC64NVME>,
+
+        checksum_md5: Option<ChecksumMD5>,
+
+        checksum_sha1: Option<ChecksumSHA1>,
+
+        checksum_sha256: Option<ChecksumSHA256>,
+
+        checksum_sha512: Option<ChecksumSHA512>,
+
+        checksum_xxhash128: Option<ChecksumXXHASH128>,
+
+        checksum_xxhash3: Option<ChecksumXXHASH3>,
+
+        checksum_xxhash64: Option<ChecksumXXHASH64>,
+
+        content_md5: Option<ContentMD5>,
+
+        expected_bucket_owner: Option<AccountId>,
+
+        key: Option<ObjectKey>,
+
+        object_if_match: Option<ObjectIfMatch>,
+
+        request_payer: Option<RequestPayer>,
+
+        version_id: Option<ObjectVersionId>,
+    }
+
+    impl PutObjectAnnotationInputBuilder {
+        pub fn set_annotation_name(&mut self, field: AnnotationName) -> &mut Self {
+            self.annotation_name = Some(field);
+            self
+        }
+
+        pub fn set_annotation_payload(&mut self, field: Option<StreamingBlob>) -> &mut Self {
+            self.annotation_payload = field;
+            self
+        }
+
+        pub fn set_bucket(&mut self, field: BucketName) -> &mut Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        pub fn set_checksum_algorithm(&mut self, field: Option<ChecksumAlgorithm>) -> &mut Self {
+            self.checksum_algorithm = field;
+            self
+        }
+
+        pub fn set_checksum_crc32(&mut self, field: Option<ChecksumCRC32>) -> &mut Self {
+            self.checksum_crc32 = field;
+            self
+        }
+
+        pub fn set_checksum_crc32c(&mut self, field: Option<ChecksumCRC32C>) -> &mut Self {
+            self.checksum_crc32c = field;
+            self
+        }
+
+        pub fn set_checksum_crc64nvme(&mut self, field: Option<ChecksumCRC64NVME>) -> &mut Self {
+            self.checksum_crc64nvme = field;
+            self
+        }
+
+        pub fn set_checksum_md5(&mut self, field: Option<ChecksumMD5>) -> &mut Self {
+            self.checksum_md5 = field;
+            self
+        }
+
+        pub fn set_checksum_sha1(&mut self, field: Option<ChecksumSHA1>) -> &mut Self {
+            self.checksum_sha1 = field;
+            self
+        }
+
+        pub fn set_checksum_sha256(&mut self, field: Option<ChecksumSHA256>) -> &mut Self {
+            self.checksum_sha256 = field;
+            self
+        }
+
+        pub fn set_checksum_sha512(&mut self, field: Option<ChecksumSHA512>) -> &mut Self {
+            self.checksum_sha512 = field;
+            self
+        }
+
+        pub fn set_checksum_xxhash128(&mut self, field: Option<ChecksumXXHASH128>) -> &mut Self {
+            self.checksum_xxhash128 = field;
+            self
+        }
+
+        pub fn set_checksum_xxhash3(&mut self, field: Option<ChecksumXXHASH3>) -> &mut Self {
+            self.checksum_xxhash3 = field;
+            self
+        }
+
+        pub fn set_checksum_xxhash64(&mut self, field: Option<ChecksumXXHASH64>) -> &mut Self {
+            self.checksum_xxhash64 = field;
+            self
+        }
+
+        pub fn set_content_md5(&mut self, field: Option<ContentMD5>) -> &mut Self {
+            self.content_md5 = field;
+            self
+        }
+
+        pub fn set_expected_bucket_owner(&mut self, field: Option<AccountId>) -> &mut Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        pub fn set_key(&mut self, field: ObjectKey) -> &mut Self {
+            self.key = Some(field);
+            self
+        }
+
+        pub fn set_object_if_match(&mut self, field: Option<ObjectIfMatch>) -> &mut Self {
+            self.object_if_match = field;
+            self
+        }
+
+        pub fn set_request_payer(&mut self, field: Option<RequestPayer>) -> &mut Self {
+            self.request_payer = field;
+            self
+        }
+
+        pub fn set_version_id(&mut self, field: Option<ObjectVersionId>) -> &mut Self {
+            self.version_id = field;
+            self
+        }
+
+        #[must_use]
+        pub fn annotation_name(mut self, field: AnnotationName) -> Self {
+            self.annotation_name = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn annotation_payload(mut self, field: Option<StreamingBlob>) -> Self {
+            self.annotation_payload = field;
+            self
+        }
+
+        #[must_use]
+        pub fn bucket(mut self, field: BucketName) -> Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_algorithm(mut self, field: Option<ChecksumAlgorithm>) -> Self {
+            self.checksum_algorithm = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_crc32(mut self, field: Option<ChecksumCRC32>) -> Self {
+            self.checksum_crc32 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_crc32c(mut self, field: Option<ChecksumCRC32C>) -> Self {
+            self.checksum_crc32c = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_crc64nvme(mut self, field: Option<ChecksumCRC64NVME>) -> Self {
+            self.checksum_crc64nvme = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_md5(mut self, field: Option<ChecksumMD5>) -> Self {
+            self.checksum_md5 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_sha1(mut self, field: Option<ChecksumSHA1>) -> Self {
+            self.checksum_sha1 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_sha256(mut self, field: Option<ChecksumSHA256>) -> Self {
+            self.checksum_sha256 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_sha512(mut self, field: Option<ChecksumSHA512>) -> Self {
+            self.checksum_sha512 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_xxhash128(mut self, field: Option<ChecksumXXHASH128>) -> Self {
+            self.checksum_xxhash128 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_xxhash3(mut self, field: Option<ChecksumXXHASH3>) -> Self {
+            self.checksum_xxhash3 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn checksum_xxhash64(mut self, field: Option<ChecksumXXHASH64>) -> Self {
+            self.checksum_xxhash64 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn content_md5(mut self, field: Option<ContentMD5>) -> Self {
+            self.content_md5 = field;
+            self
+        }
+
+        #[must_use]
+        pub fn expected_bucket_owner(mut self, field: Option<AccountId>) -> Self {
+            self.expected_bucket_owner = field;
+            self
+        }
+
+        #[must_use]
+        pub fn key(mut self, field: ObjectKey) -> Self {
+            self.key = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn object_if_match(mut self, field: Option<ObjectIfMatch>) -> Self {
+            self.object_if_match = field;
+            self
+        }
+
+        #[must_use]
+        pub fn request_payer(mut self, field: Option<RequestPayer>) -> Self {
+            self.request_payer = field;
+            self
+        }
+
+        #[must_use]
+        pub fn version_id(mut self, field: Option<ObjectVersionId>) -> Self {
+            self.version_id = field;
+            self
+        }
+
+        pub fn build(self) -> Result<PutObjectAnnotationInput, BuildError> {
+            let annotation_name = self
+                .annotation_name
+                .ok_or_else(|| BuildError::missing_field("annotation_name"))?;
+            let annotation_payload = self.annotation_payload;
+            let bucket = self.bucket.ok_or_else(|| BuildError::missing_field("bucket"))?;
+            let checksum_algorithm = self.checksum_algorithm;
+            let checksum_crc32 = self.checksum_crc32;
+            let checksum_crc32c = self.checksum_crc32c;
+            let checksum_crc64nvme = self.checksum_crc64nvme;
+            let checksum_md5 = self.checksum_md5;
+            let checksum_sha1 = self.checksum_sha1;
+            let checksum_sha256 = self.checksum_sha256;
+            let checksum_sha512 = self.checksum_sha512;
+            let checksum_xxhash128 = self.checksum_xxhash128;
+            let checksum_xxhash3 = self.checksum_xxhash3;
+            let checksum_xxhash64 = self.checksum_xxhash64;
+            let content_md5 = self.content_md5;
+            let expected_bucket_owner = self.expected_bucket_owner;
+            let key = self.key.ok_or_else(|| BuildError::missing_field("key"))?;
+            let object_if_match = self.object_if_match;
+            let request_payer = self.request_payer;
+            let version_id = self.version_id;
+            Ok(PutObjectAnnotationInput {
+                annotation_name,
+                annotation_payload,
+                bucket,
+                checksum_algorithm,
+                checksum_crc32,
+                checksum_crc32c,
+                checksum_crc64nvme,
+                checksum_md5,
+                checksum_sha1,
+                checksum_sha256,
+                checksum_sha512,
+                checksum_xxhash128,
+                checksum_xxhash3,
+                checksum_xxhash64,
+                content_md5,
+                expected_bucket_owner,
+                key,
+                object_if_match,
                 request_payer,
                 version_id,
             })
