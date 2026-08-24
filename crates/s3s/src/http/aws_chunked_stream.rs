@@ -24,6 +24,7 @@ use futures::pin_mut;
 use futures::stream::{Stream, StreamExt};
 use hyper::body::{Buf, Bytes};
 use memchr::memchr;
+use zeroize::Zeroizing;
 
 /// Maximum size for chunk metadata
 /// Prevents `DoS` via oversized chunk size declarations
@@ -57,7 +58,6 @@ impl Debug for AwsChunkedStream {
 }
 
 /// signature ctx
-#[derive(Debug)]
 struct SignatureCtx {
     /// date
     amz_date: AmzDate,
@@ -68,11 +68,23 @@ struct SignatureCtx {
     //// service
     service: Box<str>,
 
-    /// secret key
-    secret_key: SecretKey,
+    /// derived signing key
+    signing_key: Zeroizing<[u8; 32]>,
 
     /// previous chunk's signature
     prev_signature: Sha256Sum,
+}
+
+impl Debug for SignatureCtx {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SignatureCtx")
+            .field("amz_date", &self.amz_date)
+            .field("region", &self.region)
+            .field("service", &self.service)
+            .field("signing_key", &"[REDACTED]")
+            .field("prev_signature", &self.prev_signature)
+            .finish_non_exhaustive()
+    }
 }
 
 /// [`AwsChunkedStream`]
@@ -149,7 +161,7 @@ fn check_signature(ctx: &SignatureCtx, expected_signature: &[u8], chunk_data: &[
         sig_v4::create_chunk_string_to_sign(&ctx.amz_date, &ctx.region, &ctx.service, prev_signature, chunk_data)
     });
 
-    let signature = sig_v4::calculate_signature_raw(&string_to_sign, &ctx.secret_key, &ctx.amz_date, &ctx.region, &ctx.service);
+    let signature = sig_v4::calculate_signature_with_key(&string_to_sign, &ctx.signing_key);
 
     (expected == signature).then_some(signature)
 }
@@ -178,11 +190,13 @@ impl AwsChunkedStream {
                 pin_mut!(body);
                 let mut prev_bytes = Bytes::new();
                 let mut buf: Vec<u8> = Vec::new();
+                let signing_key = Zeroizing::new(sig_v4::derive_signing_key(&secret_key, &amz_date, &region, &service));
+                drop(secret_key);
                 let mut ctx = SignatureCtx {
                     amz_date,
                     region,
                     service,
-                    secret_key,
+                    signing_key,
                     prev_signature: seed_signature,
                 };
 
@@ -335,8 +349,7 @@ impl AwsChunkedStream {
             let string_to_sign = hex_bytes32(ctx.prev_signature.as_bytes(), |prev_signature| {
                 create_trailer_string_to_sign(&ctx.amz_date, &ctx.region, &ctx.service, prev_signature, &canonical_trailers)
             });
-            let signature =
-                sig_v4::calculate_signature_raw(&string_to_sign, &ctx.secret_key, &ctx.amz_date, &ctx.region, &ctx.service);
+            let signature = sig_v4::calculate_signature_with_key(&string_to_sign, &ctx.signing_key);
             if provided != signature {
                 return Some(Err(AwsChunkedStreamError::SignatureMismatch));
             }
@@ -609,6 +622,21 @@ fn trim_ascii_whitespace(mut s: &[u8]) -> &[u8] {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn signature_ctx_debug_redacts_signing_key() {
+        let ctx = SignatureCtx {
+            amz_date: AmzDate::parse("20130524T000000Z").unwrap(),
+            region: "us-east-1".into(),
+            service: "s3".into(),
+            signing_key: Zeroizing::new([0xAA; 32]),
+            prev_signature: Sha256Sum::from_hex("4f232c4386841ef735655705268965c44a0e4690baa4adea153f7db9fa80a0a9").unwrap(),
+        };
+
+        let text = format!("{ctx:?}");
+        assert!(text.contains("signing_key: \"[REDACTED]\""));
+        assert!(!text.contains("signing_key: ["));
+    }
 
     fn join(bytes: &[&[u8]]) -> Bytes {
         let mut buf = Vec::new();

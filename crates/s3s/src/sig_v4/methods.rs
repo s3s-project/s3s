@@ -8,7 +8,7 @@ use super::AmzDate;
 use crate::auth::SecretKey;
 use crate::auth::signature::Signature;
 use crate::http::OrderedHeaders;
-use crate::utils::crypto::{Sha256Sum, hex, hex_sha256, hex_sha256_chunk, hmac_sha256};
+use crate::utils::crypto::{Sha256Sum, hex_sha256, hex_sha256_chunk, hmac_sha256};
 use crate::utils::stable_sort_by_first;
 
 use hyper::Method;
@@ -430,19 +430,12 @@ pub fn calculate_signature(
     service: &str,
 ) -> Signature {
     let signing_key = derive_signing_key(secret_key, amz_date, region, service);
-    Signature::from_computed(hex(hmac_sha256(signing_key, string_to_sign)))
+    Signature::from_computed(calculate_signature_with_key(string_to_sign, &signing_key).to_hex_string())
 }
 
-/// calculate signature as raw bytes
+/// calculate signature with a derived signing key
 #[must_use]
-pub(crate) fn calculate_signature_raw(
-    string_to_sign: &str,
-    secret_key: &SecretKey,
-    amz_date: &AmzDate,
-    region: &str,
-    service: &str,
-) -> Sha256Sum {
-    let signing_key = derive_signing_key(secret_key, amz_date, region, service);
+pub(crate) fn calculate_signature_with_key(string_to_sign: &str, signing_key: &[u8; 32]) -> Sha256Sum {
     Sha256Sum::from_bytes(hmac_sha256(signing_key, string_to_sign))
 }
 
@@ -836,7 +829,7 @@ mod tests {
     }
 
     #[test]
-    fn calculate_signature_raw_matches_calculate_signature() {
+    fn calculate_signature_with_key_matches_calculate_signature() {
         use crate::utils::crypto::Sha256Sum;
 
         let secret_access_key = SecretKey::from("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
@@ -850,7 +843,8 @@ mod tests {
             create_chunk_string_to_sign(&date, region, service, seed_signature, &[Bytes::from(vec![b'a'; 64 * 1024])]);
 
         let signature = calculate_signature(&string_to_sign, &secret_access_key, &date, region, service);
-        let raw = calculate_signature_raw(&string_to_sign, &secret_access_key, &date, region, service);
+        let signing_key = derive_signing_key(&secret_access_key, &date, region, service);
+        let raw = calculate_signature_with_key(&string_to_sign, &signing_key);
 
         let expected = Sha256Sum::from_hex(signature.as_str()).unwrap();
         assert_eq!(expected, raw);
