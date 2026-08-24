@@ -103,54 +103,60 @@ pub fn hex(data: impl AsRef<[u8]>) -> String {
 }
 
 /// `f(hex(src))`
-pub(crate) fn hex_bytes32<R>(src: impl AsRef<[u8]>, f: impl FnOnce(&str) -> R) -> R {
+pub(crate) fn hex_bytes32<R>(src: &[u8; 32], f: impl FnOnce(&str) -> R) -> R {
     let buf: &mut [_] = &mut [MaybeUninit::uninit(); 64];
     let ans = hex_simd::encode_as_str(src.as_ref(), buf.as_out(), AsciiCase::Lower);
     f(ans)
 }
 
 #[cfg(not(all(feature = "openssl", not(windows))))]
-fn sha256(data: &[u8]) -> impl AsRef<[u8; 32]> + use<> {
+fn sha256(data: &[u8]) -> [u8; 32] {
     use sha2::{Digest, Sha256};
-    <Sha256 as Digest>::digest(data)
+    <Sha256 as Digest>::digest(data).into()
 }
 
 #[cfg(all(feature = "openssl", not(windows)))]
-fn sha256(data: &[u8]) -> impl AsRef<[u8]> {
+fn sha256(data: &[u8]) -> [u8; 32] {
     use openssl::hash::{Hasher, MessageDigest};
     let mut h = Hasher::new(MessageDigest::sha256()).unwrap();
     h.update(data).unwrap();
-    h.finish().unwrap()
+    let digest = h.finish().unwrap();
+    let mut ans = [0_u8; 32];
+    ans.copy_from_slice(&digest);
+    ans
 }
 
 #[cfg(not(all(feature = "openssl", not(windows))))]
-fn sha256_chunk(chunk: &[Bytes]) -> impl AsRef<[u8; 32]> + use<> {
+fn sha256_chunk(chunk: &[Bytes]) -> [u8; 32] {
     use sha2::{Digest, Sha256};
     let mut h = <Sha256 as Digest>::new();
     for data in chunk {
         h.update(data);
     }
-    h.finalize()
+    h.finalize().into()
 }
 
 #[cfg(all(feature = "openssl", not(windows)))]
-fn sha256_chunk(chunk: &[Bytes]) -> impl AsRef<[u8]> {
+fn sha256_chunk(chunk: &[Bytes]) -> [u8; 32] {
     use openssl::hash::{Hasher, MessageDigest};
     let mut h = Hasher::new(MessageDigest::sha256()).unwrap();
     for data in chunk {
         h.update(data).unwrap();
     }
-    h.finish().unwrap()
+    let digest = h.finish().unwrap();
+    let mut ans = [0_u8; 32];
+    ans.copy_from_slice(&digest);
+    ans
 }
 
 /// `f(hex(sha256(data)))`
 pub fn hex_sha256<R>(data: &[u8], f: impl FnOnce(&str) -> R) -> R {
-    hex_bytes32(sha256(data).as_ref(), f)
+    hex_bytes32(&sha256(data), f)
 }
 
 /// `f(hex(sha256(chunk)))`
 pub fn hex_sha256_chunk<R>(chunk: &[Bytes], f: impl FnOnce(&str) -> R) -> R {
-    hex_bytes32(sha256_chunk(chunk).as_ref(), f)
+    hex_bytes32(&sha256_chunk(chunk), f)
 }
 
 #[cfg(test)]
