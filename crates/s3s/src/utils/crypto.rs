@@ -7,8 +7,18 @@ use hex_simd::{AsOut, AsciiCase};
 use hyper::body::Bytes;
 
 /// A normalized SHA-256 digest.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// [`PartialEq`] compares in constant time.
+#[derive(Debug, Clone, Copy)]
 pub struct Sha256Sum([u8; 32]);
+
+impl PartialEq for Sha256Sum {
+    fn eq(&self, other: &Self) -> bool {
+        self.ct_equal(other)
+    }
+}
+
+impl Eq for Sha256Sum {}
 
 impl Sha256Sum {
     /// Parses a lowercase hexadecimal SHA-256 digest.
@@ -44,6 +54,21 @@ impl Sha256Sum {
     pub fn to_hex_string(self) -> String {
         hex(self.0)
     }
+
+    /// Returns the raw digest bytes.
+    #[must_use]
+    pub(crate) const fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+
+    /// Returns whether the digest equals `other` in constant time.
+    ///
+    /// [`PartialEq`] is implemented in constant time through this method.
+    #[must_use]
+    pub fn ct_equal(&self, other: &Sha256Sum) -> bool {
+        use subtle::ConstantTimeEq;
+        bool::from(self.0.ct_eq(&other.0))
+    }
 }
 
 /// verify sha256 checksum string
@@ -78,54 +103,60 @@ pub fn hex(data: impl AsRef<[u8]>) -> String {
 }
 
 /// `f(hex(src))`
-fn hex_bytes32<R>(src: impl AsRef<[u8]>, f: impl FnOnce(&str) -> R) -> R {
+pub(crate) fn hex_bytes32<R>(src: &[u8; 32], f: impl FnOnce(&str) -> R) -> R {
     let buf: &mut [_] = &mut [MaybeUninit::uninit(); 64];
     let ans = hex_simd::encode_as_str(src.as_ref(), buf.as_out(), AsciiCase::Lower);
     f(ans)
 }
 
 #[cfg(not(all(feature = "openssl", not(windows))))]
-fn sha256(data: &[u8]) -> impl AsRef<[u8; 32]> + use<> {
+fn sha256(data: &[u8]) -> [u8; 32] {
     use sha2::{Digest, Sha256};
-    <Sha256 as Digest>::digest(data)
+    <Sha256 as Digest>::digest(data).into()
 }
 
 #[cfg(all(feature = "openssl", not(windows)))]
-fn sha256(data: &[u8]) -> impl AsRef<[u8]> {
+fn sha256(data: &[u8]) -> [u8; 32] {
     use openssl::hash::{Hasher, MessageDigest};
     let mut h = Hasher::new(MessageDigest::sha256()).unwrap();
     h.update(data).unwrap();
-    h.finish().unwrap()
+    let digest = h.finish().unwrap();
+    let mut ans = [0_u8; 32];
+    ans.copy_from_slice(&digest);
+    ans
 }
 
 #[cfg(not(all(feature = "openssl", not(windows))))]
-fn sha256_chunk(chunk: &[Bytes]) -> impl AsRef<[u8; 32]> + use<> {
+fn sha256_chunk(chunk: &[Bytes]) -> [u8; 32] {
     use sha2::{Digest, Sha256};
     let mut h = <Sha256 as Digest>::new();
     for data in chunk {
         h.update(data);
     }
-    h.finalize()
+    h.finalize().into()
 }
 
 #[cfg(all(feature = "openssl", not(windows)))]
-fn sha256_chunk(chunk: &[Bytes]) -> impl AsRef<[u8]> {
+fn sha256_chunk(chunk: &[Bytes]) -> [u8; 32] {
     use openssl::hash::{Hasher, MessageDigest};
     let mut h = Hasher::new(MessageDigest::sha256()).unwrap();
     for data in chunk {
         h.update(data).unwrap();
     }
-    h.finish().unwrap()
+    let digest = h.finish().unwrap();
+    let mut ans = [0_u8; 32];
+    ans.copy_from_slice(&digest);
+    ans
 }
 
 /// `f(hex(sha256(data)))`
 pub fn hex_sha256<R>(data: &[u8], f: impl FnOnce(&str) -> R) -> R {
-    hex_bytes32(sha256(data).as_ref(), f)
+    hex_bytes32(&sha256(data), f)
 }
 
 /// `f(hex(sha256(chunk)))`
 pub fn hex_sha256_chunk<R>(chunk: &[Bytes], f: impl FnOnce(&str) -> R) -> R {
-    hex_bytes32(sha256_chunk(chunk).as_ref(), f)
+    hex_bytes32(&sha256_chunk(chunk), f)
 }
 
 #[cfg(test)]

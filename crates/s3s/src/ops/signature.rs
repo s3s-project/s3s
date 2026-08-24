@@ -19,6 +19,7 @@ use crate::sig_v4::AmzDate;
 use crate::sig_v4::UploadStream;
 use crate::sig_v4::{AuthorizationV4, CredentialV4, PostSignatureV4, PresignedUrlV4};
 use crate::stream::ByteStream as _;
+use crate::utils::crypto::Sha256Sum;
 use crate::utils::crypto::hex_sha256;
 use crate::utils::is_base64_encoded;
 
@@ -627,9 +628,11 @@ impl SignatureContext<'_> {
                 .ok_or_else(|| s3_error!(MissingContentLength, "missing header: x-amz-decoded-content-length"))?;
 
             let unsigned = matches!(amz_content_sha256, Some(AmzContentSha256::StreamingUnsignedPayloadTrailer));
+            let seed_signature = Sha256Sum::from_hex(signature.as_str())
+                .ok_or_else(|| s3_error!(InternalError, "verified request signature is not canonical hex"))?;
             let stream = AwsChunkedStream::new(
                 mem::take(self.req_body),
-                signature,
+                seed_signature,
                 amz_date,
                 region.into(),
                 service.into(),
