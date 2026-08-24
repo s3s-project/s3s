@@ -38,7 +38,7 @@ const MAX_TRAILERS_SIZE: usize = 16 * 1024;
 /// Prevents `DoS` via excessive header count
 const MAX_TRAILER_HEADERS: usize = 100;
 
-use transform_stream::AsyncTryStream;
+use transform_stream::{AsyncTryStream, Yielder};
 
 /// Aws chunked stream
 pub struct AwsChunkedStream {
@@ -220,24 +220,32 @@ impl AwsChunkedStream {
 
                     tracing::trace!(?meta);
 
-                    let (data, remaining_after_data): (Vec<Bytes>, Bytes) = {
-                        match Self::read_data(body.as_mut(), prev_bytes, meta.size).await {
-                            None => return Err(AwsChunkedStreamError::Incomplete),
-                            Some(Err(e)) => return Err(e),
-                            Some(Ok((data, remaining_bytes))) => (data, remaining_bytes),
-                        }
-                    };
+                    let remaining_after_data = if let Some(expected_sig) = meta.signature {
+                        let (data, remaining_bytes): (Vec<Bytes>, Bytes) = {
+                            match Self::read_data(body.as_mut(), prev_bytes, meta.size).await {
+                                None => return Err(AwsChunkedStreamError::Incomplete),
+                                Some(Err(e)) => return Err(e),
+                                Some(Ok((data, remaining_bytes))) => (data, remaining_bytes),
+                            }
+                        };
 
-                    if let Some(expected_sig) = meta.signature {
                         match check_signature(&ctx, expected_sig, &data) {
                             None => return Err(AwsChunkedStreamError::SignatureMismatch),
                             Some(signature) => ctx.prev_signature = signature,
                         }
-                    }
 
-                    for bytes in data {
-                        y.yield_ok(bytes).await;
-                    }
+                        for bytes in data {
+                            y.yield_ok(bytes).await;
+                        }
+
+                        remaining_bytes
+                    } else {
+                        match Self::read_data_streaming(body.as_mut(), &mut y, prev_bytes, meta.size).await {
+                            None => return Err(AwsChunkedStreamError::Incomplete),
+                            Some(Err(e)) => return Err(e),
+                            Some(Ok(remaining_bytes)) => remaining_bytes,
+                        }
+                    };
 
                     if meta.size == 0 {
                         // Try to read all remaining bytes (including any immediate remainder) as trailing headers
@@ -564,6 +572,70 @@ impl AwsChunkedStream {
         Some(Ok((bytes_buffer, remaining_bytes)))
     }
 
+    /// read data and yield fragments directly
+    async fn read_data_streaming<S>(
+        mut body: Pin<&mut S>,
+        y: &mut Yielder<Result<Bytes, AwsChunkedStreamError>>,
+        prev_bytes: Bytes,
+        mut data_size: usize,
+    ) -> Option<Result<Bytes, AwsChunkedStreamError>>
+    where
+        S: Stream<Item = Result<Bytes, StdError>> + Send + 'static,
+    {
+        if data_size == 0 {
+            return Some(Ok(prev_bytes));
+        }
+
+        let mut remaining_bytes = prev_bytes;
+        loop {
+            if data_size == 0 {
+                break;
+            }
+
+            if remaining_bytes.is_empty() {
+                match body.next().await? {
+                    Err(e) => return Some(Err(AwsChunkedStreamError::Underlying(e))),
+                    Ok(bytes) => remaining_bytes = bytes,
+                }
+                continue;
+            }
+
+            if data_size <= remaining_bytes.len() {
+                let data = remaining_bytes.split_to(data_size);
+                data_size = 0;
+                y.yield_ok(data).await;
+            } else {
+                data_size = data_size.wrapping_sub(remaining_bytes.len());
+                let data = std::mem::take(&mut remaining_bytes);
+                y.yield_ok(data).await;
+            }
+        }
+
+        if remaining_bytes.starts_with(b"\r\n") {
+            // fast path
+            remaining_bytes.advance(2);
+        } else {
+            for &expected_byte in b"\r\n" {
+                loop {
+                    match *remaining_bytes.as_ref() {
+                        [] => match body.next().await? {
+                            Err(e) => return Some(Err(AwsChunkedStreamError::Underlying(e))),
+                            Ok(bytes) => remaining_bytes = bytes,
+                        },
+
+                        [x, ..] if x == expected_byte => {
+                            remaining_bytes.advance(1);
+                            break;
+                        }
+                        _ => return Some(Err(AwsChunkedStreamError::FormatError)),
+                    }
+                }
+            }
+        }
+
+        Some(Ok(remaining_bytes))
+    }
+
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Result<Bytes, AwsChunkedStreamError>>> {
         let ans = Pin::new(&mut self.inner).poll_next(cx);
         if let Poll::Ready(Some(Ok(ref bytes))) = ans {
@@ -636,6 +708,42 @@ mod tests {
         let text = format!("{ctx:?}");
         assert!(text.contains("signing_key: \"[REDACTED]\""));
         assert!(!text.contains("signing_key: ["));
+    }
+
+    #[tokio::test]
+    async fn unsigned_chunk_streams_fragments_incrementally() {
+        use futures::SinkExt as _;
+
+        // The chunk meta declares 6 bytes but the data arrives in two fragments.
+        // The first fragment must be yielded before the rest is even sent.
+        let (mut tx, rx) = futures::channel::mpsc::channel(4);
+
+        let seed_signature = "0000000000000000000000000000000000000000000000000000000000000000";
+        let date = AmzDate::parse("20130524T000000Z").unwrap();
+
+        let mut chunked_stream = AwsChunkedStream::new(
+            rx,
+            Sha256Sum::from_hex(seed_signature).unwrap(),
+            date,
+            "us-east-1".into(),
+            "s3".into(),
+            "test-key".into(),
+            6,
+            true, // unsigned
+        );
+
+        tx.send(Ok(Bytes::from_static(b"6\r\nabc"))).await.unwrap();
+
+        let first = chunked_stream.next().await.unwrap().unwrap();
+        assert_eq!(first.as_ref(), b"abc");
+
+        tx.send(Ok(Bytes::from_static(b"def\r\n0\r\n\r\n"))).await.unwrap();
+        drop(tx);
+
+        let second = chunked_stream.next().await.unwrap().unwrap();
+        assert_eq!(second.as_ref(), b"def");
+
+        assert!(chunked_stream.next().await.is_none());
     }
 
     fn join(bytes: &[&[u8]]) -> Bytes {
@@ -970,6 +1078,40 @@ mod tests {
             "test-key".into(),
             256,
             true,
+        );
+
+        let result = chunked_stream.next().await;
+        // In unsigned mode, received fragments are yielded before the truncation is detected.
+        assert!(matches!(result, Some(Ok(_))));
+        let result = chunked_stream.next().await;
+        assert!(matches!(result, Some(Err(AwsChunkedStreamError::Incomplete))));
+    }
+
+    #[tokio::test]
+    async fn test_incomplete_stream_signed() {
+        // Test Incomplete when stream ends before all data is received.
+        // In signed mode, the whole chunk is collected before verification,
+        // so the error surfaces before any data is yielded.
+        let chunk_meta = b"100;chunk-signature=0000000000000000000000000000000000000000000000000000000000000000\r\n";
+        let chunk_data = b"short"; // But only sends 5 bytes
+        let chunk1 = join(&[chunk_meta, chunk_data]); // No closing \r\n, stream will end
+
+        let chunk_results: Vec<Result<Bytes, _>> = vec![Ok(chunk1)];
+
+        let seed_signature = "0000000000000000000000000000000000000000000000000000000000000000";
+        let timestamp = "20130524T000000Z";
+        let date = AmzDate::parse(timestamp).unwrap();
+
+        let stream = futures::stream::iter(chunk_results);
+        let mut chunked_stream = AwsChunkedStream::new(
+            stream,
+            Sha256Sum::from_hex(seed_signature).unwrap(),
+            date,
+            "us-east-1".into(),
+            "s3".into(),
+            "test-key".into(),
+            256,
+            false,
         );
 
         let result = chunked_stream.next().await;
