@@ -38,7 +38,7 @@ const MAX_TRAILERS_SIZE: usize = 16 * 1024;
 /// Prevents `DoS` via excessive header count
 const MAX_TRAILER_HEADERS: usize = 100;
 
-use transform_stream::AsyncTryStream;
+use transform_stream::{AsyncTryStream, Yielder};
 
 /// Aws chunked stream
 pub struct AwsChunkedStream {
@@ -220,24 +220,32 @@ impl AwsChunkedStream {
 
                     tracing::trace!(?meta);
 
-                    let (data, remaining_after_data): (Vec<Bytes>, Bytes) = {
-                        match Self::read_data(body.as_mut(), prev_bytes, meta.size).await {
-                            None => return Err(AwsChunkedStreamError::Incomplete),
-                            Some(Err(e)) => return Err(e),
-                            Some(Ok((data, remaining_bytes))) => (data, remaining_bytes),
-                        }
-                    };
+                    let remaining_after_data = if let Some(expected_sig) = meta.signature {
+                        let (data, remaining_bytes): (Vec<Bytes>, Bytes) = {
+                            match Self::read_data(body.as_mut(), prev_bytes, meta.size).await {
+                                None => return Err(AwsChunkedStreamError::Incomplete),
+                                Some(Err(e)) => return Err(e),
+                                Some(Ok((data, remaining_bytes))) => (data, remaining_bytes),
+                            }
+                        };
 
-                    if let Some(expected_sig) = meta.signature {
                         match check_signature(&ctx, expected_sig, &data) {
                             None => return Err(AwsChunkedStreamError::SignatureMismatch),
                             Some(signature) => ctx.prev_signature = signature,
                         }
-                    }
 
-                    for bytes in data {
-                        y.yield_ok(bytes).await;
-                    }
+                        for bytes in data {
+                            y.yield_ok(bytes).await;
+                        }
+
+                        remaining_bytes
+                    } else {
+                        match Self::read_data_streaming(body.as_mut(), &mut y, prev_bytes, meta.size).await {
+                            None => return Err(AwsChunkedStreamError::Incomplete),
+                            Some(Err(e)) => return Err(e),
+                            Some(Ok(remaining_bytes)) => remaining_bytes,
+                        }
+                    };
 
                     if meta.size == 0 {
                         // Try to read all remaining bytes (including any immediate remainder) as trailing headers
@@ -522,7 +530,7 @@ impl AwsChunkedStream {
             }
         };
 
-        let mut remaining_bytes = 'outer: {
+        let remaining_bytes = 'outer: {
             if let Some(remaining_bytes) = push_data_bytes(prev_bytes) {
                 break 'outer remaining_bytes;
             }
@@ -539,6 +547,22 @@ impl AwsChunkedStream {
             }
         };
 
+        let remaining_bytes = match Self::consume_trailing_crlf(body, remaining_bytes).await? {
+            Err(e) => return Some(Err(e)),
+            Ok(remaining_bytes) => remaining_bytes,
+        };
+
+        Some(Ok((bytes_buffer, remaining_bytes)))
+    }
+
+    /// consume the trailing `\r\n` of a chunk and return remaining bytes
+    async fn consume_trailing_crlf<S>(
+        mut body: Pin<&mut S>,
+        mut remaining_bytes: Bytes,
+    ) -> Option<Result<Bytes, AwsChunkedStreamError>>
+    where
+        S: Stream<Item = Result<Bytes, StdError>> + Send + 'static,
+    {
         if remaining_bytes.starts_with(b"\r\n") {
             // fast path
             remaining_bytes.advance(2);
@@ -561,7 +585,49 @@ impl AwsChunkedStream {
             }
         }
 
-        Some(Ok((bytes_buffer, remaining_bytes)))
+        Some(Ok(remaining_bytes))
+    }
+
+    /// read data and yield fragments directly
+    async fn read_data_streaming<S>(
+        mut body: Pin<&mut S>,
+        y: &mut Yielder<Result<Bytes, AwsChunkedStreamError>>,
+        prev_bytes: Bytes,
+        mut data_size: usize,
+    ) -> Option<Result<Bytes, AwsChunkedStreamError>>
+    where
+        S: Stream<Item = Result<Bytes, StdError>> + Send + 'static,
+    {
+        if data_size == 0 {
+            return Some(Ok(prev_bytes));
+        }
+
+        let mut remaining_bytes = prev_bytes;
+        loop {
+            if data_size == 0 {
+                break;
+            }
+
+            if remaining_bytes.is_empty() {
+                match body.next().await? {
+                    Err(e) => return Some(Err(AwsChunkedStreamError::Underlying(e))),
+                    Ok(bytes) => remaining_bytes = bytes,
+                }
+                continue;
+            }
+
+            if data_size <= remaining_bytes.len() {
+                let data = remaining_bytes.split_to(data_size);
+                data_size = 0;
+                y.yield_ok(data).await;
+            } else {
+                data_size = data_size.wrapping_sub(remaining_bytes.len());
+                let data = std::mem::take(&mut remaining_bytes);
+                y.yield_ok(data).await;
+            }
+        }
+
+        Self::consume_trailing_crlf(body, remaining_bytes).await
     }
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Result<Bytes, AwsChunkedStreamError>>> {
@@ -636,6 +702,161 @@ mod tests {
         let text = format!("{ctx:?}");
         assert!(text.contains("signing_key: \"[REDACTED]\""));
         assert!(!text.contains("signing_key: ["));
+    }
+
+    #[tokio::test]
+    async fn unsigned_chunk_streams_fragments_incrementally() {
+        use futures::SinkExt as _;
+
+        // The chunk meta declares 6 bytes but the data arrives in two fragments.
+        // The first fragment must be yielded before the rest is even sent.
+        let (mut tx, rx) = futures::channel::mpsc::channel::<Result<Bytes, StdError>>(4);
+
+        let seed_signature = "0000000000000000000000000000000000000000000000000000000000000000";
+        let date = AmzDate::parse("20130524T000000Z").unwrap();
+
+        let mut chunked_stream = AwsChunkedStream::new(
+            rx,
+            Sha256Sum::from_hex(seed_signature).unwrap(),
+            date,
+            "us-east-1".into(),
+            "s3".into(),
+            "test-key".into(),
+            6,
+            true, // unsigned
+        );
+
+        tx.send(Ok(Bytes::from_static(b"6\r\nabc"))).await.unwrap();
+
+        let first = chunked_stream.next().await.unwrap().unwrap();
+        assert_eq!(first.as_ref(), b"abc");
+
+        tx.send(Ok(Bytes::from_static(b"def\r\n0\r\n\r\n"))).await.unwrap();
+        drop(tx);
+
+        let second = chunked_stream.next().await.unwrap().unwrap();
+        assert_eq!(second.as_ref(), b"def");
+
+        assert!(chunked_stream.next().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn unsigned_chunk_streams_crlf_split_across_fragments() {
+        use futures::SinkExt as _;
+
+        // The chunk data exactly fills the first fragment, so the trailing CRLF
+        // arrives later and must be consumed byte-by-byte.
+        let (mut tx, rx) = futures::channel::mpsc::channel::<Result<Bytes, StdError>>(4);
+
+        let mut chunked_stream = AwsChunkedStream::new(
+            rx,
+            Sha256Sum::from_hex("0000000000000000000000000000000000000000000000000000000000000000").unwrap(),
+            AmzDate::parse("20130524T000000Z").unwrap(),
+            "us-east-1".into(),
+            "s3".into(),
+            "test-key".into(),
+            6,
+            true, // unsigned
+        );
+
+        tx.send(Ok(Bytes::from_static(b"6\r\nabcdef"))).await.unwrap();
+
+        let data = chunked_stream.next().await.unwrap().unwrap();
+        assert_eq!(data.as_ref(), b"abcdef");
+
+        tx.send(Ok(Bytes::from_static(b"\r\n0\r\n\r\n"))).await.unwrap();
+        drop(tx);
+
+        assert!(chunked_stream.next().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn unsigned_chunk_streaming_error_paths() {
+        use futures::SinkExt as _;
+
+        let build = |rx| {
+            AwsChunkedStream::new(
+                rx,
+                Sha256Sum::from_hex("0000000000000000000000000000000000000000000000000000000000000000").unwrap(),
+                AmzDate::parse("20130524T000000Z").unwrap(),
+                "us-east-1".into(),
+                "s3".into(),
+                "test-key".into(),
+                6,
+                true, // unsigned
+            )
+        };
+
+        {
+            // Underlying error while waiting for the rest of the chunk data:
+            // the received fragment is yielded first, then the error surfaces.
+            let (mut tx, rx) = futures::channel::mpsc::channel::<Result<Bytes, StdError>>(4);
+            let mut stream = build(rx);
+            tx.send(Ok(Bytes::from_static(b"6\r\nabc"))).await.unwrap();
+            tx.send(Err(Box::new(std::io::Error::new(std::io::ErrorKind::ConnectionReset, "boom"))))
+                .await
+                .unwrap();
+
+            let first = stream.next().await.unwrap().unwrap();
+            assert_eq!(first.as_ref(), b"abc");
+            let err = stream.next().await.unwrap().unwrap_err();
+            assert!(matches!(err, AwsChunkedStreamError::Underlying(_)));
+        }
+
+        {
+            // Malformed trailing CRLF: the chunk data is yielded, then FormatError.
+            let (mut tx, rx) = futures::channel::mpsc::channel::<Result<Bytes, StdError>>(4);
+            let mut stream = build(rx);
+            tx.send(Ok(Bytes::from_static(b"6\r\nabcdefXX"))).await.unwrap();
+
+            let data = stream.next().await.unwrap().unwrap();
+            assert_eq!(data.as_ref(), b"abcdef");
+            let err = stream.next().await.unwrap().unwrap_err();
+            assert!(matches!(err, AwsChunkedStreamError::FormatError));
+        }
+
+        {
+            // Underlying error while waiting for the trailing CRLF.
+            let (mut tx, rx) = futures::channel::mpsc::channel::<Result<Bytes, StdError>>(4);
+            let mut stream = build(rx);
+            tx.send(Ok(Bytes::from_static(b"6\r\nabcdef"))).await.unwrap();
+            tx.send(Err(Box::new(std::io::Error::new(std::io::ErrorKind::ConnectionReset, "boom"))))
+                .await
+                .unwrap();
+
+            let data = stream.next().await.unwrap().unwrap();
+            assert_eq!(data.as_ref(), b"abcdef");
+            let err = stream.next().await.unwrap().unwrap_err();
+            assert!(matches!(err, AwsChunkedStreamError::Underlying(_)));
+        }
+    }
+
+    #[tokio::test]
+    async fn signed_chunk_propagates_underlying_error() {
+        // In signed mode the whole chunk is collected before verification,
+        // so an underlying error surfaces before any data is yielded.
+        let chunk_meta = b"100;chunk-signature=0000000000000000000000000000000000000000000000000000000000000000\r\n";
+        let chunk_data = b"short";
+        let chunk1 = join(&[chunk_meta, chunk_data]);
+
+        let cause = std::io::Error::new(std::io::ErrorKind::ConnectionReset, "boom");
+        let err: Result<Bytes, StdError> = Err(Box::new(cause));
+        let chunk_results = vec![Ok(chunk1), err];
+
+        let stream = futures::stream::iter(chunk_results);
+        let mut chunked_stream = AwsChunkedStream::new(
+            stream,
+            Sha256Sum::from_hex("0000000000000000000000000000000000000000000000000000000000000000").unwrap(),
+            AmzDate::parse("20130524T000000Z").unwrap(),
+            "us-east-1".into(),
+            "s3".into(),
+            "test-key".into(),
+            256,
+            false, // signed
+        );
+
+        let result = chunked_stream.next().await;
+        assert!(matches!(result, Some(Err(AwsChunkedStreamError::Underlying(_)))));
     }
 
     fn join(bytes: &[&[u8]]) -> Bytes {
@@ -970,6 +1191,40 @@ mod tests {
             "test-key".into(),
             256,
             true,
+        );
+
+        let result = chunked_stream.next().await;
+        // In unsigned mode, received fragments are yielded before the truncation is detected.
+        assert!(matches!(result, Some(Ok(_))));
+        let result = chunked_stream.next().await;
+        assert!(matches!(result, Some(Err(AwsChunkedStreamError::Incomplete))));
+    }
+
+    #[tokio::test]
+    async fn test_incomplete_stream_signed() {
+        // Test Incomplete when stream ends before all data is received.
+        // In signed mode, the whole chunk is collected before verification,
+        // so the error surfaces before any data is yielded.
+        let chunk_meta = b"100;chunk-signature=0000000000000000000000000000000000000000000000000000000000000000\r\n";
+        let chunk_data = b"short"; // But only sends 5 bytes
+        let chunk1 = join(&[chunk_meta, chunk_data]); // No closing \r\n, stream will end
+
+        let chunk_results: Vec<Result<Bytes, _>> = vec![Ok(chunk1)];
+
+        let seed_signature = "0000000000000000000000000000000000000000000000000000000000000000";
+        let timestamp = "20130524T000000Z";
+        let date = AmzDate::parse(timestamp).unwrap();
+
+        let stream = futures::stream::iter(chunk_results);
+        let mut chunked_stream = AwsChunkedStream::new(
+            stream,
+            Sha256Sum::from_hex(seed_signature).unwrap(),
+            date,
+            "us-east-1".into(),
+            "s3".into(),
+            "test-key".into(),
+            256,
+            false,
         );
 
         let result = chunked_stream.next().await;
