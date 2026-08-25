@@ -33,10 +33,10 @@ struct Opt {
     #[clap(long)]
     endpoint_url: String,
 
-    /// Enable Signature Version 2 (SigV2) support.
+    /// Enable Signature Version 2 (`SigV2`) support.
     ///
-    /// SigV2 is disabled by default for security. Use this flag to explicitly
-    /// opt-in when testing clients that require SigV2.
+    /// `SigV2` is disabled by default for security. Use this flag to explicitly
+    /// opt-in when testing clients that require `SigV2`.
     #[clap(long)]
     enable_sig_v2: bool,
 }
