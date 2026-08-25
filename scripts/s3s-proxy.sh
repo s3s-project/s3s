@@ -24,4 +24,5 @@ s3s-proxy \
     --host          localhost               \
     --port          8014                    \
     --domain        localhost:8014          \
-    --endpoint-url  http://localhost:9000
+    --endpoint-url  http://localhost:9000   \
+    --enable-sig-v2

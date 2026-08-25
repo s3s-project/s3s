@@ -230,9 +230,9 @@ impl<'a> SignatureContext<'a> {
 
     /// Rejects `SigV2` requests when the `enable_sig_v2` configuration is off.
     ///
-    /// `SigV2` is enabled by default. When disabled, a recognized `SigV2` request
-    /// is rejected with `AccessDenied` (fail-closed) rather than being treated
-    /// as anonymous.
+    /// `SigV2` is disabled by default for security. When disabled, requests that are
+    /// successfully recognized as `SigV2` are rejected with `AccessDenied` (fail-closed)
+    /// rather than being treated as anonymous.
     fn ensure_v2_enabled(&self) -> S3Result<()> {
         let config = self.config.snapshot();
         if !config.enable_sig_v2 {
@@ -1369,14 +1369,14 @@ file content\r\n\
     }
 
     #[tokio::test]
-    async fn sig_v2_enabled_by_default_passes_gate() {
+    async fn sig_v2_passes_gate_when_enabled() {
         let config = sig_v2_test_config(true);
         let method = Method::GET;
         let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
 
-        // With the default config SigV2 is enabled, so the gate passes and the
-        // request proceeds to signature verification; without an auth provider
-        // it fails at the auth lookup with NotImplemented, not AccessDenied.
+        // When SigV2 is explicitly enabled, the gate passes and the request proceeds to
+        // signature verification; without an auth provider it fails at the auth
+        // lookup with NotImplemented, not AccessDenied.
         let headers = headers_from_slice(&[
             ("authorization", "AWS AKIAIOSFODNN7EXAMPLE:qgk2+6Sv9/oM7G3qLEjTH1a1l1g="),
             ("date", "Mon, 26 Nov 2024 00:00:00 GMT"),
@@ -2272,13 +2272,17 @@ file content\r\n\
     #[tokio::test]
     async fn v2_header_auth_returns_no_region() {
         use crate::auth::SecretKey;
-        use crate::config::{S3ConfigProvider, StaticConfigProvider};
+        use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
         use std::sync::Arc;
 
         let access_key = "AKIAIOSFODNN7EXAMPLE";
         let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
         let auth = crate::auth::SimpleAuth::from_single(access_key, secret_key.clone());
-        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+        let config = S3Config {
+            enable_sig_v2: true,
+            ..Default::default()
+        };
+        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(config)));
 
         let date = "Fri, 24 Jan 2030 12:00:00 +0000";
         let hs = headers_from_slice(&[("date", date), ("host", "s3.amazonaws.com")]);

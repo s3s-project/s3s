@@ -2,12 +2,14 @@
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
 use s3s::auth::SimpleAuth;
+use s3s::config::{S3Config, StaticConfigProvider};
 use s3s::host::SingleDomain;
 use s3s::service::S3ServiceBuilder;
 use tokio::net::TcpListener;
 
 use std::error::Error;
 use std::io::IsTerminal;
+use std::sync::Arc;
 
 use aws_credential_types::provider::ProvideCredentials;
 
@@ -30,6 +32,13 @@ struct Opt {
 
     #[clap(long)]
     endpoint_url: String,
+
+    /// Enable Signature Version 2 (`SigV2`) support.
+    ///
+    /// `SigV2` is disabled by default for security. Use this flag to explicitly
+    /// opt-in when testing clients that require `SigV2`.
+    #[clap(long)]
+    enable_sig_v2: bool,
 }
 
 fn setup_tracing() {
@@ -63,6 +72,13 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
         if let Some(cred_provider) = sdk_conf.credentials_provider() {
             let cred = cred_provider.provide_credentials().await?;
             b.set_auth(SimpleAuth::from_single(cred.access_key_id(), cred.secret_access_key()));
+        }
+
+        // Apply configuration
+        {
+            let mut config = S3Config::default();
+            config.enable_sig_v2 = opt.enable_sig_v2;
+            b.set_config(Arc::new(StaticConfigProvider::new(Arc::new(config))));
         }
 
         // Enable parsing virtual-hosted-style requests
