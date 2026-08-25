@@ -38,7 +38,7 @@ use crate::auth::{Credentials, S3Auth};
 use crate::config::S3ConfigProvider;
 use crate::error::*;
 use crate::header;
-use crate::host::S3Host;
+use crate::host::{S3Host, VirtualHost};
 use crate::http::Body;
 use crate::http::{self, BodySizeLimitExceeded};
 use crate::http::{OrderedHeaders, OrderedQs};
@@ -389,14 +389,56 @@ fn inject_host_header(req: &mut Request) {
     }
 }
 
+fn parse_request_path<'a>(
+    req: &mut Request,
+    ccx: &CallContext<'a>,
+    host_header: Option<&'a str>,
+) -> S3Result<(Option<VirtualHost<'a>>, Option<String>)> {
+    let decoded_uri_path = urlencoding::decode(req.uri.path()).map_err(|_| S3ErrorCode::InvalidURI)?;
+
+    let default_validation = &const { AwsNameValidation::new() };
+    let validation = ccx.validation.unwrap_or(default_validation);
+
+    let parsed = if let (Some(host_header), Some(s3_host)) = (host_header, ccx.host)
+        && !is_socket_addr_or_ip_addr(host_header)
+    {
+        debug!(?host_header, ?decoded_uri_path, "parsing virtual-hosted-style request");
+
+        let vh = s3_host.parse_host_header(host_header)?;
+        debug!(?vh);
+
+        let bucket = vh.bucket();
+        let region = vh.region().map(str::to_owned);
+        let path = crate::path::parse_virtual_hosted_style_with_validation_and_normalization(
+            bucket,
+            decoded_uri_path.as_ref(),
+            validation,
+            ccx.config.snapshot().normalize_forward_slash_path,
+        );
+        (Some(vh), region, path)
+    } else {
+        debug!(?decoded_uri_path, "parsing path-style request");
+        let path = crate::path::parse_path_style_with_validation_and_normalization(
+            decoded_uri_path.as_ref(),
+            validation,
+            ccx.config.snapshot().normalize_forward_slash_path,
+        );
+        (None, None, path)
+    };
+
+    let (vh, vh_region, result) = parsed;
+    req.s3ext.s3_path = Some(result.map_err(|err| convert_parse_s3_path_error(&err))?);
+    Ok((vh, vh_region))
+}
+
 fn resolve_operation(
     req: &Request,
     s3_path: &S3Path,
     host_header: Option<&str>,
     ccx: &CallContext<'_>,
 ) -> S3Result<&'static dyn Operation> {
-    match resolve_route(req, s3_path, req.s3ext.qs.as_ref()) {
-        Ok(result) => Ok(result),
+    let op = match resolve_route(req, s3_path, req.s3ext.qs.as_ref()) {
+        Ok(result) => result,
         Err(err) => {
             // When S3Host is absent and the host looks virtual-hosted-style,
             // bucket names in the Host header are lost — any routing failure
@@ -418,9 +460,19 @@ fn resolve_operation(
                 return Err(s3_error!(err, NotImplemented, "{}", VIRTUAL_HOSTED_STYLE_HINT));
             }
             // Not a virtual-hosted-style issue — propagate original error.
-            Err(err)
+            return Err(err);
         }
+    };
+
+    // FIXME: hack for E2E tests (minio/mint)
+    if op.name() == "ListObjects"
+        && let Some(qs) = req.s3ext.qs.as_ref()
+        && qs.has("events")
+    {
+        return Err(s3_error!(NotImplemented, "listenBucketNotification only works on MinIO"));
     }
+
+    Ok(op)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -637,60 +689,18 @@ fn apply_credentials(req: &mut Request, credentials: Option<CredentialsExt>, vh_
     Ok(())
 }
 
-#[allow(clippy::too_many_lines)]
 #[tracing::instrument(level = "debug", skip_all, err)]
 async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> {
     let mut content_length;
-    let host_header: Option<String>;
-    {
-        inject_host_header(req);
 
-        let decoded_uri_path = urlencoding::decode(req.uri.path()).map_err(|_| S3ErrorCode::InvalidURI)?;
+    inject_host_header(req);
+    let host_header = extract_host(req)?;
+    let (vh, vh_region) = parse_request_path(req, ccx, host_header.as_deref())?;
 
-        host_header = extract_host(req)?;
-        let vh;
-        let vh_bucket;
-        let vh_region;
-        {
-            let default_validation = &const { AwsNameValidation::new() };
-            let validation = ccx.validation.unwrap_or(default_validation);
-
-            let result = 'parse: {
-                if let (Some(host_header), Some(s3_host)) = (host_header.as_deref(), ccx.host)
-                    && !is_socket_addr_or_ip_addr(host_header)
-                {
-                    debug!(?host_header, ?decoded_uri_path, "parsing virtual-hosted-style request");
-
-                    vh = s3_host.parse_host_header(host_header)?;
-                    debug!(?vh);
-
-                    vh_bucket = vh.bucket();
-                    vh_region = vh.region().map(str::to_owned);
-                    break 'parse crate::path::parse_virtual_hosted_style_with_validation_and_normalization(
-                        vh_bucket,
-                        decoded_uri_path.as_ref(),
-                        validation,
-                        ccx.config.snapshot().normalize_forward_slash_path,
-                    );
-                }
-
-                debug!(?decoded_uri_path, "parsing path-style request");
-                vh_bucket = None;
-                vh_region = None;
-                crate::path::parse_path_style_with_validation_and_normalization(
-                    decoded_uri_path.as_ref(),
-                    validation,
-                    ccx.config.snapshot().normalize_forward_slash_path,
-                )
-            };
-
-            req.s3ext.s3_path = Some(result.map_err(|err| convert_parse_s3_path_error(&err))?);
-        }
-
-        req.s3ext.qs = extract_qs(&req.uri)?;
-        content_length = extract_content_length(req);
-        content_length = verify_signature(req, ccx, vh_bucket, vh_region.as_deref(), content_length).await?;
-    }
+    req.s3ext.qs = extract_qs(&req.uri)?;
+    content_length = extract_content_length(req);
+    content_length =
+        verify_signature(req, ccx, vh.as_ref().and_then(VirtualHost::bucket), vh_region.as_deref(), content_length).await?;
 
     let s3_path = req.s3ext.s3_path.as_ref().unwrap();
 
@@ -718,14 +728,6 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
         }
         resolve_operation(req, s3_path, host_header.as_deref(), ccx)?
     };
-
-    // FIXME: hack for E2E tests (minio/mint)
-    if op.name() == "ListObjects"
-        && let Some(qs) = req.s3ext.qs.as_ref()
-        && qs.has("events")
-    {
-        return Err(s3_error!(NotImplemented, "listenBucketNotification only works on MinIO"));
-    }
 
     debug!(op = %op.name(), ?s3_path, "resolved route");
 
