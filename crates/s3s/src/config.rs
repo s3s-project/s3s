@@ -169,7 +169,7 @@ pub struct S3Config {
     /// or service. When disabled, requests carrying a `SigV2` signature (header
     /// auth, presigned URL, or POST form) are rejected with `AccessDenied`.
     ///
-    /// Default: false (SigV2 is disabled by default for security)
+    /// Default: false (`SigV2` is disabled by default for security)
     pub enable_sig_v2: bool,
 
     /// Maximum allowed `X-Amz-Expires` value for `SigV4` presigned URLs in seconds.
@@ -334,7 +334,7 @@ mod tests {
         assert_eq!(config.presigned_url_max_skew_time_secs, 900);
         assert_eq!(config.expected_region, None);
         assert_eq!(config.presigned_url_max_expires_secs, DEFAULT_PRESIGNED_URL_MAX_EXPIRES_SECS);
-        assert_eq!(config.enable_sig_v2, false);
+        assert!(!config.enable_sig_v2);
     }
 
     #[test]

@@ -2204,8 +2204,10 @@ file content\r\n\
         let access_key = "AKIAIOSFODNN7EXAMPLE";
         let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
         let auth = crate::auth::SimpleAuth::from_single(access_key, secret_key.clone());
-        let mut config = S3Config::default();
-        config.enable_sig_v2 = true;
+        let config = S3Config {
+            enable_sig_v2: true,
+            ..Default::default()
+        };
         let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(config)));
 
         let date = "Fri, 24 Jan 2030 12:00:00 +0000";
