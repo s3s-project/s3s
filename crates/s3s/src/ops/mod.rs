@@ -446,6 +446,36 @@ async fn authorize(req: &mut Request, ccx: &CallContext<'_>, op_name: &'static s
     Ok(())
 }
 
+fn parse_post_policy(multipart: &crate::http::Multipart) -> S3Result<Option<PostPolicy>> {
+    // Parse POST policy BEFORE reading file stream to prevent resource exhaustion
+    // See https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-HTTPPOSTConstructPolicy.html
+    let Some(policy_b64) = multipart.find_field_value("policy") else {
+        return Ok(None);
+    };
+    let policy =
+        PostPolicy::from_base64(policy_b64).map_err(|e| s3_error!(e, InvalidPolicyDocument, "failed to parse POST policy"))?;
+
+    // Check policy expiration early to avoid reading file if policy is expired
+    // Note: clone is necessary because Into<OffsetDateTime> consumes the Timestamp
+    let expiration_time: time::OffsetDateTime = policy.expiration.clone().into();
+    let now = time::OffsetDateTime::now_utc();
+    if now >= expiration_time {
+        return Err(S3Error::with_message(S3ErrorCode::AccessDenied, "Request has expired"));
+    }
+
+    Ok(Some(policy))
+}
+
+fn post_object_max_file_size(policy: Option<&PostPolicy>, config_max: u64) -> u64 {
+    // Determine file size limit: use stricter of policy max or config max.
+    // Use the minimum of policy max and config max to prevent resource exhaustion.
+    // Note: policy min is validated later in policy.validate()
+    match policy.and_then(PostPolicy::content_length_range) {
+        Some((_, max)) => std::cmp::min(max, config_max),
+        None => config_max,
+    }
+}
+
 #[allow(clippy::too_many_lines)]
 #[tracing::instrument(level = "debug", skip_all, err)]
 async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> {
@@ -624,38 +654,9 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                     // POST object
                     debug!(?multipart);
 
-                    // Parse POST policy BEFORE reading file stream to prevent resource exhaustion
-                    // See https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-HTTPPOSTConstructPolicy.html
-                    let now = time::OffsetDateTime::now_utc();
-                    let policy = if let Some(policy_b64) = multipart.find_field_value("policy") {
-                        let policy = PostPolicy::from_base64(policy_b64)
-                            .map_err(|e| s3_error!(e, InvalidPolicyDocument, "failed to parse POST policy"))?;
-
-                        // Check policy expiration early to avoid reading file if policy is expired
-                        // Note: clone is necessary because Into<OffsetDateTime> consumes the Timestamp
-                        let expiration_time: time::OffsetDateTime = policy.expiration.clone().into();
-                        if now >= expiration_time {
-                            return Err(S3Error::with_message(S3ErrorCode::AccessDenied, "Request has expired"));
-                        }
-
-                        Some(policy)
-                    } else {
-                        None
-                    };
-
-                    // Determine file size limit: use stricter of policy max or config max
-                    let config = ccx.config.snapshot();
-                    let max_file_size = if let Some(ref pol) = policy {
-                        if let Some((_, max)) = pol.content_length_range() {
-                            // Use the minimum of policy max and config max to prevent resource exhaustion
-                            // Note: policy min is validated later in policy.validate()
-                            std::cmp::min(max, config.post_object_max_file_size)
-                        } else {
-                            config.post_object_max_file_size
-                        }
-                    } else {
-                        config.post_object_max_file_size
-                    };
+                    let policy = parse_post_policy(multipart)?;
+                    let max_file_size =
+                        post_object_max_file_size(policy.as_ref(), ccx.config.snapshot().post_object_max_file_size);
 
                     // Prepare the file stream for the operation: forwarded as a
                     // stream when the exact length is known, aggregated otherwise.
