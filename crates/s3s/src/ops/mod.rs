@@ -423,19 +423,29 @@ fn resolve_operation(
     }
 }
 
-async fn authorize(req: &mut Request, ccx: &CallContext<'_>, op_name: &'static str) -> S3Result<()> {
+#[allow(clippy::too_many_arguments)]
+async fn authorize(
+    ccx: &CallContext<'_>,
+    op_name: &'static str,
+    credentials: Option<&Credentials>,
+    s3_path: &S3Path,
+    method: &Method,
+    uri: &Uri,
+    headers: &HeaderMap,
+    extensions: &mut hyper::http::Extensions,
+) -> S3Result<()> {
     if ccx.auth.is_none() {
         return Ok(());
     }
 
     let mut acx = S3AccessContext {
-        credentials: req.s3ext.credentials.as_ref(),
-        s3_path: req.s3ext.s3_path.as_ref().unwrap(),
+        credentials,
+        s3_path,
         s3_op: &crate::S3Operation { name: op_name },
-        method: &req.method,
-        uri: &req.uri,
-        headers: &req.headers,
-        extensions: &mut req.extensions,
+        method,
+        uri,
+        headers,
+        extensions,
     };
 
     match ccx.access {
@@ -692,9 +702,19 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
 
     debug!(op = %op.name(), ?s3_path, "resolved route");
 
-    authorize(req, ccx, op.name()).await?;
-
     let s3_path = req.s3ext.s3_path.as_ref().unwrap();
+    authorize(
+        ccx,
+        op.name(),
+        req.s3ext.credentials.as_ref(),
+        s3_path,
+        &req.method,
+        &req.uri,
+        &req.headers,
+        &mut req.extensions,
+    )
+    .await?;
+
     debug!(op = %op.name(), ?s3_path, "checked access");
 
     if op.needs_full_body() {
