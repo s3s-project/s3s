@@ -3,13 +3,17 @@
 
 use crate::auth::SecretKey;
 use crate::auth::signature::Signature;
-use crate::http::OrderedHeaders;
+use crate::error::*;
+use crate::http;
 use crate::http::OrderedQs;
 use crate::utils::crypto::hmac_sha1;
+use crate::utils::stable_sort_by_first;
 
 use std::ops::Not;
 
+use hyper::HeaderMap;
 use hyper::Method;
+use smallvec::SmallVec;
 
 fn base64(data: impl AsRef<[u8]>) -> String {
     base64_simd::STANDARD.encode_to_string(data)
@@ -68,9 +72,9 @@ pub fn create_string_to_sign(
     method: &Method,
     uri_path: &str,
     qs: Option<&OrderedQs>,
-    headers: &OrderedHeaders<'_>,
+    headers: &HeaderMap,
     virtual_host_bucket: Option<&str>,
-) -> String {
+) -> S3Result<String> {
     let mut ans = String::with_capacity(256);
 
     {
@@ -81,7 +85,7 @@ pub fn create_string_to_sign(
 
     {
         // {Content-MD5}\n
-        if let Some(v) = headers.get_unique("content-md5") {
+        if let Some(v) = http::get_unique_header_str(headers, "content-md5") {
             ans.push_str(v);
         }
         ans.push('\n');
@@ -89,7 +93,7 @@ pub fn create_string_to_sign(
 
     {
         // {Content-Type}\n
-        if let Some(v) = headers.get_unique("content-type") {
+        if let Some(v) = http::get_unique_header_str(headers, "content-type") {
             ans.push_str(v);
         }
         ans.push('\n');
@@ -100,8 +104,8 @@ pub fn create_string_to_sign(
         Mode::HeaderAuth => {
             //  "if you include the x-amz-date header, use the empty string
             //      for the Date when constructing the StringToSign."
-            let mut date = headers.get_unique("date").unwrap_or_default();
-            if headers.get_unique("x-amz-date").is_some() {
+            let mut date = http::get_unique_header_str(headers, "date").unwrap_or_default();
+            if http::get_unique_header_str(headers, "x-amz-date").is_some() {
                 date = "";
             }
             ans.push_str(date);
@@ -117,29 +121,38 @@ pub fn create_string_to_sign(
 
     {
         // {CanonicalizedAmzHeaders}
-        let mut last = "";
-        for &(name, _) in headers.as_ref() {
+        let mut amz_headers = SmallVec::<[(&str, &str); 8]>::new();
+        for (name, value) in headers {
+            let name = name.as_str();
             if name.starts_with("x-amz-").not() {
                 continue;
             }
-            if name == last {
-                continue;
+            if let Some(value) = http::header_value_to_str(value) {
+                amz_headers.push((name, value));
+            } else {
+                return Err(s3_error!(SignatureDoesNotMatch, "invalid header: {name}"));
             }
-            last = name;
+        }
+        stable_sort_by_first(&mut amz_headers);
+
+        let mut i = 0;
+        while i < amz_headers.len() {
+            let (name, value) = amz_headers[i];
 
             ans.push_str(name);
             ans.push(':');
 
-            let mut iter = headers.get_all(name);
-            let first = iter.next().unwrap();
-            ans.push_str(first.trim());
+            ans.push_str(value.trim());
 
-            for value in iter {
+            let mut j = i + 1;
+            while j < amz_headers.len() && amz_headers[j].0 == name {
                 ans.push(',');
-                ans.push_str(value.trim());
+                ans.push_str(amz_headers[j].1.trim());
+                j += 1;
             }
 
             ans.push('\n');
+            i = j;
         }
     }
 
@@ -173,18 +186,46 @@ pub fn create_string_to_sign(
         }
     }
 
-    ans
+    Ok(ans)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    use hyper::header::{HeaderName, HeaderValue};
+
+    fn headers_from_slice(slice: &[(&str, &str)]) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        for &(name, value) in slice {
+            headers.append(
+                HeaderName::from_bytes(name.as_bytes()).expect("valid test header name"),
+                HeaderValue::from_bytes(value.as_bytes()).expect("valid test header value"),
+            );
+        }
+        headers
+    }
+
     #[test]
     fn sorted() {
         for w in INCLUDED_QUERY.windows(2) {
             assert!(w[0] < w[1], "{w:?}");
         }
+    }
+
+    #[test]
+    fn rejects_non_utf8_amz_header() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            HeaderName::from_static("x-amz-meta-name"),
+            HeaderValue::from_bytes(b"JULI\xC1N").expect("valid opaque header value"),
+        );
+
+        let err = create_string_to_sign(Mode::HeaderAuth, &Method::GET, "/bucket/key", None, &headers, None)
+            .expect_err("non-UTF-8 x-amz headers must fail signature verification");
+
+        assert_eq!(err.code(), &S3ErrorCode::SignatureDoesNotMatch);
+        assert_eq!(err.message(), Some("invalid header: x-amz-meta-name"));
     }
 
     #[allow(clippy::too_many_lines)]
@@ -197,11 +238,11 @@ mod tests {
             // Object GET
             let method = &Method::GET;
             let uri_path = "/photos/puppy.jpg";
-            let headers = OrderedHeaders::from_slice_unchecked(&[("date", "Tue, 27 Mar 2007 19:36:42 +0000")]);
+            let headers = headers_from_slice(&[("date", "Tue, 27 Mar 2007 19:36:42 +0000")]);
             let qs = None;
             let vh_bucket = Some("awsexamplebucket1");
 
-            let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket);
+            let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket).unwrap();
             let signature = calculate_signature(&secret_key, &string_to_sign);
 
             assert_eq!(
@@ -222,14 +263,11 @@ mod tests {
             // Object PUT
             let method = &Method::PUT;
             let uri_path = "/photos/puppy.jpg";
-            let headers = OrderedHeaders::from_slice_unchecked(&[
-                ("content-type", "image/jpeg"),
-                ("date", "Tue, 27 Mar 2007 21:15:45 +0000"),
-            ]);
+            let headers = headers_from_slice(&[("content-type", "image/jpeg"), ("date", "Tue, 27 Mar 2007 21:15:45 +0000")]);
             let qs = None;
             let vh_bucket = Some("awsexamplebucket1");
 
-            let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket);
+            let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket).unwrap();
             let signature = calculate_signature(&secret_key, &string_to_sign);
 
             assert_eq!(
@@ -250,11 +288,11 @@ mod tests {
             // List
             let method = &Method::GET;
             let uri_path = "/";
-            let headers = OrderedHeaders::from_slice_unchecked(&[("date", "Tue, 27 Mar 2007 19:42:41 +0000")]);
+            let headers = headers_from_slice(&[("date", "Tue, 27 Mar 2007 19:42:41 +0000")]);
             let qs = None;
             let vh_bucket = Some("awsexamplebucket1");
 
-            let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket);
+            let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket).unwrap();
             let signature = calculate_signature(&secret_key, &string_to_sign);
 
             assert_eq!(
@@ -276,10 +314,11 @@ mod tests {
             let method = &Method::GET;
             let uri_path = "/";
             let qs = OrderedQs::from_vec_unchecked(vec![("acl".into(), String::new())]);
-            let headers = OrderedHeaders::from_slice_unchecked(&[("date", "Tue, 27 Mar 2007 19:44:46 +0000")]);
+            let headers = headers_from_slice(&[("date", "Tue, 27 Mar 2007 19:44:46 +0000")]);
             let vh_bucket = Some("awsexamplebucket1");
 
-            let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, Some(&qs), &headers, vh_bucket);
+            let string_to_sign =
+                create_string_to_sign(Mode::HeaderAuth, method, uri_path, Some(&qs), &headers, vh_bucket).unwrap();
             let signature = calculate_signature(&secret_key, &string_to_sign);
 
             assert_eq!(
@@ -300,14 +339,14 @@ mod tests {
             // Delete
             let method = &Method::DELETE;
             let uri_path = "/awsexamplebucket1/photos/puppy.jpg";
-            let headers = OrderedHeaders::from_slice_unchecked(&[
+            let headers = headers_from_slice(&[
                 ("date", "Tue, 27 Mar 2007 21:20:27 +0000"),
                 ("x-amz-date", "Tue, 27 Mar 2007 21:20:26 +0000"),
             ]);
             let qs = None;
             let vh_bucket = None;
 
-            let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket);
+            let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket).unwrap();
             let signature = calculate_signature(&secret_key, &string_to_sign);
 
             assert_eq!(
@@ -331,7 +370,7 @@ mod tests {
             // Upload
             let method = &Method::PUT;
             let uri_path = "/db-backup.dat.gz";
-            let headers = OrderedHeaders::from_slice_unchecked(&[
+            let headers = headers_from_slice(&[
                 ("date", "Tue, 27 Mar 2007 21:06:08 +0000"),
                 ("x-amz-acl", "public-read"),
                 ("content-type", "application/x-download"),
@@ -347,7 +386,7 @@ mod tests {
             let qs = None;
             let vh_bucket = Some("static.example.com");
 
-            let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket);
+            let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket).unwrap();
             let signature = calculate_signature(&secret_key, &string_to_sign);
 
             assert_eq!(
@@ -373,11 +412,11 @@ mod tests {
             // List all my buckets
             let method = &Method::GET;
             let uri_path = "/";
-            let headers = OrderedHeaders::from_slice_unchecked(&[("date", "Wed, 28 Mar 2007 01:29:59 +0000")]);
+            let headers = headers_from_slice(&[("date", "Wed, 28 Mar 2007 01:29:59 +0000")]);
             let qs = None;
             let vh_bucket = None;
 
-            let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket);
+            let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket).unwrap();
             let signature = calculate_signature(&secret_key, &string_to_sign);
 
             assert_eq!(
@@ -398,11 +437,11 @@ mod tests {
             // Unicode keys
             let method = &Method::GET;
             let uri_path = "/dictionary/fran%C3%A7ais/pr%c3%a9f%c3%a8re";
-            let headers = OrderedHeaders::from_slice_unchecked(&[("date", "Wed, 28 Mar 2007 01:49:49 +0000")]);
+            let headers = headers_from_slice(&[("date", "Wed, 28 Mar 2007 01:49:49 +0000")]);
             let qs = None;
             let vh_bucket = None;
 
-            let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket);
+            let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket).unwrap();
             let signature = calculate_signature(&secret_key, &string_to_sign);
 
             assert_eq!(
@@ -423,7 +462,7 @@ mod tests {
             // Query string request authentication
             let method = &Method::GET;
             let uri_path = "/photos/puppy.jpg";
-            let headers = OrderedHeaders::default();
+            let headers = HeaderMap::new();
             let qs = OrderedQs::parse(concat!(
                 "AWSAccessKeyId=AKIAIOSFODNN7EXAMPLE",
                 // "&Signature=NpgCjnDzrM%2BWFzoENXmpNDUsSn8%3D", // The example is wrong?
@@ -436,7 +475,8 @@ mod tests {
             let presigned_url = super::super::PresignedUrlV2::parse(&qs).unwrap();
             assert_eq!(presigned_url.access_key, access_key);
 
-            let string_to_sign = create_string_to_sign(Mode::PresignedUrl, method, uri_path, Some(&qs), &headers, vh_bucket);
+            let string_to_sign =
+                create_string_to_sign(Mode::PresignedUrl, method, uri_path, Some(&qs), &headers, vh_bucket).unwrap();
             let signature = calculate_signature(&secret_key, &string_to_sign);
 
             assert_eq!(
@@ -468,14 +508,14 @@ mod tests {
         // and x-amz-date must appear in canonicalized headers
         let method = &Method::GET;
         let uri_path = "/mybucket/myobject";
-        let headers = OrderedHeaders::from_slice_unchecked(&[
+        let headers = headers_from_slice(&[
             ("date", "Thu, 14 Mar 2024 12:00:00 +0000"),
             ("x-amz-date", "Thu, 14 Mar 2024 12:00:00 +0000"),
         ]);
         let qs = None;
         let vh_bucket = None;
 
-        let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket);
+        let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket).unwrap();
 
         // Date field must be empty when x-amz-date is present
         assert_eq!(
@@ -505,11 +545,11 @@ mod tests {
         // Virtual-hosted-style: URI path is "/key" and bucket is prepended
         let method = &Method::GET;
         let uri_path = "/myobject";
-        let headers = OrderedHeaders::from_slice_unchecked(&[("date", "Thu, 14 Mar 2024 12:00:00 +0000")]);
+        let headers = headers_from_slice(&[("date", "Thu, 14 Mar 2024 12:00:00 +0000")]);
         let qs = None;
         let vh_bucket = Some("mybucket");
 
-        let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket);
+        let string_to_sign = create_string_to_sign(Mode::HeaderAuth, method, uri_path, qs, &headers, vh_bucket).unwrap();
 
         assert_eq!(
             string_to_sign,
@@ -530,11 +570,11 @@ mod tests {
 
         let method = &Method::GET;
         let uri_path = "/myobject";
-        let headers = OrderedHeaders::from_slice_unchecked(&[("date", "Thu, 14 Mar 2024 12:00:00 +0000")]);
+        let headers = headers_from_slice(&[("date", "Thu, 14 Mar 2024 12:00:00 +0000")]);
         let qs = OrderedQs::from_vec_unchecked(vec![("Expires".into(), "1710417600".into())]);
         let vh_bucket = Some("mybucket");
 
-        let string_to_sign = create_string_to_sign(Mode::PresignedUrl, method, uri_path, Some(&qs), &headers, vh_bucket);
+        let string_to_sign = create_string_to_sign(Mode::PresignedUrl, method, uri_path, Some(&qs), &headers, vh_bucket).unwrap();
 
         // In presigned URL mode, the date line should be the Expires value from the query string
         assert_eq!(

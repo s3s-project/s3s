@@ -40,8 +40,8 @@ use crate::error::*;
 use crate::header;
 use crate::host::{S3Host, VirtualHost};
 use crate::http::Body;
+use crate::http::OrderedQs;
 use crate::http::{self, BodySizeLimitExceeded};
-use crate::http::{OrderedHeaders, OrderedQs};
 use crate::http::{Request, Response};
 use crate::path::{ParseS3PathError, S3Path};
 use crate::post_policy::PostPolicy;
@@ -211,12 +211,8 @@ fn check_query_pattern(qs: &OrderedQs, name: &str, val: &str) -> bool {
     }
 }
 
-fn extract_headers(headers: &HeaderMap) -> OrderedHeaders<'_> {
-    OrderedHeaders::from_headers(headers)
-}
-
-fn extract_mime(hs: &OrderedHeaders<'_>) -> Option<Mime> {
-    let content_type = hs.get_unique(crate::header::CONTENT_TYPE)?;
+fn extract_mime(headers: &HeaderMap) -> Option<Mime> {
+    let content_type = http::get_unique_header_str(headers, crate::header::CONTENT_TYPE.as_str())?;
 
     // https://github.com/s3s-project/s3s/issues/361
     if content_type.is_empty() {
@@ -232,8 +228,10 @@ fn extract_content_length(req: &Request) -> Option<u64> {
         .and_then(|val| atoi::atoi::<u64>(val.as_bytes()))
 }
 
-fn extract_decoded_content_length(hs: &'_ OrderedHeaders<'_>) -> S3Result<Option<usize>> {
-    let Some(val) = hs.get_unique(crate::header::X_AMZ_DECODED_CONTENT_LENGTH) else { return Ok(None) };
+fn extract_decoded_content_length(headers: &'_ HeaderMap) -> S3Result<Option<usize>> {
+    let Some(val) = http::get_unique_header_str(headers, crate::header::X_AMZ_DECODED_CONTENT_LENGTH.as_str()) else {
+        return Ok(None);
+    };
     let x = atoi::atoi::<u64>(val.as_bytes())
         .and_then(|n| usize::try_from(n).ok())
         .ok_or_else(|| invalid_request!("invalid header: x-amz-decoded-content-length"))?;
@@ -575,9 +573,8 @@ async fn verify_signature(
 ) -> S3Result<Option<u64>> {
     let decoded_uri_path = urlencoding::decode(req.uri.path()).map_err(|_| S3ErrorCode::InvalidURI)?;
 
-    let hs = extract_headers(&req.headers);
-    let mime = extract_mime(&hs);
-    let decoded_content_length = extract_decoded_content_length(&hs)?;
+    let mime = extract_mime(&req.headers);
+    let decoded_content_length = extract_decoded_content_length(&req.headers)?;
 
     let mut scx = SignatureContext {
         auth: ccx.auth,
@@ -589,7 +586,7 @@ async fn verify_signature(
         req_body: &mut req.body,
 
         qs: req.s3ext.qs.as_ref(),
-        hs,
+        hs: &req.headers,
 
         decoded_uri_path: &decoded_uri_path,
         raw_uri_path: req.uri.path(),
