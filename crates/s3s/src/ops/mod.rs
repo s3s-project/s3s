@@ -19,7 +19,7 @@ cfg_if::cfg_if! {
 pub use self::generated::*;
 
 mod signature;
-use self::signature::SignatureContext;
+use self::signature::{CredentialsExt, SignatureContext};
 
 mod get_object;
 mod multipart;
@@ -38,7 +38,7 @@ use crate::auth::{Credentials, S3Auth};
 use crate::config::S3ConfigProvider;
 use crate::error::*;
 use crate::header;
-use crate::host::S3Host;
+use crate::host::{S3Host, VirtualHost};
 use crate::http::Body;
 use crate::http::{self, BodySizeLimitExceeded};
 use crate::http::{OrderedHeaders, OrderedQs};
@@ -372,180 +372,337 @@ enum Prepare {
     CustomRoute,
 }
 
-#[allow(clippy::too_many_lines)]
+fn inject_host_header(req: &mut Request) {
+    // HTTP/2 and HTTP/3 replace the Host header with the :authority pseudo-header.
+    // hyper exposes :authority via uri.authority() but does not insert a Host entry
+    // into the header map. For SigV4 (including presigned SigV4), the `host` header
+    // is part of the canonical request, so inject it here for uniform handling.
+    // This is primarily needed for SigV4 header canonicalization; SigV2 does not
+    // include `Host` in its string-to-sign. Only do this for HTTP/2+ to avoid
+    // synthesizing a Host header for HTTP/1.x requests that happen to use
+    // absolute-form URIs.
+    if !req.headers.contains_key(hyper::header::HOST)
+        && let Some(authority) = extract_http2_authority(req)
+        && let Ok(val) = hyper::header::HeaderValue::from_str(authority)
+    {
+        req.headers.insert(hyper::header::HOST, val);
+    }
+}
+
+fn parse_request_path<'a>(
+    req: &mut Request,
+    ccx: &CallContext<'a>,
+    host_header: Option<&'a str>,
+) -> S3Result<(Option<VirtualHost<'a>>, Option<String>)> {
+    let decoded_uri_path = urlencoding::decode(req.uri.path()).map_err(|_| S3ErrorCode::InvalidURI)?;
+
+    let default_validation = &const { AwsNameValidation::new() };
+    let validation = ccx.validation.unwrap_or(default_validation);
+
+    let parsed = if let (Some(host_header), Some(s3_host)) = (host_header, ccx.host)
+        && !is_socket_addr_or_ip_addr(host_header)
+    {
+        debug!(?host_header, ?decoded_uri_path, "parsing virtual-hosted-style request");
+
+        let vh = s3_host.parse_host_header(host_header)?;
+        debug!(?vh);
+
+        let bucket = vh.bucket();
+        let region = vh.region().map(str::to_owned);
+        let path = crate::path::parse_virtual_hosted_style_with_validation_and_normalization(
+            bucket,
+            decoded_uri_path.as_ref(),
+            validation,
+            ccx.config.snapshot().normalize_forward_slash_path,
+        );
+        (Some(vh), region, path)
+    } else {
+        debug!(?decoded_uri_path, "parsing path-style request");
+        let path = crate::path::parse_path_style_with_validation_and_normalization(
+            decoded_uri_path.as_ref(),
+            validation,
+            ccx.config.snapshot().normalize_forward_slash_path,
+        );
+        (None, None, path)
+    };
+
+    let (vh, vh_region, result) = parsed;
+    req.s3ext.s3_path = Some(result.map_err(|err| convert_parse_s3_path_error(&err))?);
+    Ok((vh, vh_region))
+}
+
+fn resolve_operation(
+    req: &Request,
+    s3_path: &S3Path,
+    host_header: Option<&str>,
+    ccx: &CallContext<'_>,
+) -> S3Result<&'static dyn Operation> {
+    let op = match resolve_route(req, s3_path, req.s3ext.qs.as_ref()) {
+        Ok(result) => result,
+        Err(err) => {
+            // When S3Host is absent and the host looks virtual-hosted-style,
+            // bucket names in the Host header are lost — any routing failure
+            // is likely caused by this mismatch.  Give an actionable error.
+            if err.code() == &S3ErrorCode::NotImplemented
+                && ccx.host.is_none()
+                && let Some(host_header) = host_header
+                && looks_like_virtual_hosted_style(host_header)
+            {
+                warn!(
+                    ?host_header,
+                    ?s3_path,
+                    "request may be using virtual-hosted-style addressing; \
+                     no S3 host parser is configured. \
+                     Consider enabling an S3Host implementation if virtual-hosted-style \
+                     requests need to be handled by this endpoint."
+                );
+
+                return Err(s3_error!(err, NotImplemented, "{}", VIRTUAL_HOSTED_STYLE_HINT));
+            }
+            // Not a virtual-hosted-style issue — propagate original error.
+            return Err(err);
+        }
+    };
+
+    // FIXME: hack for E2E tests (minio/mint)
+    if op.name() == "ListObjects"
+        && let Some(qs) = req.s3ext.qs.as_ref()
+        && qs.has("events")
+    {
+        return Err(s3_error!(NotImplemented, "listenBucketNotification only works on MinIO"));
+    }
+
+    Ok(op)
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn authorize(
+    ccx: &CallContext<'_>,
+    op_name: &'static str,
+    credentials: Option<&Credentials>,
+    s3_path: &S3Path,
+    method: &Method,
+    uri: &Uri,
+    headers: &HeaderMap,
+    extensions: &mut hyper::http::Extensions,
+) -> S3Result<()> {
+    if ccx.auth.is_none() {
+        return Ok(());
+    }
+
+    let mut acx = S3AccessContext {
+        credentials,
+        s3_path,
+        s3_op: &crate::S3Operation { name: op_name },
+        method,
+        uri,
+        headers,
+        extensions,
+    };
+
+    match ccx.access {
+        Some(access) => access.check(&mut acx).await?,
+        None => crate::access::default_check(&mut acx)?,
+    }
+
+    Ok(())
+}
+
+fn parse_post_policy(multipart: &crate::http::Multipart) -> S3Result<Option<PostPolicy>> {
+    // Parse POST policy BEFORE reading file stream to prevent resource exhaustion
+    // See https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-HTTPPOSTConstructPolicy.html
+    let Some(policy_b64) = multipart.find_field_value("policy") else {
+        return Ok(None);
+    };
+    let policy =
+        PostPolicy::from_base64(policy_b64).map_err(|e| s3_error!(e, InvalidPolicyDocument, "failed to parse POST policy"))?;
+
+    // Check policy expiration early to avoid reading file if policy is expired
+    // Note: clone is necessary because Into<OffsetDateTime> consumes the Timestamp
+    let expiration_time: time::OffsetDateTime = policy.expiration.clone().into();
+    let now = time::OffsetDateTime::now_utc();
+    if now >= expiration_time {
+        return Err(S3Error::with_message(S3ErrorCode::AccessDenied, "Request has expired"));
+    }
+
+    Ok(Some(policy))
+}
+
+fn post_object_max_file_size(policy: Option<&PostPolicy>, config_max: u64) -> u64 {
+    // Determine file size limit: use stricter of policy max or config max.
+    // Use the minimum of policy max and config max to prevent resource exhaustion.
+    // Note: policy min is validated later in policy.validate()
+    match policy.and_then(PostPolicy::content_length_range) {
+        Some((_, max)) => std::cmp::min(max, config_max),
+        None => config_max,
+    }
+}
+
+async fn resolve_post_object(
+    ccx: &CallContext<'_>,
+    bucket: &str,
+    multipart: &mut crate::http::Multipart,
+) -> S3Result<(crate::stream::DynByteStream, Option<PostPolicy>)> {
+    debug!(?multipart);
+
+    let policy = parse_post_policy(multipart)?;
+    let max_file_size = post_object_max_file_size(policy.as_ref(), ccx.config.snapshot().post_object_max_file_size);
+
+    // Prepare the file stream for the operation: forwarded as a
+    // stream when the exact length is known, aggregated otherwise.
+    let file_stream = multipart.take_file_stream().expect("missing file stream");
+    let (post_stream, file_size) = prepare_post_object_stream(file_stream, max_file_size).await?;
+
+    // Validate the policy conditions (if policy exists)
+    // Note: expiration was already checked above before reading the file
+    // Pass the URL bucket so that the "bucket" condition can be validated
+    // even when clients (like boto3) don't include it in form fields.
+    let mut policy_out = None;
+    if let Some(policy) = policy {
+        policy.validate_conditions_only(multipart, file_size, Some(bucket))?;
+        policy_out = Some(policy);
+    }
+
+    Ok((post_stream, policy_out))
+}
+
+async fn verify_signature(
+    req: &mut Request,
+    ccx: &CallContext<'_>,
+    vh_bucket: Option<&str>,
+    vh_region: Option<&str>,
+    mut content_length: Option<u64>,
+) -> S3Result<Option<u64>> {
+    let decoded_uri_path = urlencoding::decode(req.uri.path()).map_err(|_| S3ErrorCode::InvalidURI)?;
+
+    let hs = extract_headers(&req.headers);
+    let mime = extract_mime(&hs);
+    let decoded_content_length = extract_decoded_content_length(&hs)?;
+
+    let mut scx = SignatureContext {
+        auth: ccx.auth,
+        config: ccx.config,
+
+        req_version: req.version,
+        req_method: &req.method,
+        req_uri: &req.uri,
+        req_body: &mut req.body,
+
+        qs: req.s3ext.qs.as_ref(),
+        hs,
+
+        decoded_uri_path: &decoded_uri_path,
+        raw_uri_path: req.uri.path(),
+        vh_bucket,
+
+        content_length,
+        decoded_content_length,
+        mime,
+
+        multipart: None,
+        transformed_body: None,
+        trailing_headers: None,
+    };
+
+    let credentials = scx.check().await?;
+
+    // Harvest the outputs to release all borrows of `req` held by `scx`
+    // before mutating its fields below.
+    let transformed_body = scx.transformed_body;
+    let multipart = scx.multipart;
+    let trailing_headers = scx.trailing_headers;
+
+    req.s3ext.multipart = multipart;
+    req.s3ext.trailing_headers = trailing_headers;
+
+    apply_credentials(req, credentials, vh_region)?;
+
+    let body_changed = transformed_body.is_some() || req.s3ext.multipart.is_some();
+
+    if body_changed {
+        // invalidate the original content length
+        if let Some(val) = req.headers.get_mut(header::CONTENT_LENGTH) {
+            *val = fmt_content_length(decoded_content_length.unwrap_or(0));
+        }
+        content_length = content_length.map(|_| 0);
+    }
+    if let Some(body) = transformed_body {
+        req.body = body;
+    }
+
+    debug!(?body_changed, ?decoded_content_length, has_multipart = req.s3ext.multipart.is_some());
+
+    Ok(content_length)
+}
+
+fn apply_credentials(req: &mut Request, credentials: Option<CredentialsExt>, vh_region: Option<&str>) -> S3Result<()> {
+    match credentials {
+        Some(cred) => {
+            req.s3ext.credentials = Some(Credentials {
+                access_key: cred.access_key,
+                secret_key: cred.secret_key,
+            });
+
+            let cred_region = cred
+                .region
+                .filter(|s| !s.is_empty())
+                .map(|s| crate::region::Region::new(s.into()))
+                .transpose()
+                .map_err(|e| invalid_request!("invalid credential region: {e}"))?;
+
+            // When both the signature credential and S3Host supply a region,
+            // the credential region is authoritative (it was verified by the
+            // signature check). Log a debug warning if they disagree so that
+            // misconfigured clients or hosts are visible in traces.
+            if let Some(cred_region) = &cred_region
+                && let Some(host_region) = vh_region
+                && cred_region.as_str() != host_region
+            {
+                debug!(
+                    cred_region = %cred_region,
+                    host_region = %host_region,
+                    "credential region and virtual-host region differ; \
+                     using credential region"
+                );
+            }
+
+            req.s3ext.region = cred_region;
+            req.s3ext.service = cred.service;
+        }
+        None => {
+            req.s3ext.credentials = None;
+            req.s3ext.region = None;
+            req.s3ext.service = None;
+        }
+    }
+
+    // Fallback: if no region was determined from the signature credential
+    // (anonymous requests, SigV2), use the region provided by S3Host.
+    if req.s3ext.region.is_none() {
+        req.s3ext.region = vh_region
+            .filter(|s| !s.is_empty())
+            .map(|s| crate::region::Region::new(s.into()))
+            .transpose()
+            .map_err(|e| invalid_request!("invalid host region: {e}"))?;
+    }
+
+    Ok(())
+}
+
 #[tracing::instrument(level = "debug", skip_all, err)]
 async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> {
-    let s3_path;
     let mut content_length;
-    let host_header: Option<String>;
-    {
-        // HTTP/2 and HTTP/3 replace the Host header with the :authority pseudo-header.
-        // hyper exposes :authority via uri.authority() but does not insert a Host entry
-        // into the header map. For SigV4 (including presigned SigV4), the `host` header
-        // is part of the canonical request, so inject it here for uniform handling.
-        // This is primarily needed for SigV4 header canonicalization; SigV2 does not
-        // include `Host` in its string-to-sign. Only do this for HTTP/2+ to avoid
-        // synthesizing a Host header for HTTP/1.x requests that happen to use
-        // absolute-form URIs.
-        if !req.headers.contains_key(hyper::header::HOST)
-            && let Some(authority) = extract_http2_authority(req)
-            && let Ok(val) = hyper::header::HeaderValue::from_str(authority)
-        {
-            req.headers.insert(hyper::header::HOST, val);
-        }
 
-        let decoded_uri_path = urlencoding::decode(req.uri.path()).map_err(|_| S3ErrorCode::InvalidURI)?;
+    inject_host_header(req);
+    let host_header = extract_host(req)?;
+    let (vh, vh_region) = parse_request_path(req, ccx, host_header.as_deref())?;
 
-        host_header = extract_host(req)?;
-        let vh;
-        let vh_bucket;
-        let vh_region;
-        {
-            let default_validation = &const { AwsNameValidation::new() };
-            let validation = ccx.validation.unwrap_or(default_validation);
+    req.s3ext.qs = extract_qs(&req.uri)?;
+    content_length = extract_content_length(req);
+    content_length =
+        verify_signature(req, ccx, vh.as_ref().and_then(VirtualHost::bucket), vh_region.as_deref(), content_length).await?;
 
-            let result = 'parse: {
-                if let (Some(host_header), Some(s3_host)) = (host_header.as_deref(), ccx.host)
-                    && !is_socket_addr_or_ip_addr(host_header)
-                {
-                    debug!(?host_header, ?decoded_uri_path, "parsing virtual-hosted-style request");
-
-                    vh = s3_host.parse_host_header(host_header)?;
-                    debug!(?vh);
-
-                    vh_bucket = vh.bucket();
-                    vh_region = vh.region().map(str::to_owned);
-                    break 'parse crate::path::parse_virtual_hosted_style_with_validation_and_normalization(
-                        vh_bucket,
-                        decoded_uri_path.as_ref(),
-                        validation,
-                        ccx.config.snapshot().normalize_forward_slash_path,
-                    );
-                }
-
-                debug!(?decoded_uri_path, "parsing path-style request");
-                vh_bucket = None;
-                vh_region = None;
-                crate::path::parse_path_style_with_validation_and_normalization(
-                    decoded_uri_path.as_ref(),
-                    validation,
-                    ccx.config.snapshot().normalize_forward_slash_path,
-                )
-            };
-
-            req.s3ext.s3_path = Some(result.map_err(|err| convert_parse_s3_path_error(&err))?);
-            s3_path = req.s3ext.s3_path.as_ref().unwrap();
-        }
-
-        req.s3ext.qs = extract_qs(&req.uri)?;
-        content_length = extract_content_length(req);
-
-        let hs = extract_headers(&req.headers);
-        let mime = extract_mime(&hs);
-        let decoded_content_length = extract_decoded_content_length(&hs)?;
-
-        let body_changed;
-        let transformed_body;
-        {
-            let mut scx = SignatureContext {
-                auth: ccx.auth,
-                config: ccx.config,
-
-                req_version: req.version,
-                req_method: &req.method,
-                req_uri: &req.uri,
-                req_body: &mut req.body,
-
-                qs: req.s3ext.qs.as_ref(),
-                hs,
-
-                decoded_uri_path: &decoded_uri_path,
-                raw_uri_path: req.uri.path(),
-                vh_bucket,
-
-                content_length,
-                decoded_content_length,
-                mime,
-
-                multipart: None,
-                transformed_body: None,
-                trailing_headers: None,
-            };
-
-            let credentials = scx.check().await?;
-
-            body_changed = scx.transformed_body.is_some() || scx.multipart.is_some();
-            transformed_body = scx.transformed_body;
-
-            req.s3ext.multipart = scx.multipart;
-            req.s3ext.trailing_headers = scx.trailing_headers;
-
-            match credentials {
-                Some(cred) => {
-                    req.s3ext.credentials = Some(Credentials {
-                        access_key: cred.access_key,
-                        secret_key: cred.secret_key,
-                    });
-
-                    let cred_region = cred
-                        .region
-                        .filter(|s| !s.is_empty())
-                        .map(|s| crate::region::Region::new(s.into()))
-                        .transpose()
-                        .map_err(|e| invalid_request!("invalid credential region: {e}"))?;
-
-                    // When both the signature credential and S3Host supply a region,
-                    // the credential region is authoritative (it was verified by the
-                    // signature check). Log a debug warning if they disagree so that
-                    // misconfigured clients or hosts are visible in traces.
-                    if let (Some(cred_region), Some(host_region)) = (&cred_region, &vh_region)
-                        && cred_region.as_str() != host_region.as_str()
-                    {
-                        debug!(
-                            cred_region = %cred_region,
-                            host_region = %host_region,
-                            "credential region and virtual-host region differ; \
-                             using credential region"
-                        );
-                    }
-
-                    req.s3ext.region = cred_region;
-                    req.s3ext.service = cred.service;
-                }
-                None => {
-                    req.s3ext.credentials = None;
-                    req.s3ext.region = None;
-                    req.s3ext.service = None;
-                }
-            }
-
-            // Fallback: if no region was determined from the signature credential
-            // (anonymous requests, SigV2), use the region provided by S3Host.
-            if req.s3ext.region.is_none() {
-                req.s3ext.region = vh_region
-                    .filter(|s| !s.is_empty())
-                    .map(|s| crate::region::Region::new(s.into()))
-                    .transpose()
-                    .map_err(|e| invalid_request!("invalid host region: {e}"))?;
-            }
-        }
-
-        if body_changed {
-            // invalidate the original content length
-            if let Some(val) = req.headers.get_mut(header::CONTENT_LENGTH) {
-                *val = fmt_content_length(decoded_content_length.unwrap_or(0));
-            }
-            if let Some(val) = &mut content_length {
-                *val = 0;
-            }
-        }
-        if let Some(body) = transformed_body {
-            req.body = body;
-        }
-
-        let has_multipart = req.s3ext.multipart.is_some();
-        debug!(?body_changed, ?decoded_content_length, ?has_multipart);
-    }
+    let s3_path = req.s3ext.s3_path.as_ref().unwrap();
 
     if let Some(route) = ccx.route
         && route.is_match(&req.method, &req.uri, &req.headers, &mut req.extensions)
@@ -560,116 +717,32 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
             match s3_path {
                 S3Path::Root => return Err(unknown_operation()),
                 S3Path::Bucket { bucket } => {
-                    // POST object
-                    debug!(?multipart);
-
-                    // Parse POST policy BEFORE reading file stream to prevent resource exhaustion
-                    // See https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-HTTPPOSTConstructPolicy.html
-                    let now = time::OffsetDateTime::now_utc();
-                    let policy = if let Some(policy_b64) = multipart.find_field_value("policy") {
-                        let policy = PostPolicy::from_base64(policy_b64)
-                            .map_err(|e| s3_error!(e, InvalidPolicyDocument, "failed to parse POST policy"))?;
-
-                        // Check policy expiration early to avoid reading file if policy is expired
-                        // Note: clone is necessary because Into<OffsetDateTime> consumes the Timestamp
-                        let expiration_time: time::OffsetDateTime = policy.expiration.clone().into();
-                        if now >= expiration_time {
-                            return Err(S3Error::with_message(S3ErrorCode::AccessDenied, "Request has expired"));
-                        }
-
-                        Some(policy)
-                    } else {
-                        None
-                    };
-
-                    // Determine file size limit: use stricter of policy max or config max
-                    let config = ccx.config.snapshot();
-                    let max_file_size = if let Some(ref pol) = policy {
-                        if let Some((_, max)) = pol.content_length_range() {
-                            // Use the minimum of policy max and config max to prevent resource exhaustion
-                            // Note: policy min is validated later in policy.validate()
-                            std::cmp::min(max, config.post_object_max_file_size)
-                        } else {
-                            config.post_object_max_file_size
-                        }
-                    } else {
-                        config.post_object_max_file_size
-                    };
-
-                    // Prepare the file stream for the operation: forwarded as a
-                    // stream when the exact length is known, aggregated otherwise.
-                    let file_stream = multipart.take_file_stream().expect("missing file stream");
-                    let (post_stream, file_size) = prepare_post_object_stream(file_stream, max_file_size).await?;
-                    req.s3ext.post_object_stream = Some(post_stream);
-
-                    // Validate the policy conditions (if policy exists)
-                    // Note: expiration was already checked above before reading the file
-                    // Pass the URL bucket so that the "bucket" condition can be validated
-                    // even when clients (like boto3) don't include it in form fields.
-                    if let Some(policy) = policy {
-                        policy.validate_conditions_only(multipart, file_size, Some(bucket))?;
-                        req.s3ext.post_policy = Some(policy);
-                    }
-
+                    let (stream, policy) = resolve_post_object(ccx, bucket, multipart).await?;
+                    req.s3ext.post_object_stream = Some(stream);
+                    req.s3ext.post_policy = policy;
                     break 'resolve &PostObject as &'static dyn Operation;
                 }
                 // FIXME: POST /bucket/key hits this branch
                 S3Path::Object { .. } => return Err(s3_error!(MethodNotAllowed)),
             }
         }
-        match resolve_route(req, s3_path, req.s3ext.qs.as_ref()) {
-            Ok(result) => result,
-            Err(err) => {
-                // When S3Host is absent and the host looks virtual-hosted-style,
-                // bucket names in the Host header are lost — any routing failure
-                // is likely caused by this mismatch.  Give an actionable error.
-                if err.code() == &S3ErrorCode::NotImplemented
-                    && ccx.host.is_none()
-                    && let Some(host_header) = host_header.as_deref()
-                    && looks_like_virtual_hosted_style(host_header)
-                {
-                    warn!(
-                        ?host_header,
-                        ?s3_path,
-                        "request may be using virtual-hosted-style addressing; \
-                         no S3 host parser is configured. \
-                         Consider enabling an S3Host implementation if virtual-hosted-style \
-                         requests need to be handled by this endpoint."
-                    );
-
-                    return Err(s3_error!(err, NotImplemented, "{}", VIRTUAL_HOSTED_STYLE_HINT));
-                }
-                // Not a virtual-hosted-style issue — propagate original error.
-                return Err(err);
-            }
-        }
+        resolve_operation(req, s3_path, host_header.as_deref(), ccx)?
     };
-
-    // FIXME: hack for E2E tests (minio/mint)
-    if op.name() == "ListObjects"
-        && let Some(qs) = req.s3ext.qs.as_ref()
-        && qs.has("events")
-    {
-        return Err(s3_error!(NotImplemented, "listenBucketNotification only works on MinIO"));
-    }
 
     debug!(op = %op.name(), ?s3_path, "resolved route");
 
-    if ccx.auth.is_some() {
-        let mut acx = S3AccessContext {
-            credentials: req.s3ext.credentials.as_ref(),
-            s3_path,
-            s3_op: &crate::S3Operation { name: op.name() },
-            method: &req.method,
-            uri: &req.uri,
-            headers: &req.headers,
-            extensions: &mut req.extensions,
-        };
-        match ccx.access {
-            Some(access) => access.check(&mut acx).await?,
-            None => crate::access::default_check(&mut acx)?,
-        }
-    }
+    let s3_path = req.s3ext.s3_path.as_ref().unwrap();
+    authorize(
+        ccx,
+        op.name(),
+        req.s3ext.credentials.as_ref(),
+        s3_path,
+        &req.method,
+        &req.uri,
+        &req.headers,
+        &mut req.extensions,
+    )
+    .await?;
 
     debug!(op = %op.name(), ?s3_path, "checked access");
 
