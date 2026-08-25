@@ -579,11 +579,9 @@ pub(crate) fn create_presigned_canonical_request_with_raw_uri_path<'a>(
 }
 
 #[cfg(test)]
-#[allow(deprecated)]
 mod tests {
     use super::*;
 
-    use crate::http::OrderedHeaders;
     use crate::http::OrderedQs;
     use crate::sig_v4::PresignedUrlV4;
     use crate::utils::crypto::hex_sha256_string;
@@ -598,17 +596,17 @@ mod tests {
         let service = "s3";
         let path = "/test.txt";
 
-        let headers = OrderedHeaders::from_slice_unchecked(&[
+        let headers = [
             ("host", "examplebucket.s3.amazonaws.com"),
             ("range", "bytes=0-9"),
             ("x-amz-content-sha256", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
             ("x-amz-date", "20130524T000000Z"),
-        ]);
+        ];
 
         let method = Method::GET;
         let qs: &[(String, String)] = &[];
 
-        let canonical_request = create_canonical_request(&method, path, qs, &headers, Payload::empty());
+        let canonical_request = create_canonical_request(&method, path, qs, headers, Payload::empty());
 
         assert_eq!(
             canonical_request,
@@ -652,19 +650,19 @@ mod tests {
         let service = "s3";
         let path = "/test$file.text";
 
-        let headers = OrderedHeaders::from_slice_unchecked(&[
+        let headers = [
             ("date", "Fri, 24 May 2013 00:00:00 GMT"),
             ("host", "examplebucket.s3.amazonaws.com"),
             ("x-amz-content-sha256", "44ce7dd67c959e0d3524ffac1771dfbba87d2b6b4b4e99e42034a8b803f8b072"),
             ("x-amz-date", "20130524T000000Z"),
             ("x-amz-storage-class", "REDUCED_REDUNDANCY"),
-        ]);
+        ];
 
         let method = Method::PUT;
         let payload_checksum = &hex_sha256_string("Welcome to Amazon S3.".as_bytes());
         let qs: &[(String, String)] = &[];
 
-        let canonical_request = create_canonical_request(&method, path, qs, &headers, Payload::SingleChunk(payload_checksum));
+        let canonical_request = create_canonical_request(&method, path, qs, headers, Payload::SingleChunk(payload_checksum));
 
         assert_eq!(
             canonical_request,
@@ -709,7 +707,7 @@ mod tests {
         let service = "s3";
         let path = "/examplebucket/chunkObject.txt";
 
-        let headers = OrderedHeaders::from_slice_unchecked(&[
+        let headers = [
             ("content-encoding", "aws-chunked"),
             ("content-length", "66824"),
             ("host", "s3.amazonaws.com"),
@@ -717,12 +715,12 @@ mod tests {
             ("x-amz-date", "20130524T000000Z"),
             ("x-amz-decoded-content-length", "66560"),
             ("x-amz-storage-class", "REDUCED_REDUNDANCY"),
-        ]);
+        ];
 
         let method = Method::PUT;
         let qs: &[(String, String)] = &[];
 
-        let canonical_request = create_canonical_request(&method, path, qs, &headers, Payload::MultipleChunks);
+        let canonical_request = create_canonical_request(&method, path, qs, headers, Payload::MultipleChunks);
 
         assert_eq!(
             canonical_request,
@@ -862,7 +860,7 @@ mod tests {
         let path = "/examplebucket/chunkObject.txt";
 
         // Match canonical header order in the doc example
-        let headers = OrderedHeaders::from_slice_unchecked(&[
+        let headers = [
             ("content-encoding", "aws-chunked"),
             ("host", "s3.amazonaws.com"),
             ("x-amz-content-sha256", "STREAMING-AWS4-HMAC-SHA256-PAYLOAD-TRAILER"),
@@ -870,12 +868,12 @@ mod tests {
             ("x-amz-decoded-content-length", "66560"),
             ("x-amz-storage-class", "REDUCED_REDUNDANCY"),
             ("x-amz-trailer", "x-amz-checksum-crc32c"),
-        ]);
+        ];
 
         let method = Method::PUT;
         let qs: &[(String, String)] = &[];
 
-        let canonical_request = create_canonical_request(&method, path, qs, &headers, Payload::MultipleChunksWithTrailer);
+        let canonical_request = create_canonical_request(&method, path, qs, headers, Payload::MultipleChunksWithTrailer);
 
         assert_eq!(
             canonical_request,
@@ -921,7 +919,7 @@ mod tests {
         let service = "s3";
         let path = "/examplebucket/chunkObject.txt";
 
-        let headers = OrderedHeaders::from_slice_unchecked(&[
+        let headers = [
             ("content-encoding", "aws-chunked"),
             ("host", "s3.amazonaws.com"),
             ("x-amz-content-sha256", "STREAMING-UNSIGNED-PAYLOAD-TRAILER"),
@@ -929,12 +927,12 @@ mod tests {
             ("x-amz-decoded-content-length", "66560"),
             ("x-amz-storage-class", "REDUCED_REDUNDANCY"),
             ("x-amz-trailer", "x-amz-checksum-crc32c"),
-        ]);
+        ];
 
         let method = Method::PUT;
         let qs: &[(String, String)] = &[];
 
-        let canonical_request = create_canonical_request(&method, path, qs, &headers, Payload::UnsignedMultipleChunksWithTrailer);
+        let canonical_request = create_canonical_request(&method, path, qs, headers, Payload::UnsignedMultipleChunksWithTrailer);
 
         assert_eq!(
             canonical_request,
@@ -1078,17 +1076,17 @@ mod tests {
         let service = "s3";
         let path = "/";
 
-        let headers = OrderedHeaders::from_slice_unchecked(&[
+        let headers = [
             ("host", "examplebucket.s3.amazonaws.com"),
             ("x-amz-content-sha256", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
             ("x-amz-date", "20130524T000000Z"),
-        ]);
+        ];
 
         let query_strings = &[("lifecycle", "")];
 
         let method = Method::GET;
 
-        let canonical_request = create_canonical_request(&method, path, query_strings, &headers, Payload::empty());
+        let canonical_request = create_canonical_request(&method, path, query_strings, headers, Payload::empty());
         assert_eq!(
             canonical_request,
             concat!(
@@ -1130,17 +1128,17 @@ mod tests {
         let service = "s3";
         let path = "/";
 
-        let headers = OrderedHeaders::from_slice_unchecked(&[
+        let headers = [
             ("host", "examplebucket.s3.amazonaws.com"),
             ("x-amz-content-sha256", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
             ("x-amz-date", "20130524T000000Z"),
-        ]);
+        ];
 
         let query_strings = &[("max-keys", "2"), ("prefix", "J")];
 
         let method = Method::GET;
 
-        let canonical_request = create_canonical_request(&method, path, query_strings, &headers, Payload::empty());
+        let canonical_request = create_canonical_request(&method, path, query_strings, headers, Payload::empty());
 
         assert_eq!(
             canonical_request,
@@ -1192,7 +1190,7 @@ mod tests {
             "&X-Amz-Signature=aeeed9bbccd4d02ee5c0109b86d86835f995330da4c265957d157751f604d404"
         ));
 
-        let headers = OrderedHeaders::from_slice_unchecked(&[("host", "examplebucket.s3.amazonaws.com")]);
+        let headers = [("host", "examplebucket.s3.amazonaws.com")];
 
         let query_strings = &[
             ("X-Amz-Algorithm", "AWS4-HMAC-SHA256"),
@@ -1207,7 +1205,7 @@ mod tests {
 
         let info = PresignedUrlV4::parse(&qs, crate::config::DEFAULT_PRESIGNED_URL_MAX_EXPIRES_SECS).unwrap();
 
-        let canonical_request = create_presigned_canonical_request(&method, uri.path(), query_strings, &headers);
+        let canonical_request = create_presigned_canonical_request(&method, uri.path(), query_strings, headers);
 
         assert_eq!(
             canonical_request,
@@ -1395,7 +1393,7 @@ mod tests {
         // Reference: https://docs.aws.amazon.com/AmazonS3/latest/userguide/PresignedUrlUploadObject.html
         let secret_access_key = SecretKey::from("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
         let method = Method::PUT;
-        let headers = OrderedHeaders::from_slice_unchecked(&[("host", "examplebucket.s3.amazonaws.com")]);
+        let headers = [("host", "examplebucket.s3.amazonaws.com")];
 
         // Query strings for signing (without signature - signature is computed from these)
         let query_strings_for_signing = &[
@@ -1406,7 +1404,7 @@ mod tests {
             ("X-Amz-SignedHeaders", "host"),
         ];
 
-        let canonical_request = create_presigned_canonical_request(&method, "/test.txt", query_strings_for_signing, &headers);
+        let canonical_request = create_presigned_canonical_request(&method, "/test.txt", query_strings_for_signing, headers);
 
         // Canonical request for PUT should be similar to GET, just with PUT method
         assert_eq!(
@@ -1438,10 +1436,10 @@ mod tests {
         let method = Method::PUT;
 
         // Headers include content-type which is signed
-        let headers = OrderedHeaders::from_slice_unchecked(&[
+        let headers = [
             ("content-type", "application/octet-stream"),
             ("host", "examplebucket.s3.amazonaws.com"),
-        ]);
+        ];
 
         let query_strings_for_signing = &[
             ("X-Amz-Algorithm", "AWS4-HMAC-SHA256"),
@@ -1451,7 +1449,7 @@ mod tests {
             ("X-Amz-SignedHeaders", "content-type;host"),
         ];
 
-        let canonical_request = create_presigned_canonical_request(&method, "/test.txt", query_strings_for_signing, &headers);
+        let canonical_request = create_presigned_canonical_request(&method, "/test.txt", query_strings_for_signing, headers);
 
         // Canonical request should include content-type header
         assert_eq!(
@@ -1481,19 +1479,19 @@ mod tests {
         // Test that multiple headers with the same name are combined into a single line
         // with values separated by commas, as per AWS SigV4 spec.
         // This matches the behavior of AWS SDK Go which sends multiple x-amz-object-attributes headers.
-        let headers = OrderedHeaders::from_slice_unchecked(&[
+        let headers = [
             ("host", "127.0.0.1:9001"),
             ("x-amz-content-sha256", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
             ("x-amz-date", "20251205T145918Z"),
             ("x-amz-object-attributes", "ETag"),
             ("x-amz-object-attributes", "ObjectSize"),
             ("x-amz-object-attributes", "StorageClass"),
-        ]);
+        ];
 
         let method = Method::GET;
         let qs: &[(String, String)] = &[];
 
-        let canonical_request = create_canonical_request(&method, "/bucket/key", qs, &headers, Payload::empty());
+        let canonical_request = create_canonical_request(&method, "/bucket/key", qs, headers, Payload::empty());
 
         // According to AWS SigV4 spec:
         // - Multiple headers with the same name should be combined with comma-separated values
@@ -1518,11 +1516,11 @@ mod tests {
     #[test]
     fn multi_value_headers_presigned_url() {
         // Test that presigned URL canonical request also handles multi-value headers correctly
-        let headers = OrderedHeaders::from_slice_unchecked(&[
+        let headers = [
             ("host", "s3.amazonaws.com"),
             ("x-amz-object-attributes", "ETag"),
             ("x-amz-object-attributes", "ObjectSize"),
-        ]);
+        ];
 
         let method = Method::GET;
         let qs: &[(String, String)] = &[
@@ -1533,7 +1531,7 @@ mod tests {
             ),
         ];
 
-        let canonical_request = create_presigned_canonical_request(&method, "/bucket/key", qs, &headers);
+        let canonical_request = create_presigned_canonical_request(&method, "/bucket/key", qs, headers);
 
         // Verify that x-amz-object-attributes values are comma-separated
         // and the header name appears only once in SignedHeaders
@@ -1548,16 +1546,16 @@ mod tests {
     #[test]
     fn multi_value_headers_with_whitespace_normalization() {
         // Test that multi-value headers also have their values normalized (whitespace trimmed/collapsed)
-        let headers = OrderedHeaders::from_slice_unchecked(&[
+        let headers = [
             ("host", "s3.amazonaws.com"),
             ("x-amz-meta-custom", "  value1  "),
             ("x-amz-meta-custom", "value2   with   spaces"),
-        ]);
+        ];
 
         let method = Method::GET;
         let qs: &[(String, String)] = &[];
 
-        let canonical_request = create_canonical_request(&method, "/bucket/key", qs, &headers, Payload::empty());
+        let canonical_request = create_canonical_request(&method, "/bucket/key", qs, headers, Payload::empty());
 
         // Both values should be normalized and combined with comma
         assert!(canonical_request.contains("x-amz-meta-custom:value1,value2 with spaces\n"));
