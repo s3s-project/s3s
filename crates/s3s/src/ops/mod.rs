@@ -372,6 +372,80 @@ enum Prepare {
     CustomRoute,
 }
 
+fn inject_host_header(req: &mut Request) {
+    // HTTP/2 and HTTP/3 replace the Host header with the :authority pseudo-header.
+    // hyper exposes :authority via uri.authority() but does not insert a Host entry
+    // into the header map. For SigV4 (including presigned SigV4), the `host` header
+    // is part of the canonical request, so inject it here for uniform handling.
+    // This is primarily needed for SigV4 header canonicalization; SigV2 does not
+    // include `Host` in its string-to-sign. Only do this for HTTP/2+ to avoid
+    // synthesizing a Host header for HTTP/1.x requests that happen to use
+    // absolute-form URIs.
+    if !req.headers.contains_key(hyper::header::HOST)
+        && let Some(authority) = extract_http2_authority(req)
+        && let Ok(val) = hyper::header::HeaderValue::from_str(authority)
+    {
+        req.headers.insert(hyper::header::HOST, val);
+    }
+}
+
+fn resolve_operation(
+    req: &Request,
+    s3_path: &S3Path,
+    host_header: Option<&str>,
+    ccx: &CallContext<'_>,
+) -> S3Result<&'static dyn Operation> {
+    match resolve_route(req, s3_path, req.s3ext.qs.as_ref()) {
+        Ok(result) => Ok(result),
+        Err(err) => {
+            // When S3Host is absent and the host looks virtual-hosted-style,
+            // bucket names in the Host header are lost — any routing failure
+            // is likely caused by this mismatch.  Give an actionable error.
+            if err.code() == &S3ErrorCode::NotImplemented
+                && ccx.host.is_none()
+                && let Some(host_header) = host_header
+                && looks_like_virtual_hosted_style(host_header)
+            {
+                warn!(
+                    ?host_header,
+                    ?s3_path,
+                    "request may be using virtual-hosted-style addressing; \
+                     no S3 host parser is configured. \
+                     Consider enabling an S3Host implementation if virtual-hosted-style \
+                     requests need to be handled by this endpoint."
+                );
+
+                return Err(s3_error!(err, NotImplemented, "{}", VIRTUAL_HOSTED_STYLE_HINT));
+            }
+            // Not a virtual-hosted-style issue — propagate original error.
+            Err(err)
+        }
+    }
+}
+
+async fn authorize(req: &mut Request, ccx: &CallContext<'_>, op_name: &'static str) -> S3Result<()> {
+    if ccx.auth.is_none() {
+        return Ok(());
+    }
+
+    let mut acx = S3AccessContext {
+        credentials: req.s3ext.credentials.as_ref(),
+        s3_path: req.s3ext.s3_path.as_ref().unwrap(),
+        s3_op: &crate::S3Operation { name: op_name },
+        method: &req.method,
+        uri: &req.uri,
+        headers: &req.headers,
+        extensions: &mut req.extensions,
+    };
+
+    match ccx.access {
+        Some(access) => access.check(&mut acx).await?,
+        None => crate::access::default_check(&mut acx)?,
+    }
+
+    Ok(())
+}
+
 #[allow(clippy::too_many_lines)]
 #[tracing::instrument(level = "debug", skip_all, err)]
 async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> {
@@ -379,20 +453,7 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
     let mut content_length;
     let host_header: Option<String>;
     {
-        // HTTP/2 and HTTP/3 replace the Host header with the :authority pseudo-header.
-        // hyper exposes :authority via uri.authority() but does not insert a Host entry
-        // into the header map. For SigV4 (including presigned SigV4), the `host` header
-        // is part of the canonical request, so inject it here for uniform handling.
-        // This is primarily needed for SigV4 header canonicalization; SigV2 does not
-        // include `Host` in its string-to-sign. Only do this for HTTP/2+ to avoid
-        // synthesizing a Host header for HTTP/1.x requests that happen to use
-        // absolute-form URIs.
-        if !req.headers.contains_key(hyper::header::HOST)
-            && let Some(authority) = extract_http2_authority(req)
-            && let Ok(val) = hyper::header::HeaderValue::from_str(authority)
-        {
-            req.headers.insert(hyper::header::HOST, val);
-        }
+        inject_host_header(req);
 
         let decoded_uri_path = urlencoding::decode(req.uri.path()).map_err(|_| S3ErrorCode::InvalidURI)?;
 
@@ -617,32 +678,7 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                 S3Path::Object { .. } => return Err(s3_error!(MethodNotAllowed)),
             }
         }
-        match resolve_route(req, s3_path, req.s3ext.qs.as_ref()) {
-            Ok(result) => result,
-            Err(err) => {
-                // When S3Host is absent and the host looks virtual-hosted-style,
-                // bucket names in the Host header are lost — any routing failure
-                // is likely caused by this mismatch.  Give an actionable error.
-                if err.code() == &S3ErrorCode::NotImplemented
-                    && ccx.host.is_none()
-                    && let Some(host_header) = host_header.as_deref()
-                    && looks_like_virtual_hosted_style(host_header)
-                {
-                    warn!(
-                        ?host_header,
-                        ?s3_path,
-                        "request may be using virtual-hosted-style addressing; \
-                         no S3 host parser is configured. \
-                         Consider enabling an S3Host implementation if virtual-hosted-style \
-                         requests need to be handled by this endpoint."
-                    );
-
-                    return Err(s3_error!(err, NotImplemented, "{}", VIRTUAL_HOSTED_STYLE_HINT));
-                }
-                // Not a virtual-hosted-style issue — propagate original error.
-                return Err(err);
-            }
-        }
+        resolve_operation(req, s3_path, host_header.as_deref(), ccx)?
     };
 
     // FIXME: hack for E2E tests (minio/mint)
@@ -655,22 +691,9 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
 
     debug!(op = %op.name(), ?s3_path, "resolved route");
 
-    if ccx.auth.is_some() {
-        let mut acx = S3AccessContext {
-            credentials: req.s3ext.credentials.as_ref(),
-            s3_path,
-            s3_op: &crate::S3Operation { name: op.name() },
-            method: &req.method,
-            uri: &req.uri,
-            headers: &req.headers,
-            extensions: &mut req.extensions,
-        };
-        match ccx.access {
-            Some(access) => access.check(&mut acx).await?,
-            None => crate::access::default_check(&mut acx)?,
-        }
-    }
+    authorize(req, ccx, op.name()).await?;
 
+    let s3_path = req.s3ext.s3_path.as_ref().unwrap();
     debug!(op = %op.name(), ?s3_path, "checked access");
 
     if op.needs_full_body() {
