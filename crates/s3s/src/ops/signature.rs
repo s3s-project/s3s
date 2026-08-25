@@ -230,9 +230,9 @@ impl<'a> SignatureContext<'a> {
 
     /// Rejects `SigV2` requests when the `enable_sig_v2` configuration is off.
     ///
-    /// `SigV2` is disabled by default for security. When disabled, a recognized
-    /// `SigV2` request is rejected with `AccessDenied` (fail-closed) rather than
-    /// being treated as anonymous.
+    /// `SigV2` is disabled by default for security. When disabled, requests that are
+    /// successfully recognized as `SigV2` are rejected with `AccessDenied` (fail-closed)
+    /// rather than being treated as anonymous.
     fn ensure_v2_enabled(&self) -> S3Result<()> {
         let config = self.config.snapshot();
         if !config.enable_sig_v2 {
