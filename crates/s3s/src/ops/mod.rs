@@ -624,7 +624,7 @@ async fn verify_signature(
         if let Some(val) = req.headers.get_mut(header::CONTENT_LENGTH) {
             *val = fmt_content_length(decoded_content_length.unwrap_or(0));
         }
-        content_length = None;
+        content_length = content_length.map(|_| 0);
     }
     if let Some(body) = transformed_body {
         req.body = body;
