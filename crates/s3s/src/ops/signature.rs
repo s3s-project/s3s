@@ -39,7 +39,7 @@ const MAX_STS_BODY_SIZE: usize = 8192;
 type SignedHeaderPairs<'a> = SmallVec<[(&'a str, &'a str); 16]>;
 
 fn extract_amz_content_sha256(hs: &HeaderMap) -> S3Result<Option<AmzContentSha256>> {
-    let Some(val) = http::get_header_str(hs, crate::header::X_AMZ_CONTENT_SHA256.as_str()) else {
+    let Some(val) = http::get_unique_header_str(hs, crate::header::X_AMZ_CONTENT_SHA256.as_str()) else {
         return Ok(None);
     };
     match AmzContentSha256::parse(val) {
@@ -52,7 +52,7 @@ fn extract_amz_content_sha256(hs: &HeaderMap) -> S3Result<Option<AmzContentSha25
 }
 
 fn extract_authorization_v4(hs: &HeaderMap) -> S3Result<Option<AuthorizationV4<'_>>> {
-    let Some(val) = http::get_header_str(hs, crate::header::AUTHORIZATION.as_str()) else {
+    let Some(val) = http::get_unique_header_str(hs, crate::header::AUTHORIZATION.as_str()) else {
         return Ok(None);
     };
     match AuthorizationV4::parse(val) {
@@ -62,7 +62,7 @@ fn extract_authorization_v4(hs: &HeaderMap) -> S3Result<Option<AuthorizationV4<'
 }
 
 fn extract_amz_date(hs: &HeaderMap) -> S3Result<Option<AmzDate>> {
-    let Some(val) = http::get_header_str(hs, crate::header::X_AMZ_DATE.as_str()) else {
+    let Some(val) = http::get_unique_header_str(hs, crate::header::X_AMZ_DATE.as_str()) else {
         return Ok(None);
     };
     match AmzDate::parse(val) {
@@ -313,7 +313,7 @@ impl<'a> SignatureContext<'a> {
         }
 
         // header auth
-        if http::get_header_str(self.hs, crate::header::AUTHORIZATION.as_str()).is_some() {
+        if http::get_unique_header_str(self.hs, crate::header::AUTHORIZATION.as_str()).is_some() {
             debug!("checking header auth");
             return Some(self.v4_check_header_auth().await);
         }
@@ -643,7 +643,7 @@ impl<'a> SignatureContext<'a> {
         if is_stream {
             // For streaming with trailers, AWS requires x-amz-trailer header present.
             let has_trailer = amz_content_sha256.is_some_and(|v| v.has_trailer());
-            if has_trailer && http::get_header_str(self.hs, "x-amz-trailer").is_none() {
+            if has_trailer && http::get_unique_header_str(self.hs, "x-amz-trailer").is_none() {
                 return Err(invalid_request!("missing header: x-amz-trailer"));
             }
             let decoded_content_length = self
@@ -713,7 +713,7 @@ impl<'a> SignatureContext<'a> {
         }
 
         // header auth
-        if let Some(auth) = http::get_header_str(self.hs, crate::header::AUTHORIZATION.as_str())
+        if let Some(auth) = http::get_unique_header_str(self.hs, crate::header::AUTHORIZATION.as_str())
             && let Ok(auth) = AuthorizationV2::parse(auth)
         {
             debug!("checking header auth");
@@ -728,7 +728,7 @@ impl<'a> SignatureContext<'a> {
 
         let method = &self.req_method;
 
-        let date = http::get_header_str(self.hs, "date").or_else(|| http::get_header_str(self.hs, "x-amz-date"));
+        let date = http::get_unique_header_str(self.hs, "date").or_else(|| http::get_unique_header_str(self.hs, "x-amz-date"));
         if date.is_none() {
             return Err(invalid_request!("missing date"));
         }
@@ -946,7 +946,7 @@ mod tests {
     }
 
     #[test]
-    fn collect_signed_headers_skips_non_utf8_values() {
+    fn collect_signed_headers_rejects_non_utf8_values() {
         let mut headers = HeaderMap::new();
         headers.insert(
             HeaderName::from_static("x-amz-meta-name"),

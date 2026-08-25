@@ -85,7 +85,7 @@ pub fn create_string_to_sign(
 
     {
         // {Content-MD5}\n
-        if let Some(v) = http::get_header_str(headers, "content-md5") {
+        if let Some(v) = http::get_unique_header_str(headers, "content-md5") {
             ans.push_str(v);
         }
         ans.push('\n');
@@ -93,7 +93,7 @@ pub fn create_string_to_sign(
 
     {
         // {Content-Type}\n
-        if let Some(v) = http::get_header_str(headers, "content-type") {
+        if let Some(v) = http::get_unique_header_str(headers, "content-type") {
             ans.push_str(v);
         }
         ans.push('\n');
@@ -104,8 +104,8 @@ pub fn create_string_to_sign(
         Mode::HeaderAuth => {
             //  "if you include the x-amz-date header, use the empty string
             //      for the Date when constructing the StringToSign."
-            let mut date = http::get_header_str(headers, "date").unwrap_or_default();
-            if http::get_header_str(headers, "x-amz-date").is_some() {
+            let mut date = http::get_unique_header_str(headers, "date").unwrap_or_default();
+            if http::get_unique_header_str(headers, "x-amz-date").is_some() {
                 date = "";
             }
             ans.push_str(date);

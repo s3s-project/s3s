@@ -212,7 +212,7 @@ fn check_query_pattern(qs: &OrderedQs, name: &str, val: &str) -> bool {
 }
 
 fn extract_mime(headers: &HeaderMap) -> Option<Mime> {
-    let content_type = http::get_header_str(headers, crate::header::CONTENT_TYPE.as_str())?;
+    let content_type = http::get_unique_header_str(headers, crate::header::CONTENT_TYPE.as_str())?;
 
     // https://github.com/s3s-project/s3s/issues/361
     if content_type.is_empty() {
@@ -229,7 +229,7 @@ fn extract_content_length(req: &Request) -> Option<u64> {
 }
 
 fn extract_decoded_content_length(headers: &'_ HeaderMap) -> S3Result<Option<usize>> {
-    let Some(val) = http::get_header_str(headers, crate::header::X_AMZ_DECODED_CONTENT_LENGTH.as_str()) else {
+    let Some(val) = http::get_unique_header_str(headers, crate::header::X_AMZ_DECODED_CONTENT_LENGTH.as_str()) else {
         return Ok(None);
     };
     let x = atoi::atoi::<u64>(val.as_bytes())
