@@ -12,39 +12,38 @@ impl crate::auth::S3Auth for NeverGetSecretKeyAuth {
     }
 }
 
-// use crate::service::S3Service;
+use crate::service::S3Service;
+use stdx::mem::output_size;
 
-// use stdx::mem::output_size;
+#[test]
+fn future_size() {
+    // Guards against accidental future-size bloat in the dispatch path.
+    macro_rules! future_size {
+        ($f:path, $cap:expr) => {
+            (stringify!($f), output_size(&$f), $cap)
+        };
+    }
 
-// #[test]
-// #[ignore]
-// fn track_future_size() {
-//     macro_rules! future_size {
-//         ($f:path, $v:expr) => {
-//             (stringify!($f), output_size(&$f), $v)
-//         };
-//     }
+    #[rustfmt::skip]
+    let sizes = [
+        future_size!(S3Service::call,                           3300),
+        future_size!(call,                                      1900),
+        future_size!(prepare,                                   1850),
+        future_size!(SignatureContext::check,                    880),
+        future_size!(SignatureContext::v2_check,                 270),
+        future_size!(SignatureContext::v2_check_presigned_url,   120),
+        future_size!(SignatureContext::v2_check_header_auth,     150),
+        future_size!(SignatureContext::v4_check,                 760),
+        future_size!(SignatureContext::v4_check_post_signature,  580),
+        future_size!(SignatureContext::v4_check_presigned_url,   535),
+        future_size!(SignatureContext::v4_check_header_auth,     645),
+    ];
 
-//     #[rustfmt::skip]
-//     let sizes = [
-//         future_size!(S3Service::call,                           2704),
-//         future_size!(call,                                      1512),
-//         future_size!(prepare,                                   1440),
-//         future_size!(SignatureContext::check,                   776),
-//         future_size!(SignatureContext::v2_check,                296),
-//         future_size!(SignatureContext::v2_check_presigned_url,  168),
-//         future_size!(SignatureContext::v2_check_header_auth,    184),
-//         future_size!(SignatureContext::v4_check,                752),
-//         future_size!(SignatureContext::v4_check_post_signature, 368),
-//         future_size!(SignatureContext::v4_check_presigned_url,  456),
-//         future_size!(SignatureContext::v4_check_header_auth,    640),
-//     ];
-
-//     println!("{sizes:#?}");
-//     for (name, size, expected) in sizes {
-//         assert_eq!(size, expected, "{name:?} size changed: prev {expected}, now {size}");
-//     }
-// }
+    println!("{sizes:#?}");
+    for (name, size, cap) in sizes {
+        assert!(size <= cap, "{name:?} size changed: cap {cap}, now {size}");
+    }
+}
 
 fn get_object_microbench_body() -> crate::dto::StreamingBlob {
     crate::dto::StreamingBlob::from_bytes(bytes::Bytes::from_static(&[b'a'; 1024]))
