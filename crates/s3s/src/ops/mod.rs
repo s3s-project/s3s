@@ -19,7 +19,7 @@ cfg_if::cfg_if! {
 pub use self::generated::*;
 
 mod signature;
-use self::signature::SignatureContext;
+use self::signature::{CredentialsExt, SignatureContext};
 
 mod get_object;
 mod multipart;
@@ -514,10 +514,132 @@ async fn resolve_post_object(
     Ok((post_stream, policy_out))
 }
 
+async fn verify_signature(
+    req: &mut Request,
+    ccx: &CallContext<'_>,
+    vh_bucket: Option<&str>,
+    vh_region: Option<&str>,
+    mut content_length: Option<u64>,
+) -> S3Result<Option<u64>> {
+    let decoded_uri_path = urlencoding::decode(req.uri.path()).map_err(|_| S3ErrorCode::InvalidURI)?;
+
+    let hs = extract_headers(&req.headers);
+    let mime = extract_mime(&hs);
+    let decoded_content_length = extract_decoded_content_length(&hs)?;
+
+    let mut scx = SignatureContext {
+        auth: ccx.auth,
+        config: ccx.config,
+
+        req_version: req.version,
+        req_method: &req.method,
+        req_uri: &req.uri,
+        req_body: &mut req.body,
+
+        qs: req.s3ext.qs.as_ref(),
+        hs,
+
+        decoded_uri_path: &decoded_uri_path,
+        raw_uri_path: req.uri.path(),
+        vh_bucket,
+
+        content_length,
+        decoded_content_length,
+        mime,
+
+        multipart: None,
+        transformed_body: None,
+        trailing_headers: None,
+    };
+
+    let credentials = scx.check().await?;
+
+    // Harvest the outputs to release all borrows of `req` held by `scx`
+    // before mutating its fields below.
+    let transformed_body = scx.transformed_body;
+    let multipart = scx.multipart;
+    let trailing_headers = scx.trailing_headers;
+
+    req.s3ext.multipart = multipart;
+    req.s3ext.trailing_headers = trailing_headers;
+
+    apply_credentials(req, credentials, vh_region)?;
+
+    let body_changed = transformed_body.is_some() || req.s3ext.multipart.is_some();
+
+    if body_changed {
+        // invalidate the original content length
+        if let Some(val) = req.headers.get_mut(header::CONTENT_LENGTH) {
+            *val = fmt_content_length(decoded_content_length.unwrap_or(0));
+        }
+        content_length = None;
+    }
+    if let Some(body) = transformed_body {
+        req.body = body;
+    }
+
+    debug!(?body_changed, ?decoded_content_length, has_multipart = req.s3ext.multipart.is_some());
+
+    Ok(content_length)
+}
+
+fn apply_credentials(req: &mut Request, credentials: Option<CredentialsExt>, vh_region: Option<&str>) -> S3Result<()> {
+    match credentials {
+        Some(cred) => {
+            req.s3ext.credentials = Some(Credentials {
+                access_key: cred.access_key,
+                secret_key: cred.secret_key,
+            });
+
+            let cred_region = cred
+                .region
+                .filter(|s| !s.is_empty())
+                .map(|s| crate::region::Region::new(s.into()))
+                .transpose()
+                .map_err(|e| invalid_request!("invalid credential region: {e}"))?;
+
+            // When both the signature credential and S3Host supply a region,
+            // the credential region is authoritative (it was verified by the
+            // signature check). Log a debug warning if they disagree so that
+            // misconfigured clients or hosts are visible in traces.
+            if let Some(cred_region) = &cred_region
+                && let Some(host_region) = vh_region
+                && cred_region.as_str() != host_region
+            {
+                debug!(
+                    cred_region = %cred_region,
+                    host_region = %host_region,
+                    "credential region and virtual-host region differ; \
+                     using credential region"
+                );
+            }
+
+            req.s3ext.region = cred_region;
+            req.s3ext.service = cred.service;
+        }
+        None => {
+            req.s3ext.credentials = None;
+            req.s3ext.region = None;
+            req.s3ext.service = None;
+        }
+    }
+
+    // Fallback: if no region was determined from the signature credential
+    // (anonymous requests, SigV2), use the region provided by S3Host.
+    if req.s3ext.region.is_none() {
+        req.s3ext.region = vh_region
+            .filter(|s| !s.is_empty())
+            .map(|s| crate::region::Region::new(s.into()))
+            .transpose()
+            .map_err(|e| invalid_request!("invalid host region: {e}"))?;
+    }
+
+    Ok(())
+}
+
 #[allow(clippy::too_many_lines)]
 #[tracing::instrument(level = "debug", skip_all, err)]
 async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> {
-    let s3_path;
     let mut content_length;
     let host_header: Option<String>;
     {
@@ -563,118 +685,14 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
             };
 
             req.s3ext.s3_path = Some(result.map_err(|err| convert_parse_s3_path_error(&err))?);
-            s3_path = req.s3ext.s3_path.as_ref().unwrap();
         }
 
         req.s3ext.qs = extract_qs(&req.uri)?;
         content_length = extract_content_length(req);
-
-        let hs = extract_headers(&req.headers);
-        let mime = extract_mime(&hs);
-        let decoded_content_length = extract_decoded_content_length(&hs)?;
-
-        let body_changed;
-        let transformed_body;
-        {
-            let mut scx = SignatureContext {
-                auth: ccx.auth,
-                config: ccx.config,
-
-                req_version: req.version,
-                req_method: &req.method,
-                req_uri: &req.uri,
-                req_body: &mut req.body,
-
-                qs: req.s3ext.qs.as_ref(),
-                hs,
-
-                decoded_uri_path: &decoded_uri_path,
-                raw_uri_path: req.uri.path(),
-                vh_bucket,
-
-                content_length,
-                decoded_content_length,
-                mime,
-
-                multipart: None,
-                transformed_body: None,
-                trailing_headers: None,
-            };
-
-            let credentials = scx.check().await?;
-
-            body_changed = scx.transformed_body.is_some() || scx.multipart.is_some();
-            transformed_body = scx.transformed_body;
-
-            req.s3ext.multipart = scx.multipart;
-            req.s3ext.trailing_headers = scx.trailing_headers;
-
-            match credentials {
-                Some(cred) => {
-                    req.s3ext.credentials = Some(Credentials {
-                        access_key: cred.access_key,
-                        secret_key: cred.secret_key,
-                    });
-
-                    let cred_region = cred
-                        .region
-                        .filter(|s| !s.is_empty())
-                        .map(|s| crate::region::Region::new(s.into()))
-                        .transpose()
-                        .map_err(|e| invalid_request!("invalid credential region: {e}"))?;
-
-                    // When both the signature credential and S3Host supply a region,
-                    // the credential region is authoritative (it was verified by the
-                    // signature check). Log a debug warning if they disagree so that
-                    // misconfigured clients or hosts are visible in traces.
-                    if let (Some(cred_region), Some(host_region)) = (&cred_region, &vh_region)
-                        && cred_region.as_str() != host_region.as_str()
-                    {
-                        debug!(
-                            cred_region = %cred_region,
-                            host_region = %host_region,
-                            "credential region and virtual-host region differ; \
-                             using credential region"
-                        );
-                    }
-
-                    req.s3ext.region = cred_region;
-                    req.s3ext.service = cred.service;
-                }
-                None => {
-                    req.s3ext.credentials = None;
-                    req.s3ext.region = None;
-                    req.s3ext.service = None;
-                }
-            }
-
-            // Fallback: if no region was determined from the signature credential
-            // (anonymous requests, SigV2), use the region provided by S3Host.
-            if req.s3ext.region.is_none() {
-                req.s3ext.region = vh_region
-                    .filter(|s| !s.is_empty())
-                    .map(|s| crate::region::Region::new(s.into()))
-                    .transpose()
-                    .map_err(|e| invalid_request!("invalid host region: {e}"))?;
-            }
-        }
-
-        if body_changed {
-            // invalidate the original content length
-            if let Some(val) = req.headers.get_mut(header::CONTENT_LENGTH) {
-                *val = fmt_content_length(decoded_content_length.unwrap_or(0));
-            }
-            if let Some(val) = &mut content_length {
-                *val = 0;
-            }
-        }
-        if let Some(body) = transformed_body {
-            req.body = body;
-        }
-
-        let has_multipart = req.s3ext.multipart.is_some();
-        debug!(?body_changed, ?decoded_content_length, ?has_multipart);
+        content_length = verify_signature(req, ccx, vh_bucket, vh_region.as_deref(), content_length).await?;
     }
+
+    let s3_path = req.s3ext.s3_path.as_ref().unwrap();
 
     if let Some(route) = ccx.route
         && route.is_match(&req.method, &req.uri, &req.headers, &mut req.extensions)
