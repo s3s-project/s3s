@@ -460,16 +460,16 @@ mod tests {
     #[test]
     fn multi_domain_new() {
         let domains = ["example.com", "example.org"];
-        let result = MultiDomain::new(&domains);
+        let result = MultiDomain::new(domains);
         let md = result.unwrap();
         assert_eq!(md.base_domains, domains);
 
         let domains = ["example.com", "example.com"];
-        let err = MultiDomain::new(&domains).unwrap_err();
+        let err = MultiDomain::new(domains).unwrap_err();
         assert_eq!(err, DomainError::OverlappingSubdomains);
 
         let domains = ["example.com", "example.com.org"];
-        let result = MultiDomain::new(&domains);
+        let result = MultiDomain::new(domains);
         let md = result.unwrap();
         assert_eq!(md.base_domains, domains);
 
@@ -479,7 +479,7 @@ mod tests {
             ["s3.example.com", "example.com"],
             ["example.com:8080", "s3.example.com:8080"],
         ] {
-            let err = MultiDomain::new(&domains).unwrap_err();
+            let err = MultiDomain::new(domains).unwrap_err();
             assert_eq!(err, DomainError::OverlappingSubdomains, "{domains:?}");
         }
 
@@ -489,13 +489,13 @@ mod tests {
             ["rustfs.example.com", "s3-rustfs.example.com"],
             ["example.com:8080", "s3-example.com:8080"],
         ] {
-            let md = MultiDomain::new(&domains).unwrap();
+            let md = MultiDomain::new(domains).unwrap();
             assert_eq!(md.base_domains, domains, "{domains:?}");
         }
 
         // an invalid domain is rejected wherever it appears in the list
         for domains in [["", "example.com"], ["example.com", "exa_mple.com"]] {
-            let err = MultiDomain::new(&domains).unwrap_err();
+            let err = MultiDomain::new(domains).unwrap_err();
             assert_eq!(err, DomainError::InvalidDomain, "{domains:?}");
         }
 
