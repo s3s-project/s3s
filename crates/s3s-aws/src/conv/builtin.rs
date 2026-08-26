@@ -212,7 +212,10 @@ impl AwsConversion for s3s::dto::ETag {
     }
 
     fn try_into_aws(x: Self) -> S3Result<Self::Target> {
-        Ok(format!("\"{}\"", x.value()))
+        // Preserve weak validator prefix (W/) by using to_http_header()
+        let hv = x.to_http_header().map_err(S3Error::internal_error)?;
+        let s = hv.to_str().map_err(S3Error::internal_error)?;
+        Ok(s.to_owned())
     }
 }
 
@@ -226,9 +229,78 @@ impl AwsConversion for s3s::dto::ETagCondition {
     }
 
     fn try_into_aws(x: Self) -> S3Result<Self::Target> {
-        match x {
-            s3s::dto::ETagCondition::ETag(etag) => Ok(format!("\"{}\"", etag.value())),
-            s3s::dto::ETagCondition::Any => Ok("*".to_string()),
-        }
+        // Preserve weak validator prefix (W/) by using to_http_header()
+        let hv = x.to_http_header().map_err(S3Error::internal_error)?;
+        let s = hv.to_str().map_err(S3Error::internal_error)?;
+        Ok(s.to_owned())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use s3s::dto::{ETag, ETagCondition};
+
+    // Regression coverage for the tolerated MinT failure
+    // `aws-sdk-go-v2 / ConditionalDeleteWithIncorrectETag` (see issue #719).
+    //
+    // The failure is backend-owned: the MinIO release used by the E2E suite does
+    // not enforce `If-Match` preconditions on `DeleteObject`, so a delete carrying
+    // a wrong ETag returns 204 instead of 412. s3s itself parses and forwards the
+    // condition correctly; these tests lock in that conv-layer behavior so a future
+    // regression that drops or mangles the `If-Match` value is caught here, without
+    // depending on any running server.
+
+    #[test]
+    fn etag_condition_into_aws_requotes_strong() {
+        // A strong ETag is re-quoted to the canonical HTTP form the AWS SDK sends.
+        let cond = ETagCondition::ETag(ETag::Strong("abc123".to_owned()));
+        let sent = try_into_aws(cond).expect("convert strong etag");
+        assert_eq!(sent, "\"abc123\"");
+    }
+
+    #[test]
+    fn etag_condition_into_aws_wildcard() {
+        // The wildcard maps to `*`, matching any existing entity.
+        let sent = try_into_aws(ETagCondition::Any).expect("convert wildcard");
+        assert_eq!(sent, "*");
+    }
+
+    #[test]
+    fn etag_condition_into_aws_preserves_weak() {
+        // Weak ETags must include the W/ prefix when serialized to AWS SDK format.
+        let cond = ETagCondition::ETag(ETag::Weak("xyz".to_owned()));
+        let sent = try_into_aws(cond).expect("convert weak etag");
+        assert_eq!(sent, "W/\"xyz\"");
+    }
+
+    #[test]
+    fn etag_into_aws_preserves_weak() {
+        // Weak ETags must include the W/ prefix when serialized to AWS SDK format.
+        let etag = ETag::Weak("abc123".to_owned());
+        let sent = try_into_aws(etag).expect("convert weak etag");
+        assert_eq!(sent, "W/\"abc123\"");
+    }
+
+    #[test]
+    fn weak_etag_roundtrip() {
+        // Parse a weak ETag from AWS SDK format and serialize it back; the W/ prefix
+        // must be preserved byte-for-byte.
+        let weak_str = "W/\"xyz789\"";
+        let cond: ETagCondition = try_from_aws(weak_str.to_owned()).expect("parse weak if-match");
+        let sent = try_into_aws(cond).expect("forward weak if-match");
+        assert_eq!(sent, weak_str);
+    }
+
+    #[test]
+    fn delete_object_forwards_incorrect_if_match_verbatim() {
+        // Mirrors the MinT `ConditionalDeleteWithIncorrectETag` request: the client
+        // sends `If-Match: "deadbeef..."`, s3s parses it inbound and must forward the
+        // exact same value to the backend. The round-trip preserves it byte-for-byte.
+        let wrong = "\"deadbeefdeadbeefdeadbeefdeadbeef\"";
+        let cond: ETagCondition = try_from_aws(wrong.to_owned()).expect("parse inbound if-match");
+        let sent = try_into_aws(cond).expect("forward if-match");
+        assert_eq!(sent, wrong);
     }
 }
