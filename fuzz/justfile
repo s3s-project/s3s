@@ -8,12 +8,12 @@ fmt:
     cargo fmt --all
 
 lint:
-    cargo +nightly clippy --workspace --all-targets -- -D warnings
+    RUSTFLAGS="--cfg fuzzing" cargo +nightly clippy --workspace --all-targets -- -D warnings
 
 # CI gate: formatting check + clippy, fails fast before fuzzing.
 ci-check:
     cargo fmt --all -- --check
-    cargo +nightly clippy --workspace --all-targets -- -D warnings
+    RUSTFLAGS="--cfg fuzzing" cargo +nightly clippy --workspace --all-targets -- -D warnings
 
 # Run a fuzz target (requires cargo-fuzz; uses nightly + ASan).
 fuzz name *ARGS:

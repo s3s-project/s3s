@@ -1,0 +1,3 @@
+# Fuzz seed inputs are raw bytes; keep git's binary handling consistent
+# regardless of their byte content.
+fuzz/seeds/**/*.bin binary
