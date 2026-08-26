@@ -100,6 +100,14 @@ mod manually {
         }
     }
 
+    /// Returns whether `val` survives the serializer's literal-quote wrapping
+    /// and re-parses to the same strong `ETag`: printable ASCII plus tab
+    /// (mirrors the quoted branch's validity check in `parse_http_header`).
+    /// Single pass over the bytes.
+    fn is_roundtrippable_etag_value(val: &str) -> bool {
+        val.bytes().all(|b| b.is_ascii() && (b >= 32 && b != 127 || b == b'\t'))
+    }
+
     impl<'xml> DeserializeContent<'xml> for ETag {
         fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
             let val: String = d.content()?;
@@ -108,8 +116,12 @@ mod manually {
             // fallback if the ETag is not quoted
             match ETag::parse_http_header(val.as_bytes()) {
                 Ok(v) => Ok(v),
-                Err(ParseETagError::InvalidFormat) => Ok(ETag::Strong(val)),
-                Err(ParseETagError::InvalidChar) => Err(DeError::InvalidContent),
+                // Fallback for unquoted S3-style etags (hex hashes, `hash-N`,
+                // ...). The serializer wraps the value in literal quotes
+                // without escaping, so only accept values that survive that
+                // wrapping and re-parse.
+                Err(ParseETagError::InvalidFormat) if is_roundtrippable_etag_value(&val) => Ok(ETag::Strong(val)),
+                Err(_) => Err(DeError::InvalidContent),
             }
         }
     }
@@ -147,6 +159,66 @@ mod tests {
         let expected = format!("\"{long_hash}\"");
         assert!(xml.contains(&expected), "Long ETag must use literal quotes; got: {xml}");
         assert!(!xml.contains("&quot;"), "Long ETag must not use &quot;; got: {xml}");
+    }
+
+    #[test]
+    fn etag_deserialize_rejects_control_chars_in_fallback() {
+        // Regression for the fuzz-discovered ser/de asymmetry: the serializer
+        // wraps values in literal quotes without escaping, so the fallback
+        // must not accept values it cannot re-read (control characters fail
+        // `parse_http_header`'s quoted validity check).
+        for content in [
+            "l\u{0}\u{0}\u{0}\"e\"", // fuzz crash instance 1 (NULs + quotes)
+            "a\u{8}b",               // fuzz crash instance 2 (backspace)
+            "a\u{1f}b",              // other control char (unit separator)
+            "a\u{7f}b",              // DEL
+        ] {
+            let xml = format!("<ETag>{content}</ETag>");
+            let mut d = Deserializer::new(xml.as_bytes());
+            let err = d.named_element("ETag", ETag::deserialize_content).unwrap_err();
+            assert!(matches!(err, DeError::InvalidContent), "content: {content:?}");
+        }
+    }
+
+    #[test]
+    fn etag_deserialize_rejects_non_ascii_in_fallback() {
+        // Non-ASCII also cannot round-trip: the serializer writes it verbatim
+        // and `parse_http_header` rejects it on re-parse.
+        for content in ["µ", "é"] {
+            let xml = format!("<ETag>{content}</ETag>");
+            let mut d = Deserializer::new(xml.as_bytes());
+            let err = d.named_element("ETag", ETag::deserialize_content).unwrap_err();
+            assert!(matches!(err, DeError::InvalidContent), "content: {content:?}");
+        }
+    }
+
+    #[test]
+    fn etag_deserialize_fallback_accepts_roundtrippable_values() {
+        // Printable ASCII values (including embedded quotes and tabs) must
+        // still parse via the fallback and survive the roundtrip.
+        for content in ["abc def", "hash-1", "a\"b", "\"a", "a\tb", "some value"] {
+            let xml = format!("<ETag>{content}</ETag>");
+            let mut d = Deserializer::new(xml.as_bytes());
+            let etag = d.named_element("ETag", ETag::deserialize_content).unwrap();
+            assert_eq!(etag.as_strong().unwrap(), content);
+
+            let mut buf = Vec::new();
+            let mut ser = Serializer::new(Cursor::new(&mut buf));
+            ser.element("ETag", |s| etag.serialize_content(s)).unwrap();
+            let mut d = Deserializer::new(&buf[..]);
+            let reparsed = d.named_element("ETag", ETag::deserialize_content).unwrap();
+            assert_eq!(reparsed, etag, "content: {content:?}");
+        }
+    }
+
+    #[test]
+    fn completed_multipart_upload_rejects_fuzz_crash_input() {
+        use crate::dto::CompletedMultipartUpload;
+
+        // Exact fuzz oracle B crash input (instance 1, minus the selector byte).
+        let input = b"<CompleteMultipartUpload><Part><ETag>l\x00\x00\x00&quot;e&quot;</ETag><PartNumber>1</PartNumber></Part></CompleteMultipartUpload>";
+        let mut d = Deserializer::new(input);
+        assert!(CompletedMultipartUpload::deserialize(&mut d).is_err());
     }
 
     #[test]
