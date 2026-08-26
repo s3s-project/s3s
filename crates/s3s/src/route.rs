@@ -168,6 +168,24 @@ pub trait S3Route: Send + Sync + 'static {
     /// #   }
     /// }
     /// ```
+    ///
+    /// # Timing contract
+    ///
+    /// Called exactly once per request, after virtual-host resolution and
+    /// before any path interpretation or signature verification. A matching
+    /// route receives the request even when its path would fail S3 naming
+    /// semantics (bucket-name rules, key length limit), and no `S3Path` is
+    /// materialized for it.
+    ///
+    /// The predicate may observe unauthenticated requests; authentication is
+    /// enforced later via [`check_access`](Self::check_access) and the
+    /// operation `authorize` stage.
+    ///
+    /// Virtual-host resolution itself stays *ahead* of matching: it feeds
+    /// signature verification unconditionally (so early execution is free),
+    /// and rejecting malformed hosts uniformly keeps the error surface
+    /// independent of whether a route happens to be configured. Keep predicates cheap and free of side effects beyond the
+    /// provided `extensions` scratch space.
     fn is_match(&self, method: &Method, uri: &Uri, headers: &HeaderMap, extensions: &mut Extensions) -> bool;
 
     /// Checks access permissions for the request.
