@@ -3,3 +3,14 @@
 .vscode
 .idea
 __pycache__/
+
+# cargo-fuzz runtime state (seeds live in fuzz/seeds/, committed)
+/fuzz/target/
+/fuzz/corpus/
+/fuzz/artifacts/
+/fuzz/coverage/
+/fuzz/Coverage-*
+/fuzz/Crash-*
+/fuzz/Leak-*
+/fuzz/Oom-*
+/fuzz/Timeout-*

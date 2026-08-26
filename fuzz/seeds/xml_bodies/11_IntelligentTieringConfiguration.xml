@@ -1,0 +1,1 @@
+<IntelligentTieringConfiguration><Id>i</Id><Status>Enabled</Status><Tiering><Days>90</Days><AccessTier>ARCHIVE_ACCESS</AccessTier></Tiering></IntelligentTieringConfiguration>

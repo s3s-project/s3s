@@ -1,0 +1,1 @@
+<ReplicationConfiguration><Role>arn:aws:iam::1:role/r</Role><Rule><Status>Enabled</Status><Destination><Bucket>arn:aws:s3:::d</Bucket></Destination></Rule></ReplicationConfiguration>

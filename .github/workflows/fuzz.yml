@@ -1,0 +1,90 @@
+name: Fuzz
+
+on:
+  schedule:
+    - cron: '0 0 * * 0' # weekly at 00:00 UTC on Sunday
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: taiki-e/install-action@just
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly
+          components: llvm-tools
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: fuzz
+
+      - name: Install cargo-fuzz
+        uses: taiki-e/install-action@cargo-fuzz
+
+      - name: Format and lint
+        run: just ci-check
+        working-directory: fuzz
+
+      - name: Find previous run carrying the corpus
+        id: previous-run
+        run: |
+          # Crashes fail the job (strict policy), so runs are usually red; the
+          # corpus artifact is uploaded with if: always(), so pick the latest
+          # completed run regardless of its conclusion.
+          run_id="$(
+            gh api "repos/${{ github.repository }}/actions/workflows/fuzz.yml/runs" \
+              --jq '[.workflow_runs[] | select(.status == "completed") | .id][0]'
+          )"
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+
+      - name: Restore accumulated corpus
+        uses: actions/download-artifact@v4
+        with:
+          name: fuzz-corpus
+          path: fuzz/corpus
+          run-id: ${{ steps.previous-run.outputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Build fuzz targets
+        run: cargo +nightly fuzz build
+        working-directory: fuzz
+
+      - name: Fuzz for 30 minutes
+        run: |
+          # default / minio codegen variants alternate by day-of-year parity.
+          if [ $(( $(date +%j) % 2 )) -eq 0 ]; then
+            just ci-run xml_bodies "--features minio"
+          else
+            just ci-run xml_bodies
+          fi
+        working-directory: fuzz
+
+      - name: Upload corpus
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: fuzz-corpus
+          path: fuzz/corpus
+          # Only the latest corpus matters (next run restores it); 30-day
+          # retention bounds storage: one artifact per run, ~4 at steady
+          # state with the weekly schedule.
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Upload crashes and other artifacts
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: fuzz-artifacts
+          path: fuzz/artifacts
+          retention-days: 90
+          if-no-files-found: ignore

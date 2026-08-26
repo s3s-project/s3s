@@ -1,0 +1,34 @@
+[package]
+name = "s3s-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+s3s = { path = "../crates/s3s" }
+
+[features]
+minio = ["s3s/minio"]
+
+[[bin]]
+name = "xml_bodies"
+path = "fuzz_targets/xml_bodies.rs"
+test = false
+bench = false
+doc = false
+
+[[bin]]
+name = "gen_corpus"
+path = "bin/gen_corpus.rs"
+test = false
+bench = false
+doc = false
+
+# Standalone workspace: intentionally outside the main s3s workspace.
+# Requires nightly (libFuzzer + sanitizer instrumentation); the main
+# workspace MSRV does not apply here.
+[workspace]

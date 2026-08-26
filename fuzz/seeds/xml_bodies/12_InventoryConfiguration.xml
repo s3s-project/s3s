@@ -1,0 +1,1 @@
+<InventoryConfiguration><Id>i</Id><IsEnabled>true</IsEnabled><Destination><S3BucketDestination><Format>CSV</Format><Bucket>arn:aws:s3:::b</Bucket></S3BucketDestination></Destination><IncludedObjectVersions>All</IncludedObjectVersions><Schedule><Frequency>Daily</Frequency></Schedule></InventoryConfiguration>
