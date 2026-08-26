@@ -205,6 +205,20 @@ mod tests {
     }
 
     #[test]
+    fn credential_with_non_digit_date_does_not_panic() {
+        // Regression for the fuzz-discovered panic in `utils::parser::digit`:
+        // a non-digit byte in the credential date used to underflow below
+        // `b'0'` in overflow-checked builds.
+        let auth = concat!(
+            "AWS4-HMAC-SHA256 ",
+            "Credential=AKIAIOSFODNN7EXAMPLE/201%0524/us-east-1/s3/aws4_request,",
+            "SignedHeaders=host,",
+            "Signature=fe5f80f77d5fa3beca038a248ff027d0445342fe2855ddc963176630326f1024",
+        );
+        assert!(AuthorizationV4::parse(auth).is_err());
+    }
+
+    #[test]
     fn special_20200921() {
         let auth = concat!(
             "AWS4-HMAC-SHA256 ",

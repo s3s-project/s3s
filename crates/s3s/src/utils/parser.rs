@@ -5,7 +5,10 @@ pub struct Error;
 
 #[inline(always)]
 fn digit(c: u8) -> Result<u8, Error> {
-    c.is_ascii_digit().then_some(c - b'0').ok_or(Error)
+    match c {
+        b'0'..=b'9' => Ok(c - b'0'),
+        _ => Err(Error),
+    }
 }
 
 #[inline(always)]
@@ -30,4 +33,33 @@ where
     let (remaining, output) = f(*input)?;
     *input = remaining;
     Ok(output)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn digit_accepts_ascii_digits() {
+        for c in b'0'..=b'9' {
+            assert!(matches!(digit(c), Ok(v) if v == c - b'0'));
+        }
+    }
+
+    #[test]
+    fn digit_rejects_non_digit_without_overflow() {
+        // Regression for the fuzz-discovered panic: the subtraction used to
+        // be eager, so bytes below b'0' underflowed in overflow-checked
+        // builds.
+        for c in [b'%', 0x01, 0x00, 0x2f, 0x3a, 0x7f, 0xff, b'a'] {
+            assert!(digit(c).is_err(), "byte {c:#04x} must be rejected");
+        }
+    }
+
+    #[test]
+    fn digit2_digit4_reject_non_digit() {
+        assert!(digit2(*b"1%").is_err());
+        assert!(digit4(*b"201%").is_err());
+        assert!(digit4(*b"20\x014").is_err());
+    }
 }
