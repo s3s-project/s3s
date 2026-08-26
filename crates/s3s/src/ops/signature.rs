@@ -185,6 +185,23 @@ fn validate_sig_v4_region(region: &str, config: &S3Config) -> S3Result<()> {
     Ok(())
 }
 
+fn validate_sig_v4_service(service: &str, config: &S3Config) -> S3Result<()> {
+    if !config
+        .sig_v4_allowed_services
+        .iter()
+        .any(|allowed| allowed.as_str() == service)
+    {
+        return Err(s3_error!(
+            NotImplemented,
+            "unknown service '{}' in credential scope; expected one of: {}",
+            service,
+            config.sig_v4_allowed_services.join(", "),
+        ));
+    }
+
+    Ok(())
+}
+
 impl SignatureVerificationContext<'_> {
     fn verify_with_raw_path_fallback(
         &self,
@@ -375,25 +392,17 @@ impl<'a> SignatureContext<'a> {
         }
 
         let region = credential.aws_region;
+        let config = self.config.snapshot();
 
-        {
-            let config = self.config.snapshot();
-            validate_sig_v4_region(region, &config)?;
-            validate_sig_v4_clock_skew(&amz_date, time::OffsetDateTime::now_utc(), &config)?;
-        }
+        validate_sig_v4_region(region, &config)?;
+        validate_sig_v4_clock_skew(&amz_date, time::OffsetDateTime::now_utc(), &config)?;
 
         let access_key = credential.access_key_id.to_owned();
         let secret_key = auth.get_secret_key(&access_key).await?;
 
         let service = credential.aws_service;
 
-        if !matches!(service, "s3" | "sts") {
-            return Err(s3_error!(
-                NotImplemented,
-                "unknown service '{}' in credential scope; expected 's3' or 'sts'",
-                service,
-            ));
-        }
+        validate_sig_v4_service(service, &config)?;
 
         let string_to_sign = info.policy;
         let signature = sig_v4::calculate_signature(string_to_sign, &secret_key, &amz_date, region, service);
@@ -483,13 +492,7 @@ impl<'a> SignatureContext<'a> {
 
         let service = presigned_url.credential.aws_service;
 
-        if !matches!(service, "s3" | "sts") {
-            return Err(s3_error!(
-                NotImplemented,
-                "unknown service '{}' in credential scope; expected 's3' or 'sts'",
-                service,
-            ));
-        }
+        validate_sig_v4_service(service, &config)?;
 
         let expected_signature = Signature::from_hex(presigned_url.signature).ok_or_else(|| s3_error!(SignatureDoesNotMatch))?;
         let headers = collect_signed_headers(self.hs, &presigned_url.signed_headers, |name| self.signed_host_fallback(name))?;
@@ -547,14 +550,9 @@ impl<'a> SignatureContext<'a> {
         };
         let region = authorization.credential.aws_region;
         let service = authorization.credential.aws_service;
+        let config = self.config.snapshot();
 
-        if !matches!(service, "s3" | "sts") {
-            return Err(s3_error!(
-                NotImplemented,
-                "unknown service '{}' in credential scope; expected 's3' or 'sts'",
-                service,
-            ));
-        }
+        validate_sig_v4_service(service, &config)?;
 
         let auth = require_auth(self.auth)?;
 
@@ -566,11 +564,8 @@ impl<'a> SignatureContext<'a> {
             return Err(s3_error!(SignatureDoesNotMatch, "credential scope date does not match x-amz-date"));
         }
 
-        {
-            let config = self.config.snapshot();
-            validate_sig_v4_region(region, &config)?;
-            validate_sig_v4_clock_skew(&amz_date, time::OffsetDateTime::now_utc(), &config)?;
-        }
+        validate_sig_v4_region(region, &config)?;
+        validate_sig_v4_clock_skew(&amz_date, time::OffsetDateTime::now_utc(), &config)?;
 
         let amz_content_sha256 = extract_amz_content_sha256(self.hs)?;
 
@@ -986,6 +981,19 @@ mod tests {
             err.message(),
             Some("The authorization header is malformed; the region is wrong; expecting 'us-west-2'.")
         );
+    }
+
+    #[test]
+    fn sig_v4_service_validation_uses_configured_allowlist() {
+        let mut config = S3Config::default();
+        validate_sig_v4_service("s3", &config).expect("default services should include s3");
+        validate_sig_v4_service("sts", &config).expect("default services should include sts");
+
+        let err = validate_sig_v4_service("s3tables", &config).expect_err("custom services should be rejected by default");
+        assert_eq!(err.code(), &S3ErrorCode::NotImplemented);
+
+        config.sig_v4_allowed_services.push("s3tables".to_owned());
+        validate_sig_v4_service("s3tables", &config).expect("configured service should be accepted");
     }
 
     #[test]
@@ -1902,6 +1910,83 @@ file content\r\n\
             .await
             .expect_err("header signature for another region should be rejected");
         assert_eq!(err.code(), &S3ErrorCode::AuthorizationHeaderMalformed);
+    }
+
+    #[tokio::test]
+    async fn v4_header_auth_accepts_configured_service() {
+        use crate::auth::SecretKey;
+        use crate::auth::SimpleAuth;
+        use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
+        use std::sync::Arc;
+
+        let access_key = "AKIAIOSFODNN7EXAMPLE";
+        let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+        let auth = SimpleAuth::from_single(access_key, secret_key.clone());
+        let s3_config = S3Config {
+            presigned_url_max_skew_time_secs: u32::MAX,
+            expected_region: Some("us-east-1".parse().expect("valid test region")),
+            sig_v4_allowed_services: vec!["s3".to_owned(), "sts".to_owned(), "s3tables".to_owned()],
+            ..Default::default()
+        };
+        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(s3_config)));
+
+        let method = Method::GET;
+        let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+        let decoded_uri_path = "/test.txt";
+        let raw_uri_path = "/test.txt";
+        let amz_date = AmzDate::parse("20130524T000000Z").unwrap();
+        let headers_for_signing = [
+            ("host", "s3.amazonaws.com"),
+            ("x-amz-content-sha256", "UNSIGNED-PAYLOAD"),
+            ("x-amz-date", "20130524T000000Z"),
+        ];
+        let canonical_request = sig_v4::create_canonical_request(
+            &method,
+            decoded_uri_path,
+            &[] as &[(&str, &str)],
+            headers_for_signing,
+            sig_v4::Payload::Unsigned,
+        );
+        let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3tables");
+        let signature = sig_v4::calculate_signature(&string_to_sign, &secret_key, &amz_date, "us-east-1", "s3tables");
+        let authorization = format!(
+            "AWS4-HMAC-SHA256 Credential={access_key}/20130524/us-east-1/s3tables/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature={}",
+            signature.as_str(),
+        );
+        let headers = headers_from_slice(&[
+            ("authorization", authorization.as_str()),
+            ("host", "s3.amazonaws.com"),
+            ("x-amz-content-sha256", "UNSIGNED-PAYLOAD"),
+            ("x-amz-date", "20130524T000000Z"),
+        ]);
+
+        let mut body = Body::empty();
+        let mut cx = SignatureContext {
+            auth: Some(&auth),
+            config: &config,
+            req_version: ::http::Version::HTTP_11,
+            req_method: &method,
+            req_uri: &uri,
+            req_body: &mut body,
+            qs: None,
+            hs: &headers,
+            decoded_uri_path,
+            raw_uri_path,
+            vh_bucket: None,
+            content_length: Some(0),
+            mime: None,
+            decoded_content_length: None,
+            transformed_body: None,
+            multipart: None,
+            trailing_headers: None,
+        };
+
+        let cred = cx
+            .v4_check_header_auth()
+            .await
+            .expect("configured SigV4 service should be accepted");
+        assert_eq!(cred.access_key, access_key);
+        assert_eq!(cred.service.as_deref(), Some("s3tables"));
     }
 
     #[tokio::test]
