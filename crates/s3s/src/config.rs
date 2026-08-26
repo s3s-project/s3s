@@ -54,6 +54,19 @@ pub(crate) const DEFAULT_PRESIGNED_URL_MAX_EXPIRES_SECS: u32 = 7 * 24 * 60 * 60;
 // Aligned with MinIO: https://github.com/minio/minio/blob/master/cmd/streaming-signature-v4.go
 pub(crate) const DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE: usize = 256 * 1024 * 1024;
 
+const DEFAULT_SIG_V4_ALLOWED_SERVICES: &[&str] = &["s3", "sts"];
+
+fn default_sig_v4_allowed_services() -> Vec<String> {
+    DEFAULT_SIG_V4_ALLOWED_SERVICES.iter().map(ToString::to_string).collect()
+}
+
+fn is_default_sig_v4_allowed_services(services: &[String]) -> bool {
+    services
+        .iter()
+        .map(String::as_str)
+        .eq(DEFAULT_SIG_V4_ALLOWED_SERVICES.iter().copied())
+}
+
 /// S3 Service Configuration Provider trait.
 ///
 /// This trait provides a `snapshot` method that returns an `Arc<S3Config>`.
@@ -163,6 +176,19 @@ pub struct S3Config {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expected_region: Option<Region>,
 
+    /// Services accepted in `SigV4` credential scopes.
+    ///
+    /// Requests signed for services outside this list are rejected with
+    /// `NotImplemented`. Add service names here when layering S3-compatible
+    /// extension APIs behind the same authentication path.
+    ///
+    /// Default: `["s3", "sts"]`
+    #[serde(
+        default = "default_sig_v4_allowed_services",
+        skip_serializing_if = "is_default_sig_v4_allowed_services"
+    )]
+    pub sig_v4_allowed_services: Vec<String>,
+
     /// Whether Signature Version 2 (`SigV2`) verification is enabled.
     ///
     /// `SigV2` is deprecated by AWS and does not bind the signature to a region
@@ -212,6 +238,7 @@ impl Default for S3Config {
             form_max_parts: 1000,
             presigned_url_max_skew_time_secs: 900, // 15 minutes
             expected_region: None,
+            sig_v4_allowed_services: default_sig_v4_allowed_services(),
             enable_sig_v2: false,
             presigned_url_max_expires_secs: DEFAULT_PRESIGNED_URL_MAX_EXPIRES_SECS,
             normalize_forward_slash_path: false,
@@ -333,6 +360,7 @@ mod tests {
         assert_eq!(config.form_max_parts, 1000);
         assert_eq!(config.presigned_url_max_skew_time_secs, 900);
         assert_eq!(config.expected_region, None);
+        assert_eq!(config.sig_v4_allowed_services, ["s3", "sts"]);
         assert_eq!(config.presigned_url_max_expires_secs, DEFAULT_PRESIGNED_URL_MAX_EXPIRES_SECS);
         assert!(!config.enable_sig_v2);
     }
@@ -425,6 +453,7 @@ mod tests {
             form_max_parts: 500,
             presigned_url_max_skew_time_secs: 600,
             expected_region: Some("us-west-2".parse().expect("valid test region")),
+            sig_v4_allowed_services: vec!["s3".to_owned(), "sts".to_owned(), "s3tables".to_owned()],
             enable_sig_v2: true,
             presigned_url_max_expires_secs: 86_400,
             normalize_forward_slash_path: false,
@@ -446,6 +475,7 @@ mod tests {
         // Other fields should have defaults
         assert_eq!(config.post_object_max_file_size, 5 * 1024 * 1024 * 1024);
         assert_eq!(config.form_max_field_size, 1024 * 1024);
+        assert_eq!(config.sig_v4_allowed_services, ["s3", "sts"]);
         assert_eq!(config.presigned_url_max_expires_secs, DEFAULT_PRESIGNED_URL_MAX_EXPIRES_SECS);
     }
 
@@ -453,6 +483,12 @@ mod tests {
     fn test_serde_omits_unset_expected_region() {
         let json = serde_json::to_value(S3Config::default()).expect("serialize failed");
         assert!(json.get("expected_region").is_none());
+    }
+
+    #[test]
+    fn test_serde_omits_default_sig_v4_allowed_services() {
+        let json = serde_json::to_value(S3Config::default()).expect("serialize failed");
+        assert!(json.get("sig_v4_allowed_services").is_none());
     }
 
     #[test]
