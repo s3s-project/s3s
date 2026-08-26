@@ -213,9 +213,9 @@ impl AwsConversion for s3s::dto::ETag {
 
     fn try_into_aws(x: Self) -> S3Result<Self::Target> {
         // Preserve weak validator prefix (W/) by using to_http_header()
-        x.to_http_header()
-            .map(|hv| hv.to_str().expect("valid header").to_owned())
-            .map_err(S3Error::internal_error)
+        let hv = x.to_http_header().map_err(S3Error::internal_error)?;
+        let s = hv.to_str().map_err(S3Error::internal_error)?;
+        Ok(s.to_owned())
     }
 }
 
@@ -230,9 +230,9 @@ impl AwsConversion for s3s::dto::ETagCondition {
 
     fn try_into_aws(x: Self) -> S3Result<Self::Target> {
         // Preserve weak validator prefix (W/) by using to_http_header()
-        x.to_http_header()
-            .map(|hv| hv.to_str().expect("valid header").to_owned())
-            .map_err(S3Error::internal_error)
+        let hv = x.to_http_header().map_err(S3Error::internal_error)?;
+        let s = hv.to_str().map_err(S3Error::internal_error)?;
+        Ok(s.to_owned())
     }
 }
 
