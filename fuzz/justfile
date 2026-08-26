@@ -1,0 +1,47 @@
+# Fuzz workspace automation (independent of the main workspace).
+#
+# Hand-written seeds live in seeds/<target>/ (committed); the runtime-grown
+# corpus lands in corpus/<target>/ (gitignored at the repo root, local state
+# only).
+
+fmt:
+    cargo fmt --all
+
+lint:
+    cargo +nightly clippy --workspace --all-targets -- -D warnings
+
+# CI gate: formatting check + clippy, fails fast before fuzzing.
+ci-check:
+    cargo fmt --all -- --check
+    cargo +nightly clippy --workspace --all-targets -- -D warnings
+
+# Run a fuzz target (requires cargo-fuzz; uses nightly + ASan).
+fuzz name *ARGS:
+    #!/bin/bash -e
+    mkdir -p "corpus/{{name}}"
+    if [ -d "seeds/{{name}}" ]; then
+        cp -n seeds/{{name}}/* "corpus/{{name}}/" || true
+    fi
+    exec cargo +nightly fuzz run {{name}} {{ARGS}}
+
+# Regenerate committed seeds for xml_bodies (validates every seed: parse,
+# serialize, roundtrip idempotence). Pass --features minio for the second
+# codegen variant.
+gen-corpus *ARGS:
+    cargo +nightly run --release --bin gen_corpus -- seeds/xml_bodies {{ARGS}}
+
+# CI entry: compact the accumulated corpus (keep only coverage-increasing
+# inputs), re-seed, then fuzz for the full time budget. FEATURES is the
+# optional cargo-fuzz feature flag (e.g. "--features minio").
+ci-run target FEATURES="" BUDGET="1800":
+    #!/bin/bash -e
+    mkdir -p "corpus/{{target}}" "merged/{{target}}"
+    if [ -d "seeds/{{target}}" ]; then
+        cp -n seeds/{{target}}/* "corpus/{{target}}/" || true
+    fi
+    cargo +nightly fuzz run {{target}} {{FEATURES}} -- "merged/{{target}}" "corpus/{{target}}" -merge=1 -close_fd_mask=3 || true
+    if [ -n "$(ls -A "merged/{{target}}" 2>/dev/null)" ]; then
+        rm -rf "corpus/{{target}}"
+        mv "merged/{{target}}" "corpus/{{target}}"
+    fi
+    cargo +nightly fuzz run {{target}} {{FEATURES}} -- -max_total_time={{BUDGET}} -print_final_stats=1

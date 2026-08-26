@@ -1,0 +1,1 @@
+<MetadataTableConfiguration><S3TablesDestination><TableBucketArn>arn:aws:s3tables:us-east-1:1:tablebucket/tb</TableBucketArn><TableName>t</TableName></S3TablesDestination></MetadataTableConfiguration>

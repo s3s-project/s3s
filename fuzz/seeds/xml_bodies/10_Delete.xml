@@ -1,0 +1,2 @@
+
+<Delete xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Object><Key>k</Key></Object><Quiet>true</Quiet></Delete>

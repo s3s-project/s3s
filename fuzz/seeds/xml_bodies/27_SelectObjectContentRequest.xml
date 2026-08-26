@@ -1,0 +1,1 @@
+<SelectObjectContentRequest><Expression>SELECT * FROM s3object</Expression><ExpressionType>SQL</ExpressionType><InputSerialization><CSV/></InputSerialization><OutputSerialization><CSV/></OutputSerialization></SelectObjectContentRequest>
