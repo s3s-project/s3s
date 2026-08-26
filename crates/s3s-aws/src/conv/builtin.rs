@@ -212,7 +212,10 @@ impl AwsConversion for s3s::dto::ETag {
     }
 
     fn try_into_aws(x: Self) -> S3Result<Self::Target> {
-        Ok(format!("\"{}\"", x.value()))
+        // Preserve weak validator prefix (W/) by using to_http_header()
+        x.to_http_header()
+            .map(|hv| hv.to_str().expect("valid header").to_owned())
+            .map_err(S3Error::internal_error)
     }
 }
 
@@ -226,10 +229,10 @@ impl AwsConversion for s3s::dto::ETagCondition {
     }
 
     fn try_into_aws(x: Self) -> S3Result<Self::Target> {
-        match x {
-            s3s::dto::ETagCondition::ETag(etag) => Ok(format!("\"{}\"", etag.value())),
-            s3s::dto::ETagCondition::Any => Ok("*".to_string()),
-        }
+        // Preserve weak validator prefix (W/) by using to_http_header()
+        x.to_http_header()
+            .map(|hv| hv.to_str().expect("valid header").to_owned())
+            .map_err(S3Error::internal_error)
     }
 }
 
@@ -262,6 +265,32 @@ mod tests {
         // The wildcard maps to `*`, matching any existing entity.
         let sent = try_into_aws(ETagCondition::Any).expect("convert wildcard");
         assert_eq!(sent, "*");
+    }
+
+    #[test]
+    fn etag_condition_into_aws_preserves_weak() {
+        // Weak ETags must include the W/ prefix when serialized to AWS SDK format.
+        let cond = ETagCondition::ETag(ETag::Weak("xyz".to_owned()));
+        let sent = try_into_aws(cond).expect("convert weak etag");
+        assert_eq!(sent, "W/\"xyz\"");
+    }
+
+    #[test]
+    fn etag_into_aws_preserves_weak() {
+        // Weak ETags must include the W/ prefix when serialized to AWS SDK format.
+        let etag = ETag::Weak("abc123".to_owned());
+        let sent = try_into_aws(etag).expect("convert weak etag");
+        assert_eq!(sent, "W/\"abc123\"");
+    }
+
+    #[test]
+    fn weak_etag_roundtrip() {
+        // Parse a weak ETag from AWS SDK format and serialize it back; the W/ prefix
+        // must be preserved byte-for-byte.
+        let weak_str = "W/\"xyz789\"";
+        let cond: ETagCondition = try_from_aws(weak_str.to_owned()).expect("parse weak if-match");
+        let sent = try_into_aws(cond).expect("forward weak if-match");
+        assert_eq!(sent, weak_str);
     }
 
     #[test]
