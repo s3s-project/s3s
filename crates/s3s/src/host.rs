@@ -500,7 +500,7 @@ mod tests {
         }
 
         let domains: [&str; 0] = [];
-        let err = MultiDomain::new(&domains).unwrap_err();
+        let err = MultiDomain::new(domains).unwrap_err();
         assert_eq!(err, DomainError::ZeroDomains);
     }
 
