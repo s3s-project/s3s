@@ -28,6 +28,9 @@ mod multipart;
 mod tests;
 
 #[cfg(test)]
+mod route_skip_validation_tests;
+
+#[cfg(test)]
 mod route_bench;
 
 #[cfg(test)]
@@ -387,46 +390,58 @@ fn inject_host_header(req: &mut Request) {
     }
 }
 
-fn parse_request_path<'a>(
-    req: &mut Request,
+fn parse_request_host<'a>(
     ccx: &CallContext<'a>,
     host_header: Option<&'a str>,
 ) -> S3Result<(Option<VirtualHost<'a>>, Option<String>)> {
-    let decoded_uri_path = urlencoding::decode(req.uri.path()).map_err(|_| S3ErrorCode::InvalidURI)?;
+    // Virtual-host context feeds signature verification for both custom-route
+    // and S3 traffic, so it is always resolved — and malformed hosts are
+    // transport-level malformations rejected immediately (not a bucket/key
+    // concern; see the routing step in [`prepare`]).
+    if let (Some(host_header), Some(s3_host)) = (host_header, ccx.host)
+        && !is_socket_addr_or_ip_addr(host_header)
+    {
+        let vh = s3_host.parse_host_header(host_header)?;
+        debug!(?vh);
+        let region = vh.region().map(str::to_owned);
+        Ok((Some(vh), region))
+    } else {
+        Ok((None, None))
+    }
+}
+
+/// Classifies the request path.
+///
+/// Matched custom routes skip this entirely: their paths are not bucket/key
+/// paths, so no `S3Path` is materialized (`None` returned). Unmatched requests
+/// run the combined parse+validate pipeline, raising legacy errors in the
+/// legacy position.
+///
+/// Note: percent-decoding cannot be skipped in any branch — signature
+/// verification decodes the path itself as a canonical-request input.
+fn classify_request_path(
+    decoded_uri_path: &str,
+    ccx: &CallContext<'_>,
+    vh_bucket: Option<&str>,
+    custom_route_hit: bool,
+) -> S3Result<Option<S3Path>> {
+    if custom_route_hit {
+        return Ok(None);
+    }
 
     let default_validation = &const { AwsNameValidation::new() };
     let validation = ccx.validation.unwrap_or(default_validation);
+    let normalize_path = ccx.config.snapshot().normalize_forward_slash_path;
 
-    let parsed = if let (Some(host_header), Some(s3_host)) = (host_header, ccx.host)
-        && !is_socket_addr_or_ip_addr(host_header)
-    {
-        debug!(?host_header, ?decoded_uri_path, "parsing virtual-hosted-style request");
+    let path = crate::path::parse_virtual_hosted_style_with_validation_and_normalization(
+        vh_bucket,
+        decoded_uri_path,
+        validation,
+        normalize_path,
+    )
+    .map_err(|err| convert_parse_s3_path_error(&err))?;
 
-        let vh = s3_host.parse_host_header(host_header)?;
-        debug!(?vh);
-
-        let bucket = vh.bucket();
-        let region = vh.region().map(str::to_owned);
-        let path = crate::path::parse_virtual_hosted_style_with_validation_and_normalization(
-            bucket,
-            decoded_uri_path.as_ref(),
-            validation,
-            ccx.config.snapshot().normalize_forward_slash_path,
-        );
-        (Some(vh), region, path)
-    } else {
-        debug!(?decoded_uri_path, "parsing path-style request");
-        let path = crate::path::parse_path_style_with_validation_and_normalization(
-            decoded_uri_path.as_ref(),
-            validation,
-            ccx.config.snapshot().normalize_forward_slash_path,
-        );
-        (None, None, path)
-    };
-
-    let (vh, vh_region, result) = parsed;
-    req.s3ext.s3_path = Some(result.map_err(|err| convert_parse_s3_path_error(&err))?);
-    Ok((vh, vh_region))
+    Ok(Some(path))
 }
 
 fn resolve_operation(
@@ -692,22 +707,39 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
 
     inject_host_header(req);
     let host_header = extract_host(req)?;
-    let (vh, vh_region) = parse_request_path(req, ccx, host_header.as_deref())?;
+
+    // Percent-decode stays ahead of routing: it is a signature-verification
+    // input anyway, and decoding here keeps the legacy error precedence for
+    // malformed paths regardless of route configuration.
+    let decoded_uri_path = urlencoding::decode(req.uri.path()).map_err(|_| S3ErrorCode::InvalidURI)?;
+    debug!(?decoded_uri_path, "parsing request path");
+
+    let (vh, vh_region) = parse_request_host(ccx, host_header.as_deref())?;
+
+    // Custom routes claim requests before S3 naming semantics are enforced:
+    // no `S3Path` is materialized for them. The predicate may observe any
+    // request that reaches the service; authentication is enforced later via
+    // `check_access` / `authorize`. Virtual-host resolution above stays
+    // unconditional — it feeds signature verification with full context.
+    let custom_route_hit = ccx
+        .route
+        .is_some_and(|route| route.is_match(&req.method, &req.uri, &req.headers, &mut req.extensions));
+
+    // Matched routes skip path classification; unmatched requests run the
+    // legacy combined parse+validate here, preserving error codes/ordering.
+    let vh_bucket = vh.as_ref().and_then(VirtualHost::bucket);
+    req.s3ext.s3_path = classify_request_path(&decoded_uri_path, ccx, vh_bucket, custom_route_hit)?;
 
     req.s3ext.qs = extract_qs(&req.uri)?;
     content_length = extract_content_length(req);
-    content_length =
-        verify_signature(req, ccx, vh.as_ref().and_then(VirtualHost::bucket), vh_region.as_deref(), content_length).await?;
+    content_length = verify_signature(req, ccx, vh_bucket, vh_region.as_deref(), content_length).await?;
 
-    let s3_path = req.s3ext.s3_path.as_ref().unwrap();
-
-    if let Some(route) = ccx.route
-        && route.is_match(&req.method, &req.uri, &req.headers, &mut req.extensions)
-    {
+    if custom_route_hit {
         return Ok(Prepare::CustomRoute);
     }
 
     let op = 'resolve: {
+        let s3_path = req.s3ext.s3_path.as_ref().expect("classified above");
         if let Some(multipart) = &mut req.s3ext.multipart
             && req.method == Method::POST
         {
@@ -726,9 +758,9 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
         resolve_operation(req, s3_path, host_header.as_deref(), ccx)?
     };
 
+    let s3_path = req.s3ext.s3_path.as_ref().unwrap();
     debug!(op = %op.name(), ?s3_path, "resolved route");
 
-    let s3_path = req.s3ext.s3_path.as_ref().unwrap();
     authorize(
         ccx,
         op.name(),
