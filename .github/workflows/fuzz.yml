@@ -7,7 +7,7 @@ on:
 
 permissions:
   contents: read
-  actions: read
+  actions: write
 
 jobs:
   fuzz:
@@ -38,10 +38,12 @@ jobs:
         run: |
           # Crashes fail the job (strict policy), so runs are usually red; the
           # corpus artifact is uploaded with if: always(), so pick the latest
-          # completed run regardless of its conclusion.
+          # completed run regardless of its conclusion. Restrict to the
+          # default branch: manual dispatches on feature branches would
+          # otherwise contaminate the corpus across code versions.
           run_id="$(
             gh api "repos/${{ github.repository }}/actions/workflows/fuzz.yml/runs" \
-              --jq '[.workflow_runs[] | select(.status == "completed") | .id][0]'
+              --jq '[.workflow_runs[] | select(.status == "completed" and .head_branch == "${{ github.event.repository.default_branch }}") | .id][0]'
           )"
           echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
 
