@@ -28,6 +28,9 @@ mod multipart;
 mod tests;
 
 #[cfg(test)]
+mod route_skip_validation_tests;
+
+#[cfg(test)]
 mod route_bench;
 
 #[cfg(test)]
@@ -392,7 +395,31 @@ fn parse_request_path<'a>(
     ccx: &CallContext<'a>,
     host_header: Option<&'a str>,
 ) -> S3Result<(Option<VirtualHost<'a>>, Option<String>)> {
-    let decoded_uri_path = urlencoding::decode(req.uri.path()).map_err(|_| S3ErrorCode::InvalidURI)?;
+    // When a custom route is configured, a failed path parse must not
+    // short-circuit the pipeline before `route.is_match` gets a chance to
+    // claim the request: custom route paths are not S3 bucket/key paths.
+    // The error is deferred into `req.s3ext.path_parse_error` and surfaced
+    // by `prepare` right after the route misses, so non-route behavior is
+    // unchanged.
+    let defer_on_error = ccx.route.is_some();
+
+    macro_rules! try_or_defer {
+        ($expr:expr) => {
+            match $expr {
+                Ok(val) => val,
+                Err(err) => {
+                    if defer_on_error {
+                        debug!(error = ?err, "deferring s3 request path error for custom route");
+                        req.s3ext.path_parse_error = Some(err);
+                        return Ok((None, None));
+                    }
+                    return Err(err);
+                }
+            }
+        };
+    }
+
+    let decoded_uri_path = try_or_defer!(urlencoding::decode(req.uri.path()).map_err(|_| S3ErrorCode::InvalidURI.into()));
 
     let default_validation = &const { AwsNameValidation::new() };
     let validation = ccx.validation.unwrap_or(default_validation);
@@ -402,7 +429,7 @@ fn parse_request_path<'a>(
     {
         debug!(?host_header, ?decoded_uri_path, "parsing virtual-hosted-style request");
 
-        let vh = s3_host.parse_host_header(host_header)?;
+        let vh = try_or_defer!(s3_host.parse_host_header(host_header));
         debug!(?vh);
 
         let bucket = vh.bucket();
@@ -425,8 +452,21 @@ fn parse_request_path<'a>(
     };
 
     let (vh, vh_region, result) = parsed;
-    req.s3ext.s3_path = Some(result.map_err(|err| convert_parse_s3_path_error(&err))?);
-    Ok((vh, vh_region))
+    match result {
+        Ok(path) => {
+            req.s3ext.s3_path = Some(path);
+            Ok((vh, vh_region))
+        }
+        Err(err) => {
+            let err = convert_parse_s3_path_error(&err);
+            if defer_on_error {
+                req.s3ext.path_parse_error = Some(err);
+                Ok((vh, vh_region))
+            } else {
+                Err(err)
+            }
+        }
+    }
 }
 
 fn resolve_operation(
@@ -699,15 +739,25 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
     content_length =
         verify_signature(req, ccx, vh.as_ref().and_then(VirtualHost::bucket), vh_region.as_deref(), content_length).await?;
 
-    let s3_path = req.s3ext.s3_path.as_ref().unwrap();
-
+    // NOTE: no `s3_path` binding here — on a deferred path-parse failure
+    // (custom route configured) `req.s3ext.s3_path` is still None until the
+    // route decision below has had its chance.
     if let Some(route) = ccx.route
         && route.is_match(&req.method, &req.uri, &req.headers, &mut req.extensions)
     {
         return Ok(Prepare::CustomRoute);
     }
 
+    // A custom route is configured but did not match: surface the deferred
+    // path parse error (if any) so non-route requests keep their original
+    // errors. Reached only when `ccx.route` was set during path parsing.
+    if let Some(err) = req.s3ext.path_parse_error.take() {
+        debug!(error = ?err, "custom route missed; surfacing deferred s3 path error");
+        return Err(err);
+    }
+
     let op = 'resolve: {
+        let s3_path = req.s3ext.s3_path.as_ref().expect("deferred path error surfaced above");
         if let Some(multipart) = &mut req.s3ext.multipart
             && req.method == Method::POST
         {
@@ -726,9 +776,9 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
         resolve_operation(req, s3_path, host_header.as_deref(), ccx)?
     };
 
+    let s3_path = req.s3ext.s3_path.as_ref().expect("path errors surfaced above");
     debug!(op = %op.name(), ?s3_path, "resolved route");
 
-    let s3_path = req.s3ext.s3_path.as_ref().unwrap();
     authorize(
         ccx,
         op.name(),

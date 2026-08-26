@@ -7,6 +7,7 @@ use super::OrderedQs;
 
 use crate::HttpRequest;
 use crate::auth::Credentials;
+use crate::error::S3Error;
 use crate::path::S3Path;
 use crate::post_policy::PostPolicy;
 use crate::protocol::TrailingHeaders;
@@ -42,6 +43,11 @@ pub(crate) struct S3Extensions {
     pub trailing_headers: Option<TrailingHeaders>,
 
     pub post_policy: Option<PostPolicy>,
+
+    /// Deferred failure of `parse_request_path`. Set only when a custom route
+    /// is configured; surfaced right after the route misses, so non-route
+    /// behavior is unchanged.
+    pub path_parse_error: Option<S3Error>,
 }
 
 impl From<HttpRequest> for Request {
