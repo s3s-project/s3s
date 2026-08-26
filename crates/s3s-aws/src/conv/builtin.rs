@@ -270,7 +270,7 @@ mod tests {
         // sends `If-Match: "deadbeef..."`, s3s parses it inbound and must forward the
         // exact same value to the backend. The round-trip preserves it byte-for-byte.
         let wrong = "\"deadbeefdeadbeefdeadbeefdeadbeef\"";
-        let cond = ETagCondition::try_from_aws(wrong.to_owned()).expect("parse inbound if-match");
+        let cond: ETagCondition = try_from_aws(wrong.to_owned()).expect("parse inbound if-match");
         let sent = try_into_aws(cond).expect("forward if-match");
         assert_eq!(sent, wrong);
     }
