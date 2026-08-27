@@ -5277,7 +5277,7 @@ impl<'xml> DeserializeContent<'xml> for Grant {
                 let mut type_: Option<Type> = None;
                 for attr in start.attributes() {
                     let Ok(attr) = attr else { return Err(DeError::InvalidAttribute) };
-                    if attr.key.as_ref() == b"xsi:type" {
+                    if attr.key.as_ref() == "xsi:type" {
                         type_ = Some(
                             attr.normalized_value(quick_xml::XmlVersion::Implicit1_0)
                                 .map_err(DeError::InvalidXml)?
@@ -11277,7 +11277,7 @@ impl<'xml> DeserializeContent<'xml> for TargetGrant {
                 let mut type_: Option<Type> = None;
                 for attr in start.attributes() {
                     let Ok(attr) = attr else { return Err(DeError::InvalidAttribute) };
-                    if attr.key.as_ref() == b"xsi:type" {
+                    if attr.key.as_ref() == "xsi:type" {
                         type_ = Some(
                             attr.normalized_value(quick_xml::XmlVersion::Implicit1_0)
                                 .map_err(DeError::InvalidXml)?

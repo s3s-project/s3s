@@ -535,7 +535,7 @@ fn codegen_xml_serde_content_struct(
                         g!("let mut {}: Option<{}> = None;", xml_attr_name, xml_attr_field.type_);
                         g!("for attr in start.attributes() {{");
                         g!("  let Ok(attr) = attr else {{ return Err(DeError::InvalidAttribute) }};");
-                        g!("  if attr.key.as_ref() == b\"{}\" {{", xml_attr_field.xml_name.as_deref().unwrap());
+                        g!("  if attr.key.as_ref() == \"{}\" {{", xml_attr_field.xml_name.as_deref().unwrap());
                         g!(
                             "  {} = Some(attr.normalized_value(quick_xml::XmlVersion::Implicit1_0).map_err(DeError::InvalidXml)?.into_owned().into());",
                             xml_attr_name
