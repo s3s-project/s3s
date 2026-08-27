@@ -17,4 +17,7 @@
 mod amz_date;
 pub use self::amz_date::*;
 
+mod authorization;
+pub use self::authorization::*;
+
 pub(crate) mod parser;

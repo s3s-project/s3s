@@ -15,12 +15,13 @@ use crate::sig_v2::{AuthorizationV2, PostSignatureV2, PresignedUrlV2};
 use crate::sig_v4;
 use crate::sig_v4::AmzContentSha256;
 use crate::sig_v4::UploadStream;
-use crate::sig_v4::{AuthorizationV4, CredentialV4, PostSignatureV4, PresignedUrlV4};
+use crate::sig_v4::{PostSignatureV4, PresignedUrlV4};
 use crate::stream::ByteStream as _;
 use crate::utils::crypto::Sha256Sum;
 use crate::utils::crypto::hex_sha256;
 use crate::utils::is_base64_encoded;
 use s3s_sigv4::AmzDate;
+use s3s_sigv4::{AuthorizationV4, CredentialV4};
 
 use std::mem;
 use std::ops::Not;

@@ -976,6 +976,8 @@ version = "0.16.0-alpha.1"
 dependencies = [
  "arrayvec",
  "jiff",
+ "nom",
+ "serde",
  "thiserror",
 ]
 

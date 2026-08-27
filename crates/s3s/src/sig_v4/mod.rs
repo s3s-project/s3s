@@ -14,9 +14,6 @@
 mod presigned_url_v4;
 pub use self::presigned_url_v4::*;
 
-mod authorization_v4;
-pub use self::authorization_v4::*;
-
 mod amz_content_sha256;
 pub use self::amz_content_sha256::*;
 

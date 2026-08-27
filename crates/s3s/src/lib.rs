@@ -176,11 +176,11 @@ pub use self::http::{MultipartError, MultipartLimits, OrderedQs, ParseOrderedQsE
 #[cfg(fuzzing)]
 pub use self::sig_v2::{AuthorizationV2, ParseAuthorizationV2Error};
 #[cfg(fuzzing)]
-pub use self::sig_v4::{AuthorizationV4, ParseAuthorizationError};
-#[cfg(fuzzing)]
 pub use self::utils::crypto::Sha256Sum;
 #[cfg(fuzzing)]
 pub use s3s_sigv4::AmzDate;
+#[cfg(fuzzing)]
+pub use s3s_sigv4::{AuthorizationV4, ParseAuthorizationError};
 
 pub use self::protocol::HttpError;
 pub use self::protocol::HttpRequest;

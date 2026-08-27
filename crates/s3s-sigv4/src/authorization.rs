@@ -59,6 +59,11 @@ pub struct ParseCredentialError {
 }
 
 impl<'a> CredentialV4<'a> {
+    /// Parses a credential scope string of the form
+    /// `<access-key-id>/<date>/<aws-region>/<aws-service>/aws4_request`.
+    ///
+    /// # Errors
+    /// Returns [`ParseCredentialError`] when the string does not match.
     pub fn parse(input: &'a str) -> Result<Self, ParseCredentialError> {
         match parser::parse_credential(input) {
             Ok(("", ans)) => Ok(ans),
@@ -82,7 +87,7 @@ impl<'a> AuthorizationV4<'a> {
 mod parser {
     use super::*;
 
-    use crate::utils::parser::{Error, consume, digit2, digit4};
+    use crate::parser::{Error, consume, digit2, digit4};
 
     use nom::IResult;
     use nom::Parser;
@@ -160,13 +165,16 @@ mod parser {
             return Err(Error);
         }
 
-        let yyyy = digit4([x[0], x[1], x[2], x[3]])?.into();
-        let mm = digit2([x[4], x[5]])?.into();
-        let dd = digit2([x[6], x[7]])?.into();
+        let yyyy = digit4([x[0], x[1], x[2], x[3]])?;
+        let mm = digit2([x[4], x[5]])?;
+        let dd = digit2([x[6], x[7]])?;
 
-        match chrono::NaiveDate::from_ymd_opt(yyyy, mm, dd) {
-            Some(_) => Ok(()),
-            None => Err(Error),
+        let yyyy = i16::try_from(yyyy).map_err(|_| Error)?;
+        let mm = i8::try_from(mm).map_err(|_| Error)?;
+        let dd = i8::try_from(dd).map_err(|_| Error)?;
+        match jiff::civil::Date::new(yyyy, mm, dd) {
+            Ok(_) => Ok(()),
+            Err(_) => Err(Error),
         }
     }
 }
@@ -206,7 +214,7 @@ mod tests {
 
     #[test]
     fn credential_with_non_digit_date_does_not_panic() {
-        // Regression for the fuzz-discovered panic in `utils::parser::digit`:
+        // Regression for the fuzz-discovered panic in `parser::digit`:
         // a non-digit byte in the credential date used to underflow below
         // `b'0'` in overflow-checked builds.
         let auth = concat!(
