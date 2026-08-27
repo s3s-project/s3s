@@ -155,6 +155,25 @@ mod tests {
     }
 
     #[test]
+    fn parse_rejects_missing_each_field() {
+        for field in [
+            "X-Amz-Algorithm",
+            "X-Amz-Credential",
+            "X-Amz-Date",
+            "X-Amz-Expires",
+            "X-Amz-SignedHeaders",
+            "X-Amz-Signature",
+        ] {
+            let mut pairs = valid_query_strings().to_vec();
+            pairs.retain(|&(name, _)| name != field);
+            assert!(
+                PresignedUrlV4::parse(&pairs, default_max_expires_secs()).is_err(),
+                "{field} must be required"
+            );
+        }
+    }
+
+    #[test]
     fn parse_rejects_non_ascii_signed_headers() {
         let mut pairs = valid_query_strings();
         pairs[4] = ("X-Amz-SignedHeaders", "höst");

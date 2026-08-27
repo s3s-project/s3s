@@ -139,6 +139,15 @@ mod tests {
     }
 
     #[test]
+    fn reject_base64_with_invalid_alphabet_at_length_32() {
+        // 44 chars with one '=' padding decode to 32 bytes; the '!' byte is
+        // outside the base64 alphabet, so decoding must fail.
+        let invalid = format!("{}!=", "A".repeat(42));
+        assert_eq!(invalid.len(), 44);
+        assert!(AmzContentSha256::parse(&invalid).is_err());
+    }
+
+    #[test]
     fn parse_unsigned_payload() {
         let v = AmzContentSha256::parse("UNSIGNED-PAYLOAD").unwrap();
         assert_eq!(v, AmzContentSha256::UnsignedPayload);

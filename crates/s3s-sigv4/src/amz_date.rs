@@ -137,6 +137,21 @@ mod tests {
     }
 
     #[test]
+    fn parse_rejects_wrong_separators() {
+        assert!(AmzDate::parse("20130524A000000Z").is_err()); // 8th char not 'T'
+        assert!(AmzDate::parse("20130524T000000A").is_err()); // 15th char not 'Z'
+    }
+
+    #[test]
+    fn parse_rejects_non_digit_fields() {
+        assert!(AmzDate::parse("2013ab24T000000Z").is_err()); // month
+        assert!(AmzDate::parse("201305abT000000Z").is_err()); // day
+        assert!(AmzDate::parse("20130524Taa0000Z").is_err()); // hour
+        assert!(AmzDate::parse("20130524T00aa00Z").is_err()); // minute
+        assert!(AmzDate::parse("20130524T0000aaZ").is_err()); // second
+    }
+
+    #[test]
     fn to_time_rejects_out_of_range_values() {
         // Digits parse, but the calendar value is out of range.
         assert!(matches!(AmzDate::parse("20130524T999999Z"), Ok(d) if d.to_time().is_none()));

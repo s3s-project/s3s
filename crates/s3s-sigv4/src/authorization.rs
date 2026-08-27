@@ -227,6 +227,52 @@ mod tests {
     }
 
     #[test]
+    fn parse_rejects_missing_parts() {
+        let header = |suffix: &str| format!("AWS4-HMAC-SHA256 {suffix}");
+        // missing Credential=
+        assert!(AuthorizationV4::parse(&header("SignedHeaders=host, Signature=abc")).is_err());
+        // missing SignedHeaders=
+        assert!(AuthorizationV4::parse(&header("Credential=AKIA/20230524/us-east-1/s3/aws4_request, Signature=abc")).is_err());
+        // missing Signature=
+        assert!(
+            AuthorizationV4::parse(&header("Credential=AKIA/20230524/us-east-1/s3/aws4_request, SignedHeaders=host,")).is_err()
+        );
+        // missing whitespace after the algorithm
+        assert!(
+            AuthorizationV4::parse(
+                "AWS4-HMAC-SHA256Credential=AKIA/20230524/us-east-1/s3/aws4_request, SignedHeaders=host, Signature=abc"
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn parse_rejects_empty_or_whitespace_input() {
+        assert!(AuthorizationV4::parse("").is_err());
+        assert!(AuthorizationV4::parse("AWS4-HMAC-SHA256").is_err());
+    }
+
+    #[test]
+    fn parse_credential_rejects_invalid_scope() {
+        assert!(CredentialV4::parse("AKIA/20230524/us-east-1/s3/aws4_request").is_ok());
+        // missing aws4_request
+        assert!(CredentialV4::parse("AKIA/20230524/us-east-1/s3/").is_err());
+        assert!(CredentialV4::parse("bad").is_err());
+        // truncated scope
+        assert!(CredentialV4::parse("AKIA/20230524/us-east-1").is_err());
+        assert!(CredentialV4::parse("AKIA/20230524/us-east-1/s3").is_err());
+    }
+
+    #[test]
+    fn parse_credential_rejects_invalid_date() {
+        // date too short
+        assert!(CredentialV4::parse("AKIA/2023/us-east-1/s3/aws4_request").is_err());
+        // non-digit month / day
+        assert!(CredentialV4::parse("AKIA/2023ab24/us-east-1/s3/aws4_request").is_err());
+        assert!(CredentialV4::parse("AKIA/2023052a/us-east-1/s3/aws4_request").is_err());
+    }
+
+    #[test]
     fn special_20200921() {
         let auth = concat!(
             "AWS4-HMAC-SHA256 ",

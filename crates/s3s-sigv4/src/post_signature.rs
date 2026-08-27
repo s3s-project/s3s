@@ -60,13 +60,21 @@ mod tests {
     }
 
     #[test]
-    fn extract_missing_field() {
-        let fields = make_fields(vec![
+    fn extract_missing_each_field() {
+        let all = [
             ("policy", "test-policy"),
             ("x-amz-algorithm", "AWS4-HMAC-SHA256"),
             ("x-amz-credential", "AKID/20130524/us-east-1/s3/aws4_request"),
             ("x-amz-date", "20130524T000000Z"),
-        ]);
-        assert!(PostSignatureV4::extract(&fields).is_none());
+            ("x-amz-signature", "abc"),
+        ];
+        for (name, _) in all {
+            let fields: Vec<(String, String)> = all
+                .iter()
+                .filter(|&&(n, _)| n != name)
+                .map(|&(n, v)| (n.to_owned(), v.to_owned()))
+                .collect();
+            assert!(PostSignatureV4::extract(&fields).is_none(), "{name} must be required");
+        }
     }
 }
