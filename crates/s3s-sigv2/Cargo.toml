@@ -1,0 +1,14 @@
+[package]
+name = "s3s-sigv2"
+version = "0.16.0-alpha.1"
+description = "AWS Signature Version 2: parsing, canonicalization, and signing"
+readme = "../../README.md"
+keywords = ["s3", "aws", "signature", "sigv2"]
+categories = ["cryptography", "web-programming"]
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true

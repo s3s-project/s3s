@@ -15,6 +15,8 @@ S3 Service Adapter
 | :------------------------- | :-----------------------------------------------------------------------------------------: | :------------------------------------------------------------------: |
 | [s3s](./crates/s3s/)       |    [![Crates.io](https://img.shields.io/crates/v/s3s.svg)](https://crates.io/crates/s3s)    |    [![Docs](https://docs.rs/s3s/badge.svg)](https://docs.rs/s3s/)    |
 | [s3s-aws](./crates/s3s-aws/)       |    [![Crates.io](https://img.shields.io/crates/v/s3s-aws.svg)](https://crates.io/crates/s3s-aws)    |    [![Docs](https://docs.rs/s3s-aws/badge.svg)](https://docs.rs/s3s-aws/)    |
+| [s3s-sigv2](./crates/s3s-sigv2/)    |    [![Crates.io](https://img.shields.io/crates/v/s3s-sigv2.svg)](https://crates.io/crates/s3s-sigv2)    |    [![Docs](https://docs.rs/s3s-sigv2/badge.svg)](https://docs.rs/s3s-sigv2/)    |
+| [s3s-sigv4](./crates/s3s-sigv4/)    |    [![Crates.io](https://img.shields.io/crates/v/s3s-sigv4.svg)](https://crates.io/crates/s3s-sigv4)    |    [![Docs](https://docs.rs/s3s-sigv4/badge.svg)](https://docs.rs/s3s-sigv4/)    |
 | [s3s-fs](./crates/s3s-fs/) | [![Crates.io](https://img.shields.io/crates/v/s3s-fs.svg)](https://crates.io/crates/s3s-fs) | [![Docs](https://docs.rs/s3s-fs/badge.svg)](https://docs.rs/s3s-fs/) |
 
 📚 **[Development documentation](https://s3s-project.github.io/s3s/)** for the `main` branch is available on GitHub Pages.
