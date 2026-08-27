@@ -33,20 +33,6 @@ impl Sha256Sum {
         (decoded.len() == digest.len()).then_some(Self(digest))
     }
 
-    /// Parses a standard Base64-encoded SHA-256 digest.
-    #[must_use]
-    pub fn from_base64(value: &str) -> Option<Self> {
-        if base64_simd::STANDARD.decoded_length(value.as_bytes()).ok()? != 32 {
-            return None;
-        }
-
-        let mut digest = [0_u8; 32];
-        let decoded = base64_simd::STANDARD
-            .decode(value.as_bytes(), base64_simd::Out::from_slice(&mut digest))
-            .ok()?;
-        (decoded.len() == digest.len()).then_some(Self(digest))
-    }
-
     /// Creates a digest from its raw bytes.
     #[must_use]
     pub const fn from_bytes(value: [u8; 32]) -> Self {
@@ -173,22 +159,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn sha256_sum_normalizes_hex_and_base64() {
+    fn sha256_sum_normalizes_hex() {
         let hex = "083fe500b5dc034edaba07dd39da7bd80c0883ce5af73583279ce85eb66e6fcd";
-        let base64 = "CD/lALXcA07augfdOdp72AwIg85a9zWDJ5zoXrZub80=";
 
         let from_hex = Sha256Sum::from_hex(hex).expect("valid lowercase SHA-256 hex");
-        let from_base64 = Sha256Sum::from_base64(base64).expect("valid standard Base64 SHA-256");
 
-        assert_eq!(from_hex, from_base64);
-        assert_eq!(from_base64.to_hex_string(), hex);
+        assert_eq!(
+            from_hex,
+            Sha256Sum::from_bytes([
+                0x08, 0x3f, 0xe5, 0x00, 0xb5, 0xdc, 0x03, 0x4e, 0xda, 0xba, 0x07, 0xdd, 0x39, 0xda, 0x7b, 0xd8, 0x0c, 0x08, 0x83,
+                0xce, 0x5a, 0xf7, 0x35, 0x83, 0x27, 0x9c, 0xe8, 0x5e, 0xb6, 0x6e, 0x6f, 0xcd
+            ])
+        );
+        assert_eq!(from_hex.to_hex_string(), hex);
     }
 
     #[test]
     fn sha256_sum_rejects_noncanonical_or_wrong_length_encodings() {
         assert!(Sha256Sum::from_hex("083FE500B5DC034EDABA07DD39DA7BD80C0883CE5AF73583279CE85EB66E6FCD").is_none());
         assert!(Sha256Sum::from_hex("00").is_none());
-        assert!(Sha256Sum::from_base64("aGVsbG8=").is_none());
-        assert!(Sha256Sum::from_base64("CD_lALXcA07augfdOdp72AwIg85a9zWDJ5zoXrZub80=").is_none());
     }
 }

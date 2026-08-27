@@ -3017,6 +3017,8 @@ name = "s3s-sigv4"
 version = "0.16.0-alpha.1"
 dependencies = [
  "arrayvec",
+ "base64-simd",
+ "hex-simd",
  "jiff",
  "nom",
  "serde",

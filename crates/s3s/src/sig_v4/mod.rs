@@ -11,9 +11,6 @@
 //! See <https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-query-string-auth.html>
 //!
 
-mod amz_content_sha256;
-pub use self::amz_content_sha256::*;
-
 mod upload_stream;
 pub use self::upload_stream::*;
 

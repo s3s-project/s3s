@@ -13,12 +13,13 @@ use crate::protocol::TrailingHeaders;
 use crate::sig_v2;
 use crate::sig_v2::{AuthorizationV2, PostSignatureV2, PresignedUrlV2};
 use crate::sig_v4;
-use crate::sig_v4::AmzContentSha256;
 use crate::sig_v4::UploadStream;
 use crate::stream::ByteStream as _;
 use crate::utils::crypto::Sha256Sum;
+use crate::utils::crypto::hex_bytes32;
 use crate::utils::crypto::hex_sha256;
 use crate::utils::is_base64_encoded;
+use s3s_sigv4::AmzContentSha256;
 use s3s_sigv4::AmzDate;
 use s3s_sigv4::PostSignatureV4;
 use s3s_sigv4::PresignedUrlV4;
@@ -542,8 +543,7 @@ impl<'a> SignatureContext<'a> {
                     .ok_or_else(|| s3_error!(MissingContentLength, "missing header: content-length"))?
             };
 
-            let body = mem::take(self.req_body);
-            let stream = UploadStream::new(body, length, expected_checksum);
+            let stream = UploadStream::new(mem::take(self.req_body), length, Sha256Sum::from_bytes(expected_checksum));
             *self.req_body = Body::from(stream.into_byte_stream());
         }
 
@@ -603,7 +603,7 @@ impl<'a> SignatureContext<'a> {
             Some(AmzContentSha256::UnsignedPayload) => sig_v4::Payload::Unsigned,
             Some(AmzContentSha256::StreamingUnsignedPayloadTrailer) => sig_v4::Payload::UnsignedMultipleChunksWithTrailer,
             Some(AmzContentSha256::SingleChunk(checksum)) => {
-                payload_hash = checksum.to_hex_string();
+                payload_hash = hex_bytes32(&checksum, str::to_owned);
                 sig_v4::Payload::SingleChunk(&payload_hash)
             }
             Some(
@@ -692,7 +692,7 @@ impl<'a> SignatureContext<'a> {
             };
 
             let body = mem::take(self.req_body);
-            let stream = UploadStream::new(body, length, expected_checksum);
+            let stream = UploadStream::new(body, length, Sha256Sum::from_bytes(expected_checksum));
             *self.req_body = Body::from(stream.into_byte_stream());
         } else if matches!(amz_content_sha256, Some(AmzContentSha256::UnsignedPayload)) {
             // For non-streaming unsigned payloads, require Content-Length.

@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
-use crate::utils::crypto::Sha256Sum;
+use crate::crypto::is_sha256_checksum;
 
 /// [x-amz-content-sha256](https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-auth-using-authorization-header.html)
 ///
 /// See also [Common Request Headers](https://docs.aws.amazon.com/AmazonS3/latest/API/RESTCommonRequestHeaders.html)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AmzContentSha256 {
-    /// Actual payload checksum value.
-    SingleChunk(Sha256Sum),
+    /// Actual payload checksum value (raw SHA-256 digest).
+    SingleChunk([u8; 32]),
 
     /// `UNSIGNED-PAYLOAD`
     UnsignedPayload,
@@ -44,7 +44,7 @@ impl AmzContentSha256 {
     /// # Errors
     /// Returns an `Err` if the header is invalid
     pub fn parse(header: &str) -> Result<Self, ParseAmzContentSha256Error> {
-        if let Some(checksum) = Sha256Sum::from_hex(header).or_else(|| Sha256Sum::from_base64(header)) {
+        if let Some(checksum) = parse_checksum(header) {
             return Ok(Self::SingleChunk(checksum));
         }
 
@@ -59,6 +59,8 @@ impl AmzContentSha256 {
         }
     }
 
+    /// Returns whether the payload is streamed.
+    #[must_use]
     pub fn is_streaming(&self) -> bool {
         match self {
             AmzContentSha256::SingleChunk(_) | AmzContentSha256::UnsignedPayload => false,
@@ -70,6 +72,8 @@ impl AmzContentSha256 {
         }
     }
 
+    /// Returns whether the stream carries a trailer.
+    #[must_use]
     pub fn has_trailer(&self) -> bool {
         match self {
             AmzContentSha256::SingleChunk(_)
@@ -83,6 +87,23 @@ impl AmzContentSha256 {
     }
 }
 
+/// Parses a SHA-256 checksum in canonical lowercase hex or standard Base64 form.
+fn parse_checksum(header: &str) -> Option<[u8; 32]> {
+    if is_sha256_checksum(header) {
+        let mut digest = [0_u8; 32];
+        let decoded = hex_simd::decode(header.as_bytes(), hex_simd::Out::from_slice(&mut digest)).ok()?;
+        return (decoded.len() == 32).then_some(digest);
+    }
+    if base64_simd::STANDARD.decoded_length(header.as_bytes()).ok()? != 32 {
+        return None;
+    }
+    let mut digest = [0_u8; 32];
+    let decoded = base64_simd::STANDARD
+        .decode(header.as_bytes(), base64_simd::Out::from_slice(&mut digest))
+        .ok()?;
+    (decoded.len() == 32).then_some(digest)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -92,7 +113,7 @@ mod tests {
         // Valid SHA-256 hex (64 lowercase hex chars)
         let hash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
         let v = AmzContentSha256::parse(hash).unwrap();
-        assert_eq!(v, AmzContentSha256::SingleChunk(Sha256Sum::from_hex(hash).unwrap()));
+        assert_eq!(v, AmzContentSha256::SingleChunk(parse_checksum(hash).unwrap()));
         assert!(!v.is_streaming());
         assert!(!v.has_trailer());
     }
@@ -103,10 +124,10 @@ mod tests {
         let v = AmzContentSha256::parse(hash).unwrap();
         assert_eq!(
             v,
-            AmzContentSha256::SingleChunk(Sha256Sum::from_bytes([
+            AmzContentSha256::SingleChunk([
                 0x08, 0x3f, 0xe5, 0x00, 0xb5, 0xdc, 0x03, 0x4e, 0xda, 0xba, 0x07, 0xdd, 0x39, 0xda, 0x7b, 0xd8, 0x0c, 0x08, 0x83,
                 0xce, 0x5a, 0xf7, 0x35, 0x83, 0x27, 0x9c, 0xe8, 0x5e, 0xb6, 0x6e, 0x6f, 0xcd,
-            ]))
+            ])
         );
         assert!(!v.is_streaming());
         assert!(!v.has_trailer());
