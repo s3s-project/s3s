@@ -20,4 +20,7 @@ pub use self::amz_date::*;
 mod authorization;
 pub use self::authorization::*;
 
+mod post_signature;
+pub use self::post_signature::*;
+
 pub(crate) mod parser;

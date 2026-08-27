@@ -17,9 +17,6 @@ pub use self::presigned_url_v4::*;
 mod amz_content_sha256;
 pub use self::amz_content_sha256::*;
 
-mod post_signature_v4;
-pub use self::post_signature_v4::*;
-
 mod upload_stream;
 pub use self::upload_stream::*;
 
