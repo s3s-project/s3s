@@ -14,4 +14,5 @@ rust-version.workspace = true
 workspace = true
 
 [dependencies]
+jiff.workspace = true
 thiserror.workspace = true

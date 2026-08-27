@@ -2844,6 +2844,7 @@ dependencies = [
  "hyper",
  "hyper-util",
  "itoa",
+ "jiff",
  "md-5",
  "memchr",
  "mime",
@@ -3011,6 +3012,7 @@ dependencies = [
 name = "s3s-sigv2"
 version = "0.16.0-alpha.1"
 dependencies = [
+ "jiff",
  "thiserror",
 ]
 

@@ -11,7 +11,6 @@ use crate::http::{AwsChunkedStream, Body, Multipart, MultipartLimits};
 use crate::post_policy::PostPolicy;
 use crate::protocol::TrailingHeaders;
 use crate::sig_v2;
-use crate::sig_v2::PresignedUrlV2;
 use crate::sig_v4;
 use crate::sig_v4::AmzContentSha256;
 use crate::sig_v4::AmzDate;
@@ -23,6 +22,7 @@ use crate::utils::crypto::hex_sha256;
 use crate::utils::is_base64_encoded;
 use s3s_sigv2::AuthorizationV2;
 use s3s_sigv2::PostSignatureV2;
+use s3s_sigv2::PresignedUrlV2;
 
 use std::mem;
 use std::ops::Not;
@@ -237,6 +237,13 @@ impl SignatureVerificationContext<'_> {
 }
 
 impl<'a> SignatureContext<'a> {
+    fn query_pairs(&self) -> &'a [(String, String)] {
+        // `Option<&'a OrderedQs>` is Copy: extract the reference without
+        // borrowing `self`, so the returned slice lives as long as `'a`.
+        let qs: Option<&'a OrderedQs> = self.qs;
+        qs.map_or(&[], AsRef::as_ref)
+    }
+
     fn signed_host_fallback(&self, name: &'a str) -> Option<&'a str> {
         if name == "host"
             && matches!(self.req_version, ::http::Version::HTTP_2 | ::http::Version::HTTP_3)
@@ -797,10 +804,10 @@ impl<'a> SignatureContext<'a> {
     pub async fn v2_check_presigned_url(&mut self) -> S3Result<CredentialsExt> {
         self.ensure_v2_enabled()?;
 
-        let qs = self.qs.unwrap(); // assume: qs has "Signature"
-        let presigned_url = PresignedUrlV2::parse(qs).map_err(|err| invalid_request!(err, "missing presigned url v2 fields"))?;
+        let presigned_url =
+            PresignedUrlV2::parse(self.query_pairs()).map_err(|err| invalid_request!(err, "missing presigned url v2 fields"))?;
 
-        if time::OffsetDateTime::now_utc() > presigned_url.expires_time {
+        if jiff::Timestamp::now() > presigned_url.expires_time {
             return Err(s3_error!(AccessDenied, "Request has expired"));
         }
 
@@ -819,7 +826,7 @@ impl<'a> SignatureContext<'a> {
         let signature = sig_v2::calculate_signature(&secret_key, &string_to_sign);
 
         let expected_signature =
-            Signature::from_base64(presigned_url.signature.as_ref()).ok_or_else(|| s3_error!(SignatureDoesNotMatch))?;
+            Signature::from_base64(presigned_url.signature).ok_or_else(|| s3_error!(SignatureDoesNotMatch))?;
         if !Signature::compare(&signature, &expected_signature) {
             debug!(?signature, expected=?expected_signature, "signature mismatch");
             return Err(s3_error!(SignatureDoesNotMatch));

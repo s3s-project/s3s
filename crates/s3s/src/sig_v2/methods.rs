@@ -472,7 +472,7 @@ mod tests {
             .unwrap();
             let vh_bucket = Some("awsexamplebucket1");
 
-            let presigned_url = super::super::PresignedUrlV2::parse(&qs).unwrap();
+            let presigned_url = s3s_sigv2::PresignedUrlV2::parse(qs.as_ref()).unwrap();
             assert_eq!(presigned_url.access_key, access_key);
 
             let string_to_sign =
@@ -490,7 +490,7 @@ mod tests {
                 )
             );
 
-            assert_eq!(signature.as_str(), presigned_url.signature.as_ref());
+            assert_eq!(signature.as_str(), presigned_url.signature);
         }
     }
 
