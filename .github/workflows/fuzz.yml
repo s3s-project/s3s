@@ -61,8 +61,14 @@ jobs:
         with:
           workspaces: fuzz
 
+      # Installs the latest cargo-fuzz release: `tool` is left unpinned on
+      # purpose so it never goes stale. `with: tool:` keeps the name explicit,
+      # so a Dependabot bump of the action ref (e.g. @cargo-fuzz -> @v2.x)
+      # cannot drop it.
       - name: Install cargo-fuzz
         uses: taiki-e/install-action@cargo-fuzz
+        with:
+          tool: cargo-fuzz
 
       - name: Format and lint
         run: just ci-check
@@ -70,6 +76,8 @@ jobs:
 
       - name: Find previous run carrying the corpus
         id: previous-run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Crashes fail the job (strict policy), so runs are usually red; the
           # corpus artifact is uploaded with if: always(), so pick the latest
@@ -78,7 +86,7 @@ jobs:
           # otherwise contaminate the corpus across code versions.
           run_id="$(
             gh api "repos/${{ github.repository }}/actions/workflows/fuzz.yml/runs" \
-              --jq '[.workflow_runs[] | select(.status == "completed" and .head_branch == "${{ github.event.repository.default_branch }}") | .id][0]'
+              --jq '[.workflow_runs[] | select(.status == "completed" and .head_branch == "${{ github.event.repository.default_branch || 'main' }}") | .id][0]'
           )"
           echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
 
@@ -92,7 +100,7 @@ jobs:
         continue-on-error: true
 
       - name: Build fuzz targets
-        run: cargo +nightly fuzz build
+        run: cargo +nightly fuzz build --target x86_64-unknown-linux-gnu
         working-directory: fuzz
 
       - name: Fuzz for 30 minutes

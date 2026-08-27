@@ -39,9 +39,9 @@ ci-run target FEATURES="" BUDGET="1800":
     if [ -d "seeds/{{target}}" ]; then
         cp -n seeds/{{target}}/* "corpus/{{target}}/" || true
     fi
-    cargo +nightly fuzz run {{target}} {{FEATURES}} -- "merged/{{target}}" "corpus/{{target}}" -merge=1 -close_fd_mask=3 || true
+    cargo +nightly fuzz run {{target}} {{FEATURES}} --target x86_64-unknown-linux-gnu -- "merged/{{target}}" "corpus/{{target}}" -merge=1 -close_fd_mask=3 || true
     if [ -n "$(ls -A "merged/{{target}}" 2>/dev/null)" ]; then
         rm -rf "corpus/{{target}}"
         mv "merged/{{target}}" "corpus/{{target}}"
     fi
-    cargo +nightly fuzz run {{target}} {{FEATURES}} -- -max_total_time={{BUDGET}} -print_final_stats=1
+    cargo +nightly fuzz run {{target}} {{FEATURES}} --target x86_64-unknown-linux-gnu -- -max_total_time={{BUDGET}} -print_final_stats=1
