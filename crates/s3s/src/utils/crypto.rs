@@ -22,6 +22,7 @@ impl Eq for Sha256Sum {}
 
 impl Sha256Sum {
     /// Parses a lowercase hexadecimal SHA-256 digest.
+    #[must_use]
     pub fn from_hex(value: &str) -> Option<Self> {
         if !is_sha256_checksum(value) {
             return None;
@@ -33,6 +34,7 @@ impl Sha256Sum {
     }
 
     /// Parses a standard Base64-encoded SHA-256 digest.
+    #[must_use]
     pub fn from_base64(value: &str) -> Option<Self> {
         if base64_simd::STANDARD.decoded_length(value.as_bytes()).ok()? != 32 {
             return None;
@@ -46,11 +48,13 @@ impl Sha256Sum {
     }
 
     /// Creates a digest from its raw bytes.
+    #[must_use]
     pub const fn from_bytes(value: [u8; 32]) -> Self {
         Self(value)
     }
 
     /// Encodes the digest as lowercase hexadecimal.
+    #[must_use]
     pub fn to_hex_string(self) -> String {
         hex(self.0)
     }

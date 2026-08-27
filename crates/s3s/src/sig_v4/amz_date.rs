@@ -54,6 +54,7 @@ impl AmzDate {
         buf
     }
 
+    #[must_use]
     pub fn to_time(&self) -> Option<time::OffsetDateTime> {
         let y = i32::from(self.year);
         let m: time::Month = self.month.try_into().ok()?;

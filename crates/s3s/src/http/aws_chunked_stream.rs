@@ -171,6 +171,13 @@ fn check_signature(ctx: &SignatureCtx, expected_signature: &[u8], chunk_data: &[
 
 impl AwsChunkedStream {
     /// Constructs a `ChunkedStream`
+    ///
+    /// # Panics
+    ///
+    /// The worker task locks the internal trailers mutex while storing
+    /// verified trailers and unwraps the lock: if the mutex is poisoned (a
+    /// panic while any holder — the worker or a `TrailingHeaders` reader —
+    /// held the lock), polling the returned stream panics.
     #[allow(clippy::too_many_arguments)]
     pub fn new<S>(
         body: S,
@@ -646,10 +653,12 @@ impl AwsChunkedStream {
         ans
     }
 
+    #[must_use]
     pub fn exact_remaining_length(&self) -> usize {
         self.remaining_length
     }
 
+    #[must_use]
     pub fn into_byte_stream(self) -> DynByteStream {
         crate::stream::into_dyn(self)
     }

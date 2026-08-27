@@ -8,6 +8,8 @@ edition = "2024"
 cargo-fuzz = true
 
 [dependencies]
+bytes = "1"
+futures = "0.3"
 libfuzzer-sys = "0.4"
 s3s = { path = "../crates/s3s" }
 
@@ -17,6 +19,13 @@ minio = ["s3s/minio"]
 [[bin]]
 name = "xml_bodies"
 path = "fuzz_targets/xml_bodies.rs"
+test = false
+bench = false
+doc = false
+
+[[bin]]
+name = "aws_chunked"
+path = "fuzz_targets/aws_chunked.rs"
 test = false
 bench = false
 doc = false

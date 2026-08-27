@@ -165,6 +165,17 @@ pub use self::http::Body;
 pub use self::s3_op::S3Operation;
 pub use self::s3_trait::S3;
 
+// Test-support API surface for the external fuzz workspace: drives
+// otherwise-private internals. Gated on the `fuzzing` cfg set by
+// cargo-fuzz / oss-fuzz build environments (no cargo feature, hence no
+// public feature surface and no semver impact).
+#[cfg(fuzzing)]
+pub use self::http::{AwsChunkedStream, AwsChunkedStreamError};
+#[cfg(fuzzing)]
+pub use self::sig_v4::AmzDate;
+#[cfg(fuzzing)]
+pub use self::utils::crypto::Sha256Sum;
+
 pub use self::protocol::HttpError;
 pub use self::protocol::HttpRequest;
 pub use self::protocol::HttpResponse;
