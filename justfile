@@ -47,6 +47,8 @@ coverage *ARGS:
 
 sync-version:
     cargo set-version -p s3s            0.15.0
+    cargo set-version -p s3s-sigv2      0.16.0-alpha.1
+    cargo set-version -p s3s-sigv4      0.16.0-alpha.1
     cargo set-version -p s3s-aws        0.15.0
     cargo set-version -p s3s-model      0.15.0
     cargo set-version -p s3s-policy     0.15.0

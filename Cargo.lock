@@ -3007,6 +3007,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "s3s-sigv2"
+version = "0.16.0-alpha.1"
+
+[[package]]
+name = "s3s-sigv4"
+version = "0.16.0-alpha.1"
+
+[[package]]
 name = "s3s-test"
 version = "0.15.0"
 dependencies = [
