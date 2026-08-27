@@ -1,6 +1,13 @@
 name: Fuzz
 
 on:
+  pull_request:
+    branches:
+      - main
+      - 'feat/**'
+    paths:
+      - 'fuzz/**'
+      - '.github/workflows/fuzz.yml'
   schedule:
     - cron: '0 0 * * 0' # weekly at 00:00 UTC on Sunday
   workflow_dispatch:
@@ -10,7 +17,32 @@ permissions:
   actions: write
 
 jobs:
-  fuzz:
+  # Lightweight fmt + clippy gate for PRs that touch fuzz/. The fuzz/ tree is a
+  # separate cargo workspace not covered by the root ci.yml, so without this a
+  # malformed fuzz target could land without any CI signal.
+  fuzz-check:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: taiki-e/install-action@just
+
+      - name: Install nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: fuzz
+
+      - name: Format and lint
+        run: just -f fuzz/justfile ci-check
+
+  # Weekly actual fuzzing (schedule / manual dispatch only).
+  fuzz-run:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -20,7 +52,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: nightly
-          components: llvm-tools
+          components: llvm-tools, clippy
 
       - uses: Swatinem/rust-cache@v2
         with:
