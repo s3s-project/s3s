@@ -137,10 +137,10 @@ impl<'xml> Deserializer<'xml> {
                 // Note: resolve_xml_entity only covers the five predefined XML entities.
                 // Numeric character references (&#NN; and &#xNN;) are handled by
                 // resolve_char_ref below.
-                // Using from_escaped() is the correct choice here because it allows
-                // BytesText::decode() to properly reconstruct the value in the text accumulation logic.
+                // Using from_escaped() keeps the reconstructed value consistent
+                // with the text accumulation logic.
                 Event::GeneralRef(r) => {
-                    let name = std::str::from_utf8(r.as_ref()).map_err(|_| DeError::InvalidContent)?;
+                    let name = r.as_ref();
                     let value: String = resolve_xml_entity(name)
                         .map(ToOwned::to_owned)
                         .or_else(|| resolve_char_ref(name))
@@ -182,7 +182,7 @@ impl<'xml> Deserializer<'xml> {
         loop {
             match self.next_event()? {
                 DeEvent::Start(x) => {
-                    if x.name().as_ref() != name {
+                    if x.name().as_ref().as_bytes() != name {
                         return Err(unexpected_tag_name());
                     }
                     return Ok(());
@@ -203,7 +203,7 @@ impl<'xml> Deserializer<'xml> {
                     let name = x.name();
                     let name = name.as_ref();
                     for &n in names {
-                        if n.as_bytes() == name {
+                        if n == name {
                             return Ok(n);
                         }
                     }
@@ -222,7 +222,7 @@ impl<'xml> Deserializer<'xml> {
             match self.next_event()? {
                 DeEvent::Start(_) => return Err(unexpected_start()),
                 DeEvent::End(x) => {
-                    if x.name().as_ref() != name {
+                    if x.name().as_ref().as_bytes() != name {
                         return Err(unexpected_tag_name());
                     }
                     return Ok(());
@@ -279,8 +279,8 @@ impl<'xml> Deserializer<'xml> {
                 DeEvent::Start(start) => {
                     self.consume_peeked();
                     let name = start.name();
-                    let ans = f(self, name.as_ref())?;
-                    self.expect_end(name.as_ref())?;
+                    let ans = f(self, name.as_ref().as_bytes())?;
+                    self.expect_end(name.as_ref().as_bytes())?;
                     return Ok(ans);
                 }
                 DeEvent::Text(_) => {
@@ -305,8 +305,8 @@ impl<'xml> Deserializer<'xml> {
 
                     let name = start.name();
                     let name = name.as_ref();
-                    f(self, name)?;
-                    self.expect_end(name)?;
+                    f(self, name.as_bytes())?;
+                    self.expect_end(name.as_bytes())?;
 
                     continue;
                 }
@@ -329,8 +329,8 @@ impl<'xml> Deserializer<'xml> {
 
                     let name = start.name();
                     let name = name.as_ref();
-                    f(self, name, &start)?;
-                    self.expect_end(name)?;
+                    f(self, name.as_bytes(), &start)?;
+                    self.expect_end(name.as_bytes())?;
 
                     continue;
                 }
@@ -371,10 +371,10 @@ impl<'xml> Deserializer<'xml> {
                 }
                 DeEvent::Text(x) => {
                     self.consume_peeked();
-                    let s = x.decode().map_err(Into::into).map_err(invalid_xml)?;
+                    let s: &str = &x;
                     match &mut buf {
-                        None => buf = Some(s.into_owned()),
-                        Some(b) => b.push_str(&s),
+                        None => buf = Some(s.to_owned()),
+                        Some(b) => b.push_str(s),
                     }
                 }
             }
