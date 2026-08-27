@@ -4,14 +4,16 @@
 //! Authorization V2
 //!
 //! <https://docs.aws.amazon.com/AmazonS3/latest/userguide/RESTAuthentication.html#ConstructingTheAuthenticationHeader>
-//!
 
+/// `SigV2` `Authorization` header: `AWS <access-key>:<signature>`
 pub struct AuthorizationV2<'a> {
+    /// access key id
     pub access_key: &'a str,
+    /// signature (standard Base64, HMAC-SHA1)
     pub signature: &'a str,
 }
 
-/// [`AuthorizationV2`]
+/// [`AuthorizationV2`] parse error
 #[derive(Debug, thiserror::Error)]
 #[error("ParseAuthorizationError")]
 pub struct ParseAuthorizationV2Error {
@@ -20,6 +22,10 @@ pub struct ParseAuthorizationV2Error {
 }
 
 impl<'a> AuthorizationV2<'a> {
+    /// Parses an `Authorization` header of the form `AWS <access-key>:<signature>`.
+    ///
+    /// # Errors
+    /// Returns [`ParseAuthorizationV2Error`] when the header does not match.
     pub fn parse(mut input: &'a str) -> Result<Self, ParseAuthorizationV2Error> {
         let err = || ParseAuthorizationV2Error { _priv: () };
 

@@ -11,7 +11,7 @@ use crate::http::{AwsChunkedStream, Body, Multipart, MultipartLimits};
 use crate::post_policy::PostPolicy;
 use crate::protocol::TrailingHeaders;
 use crate::sig_v2;
-use crate::sig_v2::{AuthorizationV2, PostSignatureV2, PresignedUrlV2};
+use crate::sig_v2::{PostSignatureV2, PresignedUrlV2};
 use crate::sig_v4;
 use crate::sig_v4::AmzContentSha256;
 use crate::sig_v4::AmzDate;
@@ -21,6 +21,7 @@ use crate::stream::ByteStream as _;
 use crate::utils::crypto::Sha256Sum;
 use crate::utils::crypto::hex_sha256;
 use crate::utils::is_base64_encoded;
+use s3s_sigv2::AuthorizationV2;
 
 use std::mem;
 use std::ops::Not;

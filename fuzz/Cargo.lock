@@ -826,6 +826,7 @@ dependencies = [
  "pin-project-lite",
  "quick-xml",
  "regex",
+ "s3s-sigv2",
  "serde",
  "serde_json",
  "serde_urlencoded",
@@ -855,6 +856,13 @@ dependencies = [
  "futures",
  "libfuzzer-sys",
  "s3s",
+]
+
+[[package]]
+name = "s3s-sigv2"
+version = "0.16.0-alpha.1"
+dependencies = [
+ "thiserror",
 ]
 
 [[package]]

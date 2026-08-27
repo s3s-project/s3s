@@ -2854,6 +2854,7 @@ dependencies = [
  "pin-project-lite",
  "quick-xml 0.42.0",
  "regex",
+ "s3s-sigv2",
  "serde",
  "serde_json",
  "serde_urlencoded",
@@ -3009,6 +3010,9 @@ dependencies = [
 [[package]]
 name = "s3s-sigv2"
 version = "0.16.0-alpha.1"
+dependencies = [
+ "thiserror",
+]
 
 [[package]]
 name = "s3s-sigv4"
