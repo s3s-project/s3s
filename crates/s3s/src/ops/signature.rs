@@ -11,7 +11,7 @@ use crate::http::{AwsChunkedStream, Body, Multipart, MultipartLimits};
 use crate::post_policy::PostPolicy;
 use crate::protocol::TrailingHeaders;
 use crate::sig_v2;
-use crate::sig_v2::{PostSignatureV2, PresignedUrlV2};
+use crate::sig_v2::PresignedUrlV2;
 use crate::sig_v4;
 use crate::sig_v4::AmzContentSha256;
 use crate::sig_v4::AmzDate;
@@ -22,6 +22,7 @@ use crate::utils::crypto::Sha256Sum;
 use crate::utils::crypto::hex_sha256;
 use crate::utils::is_base64_encoded;
 use s3s_sigv2::AuthorizationV2;
+use s3s_sigv2::PostSignatureV2;
 
 use std::mem;
 use std::ops::Not;
@@ -764,7 +765,8 @@ impl<'a> SignatureContext<'a> {
 
         let auth = require_auth(self.auth)?;
 
-        let info = PostSignatureV2::extract(&multipart).ok_or_else(|| invalid_request!("missing required multipart fields"))?;
+        let info =
+            PostSignatureV2::extract(multipart.fields()).ok_or_else(|| invalid_request!("missing required multipart fields"))?;
 
         if is_base64_encoded(info.policy.as_bytes()).not() {
             return Err(invalid_request!("invalid field: policy"));
