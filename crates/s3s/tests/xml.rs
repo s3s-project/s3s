@@ -645,3 +645,207 @@ fn select_object_content_with_hex_char_ref() {
 
     test_serde(&ans);
 }
+
+/// Covers the `element()` deserializer path used by `AnalyticsFilter`
+/// (all variants) and the no-filter case.
+#[test]
+fn analytics_configuration_filters() {
+    use s3s::dto::{AnalyticsConfiguration, AnalyticsFilter};
+
+    // Prefix filter
+    let xml = r"
+    <AnalyticsConfiguration>
+        <Id>id1</Id>
+        <Filter><Prefix>documents/</Prefix></Filter>
+        <StorageClassAnalysis/>
+    </AnalyticsConfiguration>
+    ";
+    let val = deserialize::<AnalyticsConfiguration>(xml.as_bytes()).unwrap();
+    assert_eq!(val.id, "id1");
+    match val.filter.as_ref().unwrap() {
+        AnalyticsFilter::Prefix(p) => assert_eq!(p.as_str(), "documents/"),
+        other => panic!("expected Prefix filter, got {other:?}"),
+    }
+    test_serde(&val);
+
+    // Tag filter
+    let xml = r"
+    <AnalyticsConfiguration>
+        <Id>id2</Id>
+        <Filter><Tag><Key>k1</Key><Value>v1</Value></Tag></Filter>
+        <StorageClassAnalysis/>
+    </AnalyticsConfiguration>
+    ";
+    let val = deserialize::<AnalyticsConfiguration>(xml.as_bytes()).unwrap();
+    match val.filter.as_ref().unwrap() {
+        AnalyticsFilter::Tag(tag) => {
+            assert_eq!(tag.key.as_deref(), Some("k1"));
+            assert_eq!(tag.value.as_deref(), Some("v1"));
+        }
+        other => panic!("expected Tag filter, got {other:?}"),
+    }
+    test_serde(&val);
+
+    // And filter
+    let xml = r"
+    <AnalyticsConfiguration>
+        <Id>id3</Id>
+        <Filter>
+            <And>
+                <Prefix>docs/</Prefix>
+                <Tag><Key>k2</Key><Value>v2</Value></Tag>
+            </And>
+        </Filter>
+        <StorageClassAnalysis/>
+    </AnalyticsConfiguration>
+    ";
+    let val = deserialize::<AnalyticsConfiguration>(xml.as_bytes()).unwrap();
+    match val.filter.as_ref().unwrap() {
+        AnalyticsFilter::And(and) => {
+            assert_eq!(and.prefix.as_deref(), Some("docs/"));
+            assert_eq!(and.tags.as_ref().unwrap().len(), 1);
+        }
+        other => panic!("expected And filter, got {other:?}"),
+    }
+    test_serde(&val);
+
+    // No filter
+    let xml = r"
+    <AnalyticsConfiguration>
+        <Id>id4</Id>
+        <StorageClassAnalysis/>
+    </AnalyticsConfiguration>
+    ";
+    let val = deserialize::<AnalyticsConfiguration>(xml.as_bytes()).unwrap();
+    assert!(val.filter.is_none());
+    test_serde(&val);
+}
+
+/// Covers the `xsi:type` attribute path in `BucketLoggingStatus` target grants
+/// (including the `minio` generated variant).
+#[test]
+fn bucket_logging_status_target_grants() {
+    let xml = r#"
+    <BucketLoggingStatus>
+        <LoggingEnabled>
+            <TargetBucket>arn:aws:s3:::dest-bucket</TargetBucket>
+            <TargetPrefix>logs/</TargetPrefix>
+            <TargetGrants>
+                <Grant>
+                    <Grantee xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="CanonicalUser">
+                        <ID>canonical-id</ID>
+                    </Grantee>
+                    <Permission>READ</Permission>
+                </Grant>
+            </TargetGrants>
+        </LoggingEnabled>
+    </BucketLoggingStatus>
+    "#;
+    let val = deserialize::<s3s::dto::BucketLoggingStatus>(xml.as_bytes()).unwrap();
+    let logging = val.logging_enabled.as_ref().unwrap();
+    assert_eq!(logging.target_bucket.as_str(), "arn:aws:s3:::dest-bucket");
+    assert_eq!(logging.target_prefix.as_str(), "logs/");
+    let grant = &logging.target_grants.as_ref().unwrap()[0];
+    assert_eq!(grant.grantee.as_ref().unwrap().type_.as_str(), "CanonicalUser");
+    assert_eq!(grant.permission.as_ref().unwrap().as_str(), "READ");
+    test_serde(&val);
+}
+
+/// Text accumulation must merge consecutive text segments produced by entity
+/// references (e.g. `a&amp;b` → `a`, `&`, `b`).
+#[test]
+fn text_accumulation_multiple_segments() {
+    let mut d = xml::Deserializer::new(br"<Expr>a&amp;b</Expr>");
+    let s = d.named_element("Expr", |d| d.text(|s| Ok(s.to_owned()))).unwrap();
+    assert_eq!(s, "a&b");
+}
+
+/// Error branches of `expect_start` / `expect_end`.
+#[test]
+fn named_element_wrong_start_tag() {
+    let mut d = xml::Deserializer::new(br"<A/>");
+    let r: Result<(), _> = d.named_element("B", |_| Ok(()));
+    assert!(matches!(r, Err(xml::DeError::UnexpectedTagName)));
+}
+
+#[test]
+fn named_element_unexpected_nested_start() {
+    let mut d = xml::Deserializer::new(br"<A><A></A>");
+    let r: Result<(), _> = d.named_element("A", |_| Ok(()));
+    assert!(matches!(r, Err(xml::DeError::UnexpectedStart)));
+}
+
+/// Error propagation through the `?` operators in `element()` /
+/// `for_each_element` / `for_each_element_with_start`.
+#[test]
+fn deserialize_structural_errors() {
+    use s3s::dto::AnalyticsConfiguration;
+
+    // element(): unknown child inside <Filter> fails the callback
+    let xml = r"
+    <AnalyticsConfiguration>
+        <Id>i</Id>
+        <Filter><Bogus/></Filter>
+        <StorageClassAnalysis/>
+    </AnalyticsConfiguration>
+    ";
+    let r = deserialize::<AnalyticsConfiguration>(xml.as_bytes());
+    assert!(r.is_err());
+
+    // element(): duplicate <Prefix> fails `expect_end` on an unexpected nested start
+    let xml = r"
+    <AnalyticsConfiguration>
+        <Id>i</Id>
+        <Filter><Prefix>a</Prefix><Prefix>b</Prefix></Filter>
+        <StorageClassAnalysis/>
+    </AnalyticsConfiguration>
+    ";
+    let r = deserialize::<AnalyticsConfiguration>(xml.as_bytes());
+    assert!(r.is_err());
+
+    // for_each_element(): duplicate <Id> fails `expect_end`
+    let xml = r"
+    <AnalyticsConfiguration>
+        <Id>i</Id><Id>j</Id>
+        <StorageClassAnalysis/>
+    </AnalyticsConfiguration>
+    ";
+    let r = deserialize::<AnalyticsConfiguration>(xml.as_bytes());
+    assert!(r.is_err());
+
+    // for_each_element_with_start(): unknown child inside <Grant> fails the callback
+    let xml = r"
+    <BucketLoggingStatus>
+        <LoggingEnabled>
+            <TargetBucket>b</TargetBucket>
+            <TargetPrefix>p</TargetPrefix>
+            <TargetGrants><Grant><Bogus/></Grant></TargetGrants>
+        </LoggingEnabled>
+    </BucketLoggingStatus>
+    ";
+    let r = deserialize::<s3s::dto::BucketLoggingStatus>(xml.as_bytes());
+    assert!(r.is_err());
+
+    // for_each_element_with_start(): duplicate <Grantee> fails `expect_end`
+    let xml = r#"
+    <BucketLoggingStatus>
+        <LoggingEnabled>
+            <TargetBucket>b</TargetBucket>
+            <TargetPrefix>p</TargetPrefix>
+            <TargetGrants>
+                <Grant>
+                    <Grantee xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="CanonicalUser">
+                        <ID>i</ID>
+                    </Grantee>
+                    <Grantee xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="CanonicalUser">
+                        <ID>j</ID>
+                    </Grantee>
+                    <Permission>READ</Permission>
+                </Grant>
+            </TargetGrants>
+        </LoggingEnabled>
+    </BucketLoggingStatus>
+    "#;
+    let r = deserialize::<s3s::dto::BucketLoggingStatus>(xml.as_bytes());
+    assert!(r.is_err());
+}
