@@ -18,4 +18,5 @@ arrayvec.workspace = true
 jiff.workspace = true
 nom.workspace = true
 serde.workspace = true
+smallvec.workspace = true
 thiserror.workspace = true

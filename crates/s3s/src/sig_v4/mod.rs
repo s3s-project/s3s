@@ -11,9 +11,6 @@
 //! See <https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-query-string-auth.html>
 //!
 
-mod presigned_url_v4;
-pub use self::presigned_url_v4::*;
-
 mod amz_content_sha256;
 pub use self::amz_content_sha256::*;
 

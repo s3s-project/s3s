@@ -3,11 +3,10 @@
 
 //! presigned url information
 
-use s3s_sigv4::AmzDate;
-use s3s_sigv4::CredentialV4;
+use super::AmzDate;
+use super::CredentialV4;
 
-use crate::http::OrderedQs;
-use crate::utils::crypto::is_sha256_checksum;
+use crate::crypto::is_sha256_checksum;
 
 use smallvec::SmallVec;
 
@@ -21,7 +20,7 @@ pub struct PresignedUrlV4<'a> {
     /// amz date
     pub amz_date: AmzDate,
     /// expires
-    pub expires: time::Duration,
+    pub expires: jiff::SignedDuration,
     /// signed headers
     pub signed_headers: SmallVec<[&'a str; 16]>,
     /// signature
@@ -36,70 +35,59 @@ pub struct ParsePresignedUrlError {
     _priv: (),
 }
 
-/// query strings of a presigned url
-struct PresignedQs<'a> {
-    /// X-Amz-Algorithm
-    algorithm: &'a str,
-    /// X-Amz-Credential
-    credential: &'a str,
-    /// X-Amz-Date
-    date: &'a str,
-    /// X-Amz-Expires
-    expires: &'a str,
-    /// X-Amz-SignedHeaders
-    signed_headers: &'a str,
-    /// X-Amz-Signature
-    signature: &'a str,
-}
-
-impl<'a> PresignedQs<'a> {
-    /// Creates `PresignedQs` from `OrderedQs`
-    fn from_ordered_qs(qs: &'a OrderedQs) -> Option<Self> {
-        Some(PresignedQs {
-            algorithm: qs.get_unique("X-Amz-Algorithm")?,
-            credential: qs.get_unique("X-Amz-Credential")?,
-            date: qs.get_unique("X-Amz-Date")?,
-            expires: qs.get_unique("X-Amz-Expires")?,
-            signed_headers: qs.get_unique("X-Amz-SignedHeaders")?,
-            signature: qs.get_unique("X-Amz-Signature")?,
-        })
-    }
+/// Returns the unique value of `name` in `pairs`, or `None` when the field is
+/// missing or duplicated.
+///
+/// Query values must already be percent-decoded (contract).
+fn get_unique<'a>(pairs: &'a [(impl AsRef<str>, impl AsRef<str>)], name: &str) -> Option<&'a str> {
+    let mut iter = pairs
+        .iter()
+        .filter(|(key, _)| key.as_ref() == name)
+        .map(|(_, value)| value.as_ref());
+    let value = iter.next()?;
+    (iter.next().is_none()).then_some(value)
 }
 
 impl<'a> PresignedUrlV4<'a> {
-    /// Parses `PresignedUrl` from query with a caller-supplied `X-Amz-Expires` upper bound.
+    /// Parses `PresignedUrl` from query pairs with a caller-supplied
+    /// `X-Amz-Expires` upper bound.
     ///
     /// `max_expires_secs` is the maximum allowed `X-Amz-Expires` value in seconds.
     /// Values larger than this upper bound are rejected during parsing.
     ///
+    /// Query values must already be percent-decoded (contract; `OrderedQs` from
+    /// `s3s` satisfies it).
+    ///
     /// # Errors
     /// Returns `ParsePresignedUrlError` if it failed to parse
-    pub fn parse(qs: &'a OrderedQs, max_expires_secs: u32) -> Result<Self, ParsePresignedUrlError> {
+    pub fn parse(qs: &'a [(impl AsRef<str>, impl AsRef<str>)], max_expires_secs: u32) -> Result<Self, ParsePresignedUrlError> {
         Self::parse_impl(qs, max_expires_secs)
     }
 
-    fn parse_impl(qs: &'a OrderedQs, max_expires_secs: u32) -> Result<Self, ParsePresignedUrlError> {
+    fn parse_impl(qs: &'a [(impl AsRef<str>, impl AsRef<str>)], max_expires_secs: u32) -> Result<Self, ParsePresignedUrlError> {
         let err = || ParsePresignedUrlError { _priv: () };
 
-        let info = PresignedQs::from_ordered_qs(qs).ok_or_else(err)?;
+        let algorithm = get_unique(qs, "X-Amz-Algorithm").ok_or_else(err)?;
+        let credential_str = get_unique(qs, "X-Amz-Credential").ok_or_else(err)?;
+        let date = get_unique(qs, "X-Amz-Date").ok_or_else(err)?;
+        let expires = get_unique(qs, "X-Amz-Expires").ok_or_else(err)?;
+        let signed_headers = get_unique(qs, "X-Amz-SignedHeaders").ok_or_else(err)?;
+        let signature = get_unique(qs, "X-Amz-Signature").ok_or_else(err)?;
 
-        let algorithm = info.algorithm;
+        let credential = CredentialV4::parse(credential_str).map_err(|_e| err())?;
 
-        let credential = CredentialV4::parse(info.credential).map_err(|_e| err())?;
+        let amz_date = AmzDate::parse(date).map_err(|_e| err())?;
 
-        let amz_date = AmzDate::parse(info.date).map_err(|_e| err())?;
+        let expires = parse_expires(expires, max_expires_secs).ok_or_else(err)?;
 
-        let expires = parse_expires(info.expires, max_expires_secs).ok_or_else(err)?;
-
-        if !info.signed_headers.is_ascii() {
+        if !signed_headers.is_ascii() {
             return Err(err());
         }
-        let signed_headers = info.signed_headers.split(';').collect();
+        let signed_headers = signed_headers.split(';').collect();
 
-        if !is_sha256_checksum(info.signature) {
+        if !is_sha256_checksum(signature) {
             return Err(err());
         }
-        let signature = info.signature;
 
         Ok(Self {
             algorithm,
@@ -112,32 +100,25 @@ impl<'a> PresignedUrlV4<'a> {
     }
 }
 
-fn parse_expires(s: &str, max_expires_secs: u32) -> Option<time::Duration> {
+fn parse_expires(s: &str, max_expires_secs: u32) -> Option<jiff::SignedDuration> {
     // u32 parse rejects negative values and non-integers implicitly
     let x = s.parse::<u32>().ok()?;
     if x > max_expires_secs {
         return None;
     }
-    Some(time::Duration::new(i64::from(x), 0))
+    Some(jiff::SignedDuration::from_secs(i64::from(x)))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    use crate::http::OrderedQs;
-
     fn default_max_expires_secs() -> u32 {
-        crate::config::DEFAULT_PRESIGNED_URL_MAX_EXPIRES_SECS
+        7 * 24 * 60 * 60
     }
 
-    fn make_qs(pairs: &[(&str, &str)]) -> OrderedQs {
-        OrderedQs::from_vec_unchecked(
-            pairs
-                .iter()
-                .map(|&(name, value)| (name.to_owned(), value.to_owned()))
-                .collect(),
-        )
+    fn make_qs<'a>(pairs: &[(&'a str, &'a str)]) -> Vec<(&'a str, &'a str)> {
+        pairs.to_vec()
     }
 
     fn valid_query_strings() -> [(&'static str, &'static str); 6] {
@@ -161,7 +142,7 @@ mod tests {
         assert_eq!(info.credential.access_key_id, "AKIAIOSFODNN7EXAMPLE");
         assert_eq!(info.credential.aws_region, "us-east-1");
         assert_eq!(info.credential.aws_service, "s3");
-        assert_eq!(info.expires.whole_seconds(), 86_400);
+        assert_eq!(info.expires.as_secs(), 86_400);
         assert_eq!(info.signed_headers.as_slice(), ["host"]);
         assert_eq!(info.signature, "aeeed9bbccd4d02ee5c0109b86d86835f995330da4c265957d157751f604d404");
         assert!(info.amz_date.to_time().is_some());
@@ -225,7 +206,7 @@ mod tests {
             pairs[3] = ("X-Amz-Expires", expires);
             let qs = make_qs(&pairs);
             let parsed = PresignedUrlV4::parse(&qs, default_max_expires_secs()).expect("boundary expiration should parse");
-            assert_eq!(parsed.expires.whole_seconds().to_string(), expires);
+            assert_eq!(parsed.expires.as_secs().to_string(), expires);
         }
     }
 
@@ -236,7 +217,7 @@ mod tests {
         let qs = make_qs(&pairs);
 
         let parsed = PresignedUrlV4::parse(&qs, 700_000).expect("custom max should allow larger expires");
-        assert_eq!(parsed.expires.whole_seconds(), 604_801);
+        assert_eq!(parsed.expires.as_secs(), 604_801);
 
         assert!(PresignedUrlV4::parse(&qs, 3_600).is_err(), "custom max should reject larger expires");
     }

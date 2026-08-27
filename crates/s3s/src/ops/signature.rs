@@ -14,7 +14,6 @@ use crate::sig_v2;
 use crate::sig_v2::{AuthorizationV2, PostSignatureV2, PresignedUrlV2};
 use crate::sig_v4;
 use crate::sig_v4::AmzContentSha256;
-use crate::sig_v4::PresignedUrlV4;
 use crate::sig_v4::UploadStream;
 use crate::stream::ByteStream as _;
 use crate::utils::crypto::Sha256Sum;
@@ -22,6 +21,7 @@ use crate::utils::crypto::hex_sha256;
 use crate::utils::is_base64_encoded;
 use s3s_sigv4::AmzDate;
 use s3s_sigv4::PostSignatureV4;
+use s3s_sigv4::PresignedUrlV4;
 use s3s_sigv4::{AuthorizationV4, CredentialV4};
 
 use std::mem;
@@ -239,6 +239,13 @@ impl SignatureVerificationContext<'_> {
 }
 
 impl<'a> SignatureContext<'a> {
+    fn query_pairs(&self) -> &'a [(String, String)] {
+        // `Option<&'a OrderedQs>` is Copy: extract the reference without
+        // borrowing `self`, so the returned slice lives as long as `'a`.
+        let qs: Option<&'a OrderedQs> = self.qs;
+        qs.map_or(&[], AsRef::as_ref)
+    }
+
     fn signed_host_fallback(&self, name: &'a str) -> Option<&'a str> {
         if name == "host"
             && matches!(self.req_version, ::http::Version::HTTP_2 | ::http::Version::HTTP_3)
@@ -431,10 +438,9 @@ impl<'a> SignatureContext<'a> {
     }
 
     pub async fn v4_check_presigned_url(&mut self) -> S3Result<CredentialsExt> {
-        let qs = self.qs.unwrap(); // assume: qs has "X-Amz-Signature"
         let config = self.config.snapshot();
 
-        let presigned_url = PresignedUrlV4::parse(qs, config.presigned_url_max_expires_secs).map_err(|err| {
+        let presigned_url = PresignedUrlV4::parse(self.query_pairs(), config.presigned_url_max_expires_secs).map_err(|err| {
             s3_error!(
                 err,
                 AuthorizationQueryParametersError,
@@ -488,7 +494,7 @@ impl<'a> SignatureContext<'a> {
                 return Err(s3_error!(RequestTimeTooSkewed, "request date is later than server time too much"));
             }
 
-            if duration.as_secs() > presigned_url.expires.whole_seconds() {
+            if duration > presigned_url.expires {
                 return Err(s3_error!(AccessDenied, "Request has expired"));
             }
         }
@@ -514,9 +520,10 @@ impl<'a> SignatureContext<'a> {
             region,
             service,
         };
-        let canonical_request = sig_v4::create_presigned_canonical_request(method, self.decoded_uri_path, qs.as_ref(), &headers);
+        let canonical_request =
+            sig_v4::create_presigned_canonical_request(method, self.decoded_uri_path, self.query_pairs(), &headers);
         verifier.verify_with_raw_path_fallback(&canonical_request, || {
-            sig_v4::create_presigned_canonical_request_with_raw_uri_path(method, self.raw_uri_path, qs.as_ref(), &headers)
+            sig_v4::create_presigned_canonical_request_with_raw_uri_path(method, self.raw_uri_path, self.query_pairs(), &headers)
         })?;
 
         // Verify body hash for presigned URL requests.

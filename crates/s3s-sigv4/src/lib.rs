@@ -23,4 +23,8 @@ pub use self::authorization::*;
 mod post_signature;
 pub use self::post_signature::*;
 
+mod presigned_url;
+pub use self::presigned_url::*;
+
+pub(crate) mod crypto;
 pub(crate) mod parser;

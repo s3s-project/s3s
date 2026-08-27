@@ -583,8 +583,8 @@ mod tests {
     use super::*;
 
     use crate::http::OrderedQs;
-    use crate::sig_v4::PresignedUrlV4;
     use crate::utils::crypto::hex_sha256_string;
+    use s3s_sigv4::PresignedUrlV4;
 
     #[test]
     fn example_get_object() {
@@ -1203,7 +1203,7 @@ mod tests {
 
         let qs = OrderedQs::from_vec_unchecked(query_strings.iter().map(|&(n, v)| (n.to_owned(), v.to_owned())).collect());
 
-        let info = PresignedUrlV4::parse(&qs, crate::config::DEFAULT_PRESIGNED_URL_MAX_EXPIRES_SECS).unwrap();
+        let info = PresignedUrlV4::parse(qs.as_ref(), crate::config::DEFAULT_PRESIGNED_URL_MAX_EXPIRES_SECS).unwrap();
 
         let canonical_request = create_presigned_canonical_request(&method, uri.path(), query_strings, headers);
 
