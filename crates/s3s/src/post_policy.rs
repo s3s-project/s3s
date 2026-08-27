@@ -765,6 +765,42 @@ mod tests {
         assert_eq!(e.code(), &S3ErrorCode::InvalidPolicyDocument);
     }
 
+    /// Regression test for <https://github.com/rustfs/rustfs/issues/6177>:
+    /// policy conditions on `$key` must be evaluated against the key AFTER
+    /// `${filename}` substitution, matching the AWS POST contract.
+    #[test]
+    fn test_validate_conditions_apply_to_substituted_key() {
+        let json = r#"{
+            "expiration": "2030-01-01T00:00:00.000Z",
+            "conditions": [
+                {"bucket": "mybucket"},
+                ["starts-with", "$key", "user/betty/"]
+            ]
+        }"#;
+        let policy = PostPolicy::from_json(json).unwrap();
+
+        let mut multipart = create_test_multipart(vec![("key", "user/betty/${filename}")], None);
+
+        // The raw key with the unsubstituted variable happens to satisfy this
+        // prefix, but an `eq` condition would not — validate against the
+        // substituted key, which is what the stored object will be named.
+        multipart.substitute_key_filename();
+        assert_eq!(multipart.find_field_value("key"), Some("user/betty/test.txt"));
+        assert!(policy.validate_conditions_only(&multipart, 0, Some("mybucket")).is_ok());
+
+        let eq_json = r#"{
+            "expiration": "2030-01-01T00:00:00.000Z",
+            "conditions": [
+                {"bucket": "mybucket"},
+                ["eq", "$key", "user/betty/test.txt"]
+            ]
+        }"#;
+        let eq_policy = PostPolicy::from_json(eq_json).unwrap();
+        let mut multipart = create_test_multipart(vec![("key", "user/betty/${filename}")], None);
+        multipart.substitute_key_filename();
+        assert!(eq_policy.validate_conditions_only(&multipart, 0, Some("mybucket")).is_ok());
+    }
+
     /// Regression test for <https://github.com/rustfs/rustfs/issues/1785>
     /// `validate_conditions_only` with `url_bucket` should work for boto3-style policies.
     #[test]

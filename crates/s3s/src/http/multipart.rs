@@ -81,15 +81,46 @@ impl Multipart {
     /// Finds field value
     #[must_use]
     pub fn find_field_value<'a>(&'a self, name: &str) -> Option<&'a str> {
-        let upper_bound = self.fields.partition_point(|x| x.0.as_str() <= name);
+        let idx = Self::find_field_index(&self.fields, name)?;
+        Some(self.fields[idx].1.as_str())
+    }
+
+    fn find_field_value_mut<'a>(fields: &'a mut [(String, String)], name: &str) -> Option<&'a mut String> {
+        let idx = Self::find_field_index(fields, name)?;
+        Some(&mut fields[idx].1)
+    }
+
+    fn find_field_index(fields: &[(String, String)], name: &str) -> Option<usize> {
+        let upper_bound = fields.partition_point(|x| x.0.as_str() <= name);
         if upper_bound == 0 {
             return None;
         }
-        let pair = &self.fields[upper_bound - 1];
+        let idx = upper_bound - 1;
+        let pair = &fields[idx];
         if pair.0.as_str() != name {
             return None;
         }
-        Some(pair.1.as_str())
+        Some(idx)
+    }
+
+    /// Substitutes the `${filename}` variable in the `key` field with the
+    /// filename supplied by the file part, per the AWS POST upload contract:
+    /// <https://docs.aws.amazon.com/AmazonS3/latest/developerguide/sigv4-HTTPPOSTConstructPolicy.html>
+    ///
+    /// Amazon S3 replaces the variable verbatim and defines no escaping
+    /// mechanism, so a key containing a literal `${filename}` cannot be
+    /// uploaded through POST — this matches AWS behavior. Callers must invoke
+    /// this before evaluating POST policy conditions so that `eq`/`starts-with`
+    /// constraints on `$key` apply to the final substituted key.
+    pub(crate) fn substitute_key_filename(&mut self) {
+        const FILENAME_VARIABLE: &str = "${filename}";
+        let file_name = &self.file.name;
+        let Some(key) = Self::find_field_value_mut(&mut self.fields, "key") else {
+            return;
+        };
+        if key.contains(FILENAME_VARIABLE) {
+            *key = key.replace(FILENAME_VARIABLE, file_name);
+        }
     }
 
     /// Create a Multipart for testing purposes
@@ -779,6 +810,54 @@ mod tests {
         }
 
         Ok(buf.into())
+    }
+
+    fn test_file(name: &str) -> File {
+        File {
+            name: name.to_owned(),
+            content_type: None,
+            stream: None,
+        }
+    }
+
+    #[test]
+    fn substitute_key_filename_replaces_variable_before_policy_checks() {
+        let mut m = Multipart::new_for_test(
+            vec![
+                ("key".to_owned(), "user/betty/${filename}".to_owned()),
+                ("policy".to_owned(), "policy-data".to_owned()),
+            ],
+            test_file("photo1.jpg"),
+        );
+        m.substitute_key_filename();
+        assert_eq!(m.find_field_value("key"), Some("user/betty/photo1.jpg"));
+
+        // Every occurrence is substituted, matching a verbatim replace.
+        let mut m =
+            Multipart::new_for_test(vec![("key".to_owned(), "${filename}/copies/${filename}".to_owned())], test_file("a.txt"));
+        m.substitute_key_filename();
+        assert_eq!(m.find_field_value("key"), Some("a.txt/copies/a.txt"));
+    }
+
+    #[test]
+    fn substitute_key_filename_leaves_plain_keys_and_other_fields_alone() {
+        let mut m = Multipart::new_for_test(
+            vec![
+                ("key".to_owned(), "plain-key.txt".to_owned()),
+                ("success_action_redirect".to_owned(), "https://example.com/${filename}".to_owned()),
+            ],
+            test_file("photo1.jpg"),
+        );
+        m.substitute_key_filename();
+        assert_eq!(m.find_field_value("key"), Some("plain-key.txt"));
+        // Only the key field participates in the substitution contract.
+        assert_eq!(m.find_field_value("success_action_redirect"), Some("https://example.com/${filename}"));
+
+        // No key field at all: nothing to do (the missing-key error is
+        // reported later by input deserialization).
+        let mut m = Multipart::new_for_test(vec![("policy".to_owned(), "policy-data".to_owned())], test_file("photo1.jpg"));
+        m.substitute_key_filename();
+        assert_eq!(m.find_field_value("key"), None);
     }
 
     #[test]

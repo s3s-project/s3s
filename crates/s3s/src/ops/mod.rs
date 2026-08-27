@@ -558,6 +558,10 @@ async fn resolve_post_object(
 ) -> S3Result<(crate::stream::DynByteStream, Option<PostPolicy>)> {
     debug!(?multipart);
 
+    // Substitute `${filename}` in the key field before the policy conditions
+    // are evaluated, so `$key` constraints apply to the final key.
+    multipart.substitute_key_filename();
+
     let policy = parse_post_policy(multipart)?;
     let max_file_size = post_object_max_file_size(policy.as_ref(), ccx.config.snapshot().post_object_max_file_size);
 
