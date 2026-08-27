@@ -31,6 +31,13 @@ bench = false
 doc = false
 
 [[bin]]
+name = "syntax_parsers"
+path = "fuzz_targets/syntax_parsers.rs"
+test = false
+bench = false
+doc = false
+
+[[bin]]
 name = "gen_corpus"
 path = "bin/gen_corpus.rs"
 test = false

@@ -1,0 +1,20 @@
+--BOUNDARY
+Content-Disposition: form-data; name="field1"
+
+value1
+--BOUNDARY
+Content-Disposition: form-data; name="file"; filename="a.txt"
+Content-Type: text/plain
+
+hello world
+--BOUNDARY--
+--BOUNDARY
+Content-Disposition: form-data; name="field1"
+
+value1
+--BOUNDARY
+Content-Disposition: form-data; name="file"; filename="a.txt"
+Content-Type: text/plain
+
+hello world
+--BOUNDARY--
