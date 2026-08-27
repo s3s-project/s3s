@@ -174,9 +174,10 @@ impl AwsChunkedStream {
     ///
     /// # Panics
     ///
-    /// Panics if the internal trailing-headers mutex is poisoned, which can
-    /// only happen if the worker task previously panicked while holding the
-    /// lock.
+    /// The worker task locks the internal trailers mutex while storing
+    /// verified trailers and unwraps the lock: if the mutex is poisoned (a
+    /// panic while any holder — the worker or a `TrailingHeaders` reader —
+    /// held the lock), polling the returned stream panics.
     #[allow(clippy::too_many_arguments)]
     pub fn new<S>(
         body: S,

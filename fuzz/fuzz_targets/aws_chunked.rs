@@ -50,16 +50,25 @@ fn split_fragments(payload: &[u8]) -> Vec<Bytes> {
     out
 }
 
+fn fuzz_error() -> StdError {
+    std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "fuzz-injected error").into()
+}
+
 fn build_items(payload: &[u8], single_fragment: bool, inject_error: bool) -> Vec<Result<Bytes, StdError>> {
     let mut items: Vec<Result<Bytes, StdError>> = if single_fragment {
         vec![Ok(Bytes::copy_from_slice(payload))]
     } else {
         split_fragments(payload).into_iter().map(Ok).collect()
     };
-    if inject_error && !items.is_empty() {
-        let idx = items.len() / 2;
-        let err: StdError = std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "fuzz-injected error").into();
-        items[idx] = Err(err);
+    if inject_error {
+        // Ensure the injected error is present even for an empty payload,
+        // so the control bit always exercises the underlying-error path.
+        let idx = if items.is_empty() { 0 } else { items.len() / 2 };
+        if items.is_empty() {
+            items.push(Err(fuzz_error()));
+        } else {
+            items[idx] = Err(fuzz_error());
+        }
     }
     items
 }
