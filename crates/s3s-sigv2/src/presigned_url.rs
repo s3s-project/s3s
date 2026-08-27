@@ -95,6 +95,18 @@ mod tests {
     }
 
     #[test]
+    fn parse_rejects_missing_access_key() {
+        let qs = [("Signature", "abc"), ("Expires", "1175139620")];
+        assert!(PresignedUrlV2::parse(&qs).is_err());
+    }
+
+    #[test]
+    fn parse_rejects_missing_expires() {
+        let qs = [("AWSAccessKeyId", "AKIAIOSFODNN7EXAMPLE"), ("Signature", "abc")];
+        assert!(PresignedUrlV2::parse(&qs).is_err());
+    }
+
+    #[test]
     fn parse_rejects_negative_timestamp() {
         let qs = [
             ("AWSAccessKeyId", "AKIAIOSFODNN7EXAMPLE"),

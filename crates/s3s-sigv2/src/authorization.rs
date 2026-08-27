@@ -48,4 +48,16 @@ mod tests {
         assert_eq!(ans.access_key, "AKIAIOSFODNN7EXAMPLE");
         assert_eq!(ans.signature, "qgk2+6Sv9/oM7G3qLEjTH1a1l1g=");
     }
+
+    #[test]
+    fn rejects_missing_aws_prefix() {
+        let input = "AKIAIOSFODNN7EXAMPLE:qgk2+6Sv9/oM7G3qLEjTH1a1l1g=";
+        assert!(AuthorizationV2::parse(input).is_err());
+    }
+
+    #[test]
+    fn rejects_missing_colon() {
+        let input = "AWS AKIAIOSFODNN7EXAMPLEqgk2+6Sv9/oM7G3qLEjTH1a1l1g=";
+        assert!(AuthorizationV2::parse(input).is_err());
+    }
 }
