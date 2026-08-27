@@ -16,9 +16,10 @@ use crate::host::SingleDomain;
 use crate::protocol::S3Response;
 use crate::route::S3Route;
 use crate::s3_trait::S3;
-use crate::sig_v4::{self, AmzDate};
+use crate::sig_v4;
 use hyper::http::Extensions;
 use hyper::{HeaderMap, Method, Uri};
+use s3s_sigv4::AmzDate;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 

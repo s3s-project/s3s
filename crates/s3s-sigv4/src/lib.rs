@@ -2,8 +2,19 @@
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
 //! AWS Signature Version 4 — parsing and canonicalization.
-//!
-//! This initial release is a placeholder that reserves the crate name on
-//! crates.io. The implementation will be published in a later 0.16 release.
 
 #![deny(missing_docs)]
+#![allow(
+    clippy::multiple_crate_versions,
+    clippy::module_name_repetitions,
+    clippy::single_match_else,
+    clippy::wildcard_imports,
+    clippy::let_underscore_untyped,
+    clippy::inline_always,
+    clippy::needless_continue
+)]
+
+mod amz_date;
+pub use self::amz_date::*;
+
+pub(crate) mod parser;

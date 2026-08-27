@@ -20,9 +20,6 @@ pub use self::authorization_v4::*;
 mod amz_content_sha256;
 pub use self::amz_content_sha256::*;
 
-mod amz_date;
-pub use self::amz_date::*;
-
 mod post_signature_v4;
 pub use self::post_signature_v4::*;
 

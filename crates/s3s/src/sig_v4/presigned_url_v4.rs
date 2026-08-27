@@ -3,8 +3,9 @@
 
 //! presigned url information
 
-use super::AmzDate;
 use super::CredentialV4;
+
+use s3s_sigv4::AmzDate;
 
 use crate::http::OrderedQs;
 use crate::utils::crypto::is_sha256_checksum;

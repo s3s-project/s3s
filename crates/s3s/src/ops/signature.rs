@@ -14,13 +14,13 @@ use crate::sig_v2;
 use crate::sig_v2::{AuthorizationV2, PostSignatureV2, PresignedUrlV2};
 use crate::sig_v4;
 use crate::sig_v4::AmzContentSha256;
-use crate::sig_v4::AmzDate;
 use crate::sig_v4::UploadStream;
 use crate::sig_v4::{AuthorizationV4, CredentialV4, PostSignatureV4, PresignedUrlV4};
 use crate::stream::ByteStream as _;
 use crate::utils::crypto::Sha256Sum;
 use crate::utils::crypto::hex_sha256;
 use crate::utils::is_base64_encoded;
+use s3s_sigv4::AmzDate;
 
 use std::mem;
 use std::ops::Not;
@@ -160,10 +160,12 @@ struct SignatureVerificationContext<'a> {
     service: &'a str,
 }
 
-fn validate_sig_v4_clock_skew(amz_date: &AmzDate, now: time::OffsetDateTime, config: &S3Config) -> S3Result<()> {
+fn validate_sig_v4_clock_skew(amz_date: &AmzDate, now: jiff::Timestamp, config: &S3Config) -> S3Result<()> {
     let request_time = amz_date.to_time().ok_or_else(|| invalid_request!("invalid amz date"))?;
-    let duration = now - request_time;
-    let max_skew_time = time::Duration::seconds(i64::from(config.presigned_url_max_skew_time_secs));
+    let duration = (now - request_time)
+        .to_duration(jiff::SpanRelativeTo::days_are_24_hours())
+        .map_err(|_| invalid_request!("invalid amz date"))?;
+    let max_skew_time = jiff::SignedDuration::from_secs(i64::from(config.presigned_url_max_skew_time_secs));
 
     if duration.abs() > max_skew_time {
         return Err(s3_error!(RequestTimeTooSkewed, "request time is too far from server time"));
@@ -395,7 +397,7 @@ impl<'a> SignatureContext<'a> {
         let config = self.config.snapshot();
 
         validate_sig_v4_region(region, &config)?;
-        validate_sig_v4_clock_skew(&amz_date, time::OffsetDateTime::now_utc(), &config)?;
+        validate_sig_v4_clock_skew(&amz_date, jiff::Timestamp::now(), &config)?;
 
         let access_key = credential.access_key_id.to_owned();
         let secret_key = auth.get_secret_key(&access_key).await?;
@@ -463,25 +465,27 @@ impl<'a> SignatureContext<'a> {
             // check expiration
             validate_sig_v4_region(region, &config)?;
 
-            let now = time::OffsetDateTime::now_utc();
+            let now = jiff::Timestamp::now();
 
             let date = presigned_url
                 .amz_date
                 .to_time()
                 .ok_or_else(|| invalid_request!("invalid amz date"))?;
 
-            let duration = now - date;
+            let duration = (now - date)
+                .to_duration(jiff::SpanRelativeTo::days_are_24_hours())
+                .map_err(|_| invalid_request!("invalid amz date"))?;
 
             // Allow requests that are up to max_skew_time_secs in the future.
             // This is to account for clock skew between the client and server.
             // See also https://github.com/minio/minio/blob/b5177993b371817699d3fa25685f54f88d8bfcce/cmd/signature-v4.go#L238-L242
 
-            let max_skew_time = time::Duration::seconds(i64::from(config.presigned_url_max_skew_time_secs));
+            let max_skew_time = jiff::SignedDuration::from_secs(i64::from(config.presigned_url_max_skew_time_secs));
             if duration.is_negative() && duration.abs() > max_skew_time {
                 return Err(s3_error!(RequestTimeTooSkewed, "request date is later than server time too much"));
             }
 
-            if duration > presigned_url.expires {
+            if duration.as_secs() > presigned_url.expires.whole_seconds() {
                 return Err(s3_error!(AccessDenied, "Request has expired"));
             }
         }
@@ -565,7 +569,7 @@ impl<'a> SignatureContext<'a> {
         }
 
         validate_sig_v4_region(region, &config)?;
-        validate_sig_v4_clock_skew(&amz_date, time::OffsetDateTime::now_utc(), &config)?;
+        validate_sig_v4_clock_skew(&amz_date, jiff::Timestamp::now(), &config)?;
 
         let amz_content_sha256 = extract_amz_content_sha256(self.hs)?;
 

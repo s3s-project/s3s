@@ -3,7 +3,7 @@
 
 //! Signature v4 methods
 
-use super::AmzDate;
+use s3s_sigv4::AmzDate;
 
 use crate::auth::SecretKey;
 use crate::auth::signature::Signature;

@@ -24,13 +24,14 @@ pub struct AmzDate {
     second: u8,
 }
 
-/// [`AmzDate`]
+/// [`AmzDate`] parse error
 #[derive(Debug, thiserror::Error)]
 #[error("ParseAmzDateError")]
 pub struct ParseAmzDateError(());
 
 impl AmzDate {
     /// Parses `AmzDate` from header
+    ///
     /// # Errors
     /// Returns an error if the header is invalid
     pub fn parse(header: &str) -> Result<Self, ParseAmzDateError> {
@@ -54,22 +55,27 @@ impl AmzDate {
         buf
     }
 
+    /// Converts to a UTC timestamp; returns `None` for out-of-range calendar values.
     #[must_use]
-    pub fn to_time(&self) -> Option<time::OffsetDateTime> {
-        let y = i32::from(self.year);
-        let m: time::Month = self.month.try_into().ok()?;
-        let d = self.day;
-
-        let t = time::Date::from_calendar_date(y, m, d).ok()?;
-        let t = t.with_hms(self.hour, self.minute, self.second).ok()?;
-        Some(t.assume_utc())
+    pub fn to_time(&self) -> Option<jiff::Timestamp> {
+        let dt = jiff::civil::DateTime::new(
+            i16::try_from(self.year).ok()?,
+            i8::try_from(self.month).ok()?,
+            i8::try_from(self.day).ok()?,
+            i8::try_from(self.hour).ok()?,
+            i8::try_from(self.minute).ok()?,
+            i8::try_from(self.second).ok()?,
+            0,
+        )
+        .ok()?;
+        Some(dt.to_zoned(jiff::tz::TimeZone::UTC).ok()?.timestamp())
     }
 }
 
 mod parser {
     use super::*;
 
-    use crate::utils::parser::{Error, digit2, digit4};
+    use crate::parser::{Error, digit2, digit4};
 
     macro_rules! ensure {
         ($cond:expr) => {
@@ -101,5 +107,40 @@ mod parser {
             minute,
             second,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_and_fmt() {
+        let date = AmzDate::parse("20130524T000000Z").unwrap();
+        assert_eq!(date.fmt_iso8601().as_str(), "20130524T000000Z");
+        assert_eq!(date.fmt_date().as_str(), "20130524");
+    }
+
+    #[test]
+    fn to_time() {
+        let date = AmzDate::parse("20130524T000000Z").unwrap();
+        let ts = date.to_time().unwrap();
+        assert_eq!(ts.as_second(), 1_369_353_600);
+    }
+
+    #[test]
+    fn parse_rejects_invalid_input() {
+        assert!(AmzDate::parse("20130524").is_err());
+        assert!(AmzDate::parse("20130524000000Z").is_err());
+        assert!(AmzDate::parse("20130524T000000").is_err());
+        assert!(AmzDate::parse("abcdefghijklmnop").is_err());
+    }
+
+    #[test]
+    fn to_time_rejects_out_of_range_values() {
+        // Digits parse, but the calendar value is out of range.
+        assert!(matches!(AmzDate::parse("20130524T999999Z"), Ok(d) if d.to_time().is_none()));
+        assert!(matches!(AmzDate::parse("20131324T000000Z"), Ok(d) if d.to_time().is_none()));
+        assert!(matches!(AmzDate::parse("20130230T000000Z"), Ok(d) if d.to_time().is_none()));
     }
 }

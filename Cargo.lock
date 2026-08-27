@@ -2844,6 +2844,7 @@ dependencies = [
  "hyper",
  "hyper-util",
  "itoa",
+ "jiff",
  "md-5",
  "memchr",
  "mime",
@@ -2854,6 +2855,7 @@ dependencies = [
  "pin-project-lite",
  "quick-xml 0.42.0",
  "regex",
+ "s3s-sigv4",
  "serde",
  "serde_json",
  "serde_urlencoded",
@@ -3013,6 +3015,11 @@ version = "0.16.0-alpha.1"
 [[package]]
 name = "s3s-sigv4"
 version = "0.16.0-alpha.1"
+dependencies = [
+ "arrayvec",
+ "jiff",
+ "thiserror",
+]
 
 [[package]]
 name = "s3s-test"
