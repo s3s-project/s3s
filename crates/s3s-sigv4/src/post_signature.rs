@@ -15,6 +15,17 @@ pub struct PostSignatureV4<'a> {
     pub x_amz_signature: &'a str,
 }
 
+/// [`PostSignatureV4::extract`] error
+#[derive(Debug, Clone, Copy, thiserror::Error)]
+pub enum PostSignatureError {
+    /// missing required field
+    #[error("missing field: {0}")]
+    MissingField(&'static str),
+    /// duplicate field (value not unique)
+    #[error("duplicate field: {0}")]
+    DuplicateField(&'static str),
+}
+
 impl<'a> PostSignatureV4<'a> {
     /// Extracts `policy` / `x-amz-algorithm` / `x-amz-credential` /
     /// `x-amz-date` / `x-amz-signature` from the field table.
@@ -25,14 +36,19 @@ impl<'a> PostSignatureV4<'a> {
     /// Duplicate fields are rejected: `s3s`'s other multipart consumers select
     /// the last value on sorted fields, so a non-unique value would be
     /// ambiguous between signature verification and policy validation.
-    #[must_use]
-    pub fn extract(fields: &'a [(String, String)]) -> Option<Self> {
-        let get = |name: &str| {
+    ///
+    /// # Errors
+    /// Returns [`PostSignatureError`] for a missing or duplicate field.
+    pub fn extract(fields: &'a [(String, String)]) -> Result<Self, PostSignatureError> {
+        let get = |name: &'static str| -> Result<&'a str, PostSignatureError> {
             let mut iter = fields.iter().filter(|(k, _)| k == name).map(|(_, v)| v.as_str());
-            let value = iter.next()?;
-            (iter.next().is_none()).then_some(value)
+            let value = iter.next().ok_or(PostSignatureError::MissingField(name))?;
+            if iter.next().is_some() {
+                return Err(PostSignatureError::DuplicateField(name));
+            }
+            Ok(value)
         };
-        Some(Self {
+        Ok(Self {
             policy: get("policy")?,
             x_amz_algorithm: get("x-amz-algorithm")?,
             x_amz_credential: get("x-amz-credential")?,
@@ -82,7 +98,10 @@ mod tests {
                 .filter(|&&(n, _)| n != name)
                 .map(|&(n, v)| (n.to_owned(), v.to_owned()))
                 .collect();
-            assert!(PostSignatureV4::extract(&fields).is_none(), "{name} must be required");
+            assert!(
+                matches!(PostSignatureV4::extract(&fields), Err(PostSignatureError::MissingField(f)) if f == name),
+                "{name} must be required"
+            );
         }
     }
 
@@ -96,6 +115,17 @@ mod tests {
             ("x-amz-signature", "abc"),
         ]);
         fields.push(("policy".to_owned(), "evil-policy".to_owned()));
-        assert!(PostSignatureV4::extract(&fields).is_none());
+        assert!(matches!(
+            PostSignatureV4::extract(&fields),
+            Err(PostSignatureError::DuplicateField("policy"))
+        ));
+    }
+
+    #[test]
+    fn extract_error_display() {
+        let err = PostSignatureError::MissingField("policy");
+        assert_eq!(err.to_string(), "missing field: policy");
+        let err = PostSignatureError::DuplicateField("x-amz-signature");
+        assert_eq!(err.to_string(), "duplicate field: x-amz-signature");
     }
 }

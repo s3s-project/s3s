@@ -354,7 +354,7 @@ impl<'a> SignatureContext<'a> {
         let auth = require_auth(self.auth)?;
 
         let info =
-            PostSignatureV4::extract(multipart.fields()).ok_or_else(|| invalid_request!("missing required multipart fields"))?;
+            PostSignatureV4::extract(multipart.fields()).map_err(|e| invalid_request!(e, "invalid multipart fields: {e}"))?;
 
         if is_base64_encoded(info.policy.as_bytes()).not() {
             return Err(invalid_request!("invalid field: policy"));
