@@ -36,6 +36,7 @@ fn from_bytes_matches_static_codes() {
         );
 
         let mixed = mixed_case(code);
+        assert_ne!(mixed, code, "mixed-case input should differ from {code}");
         assert_eq!(
             S3ErrorCode::from_bytes(mixed.as_bytes()),
             Some(exact),
