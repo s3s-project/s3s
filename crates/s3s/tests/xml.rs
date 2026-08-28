@@ -67,6 +67,20 @@ where
     assert_eq!(*val, ans);
 }
 
+fn select_request_xml(root: &str, namespace: Option<&str>) -> String {
+    let namespace = namespace.map(|value| format!(r#" xmlns="{value}""#)).unwrap_or_default();
+    format!(
+        r"<{root}{namespace}>
+            <Expression>select * from s3object</Expression>
+            <ExpressionType>SQL</ExpressionType>
+            <InputSerialization><CSV /></InputSerialization>
+            <OutputSerialization><CSV /></OutputSerialization>
+            <RequestProgress><Enabled>true</Enabled></RequestProgress>
+            <ScanRange><Start>0</Start><End>10</End></ScanRange>
+        </{root}>"
+    )
+}
+
 /// See <https://github.com/Nugine/s3s/issues/2>
 #[test]
 fn completed_multipart_upload() {
@@ -174,6 +188,28 @@ fn select_object_content_request() {
 
         test_serde(&ans);
     }
+}
+
+#[test]
+fn select_object_content_request_accepts_exact_root_aliases() {
+    const S3_NAMESPACE: &str = "http://s3.amazonaws.com/doc/2006-03-01/";
+    let canonical = select_request_xml("SelectObjectContentRequest", Some(S3_NAMESPACE));
+    let expected = deserialize::<s3s::dto::SelectObjectContentRequest>(canonical.as_bytes()).unwrap();
+
+    for namespace in [Some(S3_NAMESPACE), None, Some("urn:unknown-s3-namespace")] {
+        let alias = select_request_xml("SelectRequest", namespace);
+        let actual = deserialize::<s3s::dto::SelectObjectContentRequest>(alias.as_bytes()).unwrap();
+        assert_eq!(actual, expected, "Select roots must deserialize to the same DTO");
+    }
+
+    let unknown = select_request_xml("UnknownSelectRequest", Some(S3_NAMESPACE));
+    assert!(matches!(
+        deserialize::<s3s::dto::SelectObjectContentRequest>(unknown.as_bytes()),
+        Err(xml::DeError::UnexpectedTagName)
+    ));
+
+    let malformed = select_request_xml("SelectRequest", Some(S3_NAMESPACE)).replace("</SelectRequest>", "");
+    assert!(deserialize::<s3s::dto::SelectObjectContentRequest>(malformed.as_bytes()).is_err());
 }
 
 #[test]
