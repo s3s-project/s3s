@@ -23,7 +23,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::AbortMultipartUploadOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.abort_multipart_upload();
+        let mut b = self.client.abort_multipart_upload();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         b = b.set_if_match_initiated_time(try_into_aws(input.if_match_initiated_time)?);
@@ -49,7 +49,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::CompleteMultipartUploadOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.complete_multipart_upload();
+        let mut b = self.client.complete_multipart_upload();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_checksum_crc32(try_into_aws(input.checksum_crc32)?);
         b = b.set_checksum_crc32_c(try_into_aws(input.checksum_crc32c)?);
@@ -89,7 +89,7 @@ impl S3 for Proxy {
     async fn copy_object(&self, req: S3Request<s3s::dto::CopyObjectInput>) -> S3Result<S3Response<s3s::dto::CopyObjectOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.copy_object();
+        let mut b = self.client.copy_object();
         b = b.set_acl(try_into_aws(input.acl)?);
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_bucket_key_enabled(try_into_aws(input.bucket_key_enabled)?);
@@ -150,7 +150,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::CreateBucketOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.create_bucket();
+        let mut b = self.client.create_bucket();
         b = b.set_acl(try_into_aws(input.acl)?);
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_bucket_namespace(try_into_aws(input.bucket_namespace)?);
@@ -181,7 +181,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::CreateBucketMetadataConfigurationOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.create_bucket_metadata_configuration();
+        let mut b = self.client.create_bucket_metadata_configuration();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_checksum_algorithm(try_into_aws(input.checksum_algorithm)?);
         b = b.set_content_md5(try_into_aws(input.content_md5)?);
@@ -206,7 +206,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::CreateBucketMetadataTableConfigurationOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.create_bucket_metadata_table_configuration();
+        let mut b = self.client.create_bucket_metadata_table_configuration();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_checksum_algorithm(try_into_aws(input.checksum_algorithm)?);
         b = b.set_content_md5(try_into_aws(input.content_md5)?);
@@ -231,7 +231,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::CreateMultipartUploadOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.create_multipart_upload();
+        let mut b = self.client.create_multipart_upload();
         b = b.set_acl(try_into_aws(input.acl)?);
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_bucket_key_enabled(try_into_aws(input.bucket_key_enabled)?);
@@ -282,7 +282,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::CreateSessionOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.create_session();
+        let mut b = self.client.create_session();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_bucket_key_enabled(try_into_aws(input.bucket_key_enabled)?);
         b = b.set_ssekms_encryption_context(try_into_aws(input.ssekms_encryption_context)?);
@@ -308,7 +308,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::DeleteBucketOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.delete_bucket();
+        let mut b = self.client.delete_bucket();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
@@ -330,7 +330,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::DeleteBucketAnalyticsConfigurationOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.delete_bucket_analytics_configuration();
+        let mut b = self.client.delete_bucket_analytics_configuration();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         b = b.set_id(Some(try_into_aws(input.id)?));
@@ -353,7 +353,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::DeleteBucketCorsOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.delete_bucket_cors();
+        let mut b = self.client.delete_bucket_cors();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
@@ -375,7 +375,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::DeleteBucketEncryptionOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.delete_bucket_encryption();
+        let mut b = self.client.delete_bucket_encryption();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
@@ -397,7 +397,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::DeleteBucketIntelligentTieringConfigurationOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.delete_bucket_intelligent_tiering_configuration();
+        let mut b = self.client.delete_bucket_intelligent_tiering_configuration();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         b = b.set_id(Some(try_into_aws(input.id)?));
@@ -420,7 +420,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::DeleteBucketInventoryConfigurationOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.delete_bucket_inventory_configuration();
+        let mut b = self.client.delete_bucket_inventory_configuration();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         b = b.set_id(Some(try_into_aws(input.id)?));
@@ -443,7 +443,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::DeleteBucketLifecycleOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.delete_bucket_lifecycle();
+        let mut b = self.client.delete_bucket_lifecycle();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
@@ -465,7 +465,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::DeleteBucketMetadataConfigurationOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.delete_bucket_metadata_configuration();
+        let mut b = self.client.delete_bucket_metadata_configuration();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
@@ -487,7 +487,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::DeleteBucketMetadataTableConfigurationOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.delete_bucket_metadata_table_configuration();
+        let mut b = self.client.delete_bucket_metadata_table_configuration();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
@@ -509,7 +509,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::DeleteBucketMetricsConfigurationOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.delete_bucket_metrics_configuration();
+        let mut b = self.client.delete_bucket_metrics_configuration();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         b = b.set_id(Some(try_into_aws(input.id)?));
@@ -532,7 +532,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::DeleteBucketOwnershipControlsOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.delete_bucket_ownership_controls();
+        let mut b = self.client.delete_bucket_ownership_controls();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
@@ -554,7 +554,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::DeleteBucketPolicyOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.delete_bucket_policy();
+        let mut b = self.client.delete_bucket_policy();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
@@ -576,7 +576,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::DeleteBucketReplicationOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.delete_bucket_replication();
+        let mut b = self.client.delete_bucket_replication();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
@@ -598,7 +598,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::DeleteBucketTaggingOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.delete_bucket_tagging();
+        let mut b = self.client.delete_bucket_tagging();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
@@ -620,7 +620,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::DeleteBucketWebsiteOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.delete_bucket_website();
+        let mut b = self.client.delete_bucket_website();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
@@ -642,7 +642,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::DeleteObjectOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.delete_object();
+        let mut b = self.client.delete_object();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_bypass_governance_retention(try_into_aws(input.bypass_governance_retention)?);
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
@@ -672,7 +672,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::DeleteObjectTaggingOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.delete_object_tagging();
+        let mut b = self.client.delete_object_tagging();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         b = b.set_key(Some(try_into_aws(input.key)?));
@@ -696,7 +696,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::DeleteObjectsOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.delete_objects();
+        let mut b = self.client.delete_objects();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_bypass_governance_retention(try_into_aws(input.bypass_governance_retention)?);
         b = b.set_checksum_algorithm(try_into_aws(input.checksum_algorithm)?);
@@ -723,7 +723,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::DeletePublicAccessBlockOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.delete_public_access_block();
+        let mut b = self.client.delete_public_access_block();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
@@ -745,7 +745,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::GetBucketAbacOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.get_bucket_abac();
+        let mut b = self.client.get_bucket_abac();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
@@ -767,7 +767,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::GetBucketAccelerateConfigurationOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.get_bucket_accelerate_configuration();
+        let mut b = self.client.get_bucket_accelerate_configuration();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         b = b.set_request_payer(try_into_aws(input.request_payer)?);
@@ -790,7 +790,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::GetBucketAclOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.get_bucket_acl();
+        let mut b = self.client.get_bucket_acl();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
@@ -812,7 +812,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::GetBucketAnalyticsConfigurationOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.get_bucket_analytics_configuration();
+        let mut b = self.client.get_bucket_analytics_configuration();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         b = b.set_id(Some(try_into_aws(input.id)?));
@@ -835,7 +835,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::GetBucketCorsOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.get_bucket_cors();
+        let mut b = self.client.get_bucket_cors();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
@@ -857,7 +857,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::GetBucketEncryptionOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.get_bucket_encryption();
+        let mut b = self.client.get_bucket_encryption();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
@@ -879,7 +879,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::GetBucketIntelligentTieringConfigurationOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.get_bucket_intelligent_tiering_configuration();
+        let mut b = self.client.get_bucket_intelligent_tiering_configuration();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         b = b.set_id(Some(try_into_aws(input.id)?));
@@ -902,7 +902,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::GetBucketInventoryConfigurationOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.get_bucket_inventory_configuration();
+        let mut b = self.client.get_bucket_inventory_configuration();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         b = b.set_id(Some(try_into_aws(input.id)?));
@@ -925,7 +925,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::GetBucketLifecycleConfigurationOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.get_bucket_lifecycle_configuration();
+        let mut b = self.client.get_bucket_lifecycle_configuration();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
@@ -947,7 +947,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::GetBucketLocationOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.get_bucket_location();
+        let mut b = self.client.get_bucket_location();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
@@ -969,7 +969,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::GetBucketLoggingOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.get_bucket_logging();
+        let mut b = self.client.get_bucket_logging();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
@@ -991,7 +991,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::GetBucketMetadataConfigurationOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.get_bucket_metadata_configuration();
+        let mut b = self.client.get_bucket_metadata_configuration();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
@@ -1013,7 +1013,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::GetBucketMetadataTableConfigurationOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.get_bucket_metadata_table_configuration();
+        let mut b = self.client.get_bucket_metadata_table_configuration();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
@@ -1035,7 +1035,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::GetBucketMetricsConfigurationOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.get_bucket_metrics_configuration();
+        let mut b = self.client.get_bucket_metrics_configuration();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         b = b.set_id(Some(try_into_aws(input.id)?));
@@ -1058,7 +1058,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::GetBucketNotificationConfigurationOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.get_bucket_notification_configuration();
+        let mut b = self.client.get_bucket_notification_configuration();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
@@ -1080,7 +1080,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::GetBucketOwnershipControlsOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.get_bucket_ownership_controls();
+        let mut b = self.client.get_bucket_ownership_controls();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
@@ -1102,7 +1102,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::GetBucketPolicyOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.get_bucket_policy();
+        let mut b = self.client.get_bucket_policy();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
@@ -1124,7 +1124,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::GetBucketPolicyStatusOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.get_bucket_policy_status();
+        let mut b = self.client.get_bucket_policy_status();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
@@ -1146,7 +1146,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::GetBucketReplicationOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.get_bucket_replication();
+        let mut b = self.client.get_bucket_replication();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
@@ -1168,7 +1168,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::GetBucketRequestPaymentOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.get_bucket_request_payment();
+        let mut b = self.client.get_bucket_request_payment();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
@@ -1190,7 +1190,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::GetBucketTaggingOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.get_bucket_tagging();
+        let mut b = self.client.get_bucket_tagging();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
@@ -1212,7 +1212,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::GetBucketVersioningOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.get_bucket_versioning();
+        let mut b = self.client.get_bucket_versioning();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
@@ -1234,7 +1234,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::GetBucketWebsiteOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.get_bucket_website();
+        let mut b = self.client.get_bucket_website();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
@@ -1253,7 +1253,7 @@ impl S3 for Proxy {
     async fn get_object(&self, req: S3Request<s3s::dto::GetObjectInput>) -> S3Result<S3Response<s3s::dto::GetObjectOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.get_object();
+        let mut b = self.client.get_object();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_checksum_mode(try_into_aws(input.checksum_mode)?);
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
@@ -1294,7 +1294,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::GetObjectAclOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.get_object_acl();
+        let mut b = self.client.get_object_acl();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         b = b.set_key(Some(try_into_aws(input.key)?));
@@ -1319,7 +1319,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::GetObjectAttributesOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.get_object_attributes();
+        let mut b = self.client.get_object_attributes();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         b = b.set_key(Some(try_into_aws(input.key)?));
@@ -1350,7 +1350,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::GetObjectLegalHoldOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.get_object_legal_hold();
+        let mut b = self.client.get_object_legal_hold();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         b = b.set_key(Some(try_into_aws(input.key)?));
@@ -1375,7 +1375,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::GetObjectLockConfigurationOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.get_object_lock_configuration();
+        let mut b = self.client.get_object_lock_configuration();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
@@ -1397,7 +1397,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::GetObjectRetentionOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.get_object_retention();
+        let mut b = self.client.get_object_retention();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         b = b.set_key(Some(try_into_aws(input.key)?));
@@ -1422,7 +1422,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::GetObjectTaggingOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.get_object_tagging();
+        let mut b = self.client.get_object_tagging();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         b = b.set_key(Some(try_into_aws(input.key)?));
@@ -1447,7 +1447,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::GetObjectTorrentOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.get_object_torrent();
+        let mut b = self.client.get_object_torrent();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         b = b.set_key(Some(try_into_aws(input.key)?));
@@ -1471,7 +1471,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::GetPublicAccessBlockOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.get_public_access_block();
+        let mut b = self.client.get_public_access_block();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
@@ -1490,7 +1490,7 @@ impl S3 for Proxy {
     async fn head_bucket(&self, req: S3Request<s3s::dto::HeadBucketInput>) -> S3Result<S3Response<s3s::dto::HeadBucketOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.head_bucket();
+        let mut b = self.client.head_bucket();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         let result = b.send().await;
@@ -1509,7 +1509,7 @@ impl S3 for Proxy {
     async fn head_object(&self, req: S3Request<s3s::dto::HeadObjectInput>) -> S3Result<S3Response<s3s::dto::HeadObjectOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.head_object();
+        let mut b = self.client.head_object();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_checksum_mode(try_into_aws(input.checksum_mode)?);
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
@@ -1550,7 +1550,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::ListBucketAnalyticsConfigurationsOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.list_bucket_analytics_configurations();
+        let mut b = self.client.list_bucket_analytics_configurations();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_continuation_token(try_into_aws(input.continuation_token)?);
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
@@ -1573,7 +1573,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::ListBucketIntelligentTieringConfigurationsOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.list_bucket_intelligent_tiering_configurations();
+        let mut b = self.client.list_bucket_intelligent_tiering_configurations();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_continuation_token(try_into_aws(input.continuation_token)?);
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
@@ -1596,7 +1596,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::ListBucketInventoryConfigurationsOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.list_bucket_inventory_configurations();
+        let mut b = self.client.list_bucket_inventory_configurations();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_continuation_token(try_into_aws(input.continuation_token)?);
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
@@ -1619,7 +1619,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::ListBucketMetricsConfigurationsOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.list_bucket_metrics_configurations();
+        let mut b = self.client.list_bucket_metrics_configurations();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_continuation_token(try_into_aws(input.continuation_token)?);
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
@@ -1642,7 +1642,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::ListBucketsOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.list_buckets();
+        let mut b = self.client.list_buckets();
         b = b.set_bucket_region(try_into_aws(input.bucket_region)?);
         b = b.set_continuation_token(try_into_aws(input.continuation_token)?);
         b = b.set_max_buckets(try_into_aws(input.max_buckets)?);
@@ -1666,7 +1666,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::ListDirectoryBucketsOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.list_directory_buckets();
+        let mut b = self.client.list_directory_buckets();
         b = b.set_continuation_token(try_into_aws(input.continuation_token)?);
         b = b.set_max_directory_buckets(try_into_aws(input.max_directory_buckets)?);
         let result = b.send().await;
@@ -1688,7 +1688,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::ListMultipartUploadsOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.list_multipart_uploads();
+        let mut b = self.client.list_multipart_uploads();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_delimiter(try_into_aws(input.delimiter)?);
         b = b.set_encoding_type(try_into_aws(input.encoding_type)?);
@@ -1717,7 +1717,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::ListObjectVersionsOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.list_object_versions();
+        let mut b = self.client.list_object_versions();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_delimiter(try_into_aws(input.delimiter)?);
         b = b.set_encoding_type(try_into_aws(input.encoding_type)?);
@@ -1747,7 +1747,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::ListObjectsOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.list_objects();
+        let mut b = self.client.list_objects();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_delimiter(try_into_aws(input.delimiter)?);
         b = b.set_encoding_type(try_into_aws(input.encoding_type)?);
@@ -1776,7 +1776,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::ListObjectsV2Output>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.list_objects_v2();
+        let mut b = self.client.list_objects_v2();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_continuation_token(try_into_aws(input.continuation_token)?);
         b = b.set_delimiter(try_into_aws(input.delimiter)?);
@@ -1804,7 +1804,7 @@ impl S3 for Proxy {
     async fn list_parts(&self, req: S3Request<s3s::dto::ListPartsInput>) -> S3Result<S3Response<s3s::dto::ListPartsOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.list_parts();
+        let mut b = self.client.list_parts();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         b = b.set_key(Some(try_into_aws(input.key)?));
@@ -1834,7 +1834,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::PutBucketAbacOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.put_bucket_abac();
+        let mut b = self.client.put_bucket_abac();
         b = b.set_abac_status(Some(try_into_aws(input.abac_status)?));
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_checksum_algorithm(try_into_aws(input.checksum_algorithm)?);
@@ -1859,7 +1859,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::PutBucketAccelerateConfigurationOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.put_bucket_accelerate_configuration();
+        let mut b = self.client.put_bucket_accelerate_configuration();
         b = b.set_accelerate_configuration(Some(try_into_aws(input.accelerate_configuration)?));
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_checksum_algorithm(try_into_aws(input.checksum_algorithm)?);
@@ -1883,7 +1883,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::PutBucketAclOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.put_bucket_acl();
+        let mut b = self.client.put_bucket_acl();
         b = b.set_acl(try_into_aws(input.acl)?);
         b = b.set_access_control_policy(try_into_aws(input.access_control_policy)?);
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
@@ -1914,7 +1914,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::PutBucketAnalyticsConfigurationOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.put_bucket_analytics_configuration();
+        let mut b = self.client.put_bucket_analytics_configuration();
         b = b.set_analytics_configuration(Some(try_into_aws(input.analytics_configuration)?));
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
@@ -1938,7 +1938,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::PutBucketCorsOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.put_bucket_cors();
+        let mut b = self.client.put_bucket_cors();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_cors_configuration(Some(try_into_aws(input.cors_configuration)?));
         b = b.set_checksum_algorithm(try_into_aws(input.checksum_algorithm)?);
@@ -1963,7 +1963,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::PutBucketEncryptionOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.put_bucket_encryption();
+        let mut b = self.client.put_bucket_encryption();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_checksum_algorithm(try_into_aws(input.checksum_algorithm)?);
         b = b.set_content_md5(try_into_aws(input.content_md5)?);
@@ -1988,7 +1988,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::PutBucketIntelligentTieringConfigurationOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.put_bucket_intelligent_tiering_configuration();
+        let mut b = self.client.put_bucket_intelligent_tiering_configuration();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         b = b.set_id(Some(try_into_aws(input.id)?));
@@ -2012,7 +2012,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::PutBucketInventoryConfigurationOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.put_bucket_inventory_configuration();
+        let mut b = self.client.put_bucket_inventory_configuration();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         b = b.set_id(Some(try_into_aws(input.id)?));
@@ -2036,7 +2036,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::PutBucketLifecycleConfigurationOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.put_bucket_lifecycle_configuration();
+        let mut b = self.client.put_bucket_lifecycle_configuration();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_checksum_algorithm(try_into_aws(input.checksum_algorithm)?);
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
@@ -2061,7 +2061,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::PutBucketLoggingOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.put_bucket_logging();
+        let mut b = self.client.put_bucket_logging();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_bucket_logging_status(Some(try_into_aws(input.bucket_logging_status)?));
         b = b.set_checksum_algorithm(try_into_aws(input.checksum_algorithm)?);
@@ -2086,7 +2086,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::PutBucketMetricsConfigurationOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.put_bucket_metrics_configuration();
+        let mut b = self.client.put_bucket_metrics_configuration();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         b = b.set_id(Some(try_into_aws(input.id)?));
@@ -2110,7 +2110,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::PutBucketNotificationConfigurationOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.put_bucket_notification_configuration();
+        let mut b = self.client.put_bucket_notification_configuration();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         b = b.set_notification_configuration(Some(try_into_aws(input.notification_configuration)?));
@@ -2134,7 +2134,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::PutBucketOwnershipControlsOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.put_bucket_ownership_controls();
+        let mut b = self.client.put_bucket_ownership_controls();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_checksum_algorithm(try_into_aws(input.checksum_algorithm)?);
         b = b.set_content_md5(try_into_aws(input.content_md5)?);
@@ -2159,7 +2159,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::PutBucketPolicyOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.put_bucket_policy();
+        let mut b = self.client.put_bucket_policy();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_checksum_algorithm(try_into_aws(input.checksum_algorithm)?);
         b = b.set_confirm_remove_self_bucket_access(try_into_aws(input.confirm_remove_self_bucket_access)?);
@@ -2185,7 +2185,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::PutBucketReplicationOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.put_bucket_replication();
+        let mut b = self.client.put_bucket_replication();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_checksum_algorithm(try_into_aws(input.checksum_algorithm)?);
         b = b.set_content_md5(try_into_aws(input.content_md5)?);
@@ -2211,7 +2211,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::PutBucketRequestPaymentOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.put_bucket_request_payment();
+        let mut b = self.client.put_bucket_request_payment();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_checksum_algorithm(try_into_aws(input.checksum_algorithm)?);
         b = b.set_content_md5(try_into_aws(input.content_md5)?);
@@ -2236,7 +2236,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::PutBucketTaggingOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.put_bucket_tagging();
+        let mut b = self.client.put_bucket_tagging();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_checksum_algorithm(try_into_aws(input.checksum_algorithm)?);
         b = b.set_content_md5(try_into_aws(input.content_md5)?);
@@ -2261,7 +2261,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::PutBucketVersioningOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.put_bucket_versioning();
+        let mut b = self.client.put_bucket_versioning();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_checksum_algorithm(try_into_aws(input.checksum_algorithm)?);
         b = b.set_content_md5(try_into_aws(input.content_md5)?);
@@ -2287,7 +2287,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::PutBucketWebsiteOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.put_bucket_website();
+        let mut b = self.client.put_bucket_website();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_checksum_algorithm(try_into_aws(input.checksum_algorithm)?);
         b = b.set_content_md5(try_into_aws(input.content_md5)?);
@@ -2309,7 +2309,7 @@ impl S3 for Proxy {
     async fn put_object(&self, req: S3Request<s3s::dto::PutObjectInput>) -> S3Result<S3Response<s3s::dto::PutObjectOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.put_object();
+        let mut b = self.client.put_object();
         b = b.set_acl(try_into_aws(input.acl)?);
         b = b.set_body(try_into_aws(input.body)?);
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
@@ -2375,7 +2375,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::PutObjectAclOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.put_object_acl();
+        let mut b = self.client.put_object_acl();
         b = b.set_acl(try_into_aws(input.acl)?);
         b = b.set_access_control_policy(try_into_aws(input.access_control_policy)?);
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
@@ -2409,7 +2409,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::PutObjectLegalHoldOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.put_object_legal_hold();
+        let mut b = self.client.put_object_legal_hold();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_checksum_algorithm(try_into_aws(input.checksum_algorithm)?);
         b = b.set_content_md5(try_into_aws(input.content_md5)?);
@@ -2437,7 +2437,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::PutObjectLockConfigurationOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.put_object_lock_configuration();
+        let mut b = self.client.put_object_lock_configuration();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_checksum_algorithm(try_into_aws(input.checksum_algorithm)?);
         b = b.set_content_md5(try_into_aws(input.content_md5)?);
@@ -2464,7 +2464,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::PutObjectRetentionOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.put_object_retention();
+        let mut b = self.client.put_object_retention();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_bypass_governance_retention(try_into_aws(input.bypass_governance_retention)?);
         b = b.set_checksum_algorithm(try_into_aws(input.checksum_algorithm)?);
@@ -2493,7 +2493,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::PutObjectTaggingOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.put_object_tagging();
+        let mut b = self.client.put_object_tagging();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_checksum_algorithm(try_into_aws(input.checksum_algorithm)?);
         b = b.set_content_md5(try_into_aws(input.content_md5)?);
@@ -2521,7 +2521,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::PutPublicAccessBlockOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.put_public_access_block();
+        let mut b = self.client.put_public_access_block();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_checksum_algorithm(try_into_aws(input.checksum_algorithm)?);
         b = b.set_content_md5(try_into_aws(input.content_md5)?);
@@ -2546,7 +2546,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::RenameObjectOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.rename_object();
+        let mut b = self.client.rename_object();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_client_token(try_into_aws(input.client_token)?);
         b = b.set_destination_if_match(try_into_aws(input.destination_if_match)?);
@@ -2578,7 +2578,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::RestoreObjectOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.restore_object();
+        let mut b = self.client.restore_object();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_checksum_algorithm(try_into_aws(input.checksum_algorithm)?);
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
@@ -2605,7 +2605,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::SelectObjectContentOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.select_object_content();
+        let mut b = self.client.select_object_content();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         b = b.set_key(Some(try_into_aws(input.key)?));
@@ -2637,7 +2637,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::UpdateBucketMetadataAnnotationTableConfigurationOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.update_bucket_metadata_annotation_table_configuration();
+        let mut b = self.client.update_bucket_metadata_annotation_table_configuration();
         b = b.set_annotation_table_configuration(Some(try_into_aws(input.annotation_table_configuration)?));
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_checksum_algorithm(try_into_aws(input.checksum_algorithm)?);
@@ -2662,7 +2662,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::UpdateBucketMetadataInventoryTableConfigurationOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.update_bucket_metadata_inventory_table_configuration();
+        let mut b = self.client.update_bucket_metadata_inventory_table_configuration();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_checksum_algorithm(try_into_aws(input.checksum_algorithm)?);
         b = b.set_content_md5(try_into_aws(input.content_md5)?);
@@ -2687,7 +2687,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::UpdateBucketMetadataJournalTableConfigurationOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.update_bucket_metadata_journal_table_configuration();
+        let mut b = self.client.update_bucket_metadata_journal_table_configuration();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_checksum_algorithm(try_into_aws(input.checksum_algorithm)?);
         b = b.set_content_md5(try_into_aws(input.content_md5)?);
@@ -2709,7 +2709,7 @@ impl S3 for Proxy {
     async fn upload_part(&self, req: S3Request<s3s::dto::UploadPartInput>) -> S3Result<S3Response<s3s::dto::UploadPartOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.upload_part();
+        let mut b = self.client.upload_part();
         b = b.set_body(try_into_aws(input.body)?);
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_checksum_algorithm(try_into_aws(input.checksum_algorithm)?);
@@ -2752,7 +2752,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::UploadPartCopyOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.upload_part_copy();
+        let mut b = self.client.upload_part_copy();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_copy_source(Some(try_into_aws(input.copy_source)?));
         b = b.set_copy_source_if_match(try_into_aws(input.copy_source_if_match)?);
@@ -2791,7 +2791,7 @@ impl S3 for Proxy {
     ) -> S3Result<S3Response<s3s::dto::WriteGetObjectResponseOutput>> {
         let input = req.input;
         debug!(?input);
-        let mut b = self.0.write_get_object_response();
+        let mut b = self.client.write_get_object_response();
         b = b.set_accept_ranges(try_into_aws(input.accept_ranges)?);
         b = b.set_body(try_into_aws(input.body)?);
         b = b.set_bucket_key_enabled(try_into_aws(input.bucket_key_enabled)?);

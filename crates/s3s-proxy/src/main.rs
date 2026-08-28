@@ -75,10 +75,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
         let provider =
             minio::s3::creds::StaticProvider::new(cred.access_key_id(), cred.secret_access_key(), cred.session_token());
         let minio_client = minio::s3::MinioClient::new(opt.endpoint_url.parse()?, Some(provider), None, None)?;
-        s3s_aws::Proxy::new(client, minio_client)
+        s3s_aws::Proxy::builder(client).minio_client(minio_client).build()
     };
     #[cfg(not(feature = "minio"))]
-    let proxy = s3s_aws::Proxy::from(client);
+    let proxy = s3s_aws::Proxy::builder(client).build();
 
     // Setup S3 service
     let service = {

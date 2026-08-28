@@ -46,7 +46,7 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
             // forwards them through the official MinIO SDK (see `listen.rs`).
             g!("#[tracing::instrument(skip(self, req))]");
             g!("async fn {method_name}(&self, req: S3Request<{s3s_input}>) -> S3Result<S3Response<{s3s_output}>> {{");
-            g!("super::listen::listen_bucket_notification(&self.1, req).await");
+            g!("super::listen::listen_bucket_notification(&self.minio, req).await");
             g!("}}");
             g!();
             continue;
@@ -59,9 +59,9 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
         g!("debug!(?input);");
 
         if op.smithy_input == "Unit" {
-            g!("let result = self.0.{method_name}().send().await;");
+            g!("let result = self.client.{method_name}().send().await;");
         } else {
-            g!("let mut b = self.0.{method_name}();");
+            g!("let mut b = self.client.{method_name}();");
             let rust::Type::Struct(ty) = &rust_types[op.input.as_str()] else { panic!() };
 
             let flattened_fields = if ty.name == "SelectObjectContentInput" {
