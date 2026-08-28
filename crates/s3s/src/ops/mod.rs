@@ -66,6 +66,8 @@ use hyper::Uri;
 use mime::Mime;
 use tracing::{debug, error, warn};
 
+const EMPTY_PAYLOAD_SHA256: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+
 #[async_trait::async_trait]
 pub trait Operation: Send + Sync + 'static {
     fn name(&self) -> &'static str;
@@ -225,10 +227,50 @@ fn extract_mime(headers: &HeaderMap) -> Option<Mime> {
     content_type.parse::<Mime>().ok()
 }
 
-fn extract_content_length(req: &Request) -> Option<u64> {
-    req.headers
-        .get(hyper::header::CONTENT_LENGTH)
-        .and_then(|val| atoi::atoi::<u64>(val.as_bytes()))
+fn invalid_content_length(val: &hyper::header::HeaderValue) -> S3Error {
+    s3_error!(InvalidArgument, "invalid header: content-length: {val:?}")
+}
+
+fn extract_content_length(req: &Request) -> S3Result<Option<u64>> {
+    let mut iter = req.headers.get_all(hyper::header::CONTENT_LENGTH).iter();
+    let Some(val) = iter.next() else { return Ok(None) };
+    if iter.next().is_some() {
+        return Err(invalid_request!("duplicate header: content-length"));
+    }
+
+    let raw = val.to_str().map_err(|_| invalid_content_length(val))?;
+    if raw.is_empty() || raw.bytes().any(|b| !b.is_ascii_digit()) {
+        return Err(invalid_content_length(val));
+    }
+
+    raw.parse::<u64>().map(Some).map_err(|_| invalid_content_length(val))
+}
+
+fn operation_has_request_payload(op: &dyn Operation) -> bool {
+    op.needs_full_body() || matches!(op.name(), "PostObject" | "PutObject" | "UploadPart" | "WriteGetObjectResponse")
+}
+
+fn request_has_request_payload(req: &Request, custom_route_hit: bool) -> bool {
+    if custom_route_hit {
+        return true;
+    }
+
+    let Some(s3_path) = req.s3ext.s3_path.as_ref() else {
+        return true;
+    };
+
+    generated::resolve_route(req, s3_path, req.s3ext.qs.as_ref()).map_or(true, operation_has_request_payload)
+}
+
+fn signature_content_length(req: &Request, content_length: Option<u64>, request_has_payload: bool) -> Option<u64> {
+    if content_length.is_none()
+        && !request_has_payload
+        && http::get_unique_header_str(&req.headers, header::X_AMZ_CONTENT_SHA256.as_str()) == Some(EMPTY_PAYLOAD_SHA256)
+    {
+        Some(0)
+    } else {
+        content_length
+    }
 }
 
 fn extract_decoded_content_length(headers: &'_ HeaderMap) -> S3Result<Option<usize>> {
@@ -727,8 +769,10 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
     req.s3ext.s3_path = classify_request_path(&decoded_uri_path, ccx, vh_bucket, custom_route_hit)?;
 
     req.s3ext.qs = extract_qs(&req.uri)?;
-    content_length = extract_content_length(req);
-    content_length = verify_signature(req, ccx, vh_bucket, vh_region.as_deref(), content_length).await?;
+    content_length = extract_content_length(req)?;
+    let request_has_payload = request_has_request_payload(req, custom_route_hit);
+    let content_length_for_signature = signature_content_length(req, content_length, request_has_payload);
+    content_length = verify_signature(req, ccx, vh_bucket, vh_region.as_deref(), content_length_for_signature).await?;
 
     if custom_route_hit {
         return Ok(Prepare::CustomRoute);
