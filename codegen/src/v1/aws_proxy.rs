@@ -43,10 +43,11 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
 
         if op.is_minio {
             // MinIO-only extensions have no aws-sdk-s3 counterpart; the proxy
-            // forwards them through the official MinIO SDK (see `listen.rs`).
+            // forwards them through the official MinIO SDK, delegating to a
+            // same-named helper in `listen.rs`.
             g!("#[tracing::instrument(skip(self, req))]");
             g!("async fn {method_name}(&self, req: S3Request<{s3s_input}>) -> S3Result<S3Response<{s3s_output}>> {{");
-            g!("super::listen::listen_bucket_notification(&self.minio, req).await");
+            g!("super::listen::{method_name}(&self.minio, req).await");
             g!("}}");
             g!();
             continue;

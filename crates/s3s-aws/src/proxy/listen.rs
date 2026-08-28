@@ -36,9 +36,19 @@ pub async fn listen_bucket_notification(
         extra_params.add("suffix", suffix);
     }
 
+    // A bare `?events` key parses as an empty value; drop empty segments so
+    // it behaves like "no explicit event names" (MinIO defaults to all
+    // events) instead of a single empty event name.
     let events: Vec<String> = input
         .events
-        .map(|events| events.split(',').map(str::to_owned).collect())
+        .map(|events| {
+            events
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_owned)
+                .collect()
+        })
         .unwrap_or_default();
 
     let builder = minio
