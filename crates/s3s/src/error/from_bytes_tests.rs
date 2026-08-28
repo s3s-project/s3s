@@ -4,14 +4,26 @@
 use super::S3ErrorCode;
 
 fn mixed_case(code: &str) -> String {
-    let mut mixed = code.as_bytes().to_vec();
-    let idx = mixed.iter().position(u8::is_ascii_alphabetic).unwrap();
-    mixed[idx] = if mixed[idx].is_ascii_uppercase() {
-        mixed[idx].to_ascii_lowercase()
-    } else {
-        mixed[idx].to_ascii_uppercase()
-    };
-    String::from_utf8(mixed).unwrap()
+    let lowercase = code.to_ascii_lowercase();
+
+    for idx in code
+        .bytes()
+        .enumerate()
+        .filter_map(|(idx, byte)| byte.is_ascii_alphabetic().then_some(idx))
+    {
+        let mut mixed = code.as_bytes().to_vec();
+        mixed[idx] = if mixed[idx].is_ascii_uppercase() {
+            mixed[idx].to_ascii_lowercase()
+        } else {
+            mixed[idx].to_ascii_uppercase()
+        };
+        let mixed = String::from_utf8(mixed).unwrap();
+        if mixed != code && mixed != lowercase {
+            return mixed;
+        }
+    }
+
+    panic!("missing mixed-case input for {code}");
 }
 
 #[test]
