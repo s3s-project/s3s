@@ -4,17 +4,22 @@
 use super::S3ErrorCode;
 
 fn mixed_case(code: &str) -> String {
-    code.bytes()
+    let lowercase = code.to_ascii_lowercase();
+
+    for idx in lowercase
+        .bytes()
         .enumerate()
-        .map(|(idx, byte)| {
-            let byte = if idx & 1 == 0 {
-                byte.to_ascii_lowercase()
-            } else {
-                byte.to_ascii_uppercase()
-            };
-            char::from(byte)
-        })
-        .collect()
+        .filter_map(|(idx, byte)| byte.is_ascii_alphabetic().then_some(idx))
+    {
+        let mut mixed = lowercase.clone();
+        mixed.replace_range(idx..=idx, &char::from(mixed.as_bytes()[idx].to_ascii_uppercase()).to_string());
+        if mixed != code {
+            return mixed;
+        }
+    }
+
+    assert_ne!(lowercase, code, "missing alternate case for {code}");
+    lowercase
 }
 
 #[test]
