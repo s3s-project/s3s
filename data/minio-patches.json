@@ -186,7 +186,9 @@
                 }
             },
             "traits": {
-                "s3s#xmlAltName": ["BucketLifecycleConfiguration"]
+                "s3s#xmlAltName": [
+                    "BucketLifecycleConfiguration"
+                ]
             }
         },
         "com.amazonaws.s3#PutObjectLockConfigurationRequest": {
@@ -250,6 +252,86 @@
                         "s3s#minio": ""
                     }
                 }
+            }
+        },
+        "com.amazonaws.s3#NotificationEvents": {
+            "type": "string",
+            "traits": {
+                "smithy.api#documentation": "Comma-separated notification event names (e.g. s3:ObjectCreated:*)."
+            }
+        },
+        "com.amazonaws.s3#ListenBucketNotification": {
+            "type": "operation",
+            "input": {
+                "target": "com.amazonaws.s3#ListenBucketNotificationRequest"
+            },
+            "output": {
+                "target": "com.amazonaws.s3#ListenBucketNotificationOutput"
+            },
+            "traits": {
+                "s3s#minio": "",
+                "smithy.api#http": {
+                    "method": "GET",
+                    "uri": "/{Bucket}?events",
+                    "code": 200
+                },
+                "smithy.api#documentation": "`MinIO` extension: listen to bucket notification events as a long-polling SSE stream."
+            }
+        },
+        "com.amazonaws.s3#ListenBucketNotificationRequest": {
+            "type": "structure",
+            "members": {
+                "Bucket": {
+                    "target": "com.amazonaws.s3#BucketName",
+                    "traits": {
+                        "smithy.api#documentation": "The bucket name to listen to.",
+                        "smithy.api#httpLabel": {},
+                        "smithy.api#required": {}
+                    }
+                },
+                "Events": {
+                    "target": "com.amazonaws.s3#NotificationEvents",
+                    "traits": {
+                        "s3s#queryJoined": ",",
+                        "smithy.api#documentation": "Comma-separated notification event names (e.g. s3:ObjectCreated:*). Repeated query keys are joined with commas.",
+                        "smithy.api#httpQuery": "events"
+                    }
+                },
+                "Prefix": {
+                    "target": "com.amazonaws.s3#Prefix",
+                    "traits": {
+                        "smithy.api#documentation": "Listen to events for objects with this prefix.",
+                        "smithy.api#httpQuery": "prefix"
+                    }
+                },
+                "Suffix": {
+                    "target": "com.amazonaws.s3#Suffix",
+                    "traits": {
+                        "smithy.api#documentation": "Listen to events for objects with this suffix.",
+                        "smithy.api#httpQuery": "suffix"
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#documentation": "`MinIO` extension: listen to bucket notification events.",
+                "smithy.api#input": {}
+            }
+        },
+        "com.amazonaws.s3#ListenBucketNotificationOutput": {
+            "type": "structure",
+            "members": {
+                "Payload": {
+                    "target": "com.amazonaws.s3#StreamingBlob",
+                    "traits": {
+                        "smithy.api#default": "",
+                        "smithy.api#documentation": "The raw SSE event stream.",
+                        "smithy.api#httpPayload": {}
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#documentation": "`MinIO` extension: bucket notification event stream.",
+                "smithy.api#output": {}
             }
         }
     }

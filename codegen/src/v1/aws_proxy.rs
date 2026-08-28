@@ -41,6 +41,18 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
         let s3s_input = f!("s3s::dto::{}", op.input);
         let s3s_output = f!("s3s::dto::{}", op.output);
 
+        if op.is_minio {
+            // MinIO-only extensions have no aws-sdk-s3 counterpart; the proxy
+            // forwards them through the official MinIO SDK, delegating to a
+            // same-named helper in `listen.rs`.
+            g!("#[tracing::instrument(skip(self, req))]");
+            g!("async fn {method_name}(&self, req: S3Request<{s3s_input}>) -> S3Result<S3Response<{s3s_output}>> {{");
+            g!("super::listen::{method_name}(&self.minio, req).await");
+            g!("}}");
+            g!();
+            continue;
+        }
+
         g!("#[tracing::instrument(skip(self, req))]");
         g!("async fn {method_name}(&self, req: S3Request<{s3s_input}>) -> S3Result<S3Response<{s3s_output}>> {{");
 
@@ -48,9 +60,9 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
         g!("debug!(?input);");
 
         if op.smithy_input == "Unit" {
-            g!("let result = self.0.{method_name}().send().await;");
+            g!("let result = self.client.{method_name}().send().await;");
         } else {
-            g!("let mut b = self.0.{method_name}();");
+            g!("let mut b = self.client.{method_name}();");
             let rust::Type::Struct(ty) = &rust_types[op.input.as_str()] else { panic!() };
 
             let flattened_fields = if ty.name == "SelectObjectContentInput" {

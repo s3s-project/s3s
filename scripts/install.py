@@ -62,7 +62,7 @@ def install_s3s_fs(args: CliArgs):
 
 @installer("s3s-proxy")
 def install_s3s_proxy(args: CliArgs):
-    cargo_install(args, "s3s-proxy")
+    cargo_install(args, "s3s-proxy", features=["minio"])
 
 
 @installer("s3s-e2e")

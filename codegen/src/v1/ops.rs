@@ -3,6 +3,7 @@
 
 use super::dto::RustTypes;
 use super::rust::default_value_literal;
+use super::smithy::SmithyTraitsExt;
 use super::xml::{is_xml_output, is_xml_payload};
 use super::{dto, rust, smithy};
 use super::{headers, o};
@@ -36,6 +37,9 @@ pub struct Operation {
     pub http_method: String,
     pub http_uri: String,
     pub http_code: u16,
+
+    /// Whether this operation is a `MinIO` extension (only present in the `MinIO` model variant).
+    pub is_minio: bool,
 }
 
 pub type Operations = BTreeMap<String, Operation>;
@@ -114,6 +118,8 @@ pub fn collect_operations(model: &smithy::Model) -> Operations {
             http_method: sh.traits.http_method().unwrap().to_owned(),
             http_uri: sh.traits.http_uri().unwrap().to_owned(),
             http_code,
+
+            is_minio: sh.traits.minio(),
         };
         insert(&mut operations, op_name, op);
     }
@@ -139,6 +145,8 @@ pub fn collect_operations(model: &smithy::Model) -> Operations {
             http_method: o("POST"),
             http_uri: o("/{Bucket}"),
             http_code: 200,
+
+            is_minio: false,
         };
         insert(&mut operations, op_name, op);
     }
@@ -769,7 +777,16 @@ fn codegen_field_de_query(field: &rust::StructField, rust_types: &RustTypes) {
 
     let field_type = &rust_types[&field.type_];
 
-    if let rust::Type::List(_) = field_type {
+    if let Some(ref separator) = field.query_joined {
+        assert!(field.option_type);
+        g!(
+            "let {}: Option<{}> = http::parse_opt_query_joined(req, \"{}\", \"{}\");",
+            field.name,
+            field.type_,
+            query,
+            separator,
+        );
+    } else if let rust::Type::List(_) = field_type {
         panic!()
     } else if let rust::Type::Timestamp(ts_ty) = field_type {
         assert!(field.option_type);

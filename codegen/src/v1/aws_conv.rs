@@ -27,6 +27,9 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
             // PostObject is a synthetic API in s3s; aws-sdk-s3 has no corresponding types.
             "PostObjectInput" => continue,
             "PostObjectOutput" => continue,
+            // ListenBucketNotification is a MinIO extension; aws-sdk-s3 has no corresponding types.
+            "ListenBucketNotificationInput" => continue,
+            "ListenBucketNotificationOutput" => continue,
             "SelectObjectContentRequest" => continue,
             "SelectObjectContentInput" => continue,
             "AssumeRoleOutput" => continue,

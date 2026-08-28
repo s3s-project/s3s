@@ -14663,6 +14663,60 @@ impl fmt::Debug for ListPartsOutput {
     }
 }
 
+/// `MinIO` extension: listen to bucket notification events.
+#[derive(Clone, Default, PartialEq)]
+pub struct ListenBucketNotificationInput {
+    /// The bucket name to listen to.
+    pub bucket: BucketName,
+    /// Comma-separated notification event names (e.g. s3:ObjectCreated:*). Repeated query keys are joined with commas.
+    pub events: Option<NotificationEvents>,
+    /// Listen to events for objects with this prefix.
+    pub prefix: Option<Prefix>,
+    /// Listen to events for objects with this suffix.
+    pub suffix: Option<Suffix>,
+}
+
+impl fmt::Debug for ListenBucketNotificationInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("ListenBucketNotificationInput");
+        d.field("bucket", &self.bucket);
+        if let Some(ref val) = self.events {
+            d.field("events", val);
+        }
+        if let Some(ref val) = self.prefix {
+            d.field("prefix", val);
+        }
+        if let Some(ref val) = self.suffix {
+            d.field("suffix", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+
+impl ListenBucketNotificationInput {
+    #[must_use]
+    pub fn builder() -> builders::ListenBucketNotificationInputBuilder {
+        default()
+    }
+}
+
+/// `MinIO` extension: bucket notification event stream.
+#[derive(Default)]
+pub struct ListenBucketNotificationOutput {
+    /// The raw SSE event stream.
+    pub payload: Option<StreamingBlob>,
+}
+
+impl fmt::Debug for ListenBucketNotificationOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("ListenBucketNotificationOutput");
+        if let Some(ref val) = self.payload {
+            d.field("payload", val);
+        }
+        d.finish_non_exhaustive()
+    }
+}
+
 pub type Location = String;
 
 /// <p>Specifies the location where the bucket will be created.</p>
@@ -15522,6 +15576,9 @@ impl fmt::Debug for NotificationConfigurationFilter {
         d.finish_non_exhaustive()
     }
 }
+
+/// Comma-separated notification event names (e.g. s3:ObjectCreated:*).
+pub type NotificationEvents = String;
 
 /// <p>An optional unique identifier for configurations in a notification configuration. If you
 /// don't provide one, Amazon S3 will assign an ID.</p>
@@ -24384,6 +24441,7 @@ mod tests {
         require_default::<ListObjectsOutput>();
         require_default::<ListObjectsV2Output>();
         require_default::<ListPartsOutput>();
+        require_default::<ListenBucketNotificationOutput>();
         require_default::<PostObjectOutput>();
         require_default::<PutBucketAbacOutput>();
         require_default::<PutBucketAccelerateConfigurationOutput>();
@@ -24564,6 +24622,7 @@ mod tests {
         require_clone::<ListObjectsV2Output>();
         require_clone::<ListPartsInput>();
         require_clone::<ListPartsOutput>();
+        require_clone::<ListenBucketNotificationInput>();
         require_clone::<PostObjectOutput>();
         require_clone::<PutBucketAbacInput>();
         require_clone::<PutBucketAbacOutput>();
@@ -31266,6 +31325,77 @@ pub mod builders {
                 sse_customer_key,
                 sse_customer_key_md5,
                 upload_id,
+            })
+        }
+    }
+
+    /// A builder for [`ListenBucketNotificationInput`]
+    #[derive(Default)]
+    pub struct ListenBucketNotificationInputBuilder {
+        bucket: Option<BucketName>,
+
+        events: Option<NotificationEvents>,
+
+        prefix: Option<Prefix>,
+
+        suffix: Option<Suffix>,
+    }
+
+    impl ListenBucketNotificationInputBuilder {
+        pub fn set_bucket(&mut self, field: BucketName) -> &mut Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        pub fn set_events(&mut self, field: Option<NotificationEvents>) -> &mut Self {
+            self.events = field;
+            self
+        }
+
+        pub fn set_prefix(&mut self, field: Option<Prefix>) -> &mut Self {
+            self.prefix = field;
+            self
+        }
+
+        pub fn set_suffix(&mut self, field: Option<Suffix>) -> &mut Self {
+            self.suffix = field;
+            self
+        }
+
+        #[must_use]
+        pub fn bucket(mut self, field: BucketName) -> Self {
+            self.bucket = Some(field);
+            self
+        }
+
+        #[must_use]
+        pub fn events(mut self, field: Option<NotificationEvents>) -> Self {
+            self.events = field;
+            self
+        }
+
+        #[must_use]
+        pub fn prefix(mut self, field: Option<Prefix>) -> Self {
+            self.prefix = field;
+            self
+        }
+
+        #[must_use]
+        pub fn suffix(mut self, field: Option<Suffix>) -> Self {
+            self.suffix = field;
+            self
+        }
+
+        pub fn build(self) -> Result<ListenBucketNotificationInput, BuildError> {
+            let bucket = self.bucket.ok_or_else(|| BuildError::missing_field("bucket"))?;
+            let events = self.events;
+            let prefix = self.prefix;
+            let suffix = self.suffix;
+            Ok(ListenBucketNotificationInput {
+                bucket,
+                events,
+                prefix,
+                suffix,
             })
         }
     }
@@ -40192,6 +40322,22 @@ impl DtoExt for ListPartsOutput {
             self.upload_id = None;
         }
     }
+}
+impl DtoExt for ListenBucketNotificationInput {
+    fn ignore_empty_strings(&mut self) {
+        if self.events.as_deref() == Some("") {
+            self.events = None;
+        }
+        if self.prefix.as_deref() == Some("") {
+            self.prefix = None;
+        }
+        if self.suffix.as_deref() == Some("") {
+            self.suffix = None;
+        }
+    }
+}
+impl DtoExt for ListenBucketNotificationOutput {
+    fn ignore_empty_strings(&mut self) {}
 }
 impl DtoExt for LocationInfo {
     fn ignore_empty_strings(&mut self) {
