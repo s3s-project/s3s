@@ -1552,7 +1552,7 @@ impl Serialize for SelectObjectContentRequest {
 
 impl<'xml> Deserialize<'xml> for SelectObjectContentRequest {
     fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("SelectObjectContentRequest", Deserializer::content)
+        d.named_element_any(&["SelectObjectContentRequest", "SelectRequest"], Deserializer::content)
     }
 }
 

@@ -408,7 +408,7 @@ fn patch_types(space: &mut RustTypes) {
             fields: ty.fields.iter().filter(|x| x.position == "xml").cloned().collect(),
             doc: ty.doc.clone(),
             xml_name: None,
-            xml_alt_names: vec![],
+            xml_alt_names: vec![o("SelectRequest")],
             is_error_type: false,
             is_custom_extension: false,
         };
