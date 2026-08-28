@@ -112,7 +112,6 @@ impl S3Path {
 }
 
 /// See [bucket naming rules](https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucketnamingrules.html)
-#[allow(clippy::manual_is_variant_and)] // FIXME: https://github.com/rust-lang/rust-clippy/issues/15202
 #[must_use]
 pub fn check_bucket_name(name: &str) -> bool {
     if !(3_usize..64).contains(&name.len()) {
@@ -127,11 +126,19 @@ pub fn check_bucket_name(name: &str) -> bool {
         return false;
     }
 
-    if name.as_bytes().first().map(|&b| b.is_ascii_lowercase() || b.is_ascii_digit()) != Some(true) {
+    if name
+        .as_bytes()
+        .first()
+        .is_none_or(|&b| !(b.is_ascii_lowercase() || b.is_ascii_digit()))
+    {
         return false;
     }
 
-    if name.as_bytes().last().map(|&b| b.is_ascii_lowercase() || b.is_ascii_digit()) != Some(true) {
+    if name
+        .as_bytes()
+        .last()
+        .is_none_or(|&b| !(b.is_ascii_lowercase() || b.is_ascii_digit()))
+    {
         return false;
     }
 
