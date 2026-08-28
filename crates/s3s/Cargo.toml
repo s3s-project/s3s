@@ -43,8 +43,8 @@ http-body.workspace = true
 http-body-util.workspace = true
 httparse.workspace = true
 hyper = { workspace = true, features = ["http1", "http2", "server"] }
-jiff.workspace = true
 itoa.workspace = true
+jiff.workspace = true
 md-5.workspace = true
 memchr.workspace = true
 mime.workspace = true
