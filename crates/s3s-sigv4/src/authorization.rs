@@ -87,7 +87,7 @@ impl<'a> AuthorizationV4<'a> {
 mod parser {
     use super::*;
 
-    use crate::parser::{Error, consume, digit2, digit4};
+    use crate::parser::{Error, digit2, digit4};
 
     use nom::IResult;
     use nom::Parser;
@@ -96,6 +96,16 @@ mod parser {
     use nom::combinator::verify;
     use nom::multi::separated_list1;
     use nom::sequence::{delimited, preceded, terminated};
+
+    fn consume<I, O, F>(input: &mut I, f: F) -> Result<O, nom::Err<nom::error::Error<I>>>
+    where
+        F: FnOnce(I) -> nom::IResult<I, O>,
+        I: Copy,
+    {
+        let (remaining, output) = f(*input)?;
+        *input = remaining;
+        Ok(output)
+    }
 
     pub fn parse_authorization(mut input: &str) -> IResult<&str, AuthorizationV4<'_>> {
         let s = &mut input;

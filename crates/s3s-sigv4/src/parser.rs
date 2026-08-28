@@ -18,16 +18,6 @@ pub fn digit4(x: [u8; 4]) -> Result<u16, Error> {
     Ok(x0 * 100 + x1)
 }
 
-pub fn consume<I, O, F>(input: &mut I, f: F) -> Result<O, nom::Err<nom::error::Error<I>>>
-where
-    F: FnOnce(I) -> nom::IResult<I, O>,
-    I: Copy,
-{
-    let (remaining, output) = f(*input)?;
-    *input = remaining;
-    Ok(output)
-}
-
 #[inline(always)]
 fn digit(c: u8) -> Result<u8, Error> {
     match c {
