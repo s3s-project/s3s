@@ -8,7 +8,6 @@
 # reachable upstream yet. Revisit: remove this ignore once aws-sdk-s3 allows
 # lru >= 0.18.2.
 ignore = [
-    "RUSTSEC-2026-0253",
     # async-std is discontinued (unmaintained).
     # Transitive via minio 0.4.0 (optional dependency behind the minio
     # feature), which requires it unconditionally; no patched version
