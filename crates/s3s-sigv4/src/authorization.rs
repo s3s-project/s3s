@@ -46,7 +46,7 @@ pub struct CredentialV4<'a> {
 #[derive(Debug, thiserror::Error)]
 #[error("ParseAuthorizationError")]
 pub struct ParseAuthorizationError {
-    /// priv place holder
+    /// private placeholder
     _priv: (),
 }
 
@@ -54,7 +54,7 @@ pub struct ParseAuthorizationError {
 #[derive(Debug, thiserror::Error)]
 #[error("ParseAuthorizationError")]
 pub struct ParseCredentialError {
-    /// priv place holder
+    /// private placeholder
     _priv: (),
 }
 

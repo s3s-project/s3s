@@ -31,7 +31,7 @@ pub struct PresignedUrlV4<'a> {
 #[derive(Debug, thiserror::Error)]
 #[error("ParsePresignedUrlError")]
 pub struct ParsePresignedUrlError {
-    /// priv place holder
+    /// private placeholder
     _priv: (),
 }
 

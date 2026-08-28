@@ -21,9 +21,17 @@ impl<'a> PostSignatureV4<'a> {
     ///
     /// `fields` is the borrowed multipart field table (`multipart.fields()`);
     /// field names must already be normalized to lowercase (contract).
+    ///
+    /// Duplicate fields are rejected: `s3s`'s other multipart consumers select
+    /// the last value on sorted fields, so a non-unique value would be
+    /// ambiguous between signature verification and policy validation.
     #[must_use]
     pub fn extract(fields: &'a [(String, String)]) -> Option<Self> {
-        let get = |name: &str| fields.iter().find(|(k, _)| k == name).map(|(_, v)| v.as_str());
+        let get = |name: &str| {
+            let mut iter = fields.iter().filter(|(k, _)| k == name).map(|(_, v)| v.as_str());
+            let value = iter.next()?;
+            (iter.next().is_none()).then_some(value)
+        };
         Some(Self {
             policy: get("policy")?,
             x_amz_algorithm: get("x-amz-algorithm")?,
@@ -76,5 +84,18 @@ mod tests {
                 .collect();
             assert!(PostSignatureV4::extract(&fields).is_none(), "{name} must be required");
         }
+    }
+
+    #[test]
+    fn extract_rejects_duplicate_fields() {
+        let mut fields = make_fields(vec![
+            ("policy", "test-policy"),
+            ("x-amz-algorithm", "AWS4-HMAC-SHA256"),
+            ("x-amz-credential", "AKID/20130524/us-east-1/s3/aws4_request"),
+            ("x-amz-date", "20130524T000000Z"),
+            ("x-amz-signature", "abc"),
+        ]);
+        fields.push(("policy".to_owned(), "evil-policy".to_owned()));
+        assert!(PostSignatureV4::extract(&fields).is_none());
     }
 }
