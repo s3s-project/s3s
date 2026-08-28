@@ -24,16 +24,11 @@ pub async fn listen_bucket_notification(
     let input = req.input;
     tracing::debug!(?input);
 
-    // All parameters go through `extra_query_params` so that the typed
-    // builder chain stays unconditional. Repeated `events` keys are the
-    // wire format MinIO expects (clients like `mc watch` send one key per
-    // event name), so the comma-joined DTO value is split back.
+    // `prefix` and `suffix` go through `extra_query_params` so the typed
+    // builder chain stays unconditional. `events` must go through the typed
+    // setter: when it is `None`, minio-rs would otherwise append three
+    // default events, widening the server-side filter to all events.
     let mut extra_params = Multimap::default();
-    if let Some(ref events) = input.events {
-        for event in events.split(',') {
-            extra_params.add("events", event);
-        }
-    }
     if let Some(ref prefix) = input.prefix {
         extra_params.add("prefix", prefix);
     }
@@ -41,10 +36,15 @@ pub async fn listen_bucket_notification(
         extra_params.add("suffix", suffix);
     }
 
+    let events: Vec<String> = input
+        .events
+        .map(|events| events.split(',').map(str::to_owned).collect())
+        .unwrap_or_default();
+
     let builder = minio
         .listen_bucket_notification(input.bucket.as_str())
         .map_err(|e| s3_error!(e, InternalError, "invalid bucket"))?;
-    let value = builder.extra_query_params(extra_params).build();
+    let value = builder.extra_query_params(extra_params).events(events).build();
     let mut s3_request = value
         .to_s3request()
         .map_err(|e| s3_error!(e, InternalError, "failed to build request"))?;
