@@ -50,6 +50,7 @@ memchr.workspace = true
 mime.workspace = true
 nom.workspace = true
 numeric_cast.workspace = true
+phf = "0.14.0"
 pin-project-lite.workspace = true
 quick-xml.workspace = true
 regex.workspace = true
