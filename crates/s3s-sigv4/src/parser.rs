@@ -28,6 +28,7 @@ where
     Ok(output)
 }
 
+#[inline(always)]
 fn digit(c: u8) -> Result<u8, Error> {
     match c {
         b'0'..=b'9' => Ok(c - b'0'),
