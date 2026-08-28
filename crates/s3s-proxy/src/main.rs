@@ -62,6 +62,22 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     // Setup S3 provider
     let sdk_conf = aws_config::from_env().endpoint_url(&opt.endpoint_url).load().await;
     let client = aws_sdk_s3::Client::from_conf(aws_sdk_s3::config::Builder::from(&sdk_conf).force_path_style(true).build());
+
+    #[cfg(feature = "minio")]
+    let proxy = {
+        // MinIO-only extensions (e.g. ListenBucketNotification) have no
+        // aws-sdk-s3 counterpart; forward them through the official MinIO SDK.
+        let cred = sdk_conf
+            .credentials_provider()
+            .ok_or("missing credentials provider")?
+            .provide_credentials()
+            .await?;
+        let provider =
+            minio::s3::creds::StaticProvider::new(cred.access_key_id(), cred.secret_access_key(), cred.session_token());
+        let minio_client = minio::s3::MinioClient::new(opt.endpoint_url.parse()?, Some(provider), None, None)?;
+        s3s_aws::Proxy::new(client, minio_client)
+    };
+    #[cfg(not(feature = "minio"))]
     let proxy = s3s_aws::Proxy::from(client);
 
     // Setup S3 service

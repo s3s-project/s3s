@@ -13,6 +13,9 @@ rust-version.workspace = true
 [lints]
 workspace = true
 
+[features]
+minio = ["s3s-aws/minio", "dep:minio"]
+
 [dependencies]
 aws-config = { workspace = true, features = ["behavior-version-latest"] }
 aws-credential-types.workspace = true
@@ -25,6 +28,7 @@ hyper-util = { workspace = true, features = [
     "http2",
     "tokio",
 ] }
+minio = { workspace = true, optional = true }
 s3s = { version = "0.15.0", path = "../s3s" }
 s3s-aws = { version = "0.15.0", path = "../s3s-aws" }
 tokio = { workspace = true, features = ["full"] }

@@ -37,13 +37,20 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
         if op.name == "PostObject" {
             continue;
         }
-        // ListenBucketNotification is a MinIO extension; aws-sdk-s3 has no corresponding operation.
-        if op.name == "ListenBucketNotification" {
-            continue;
-        }
         let method_name = op.name.to_snake_case();
         let s3s_input = f!("s3s::dto::{}", op.input);
         let s3s_output = f!("s3s::dto::{}", op.output);
+
+        if op.is_minio {
+            // MinIO-only extensions have no aws-sdk-s3 counterpart; the proxy
+            // forwards them through the official MinIO SDK (see `listen.rs`).
+            g!("#[tracing::instrument(skip(self, req))]");
+            g!("async fn {method_name}(&self, req: S3Request<{s3s_input}>) -> S3Result<S3Response<{s3s_output}>> {{");
+            g!("super::listen::listen_bucket_notification(&self.1, req).await");
+            g!("}}");
+            g!();
+            continue;
+        }
 
         g!("#[tracing::instrument(skip(self, req))]");
         g!("async fn {method_name}(&self, req: S3Request<{s3s_input}>) -> S3Result<S3Response<{s3s_output}>> {{");

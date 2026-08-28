@@ -1828,6 +1828,14 @@ impl S3 for Proxy {
     }
 
     #[tracing::instrument(skip(self, req))]
+    async fn listen_bucket_notification(
+        &self,
+        req: S3Request<s3s::dto::ListenBucketNotificationInput>,
+    ) -> S3Result<S3Response<s3s::dto::ListenBucketNotificationOutput>> {
+        super::listen::listen_bucket_notification(&self.1, req).await
+    }
+
+    #[tracing::instrument(skip(self, req))]
     async fn put_bucket_abac(
         &self,
         req: S3Request<s3s::dto::PutBucketAbacInput>,
