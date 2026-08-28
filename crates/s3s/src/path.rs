@@ -126,11 +126,11 @@ pub fn check_bucket_name(name: &str) -> bool {
         return false;
     }
 
-    if name.as_bytes().first().map(|&b| b.is_ascii_lowercase() || b.is_ascii_digit()) != Some(true) {
+    if name.as_bytes().first().is_none_or(|&b| !(b.is_ascii_lowercase() || b.is_ascii_digit())) {
         return false;
     }
 
-    if name.as_bytes().last().map(|&b| b.is_ascii_lowercase() || b.is_ascii_digit()) != Some(true) {
+    if name.as_bytes().last().is_none_or(|&b| !(b.is_ascii_lowercase() || b.is_ascii_digit())) {
         return false;
     }
 
