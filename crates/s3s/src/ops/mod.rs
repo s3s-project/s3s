@@ -264,6 +264,19 @@ async fn extract_full_body(content_length: Option<u64>, body: &mut Body, max_bod
     Ok(bytes)
 }
 
+fn reject_custom_route_body_too_large(content_length: Option<u64>, max_body_size: u64) -> S3Result {
+    if let Some(content_length) = content_length
+        && content_length > max_body_size
+    {
+        return Err(s3_error!(
+            EntityTooLarge,
+            "Custom route request body exceeds the configured maximum size."
+        ));
+    }
+
+    Ok(())
+}
+
 /// Prepares the POST object file stream for the operation.
 ///
 /// The file part is the last part of a POST object form. When the request
@@ -342,7 +355,14 @@ pub async fn call(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Response
             }
         }
         Prepare::CustomRoute => {
-            let body = mem::take(&mut req.body);
+            let max_body_size = ccx.config.snapshot().custom_route_max_body_size;
+            let result = reject_custom_route_body_too_large(extract_content_length(req), max_body_size);
+            if let Err(err) = result {
+                error!(?err, "custom route request body is too large");
+                return serialize_error(err, false);
+            }
+
+            let body = mem::take(&mut req.body).limited(max_body_size);
             let mut s3_req = build_s3_request(body, req);
             let route = ccx.route.unwrap();
 

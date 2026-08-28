@@ -813,6 +813,7 @@ mod tests {
         let config = service.inner.config.snapshot();
         assert_eq!(config.xml_max_body_size, 20 * 1024 * 1024);
         assert_eq!(config.post_object_max_file_size, 5 * 1024 * 1024 * 1024);
+        assert_eq!(config.custom_route_max_body_size, 1024 * 1024);
     }
 
     #[test]
@@ -822,6 +823,7 @@ mod tests {
         let custom_config = Arc::new(HotReloadConfigProvider::new(Arc::new(S3Config {
             xml_max_body_size: 10 * 1024 * 1024,
             post_object_max_file_size: 2 * 1024 * 1024 * 1024,
+            custom_route_max_body_size: 512 * 1024,
             ..Default::default()
         })));
 
@@ -832,6 +834,7 @@ mod tests {
         let config = service.inner.config.snapshot();
         assert_eq!(config.xml_max_body_size, 10 * 1024 * 1024);
         assert_eq!(config.post_object_max_file_size, 2 * 1024 * 1024 * 1024);
+        assert_eq!(config.custom_route_max_body_size, 512 * 1024);
     }
 
     #[test]

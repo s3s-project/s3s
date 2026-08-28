@@ -120,6 +120,16 @@ impl Body {
             },
         }
     }
+
+    /// Wraps this body with a byte limit.
+    ///
+    /// Reads fail if the body yields more than `limit` bytes. This is useful
+    /// when forwarding streaming bodies to handlers that may aggregate them.
+    #[must_use]
+    pub fn limited(self, limit: u64) -> Self {
+        let limit = usize::try_from(limit).unwrap_or(usize::MAX);
+        Self::http_body_unsync(http_body_util::Limited::new(self, limit))
+    }
 }
 
 impl From<Bytes> for Body {
@@ -356,6 +366,22 @@ mod tests {
         let result = body.store_all_limited(10).await;
         assert!(result.is_ok());
         assert!(result.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn limited_allows_body_within_limit() {
+        let data = Bytes::from_static(b"hello world");
+        let body = Body::from(data.clone()).limited(u64::try_from(data.len()).unwrap());
+        let result = http_body_util::BodyExt::collect(body).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().to_bytes(), data);
+    }
+
+    #[tokio::test]
+    async fn limited_rejects_body_over_limit() {
+        let body = Body::from(Bytes::from_static(b"hello world")).limited(5);
+        let result = http_body_util::BodyExt::collect(body).await;
+        assert!(result.is_err());
     }
 
     #[test]
