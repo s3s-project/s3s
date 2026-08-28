@@ -12,17 +12,20 @@ use crate::post_policy::PostPolicy;
 use crate::protocol::TrailingHeaders;
 use crate::sig_v2;
 use crate::sig_v4;
-use crate::sig_v4::AmzContentSha256;
-use crate::sig_v4::AmzDate;
 use crate::sig_v4::UploadStream;
-use crate::sig_v4::{AuthorizationV4, CredentialV4, PostSignatureV4, PresignedUrlV4};
 use crate::stream::ByteStream as _;
 use crate::utils::crypto::Sha256Sum;
+use crate::utils::crypto::hex_bytes32;
 use crate::utils::crypto::hex_sha256;
 use crate::utils::is_base64_encoded;
 use s3s_sigv2::AuthorizationV2;
 use s3s_sigv2::PostSignatureV2;
 use s3s_sigv2::PresignedUrlV2;
+use s3s_sigv4::AmzContentSha256;
+use s3s_sigv4::AmzDate;
+use s3s_sigv4::PostSignatureV4;
+use s3s_sigv4::PresignedUrlV4;
+use s3s_sigv4::{AuthorizationV4, CredentialV4};
 
 use std::mem;
 use std::ops::Not;
@@ -162,10 +165,12 @@ struct SignatureVerificationContext<'a> {
     service: &'a str,
 }
 
-fn validate_sig_v4_clock_skew(amz_date: &AmzDate, now: time::OffsetDateTime, config: &S3Config) -> S3Result<()> {
+fn validate_sig_v4_clock_skew(amz_date: &AmzDate, now: jiff::Timestamp, config: &S3Config) -> S3Result<()> {
     let request_time = amz_date.to_time().ok_or_else(|| invalid_request!("invalid amz date"))?;
-    let duration = now - request_time;
-    let max_skew_time = time::Duration::seconds(i64::from(config.presigned_url_max_skew_time_secs));
+    let duration = (now - request_time)
+        .to_duration(jiff::SpanRelativeTo::days_are_24_hours())
+        .map_err(|_| invalid_request!("invalid amz date"))?;
+    let max_skew_time = jiff::SignedDuration::from_secs(i64::from(config.presigned_url_max_skew_time_secs));
 
     if duration.abs() > max_skew_time {
         return Err(s3_error!(RequestTimeTooSkewed, "request time is too far from server time"));
@@ -350,7 +355,8 @@ impl<'a> SignatureContext<'a> {
     pub async fn v4_check_post_signature(&mut self, multipart: Multipart) -> S3Result<CredentialsExt> {
         let auth = require_auth(self.auth)?;
 
-        let info = PostSignatureV4::extract(&multipart).ok_or_else(|| invalid_request!("missing required multipart fields"))?;
+        let info =
+            PostSignatureV4::extract(multipart.fields()).map_err(|e| invalid_request!(e, "invalid multipart fields: {e}"))?;
 
         if is_base64_encoded(info.policy.as_bytes()).not() {
             return Err(invalid_request!("invalid field: policy"));
@@ -404,7 +410,7 @@ impl<'a> SignatureContext<'a> {
         let config = self.config.snapshot();
 
         validate_sig_v4_region(region, &config)?;
-        validate_sig_v4_clock_skew(&amz_date, time::OffsetDateTime::now_utc(), &config)?;
+        validate_sig_v4_clock_skew(&amz_date, jiff::Timestamp::now(), &config)?;
 
         let access_key = credential.access_key_id.to_owned();
         let secret_key = auth.get_secret_key(&access_key).await?;
@@ -435,10 +441,9 @@ impl<'a> SignatureContext<'a> {
     }
 
     pub async fn v4_check_presigned_url(&mut self) -> S3Result<CredentialsExt> {
-        let qs = self.qs.unwrap(); // assume: qs has "X-Amz-Signature"
         let config = self.config.snapshot();
 
-        let presigned_url = PresignedUrlV4::parse(qs, config.presigned_url_max_expires_secs).map_err(|err| {
+        let presigned_url = PresignedUrlV4::parse(self.query_pairs(), config.presigned_url_max_expires_secs).map_err(|err| {
             s3_error!(
                 err,
                 AuthorizationQueryParametersError,
@@ -472,20 +477,22 @@ impl<'a> SignatureContext<'a> {
             // check expiration
             validate_sig_v4_region(region, &config)?;
 
-            let now = time::OffsetDateTime::now_utc();
+            let now = jiff::Timestamp::now();
 
             let date = presigned_url
                 .amz_date
                 .to_time()
                 .ok_or_else(|| invalid_request!("invalid amz date"))?;
 
-            let duration = now - date;
+            let duration = (now - date)
+                .to_duration(jiff::SpanRelativeTo::days_are_24_hours())
+                .map_err(|_| invalid_request!("invalid amz date"))?;
 
             // Allow requests that are up to max_skew_time_secs in the future.
             // This is to account for clock skew between the client and server.
             // See also https://github.com/minio/minio/blob/b5177993b371817699d3fa25685f54f88d8bfcce/cmd/signature-v4.go#L238-L242
 
-            let max_skew_time = time::Duration::seconds(i64::from(config.presigned_url_max_skew_time_secs));
+            let max_skew_time = jiff::SignedDuration::from_secs(i64::from(config.presigned_url_max_skew_time_secs));
             if duration.is_negative() && duration.abs() > max_skew_time {
                 return Err(s3_error!(RequestTimeTooSkewed, "request date is later than server time too much"));
             }
@@ -516,9 +523,10 @@ impl<'a> SignatureContext<'a> {
             region,
             service,
         };
-        let canonical_request = sig_v4::create_presigned_canonical_request(method, self.decoded_uri_path, qs.as_ref(), &headers);
+        let canonical_request =
+            sig_v4::create_presigned_canonical_request(method, self.decoded_uri_path, self.query_pairs(), &headers);
         verifier.verify_with_raw_path_fallback(&canonical_request, || {
-            sig_v4::create_presigned_canonical_request_with_raw_uri_path(method, self.raw_uri_path, qs.as_ref(), &headers)
+            sig_v4::create_presigned_canonical_request_with_raw_uri_path(method, self.raw_uri_path, self.query_pairs(), &headers)
         })?;
 
         // Verify body hash for presigned URL requests.
@@ -537,8 +545,7 @@ impl<'a> SignatureContext<'a> {
                     .ok_or_else(|| s3_error!(MissingContentLength, "missing header: content-length"))?
             };
 
-            let body = mem::take(self.req_body);
-            let stream = UploadStream::new(body, length, expected_checksum);
+            let stream = UploadStream::new(mem::take(self.req_body), length, Sha256Sum::from_bytes(expected_checksum));
             *self.req_body = Body::from(stream.into_byte_stream());
         }
 
@@ -574,7 +581,7 @@ impl<'a> SignatureContext<'a> {
         }
 
         validate_sig_v4_region(region, &config)?;
-        validate_sig_v4_clock_skew(&amz_date, time::OffsetDateTime::now_utc(), &config)?;
+        validate_sig_v4_clock_skew(&amz_date, jiff::Timestamp::now(), &config)?;
 
         let amz_content_sha256 = extract_amz_content_sha256(self.hs)?;
 
@@ -598,7 +605,7 @@ impl<'a> SignatureContext<'a> {
             Some(AmzContentSha256::UnsignedPayload) => sig_v4::Payload::Unsigned,
             Some(AmzContentSha256::StreamingUnsignedPayloadTrailer) => sig_v4::Payload::UnsignedMultipleChunksWithTrailer,
             Some(AmzContentSha256::SingleChunk(checksum)) => {
-                payload_hash = checksum.to_hex_string();
+                payload_hash = hex_bytes32(&checksum, str::to_owned);
                 sig_v4::Payload::SingleChunk(&payload_hash)
             }
             Some(
@@ -687,7 +694,7 @@ impl<'a> SignatureContext<'a> {
             };
 
             let body = mem::take(self.req_body);
-            let stream = UploadStream::new(body, length, expected_checksum);
+            let stream = UploadStream::new(body, length, Sha256Sum::from_bytes(expected_checksum));
             *self.req_body = Body::from(stream.into_byte_stream());
         } else if matches!(amz_content_sha256, Some(AmzContentSha256::UnsignedPayload)) {
             // For non-streaming unsigned payloads, require Content-Length.
