@@ -2835,12 +2835,12 @@ mod bodyless_content_length_tests {
 
     #[derive(Default)]
     struct TestS3 {
-        get_object_calls: AtomicUsize,
-        head_object_calls: AtomicUsize,
-        delete_object_calls: AtomicUsize,
-        copy_object_calls: AtomicUsize,
-        upload_part_copy_calls: AtomicUsize,
-        put_object_calls: AtomicUsize,
+        get_object: AtomicUsize,
+        head_object: AtomicUsize,
+        delete_object: AtomicUsize,
+        copy_object: AtomicUsize,
+        upload_part_copy: AtomicUsize,
+        put_object: AtomicUsize,
     }
 
     #[async_trait::async_trait]
@@ -2849,7 +2849,7 @@ mod bodyless_content_length_tests {
             &self,
             _req: crate::S3Request<crate::dto::GetObjectInput>,
         ) -> crate::error::S3Result<S3Response<crate::dto::GetObjectOutput>> {
-            self.get_object_calls.fetch_add(1, Ordering::SeqCst);
+            self.get_object.fetch_add(1, Ordering::SeqCst);
             Ok(S3Response::new(crate::dto::GetObjectOutput::default()))
         }
 
@@ -2857,7 +2857,7 @@ mod bodyless_content_length_tests {
             &self,
             _req: crate::S3Request<crate::dto::HeadObjectInput>,
         ) -> crate::error::S3Result<S3Response<crate::dto::HeadObjectOutput>> {
-            self.head_object_calls.fetch_add(1, Ordering::SeqCst);
+            self.head_object.fetch_add(1, Ordering::SeqCst);
             Ok(S3Response::new(crate::dto::HeadObjectOutput::default()))
         }
 
@@ -2865,7 +2865,7 @@ mod bodyless_content_length_tests {
             &self,
             _req: crate::S3Request<crate::dto::DeleteObjectInput>,
         ) -> crate::error::S3Result<S3Response<crate::dto::DeleteObjectOutput>> {
-            self.delete_object_calls.fetch_add(1, Ordering::SeqCst);
+            self.delete_object.fetch_add(1, Ordering::SeqCst);
             Ok(S3Response::new(crate::dto::DeleteObjectOutput::default()))
         }
 
@@ -2873,7 +2873,7 @@ mod bodyless_content_length_tests {
             &self,
             _req: crate::S3Request<crate::dto::CopyObjectInput>,
         ) -> crate::error::S3Result<S3Response<crate::dto::CopyObjectOutput>> {
-            self.copy_object_calls.fetch_add(1, Ordering::SeqCst);
+            self.copy_object.fetch_add(1, Ordering::SeqCst);
             Ok(S3Response::new(crate::dto::CopyObjectOutput::default()))
         }
 
@@ -2881,7 +2881,7 @@ mod bodyless_content_length_tests {
             &self,
             _req: crate::S3Request<crate::dto::UploadPartCopyInput>,
         ) -> crate::error::S3Result<S3Response<crate::dto::UploadPartCopyOutput>> {
-            self.upload_part_copy_calls.fetch_add(1, Ordering::SeqCst);
+            self.upload_part_copy.fetch_add(1, Ordering::SeqCst);
             Ok(S3Response::new(crate::dto::UploadPartCopyOutput::default()))
         }
 
@@ -2889,18 +2889,18 @@ mod bodyless_content_length_tests {
             &self,
             _req: crate::S3Request<crate::dto::PutObjectInput>,
         ) -> crate::error::S3Result<S3Response<crate::dto::PutObjectOutput>> {
-            self.put_object_calls.fetch_add(1, Ordering::SeqCst);
+            self.put_object.fetch_add(1, Ordering::SeqCst);
             Ok(S3Response::new(crate::dto::PutObjectOutput::default()))
         }
     }
 
     impl TestS3 {
         fn total_bodyless_calls(&self) -> usize {
-            self.get_object_calls.load(Ordering::SeqCst)
-                + self.head_object_calls.load(Ordering::SeqCst)
-                + self.delete_object_calls.load(Ordering::SeqCst)
-                + self.copy_object_calls.load(Ordering::SeqCst)
-                + self.upload_part_copy_calls.load(Ordering::SeqCst)
+            self.get_object.load(Ordering::SeqCst)
+                + self.head_object.load(Ordering::SeqCst)
+                + self.delete_object.load(Ordering::SeqCst)
+                + self.copy_object.load(Ordering::SeqCst)
+                + self.upload_part_copy.load(Ordering::SeqCst)
         }
     }
 
@@ -2996,11 +2996,11 @@ mod bodyless_content_length_tests {
     impl BodylessCase {
         fn calls(&self, s3: &TestS3) -> usize {
             match self.name {
-                "GetObject" => s3.get_object_calls.load(Ordering::SeqCst),
-                "HeadObject" => s3.head_object_calls.load(Ordering::SeqCst),
-                "DeleteObject" => s3.delete_object_calls.load(Ordering::SeqCst),
-                "CopyObject" => s3.copy_object_calls.load(Ordering::SeqCst),
-                "UploadPartCopy" => s3.upload_part_copy_calls.load(Ordering::SeqCst),
+                "GetObject" => s3.get_object.load(Ordering::SeqCst),
+                "HeadObject" => s3.head_object.load(Ordering::SeqCst),
+                "DeleteObject" => s3.delete_object.load(Ordering::SeqCst),
+                "CopyObject" => s3.copy_object.load(Ordering::SeqCst),
+                "UploadPartCopy" => s3.upload_part_copy.load(Ordering::SeqCst),
                 _ => unreachable!("unknown test case"),
             }
         }
@@ -3088,7 +3088,7 @@ mod bodyless_content_length_tests {
             );
         }
 
-        assert_eq!(test_s3.put_object_calls.load(Ordering::SeqCst), 0);
+        assert_eq!(test_s3.put_object.load(Ordering::SeqCst), 0);
     }
 
     #[tokio::test]
