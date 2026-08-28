@@ -258,7 +258,7 @@ pub fn codegen(model: &smithy::Model) {
     g!("impl S3ErrorCode {{");
 
     {
-        g!("const STATIC_CODE_LIST: &'static [&'static str] = &[");
+        g!("pub(super) const STATIC_CODE_LIST: &'static [&'static str] = &[");
         for err in errors.values() {
             g!("\"{}\",", err.code);
         }

@@ -3,26 +3,6 @@
 
 use super::S3ErrorCode;
 
-#[cfg(feature = "minio")]
-const GENERATED_SOURCE: &str = include_str!("generated_minio.rs");
-#[cfg(not(feature = "minio"))]
-const GENERATED_SOURCE: &str = include_str!("generated.rs");
-
-fn static_code_list() -> impl Iterator<Item = &'static str> {
-    let (_, tail) = GENERATED_SOURCE
-        .split_once("const STATIC_CODE_LIST: &'static [&'static str] = &[\n")
-        .unwrap();
-    let (list, _) = tail.split_once("    ];").unwrap();
-
-    list.lines().map(|line| {
-        let literal = line.trim().strip_suffix(',').unwrap().trim();
-        literal
-            .strip_prefix('"')
-            .and_then(|literal| literal.strip_suffix('"'))
-            .unwrap()
-    })
-}
-
 fn mixed_case(code: &str) -> String {
     code.bytes()
         .enumerate()
@@ -41,7 +21,7 @@ fn mixed_case(code: &str) -> String {
 fn from_bytes_matches_static_codes() {
     let mut saw_code = false;
 
-    for code in static_code_list() {
+    for &code in S3ErrorCode::STATIC_CODE_LIST {
         saw_code = true;
 
         let exact = S3ErrorCode::from_bytes(code.as_bytes()).unwrap();

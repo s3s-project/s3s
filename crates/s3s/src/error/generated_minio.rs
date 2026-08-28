@@ -2455,7 +2455,7 @@ static S3_ERROR_CODE_LOWERCASE_MAP: phf::Map<&'static str, S3ErrorCode> = ::phf:
 };
 
 impl S3ErrorCode {
-    const STATIC_CODE_LIST: &'static [&'static str] = &[
+    pub(super) const STATIC_CODE_LIST: &'static [&'static str] = &[
         "AccessControlListNotSupported",
         "AccessDenied",
         "AccessPointAlreadyOwnedByYou",
