@@ -53,6 +53,7 @@ numeric_cast.workspace = true
 pin-project-lite.workspace = true
 quick-xml.workspace = true
 regex.workspace = true
+s3s-sigv2 = { version = "0.16.0-alpha.1", path = "../s3s-sigv2" }
 s3s-sigv4 = { version = "0.16.0-alpha.1", path = "../s3s-sigv4" }
 serde.workspace = true
 serde_json.workspace = true

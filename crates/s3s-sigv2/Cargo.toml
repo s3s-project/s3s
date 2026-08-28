@@ -12,3 +12,7 @@ rust-version.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+jiff.workspace = true
+thiserror.workspace = true
