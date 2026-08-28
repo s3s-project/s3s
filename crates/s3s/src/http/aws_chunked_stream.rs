@@ -7,11 +7,11 @@ use crate::auth::SecretKey;
 use crate::error::StdError;
 use crate::protocol::TrailingHeaders;
 use crate::sig_v4;
-use crate::sig_v4::AmzDate;
 use crate::sig_v4::create_trailer_string_to_sign;
 use crate::stream::{ByteStream, DynByteStream, RemainingLength};
 use crate::utils::SyncBoxFuture;
 use crate::utils::crypto::{Sha256Sum, hex_bytes32};
+use s3s_sigv4::AmzDate;
 
 use hyper::HeaderMap;
 use hyper::http::{HeaderName, HeaderValue};

@@ -46,7 +46,7 @@ pub struct CredentialV4<'a> {
 #[derive(Debug, thiserror::Error)]
 #[error("ParseAuthorizationError")]
 pub struct ParseAuthorizationError {
-    /// priv place holder
+    /// private placeholder
     _priv: (),
 }
 
@@ -54,11 +54,16 @@ pub struct ParseAuthorizationError {
 #[derive(Debug, thiserror::Error)]
 #[error("ParseAuthorizationError")]
 pub struct ParseCredentialError {
-    /// priv place holder
+    /// private placeholder
     _priv: (),
 }
 
 impl<'a> CredentialV4<'a> {
+    /// Parses a credential scope string of the form
+    /// `<access-key-id>/<date>/<aws-region>/<aws-service>/aws4_request`.
+    ///
+    /// # Errors
+    /// Returns [`ParseCredentialError`] when the string does not match.
     pub fn parse(input: &'a str) -> Result<Self, ParseCredentialError> {
         match parser::parse_credential(input) {
             Ok(("", ans)) => Ok(ans),
@@ -82,7 +87,7 @@ impl<'a> AuthorizationV4<'a> {
 mod parser {
     use super::*;
 
-    use crate::utils::parser::{Error, consume, digit2, digit4};
+    use crate::parser::{Error, digit2, digit4};
 
     use nom::IResult;
     use nom::Parser;
@@ -91,6 +96,16 @@ mod parser {
     use nom::combinator::verify;
     use nom::multi::separated_list1;
     use nom::sequence::{delimited, preceded, terminated};
+
+    fn consume<I, O, F>(input: &mut I, f: F) -> Result<O, nom::Err<nom::error::Error<I>>>
+    where
+        F: FnOnce(I) -> nom::IResult<I, O>,
+        I: Copy,
+    {
+        let (remaining, output) = f(*input)?;
+        *input = remaining;
+        Ok(output)
+    }
 
     pub fn parse_authorization(mut input: &str) -> IResult<&str, AuthorizationV4<'_>> {
         let s = &mut input;
@@ -160,13 +175,16 @@ mod parser {
             return Err(Error);
         }
 
-        let yyyy = digit4([x[0], x[1], x[2], x[3]])?.into();
-        let mm = digit2([x[4], x[5]])?.into();
-        let dd = digit2([x[6], x[7]])?.into();
+        let yyyy = digit4([x[0], x[1], x[2], x[3]])?;
+        let mm = digit2([x[4], x[5]])?;
+        let dd = digit2([x[6], x[7]])?;
 
-        match chrono::NaiveDate::from_ymd_opt(yyyy, mm, dd) {
-            Some(_) => Ok(()),
-            None => Err(Error),
+        let yyyy = i16::try_from(yyyy).map_err(|_| Error)?;
+        let mm = i8::try_from(mm).map_err(|_| Error)?;
+        let dd = i8::try_from(dd).map_err(|_| Error)?;
+        match jiff::civil::Date::new(yyyy, mm, dd) {
+            Ok(_) => Ok(()),
+            Err(_) => Err(Error),
         }
     }
 }
@@ -206,7 +224,7 @@ mod tests {
 
     #[test]
     fn credential_with_non_digit_date_does_not_panic() {
-        // Regression for the fuzz-discovered panic in `utils::parser::digit`:
+        // Regression for the fuzz-discovered panic in `parser::digit`:
         // a non-digit byte in the credential date used to underflow below
         // `b'0'` in overflow-checked builds.
         let auth = concat!(
@@ -216,6 +234,52 @@ mod tests {
             "Signature=fe5f80f77d5fa3beca038a248ff027d0445342fe2855ddc963176630326f1024",
         );
         assert!(AuthorizationV4::parse(auth).is_err());
+    }
+
+    #[test]
+    fn parse_rejects_missing_parts() {
+        let header = |suffix: &str| format!("AWS4-HMAC-SHA256 {suffix}");
+        // missing Credential=
+        assert!(AuthorizationV4::parse(&header("SignedHeaders=host, Signature=abc")).is_err());
+        // missing SignedHeaders=
+        assert!(AuthorizationV4::parse(&header("Credential=AKIA/20230524/us-east-1/s3/aws4_request, Signature=abc")).is_err());
+        // missing Signature=
+        assert!(
+            AuthorizationV4::parse(&header("Credential=AKIA/20230524/us-east-1/s3/aws4_request, SignedHeaders=host,")).is_err()
+        );
+        // missing whitespace after the algorithm
+        assert!(
+            AuthorizationV4::parse(
+                "AWS4-HMAC-SHA256Credential=AKIA/20230524/us-east-1/s3/aws4_request, SignedHeaders=host, Signature=abc"
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn parse_rejects_empty_or_whitespace_input() {
+        assert!(AuthorizationV4::parse("").is_err());
+        assert!(AuthorizationV4::parse("AWS4-HMAC-SHA256").is_err());
+    }
+
+    #[test]
+    fn parse_credential_rejects_invalid_scope() {
+        assert!(CredentialV4::parse("AKIA/20230524/us-east-1/s3/aws4_request").is_ok());
+        // missing aws4_request
+        assert!(CredentialV4::parse("AKIA/20230524/us-east-1/s3/").is_err());
+        assert!(CredentialV4::parse("bad").is_err());
+        // truncated scope
+        assert!(CredentialV4::parse("AKIA/20230524/us-east-1").is_err());
+        assert!(CredentialV4::parse("AKIA/20230524/us-east-1/s3").is_err());
+    }
+
+    #[test]
+    fn parse_credential_rejects_invalid_date() {
+        // date too short
+        assert!(CredentialV4::parse("AKIA/2023/us-east-1/s3/aws4_request").is_err());
+        // non-digit month / day
+        assert!(CredentialV4::parse("AKIA/2023ab24/us-east-1/s3/aws4_request").is_err());
+        assert!(CredentialV4::parse("AKIA/2023052a/us-east-1/s3/aws4_request").is_err());
     }
 
     #[test]

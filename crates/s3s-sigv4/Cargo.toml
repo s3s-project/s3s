@@ -12,3 +12,13 @@ rust-version.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+arrayvec.workspace = true
+base64-simd.workspace = true
+hex-simd.workspace = true
+jiff.workspace = true
+nom.workspace = true
+serde.workspace = true
+smallvec.workspace = true
+thiserror.workspace = true

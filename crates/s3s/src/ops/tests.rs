@@ -953,7 +953,6 @@ async fn post_multipart_bucket_routes_to_post_object() {
     use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
     use crate::http::{Body, Request};
     use crate::ops::CallContext;
-    use crate::sig_v4;
     use bytes::Bytes;
     use hyper::Method;
     use std::sync::Arc;
@@ -1015,7 +1014,7 @@ async fn post_multipart_bucket_routes_to_post_object() {
     let key = "mc-test-object-7658";
     let policy_b64 = "eyJleHBpcmF0aW9uIjoiMjAyMC0xMC0wM1QxMzoyNTo0Ny4yMThaIiwiY29uZGl0aW9ucyI6W1siZXEiLCIkYnVja2V0IiwibWMtdGVzdC1idWNrZXQtMzI1NjkiXSxbImVxIiwiJGtleSIsIm1jLXRlc3Qtb2JqZWN0LTc2NTgiXSxbImVxIiwiJHgtYW16LWRhdGUiLCIyMDIwMDkyNlQxMzI1NDdaIl0sWyJlcSIsIiR4LWFtei1hbGdvcml0aG0iLCJBV1M0LUhNQUMtU0hBMjU2Il0sWyJlcSIsIiR4LWFtei1jcmVkZW50aWFsIiwiQUtJQUlPU0ZPRE5ON0VYQU1QTEUvMjAyMDA5MjYvdXMtZWFzdC0xL3MzL2F3czRfcmVxdWVzdCJdXX0=";
     let algorithm = "AWS4-HMAC-SHA256";
-    let amz_date = sig_v4::AmzDate::parse("20200926T132547Z").unwrap();
+    let amz_date = s3s_sigv4::AmzDate::parse("20200926T132547Z").unwrap();
     let amz_date_str = amz_date.fmt_iso8601();
     let credential = "AKIAIOSFODNN7EXAMPLE/20200926/us-east-1/s3/aws4_request";
     let region = "us-east-1";
@@ -1094,7 +1093,6 @@ mod post_policy_test_helpers {
     use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
     use crate::http::{Body, Request};
     use crate::ops::CallContext;
-    use crate::sig_v4;
     use bytes::Bytes;
     use hyper::Method;
     use std::sync::Arc;
@@ -1225,7 +1223,7 @@ mod post_policy_test_helpers {
         let boundary = "------------------------test12345678";
         let bucket = "test-bucket";
         let key = "test-key";
-        let amz_date = sig_v4::AmzDate::parse("20250101T000000Z").unwrap();
+        let amz_date = s3s_sigv4::AmzDate::parse("20250101T000000Z").unwrap();
         let amz_date_str = amz_date.fmt_iso8601();
         let region = "us-east-1";
         let service = "s3";
@@ -1288,7 +1286,7 @@ mod post_policy_test_helpers {
         let boundary = "------------------------test12345678";
         let bucket = "test-bucket";
         let key = "test-key";
-        let amz_date = sig_v4::AmzDate::parse("20250101T000000Z").unwrap();
+        let amz_date = s3s_sigv4::AmzDate::parse("20250101T000000Z").unwrap();
         let amz_date_str = amz_date.fmt_iso8601();
         let region = "us-east-1";
         let service = "s3";
@@ -1811,7 +1809,7 @@ async fn post_object_chunked_rejects_broken_body() {
     let boundary = "------------------------test12345678";
     let bucket = "test-bucket";
     let key = "test-key";
-    let amz_date = crate::sig_v4::AmzDate::parse("20250101T000000Z").unwrap();
+    let amz_date = s3s_sigv4::AmzDate::parse("20250101T000000Z").unwrap();
     let amz_date_str = amz_date.fmt_iso8601();
     let credential = "AKIAIOSFODNN7EXAMPLE/20250101/us-east-1/s3/aws4_request";
     let algorithm = "AWS4-HMAC-SHA256";
