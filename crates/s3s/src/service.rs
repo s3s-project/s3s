@@ -615,7 +615,7 @@ impl S3Service {
         fields(start_time=?crate::time::now_utc())
     )]
     pub async fn call(&self, req: HttpRequest) -> Result<HttpResponse, HttpError> {
-        debug!(?req);
+        debug!(method = %req.method(), version = ?req.version(), "request received");
 
         let t0 = crate::time::Instant::now();
 
@@ -717,7 +717,21 @@ mod tests {
 
     use crate::{S3Error, S3Request, S3Response};
 
+    use std::io::Write;
+    use std::sync::Mutex;
     use stdx::mem::output_size;
+
+    struct CapturedWriter(Arc<Mutex<Vec<u8>>>);
+
+    impl Write for CapturedWriter {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().expect("captured log mutex poisoned").write(buf)
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            self.0.lock().expect("captured log mutex poisoned").flush()
+        }
+    }
 
     macro_rules! print_future_size {
         ($func:path) => {
@@ -935,5 +949,39 @@ mod tests {
         let service = S3ServiceBuilder::new(MockS3).build();
         let cloned = service.clone();
         assert!(format!("{cloned:?}").contains("S3Service"));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn request_debug_log_omits_sensitive_headers() {
+        const AUTHORIZATION: &str = "AWS4-HMAC-SHA256 Credential=access/secret-signature";
+        const CUSTOMER_KEY: &str = "customer-key-material";
+        const SESSION_TOKEN: &str = "session-token-material";
+
+        let captured = Arc::new(Mutex::new(Vec::new()));
+        let writer = Arc::clone(&captured);
+        let subscriber = tracing_subscriber::fmt()
+            .with_ansi(false)
+            .without_time()
+            .with_max_level(tracing::Level::DEBUG)
+            .with_writer(move || CapturedWriter(Arc::clone(&writer)))
+            .finish();
+        let _subscriber = tracing::subscriber::set_default(subscriber);
+
+        let request = http::Request::builder()
+            .method(http::Method::GET)
+            .uri("/bucket/object?X-Amz-Signature=query-signature")
+            .header(http::header::AUTHORIZATION, AUTHORIZATION)
+            .header("x-amz-server-side-encryption-customer-key", CUSTOMER_KEY)
+            .header("x-amz-security-token", SESSION_TOKEN)
+            .body(Body::empty())
+            .expect("valid test request");
+        let _ = S3ServiceBuilder::new(MockS3).build().call(request).await;
+
+        let logs = String::from_utf8(captured.lock().expect("captured log mutex poisoned").clone())
+            .expect("tracing output should be UTF-8");
+        assert!(logs.contains("request received"));
+        for sensitive in [AUTHORIZATION, CUSTOMER_KEY, SESSION_TOKEN, "query-signature"] {
+            assert!(!logs.contains(sensitive), "request debug log leaked {sensitive}");
+        }
     }
 }
