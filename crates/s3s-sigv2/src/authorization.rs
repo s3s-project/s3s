@@ -17,7 +17,7 @@ pub struct AuthorizationV2<'a> {
 #[derive(Debug, thiserror::Error)]
 #[error("ParseAuthorizationError")]
 pub struct ParseAuthorizationV2Error {
-    /// priv place holder
+    /// private placeholder
     _priv: (),
 }
 

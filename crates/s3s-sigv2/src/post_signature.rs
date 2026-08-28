@@ -16,9 +16,17 @@ impl<'a> PostSignatureV2<'a> {
     ///
     /// `fields` is the borrowed multipart field table (`multipart.fields()`);
     /// field names must already be normalized to lowercase (contract).
+    ///
+    /// Duplicate fields are rejected: `s3s`'s other multipart consumers select
+    /// the last value on sorted fields, so a non-unique value would be
+    /// ambiguous between signature verification and policy validation.
     #[must_use]
     pub fn extract(fields: &'a [(String, String)]) -> Option<Self> {
-        let get = |name: &str| fields.iter().find(|(k, _)| k == name).map(|(_, v)| v.as_str());
+        let get = |name: &str| {
+            let mut iter = fields.iter().filter(|(k, _)| k == name).map(|(_, v)| v.as_str());
+            let value = iter.next()?;
+            (iter.next().is_none()).then_some(value)
+        };
         Some(Self {
             policy: get("policy")?,
             access_key_id: get("awsaccesskeyid")?,
@@ -59,6 +67,17 @@ mod tests {
     #[test]
     fn extract_missing_signature() {
         let fields = make_fields(vec![("policy", "test-policy"), ("awsaccesskeyid", "AKID")]);
+        assert!(PostSignatureV2::extract(&fields).is_none());
+    }
+
+    #[test]
+    fn extract_rejects_duplicate_fields() {
+        let fields = make_fields(vec![
+            ("policy", "test-policy"),
+            ("awsaccesskeyid", "AKID"),
+            ("signature", "sig123"),
+            ("policy", "evil-policy"),
+        ]);
         assert!(PostSignatureV2::extract(&fields).is_none());
     }
 }
