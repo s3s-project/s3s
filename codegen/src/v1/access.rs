@@ -49,6 +49,10 @@ pub fn codegen(ops: &Operations) {
         let method_name = op.name.to_snake_case();
         let input = &op.input;
 
+        if op.is_minio {
+            g!("#[cfg(feature = \"minio\")]");
+        }
+
         g!("/// Checks whether the {} request has accesses to the resources.", op.name);
         g!("/// ");
         g!("/// This method returns `Ok(())` by default.");

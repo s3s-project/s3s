@@ -477,14 +477,6 @@ fn resolve_operation(
         }
     };
 
-    // FIXME: hack for E2E tests (minio/mint)
-    if op.name() == "ListObjects"
-        && let Some(qs) = req.s3ext.qs.as_ref()
-        && qs.has("events")
-    {
-        return Err(s3_error!(NotImplemented, "listenBucketNotification only works on MinIO"));
-    }
-
     Ok(op)
 }
 

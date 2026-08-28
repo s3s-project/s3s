@@ -75,6 +75,7 @@
 // ListObjects
 // ListObjectsV2
 // ListParts
+// ListenBucketNotification
 // PostObject
 // PutBucketAbac
 // PutBucketAccelerateConfiguration
@@ -5028,6 +5029,64 @@ impl super::Operation for ListParts {
     }
 }
 
+pub struct ListenBucketNotification;
+
+impl ListenBucketNotification {
+    pub fn deserialize_http(req: &mut http::Request) -> S3Result<ListenBucketNotificationInput> {
+        let bucket = http::unwrap_bucket(req);
+
+        let events: Option<NotificationEvents> = http::parse_opt_query(req, "events")?;
+
+        let prefix: Option<Prefix> = http::parse_opt_query(req, "prefix")?;
+
+        let suffix: Option<Suffix> = http::parse_opt_query(req, "suffix")?;
+
+        Ok(ListenBucketNotificationInput {
+            bucket,
+            events,
+            prefix,
+            suffix,
+        })
+    }
+
+    pub fn serialize_http(x: ListenBucketNotificationOutput) -> S3Result<http::Response> {
+        let mut res = http::Response::with_status(http::StatusCode::OK);
+        if let Some(val) = x.payload {
+            http::set_stream_body(&mut res, val);
+        }
+        Ok(res)
+    }
+}
+
+#[async_trait::async_trait]
+impl super::Operation for ListenBucketNotification {
+    fn name(&self) -> &'static str {
+        "ListenBucketNotification"
+    }
+
+    fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
+        let input = Self::deserialize_http(req)?;
+        let mut s3_req = super::build_s3_request(input, req);
+        let s3 = ccx.s3;
+        if let Some(access) = ccx.access {
+            access.listen_bucket_notification(&mut s3_req).await?;
+        }
+        let result = s3.listen_bucket_notification(s3_req).await;
+        let s3_resp = match result {
+            Ok(val) => val,
+            Err(err) => return super::serialize_error(err, false),
+        };
+        let mut resp = Self::serialize_http(s3_resp.output)?;
+        resp.headers.extend(s3_resp.headers);
+        resp.extensions.extend(s3_resp.extensions);
+        Ok(resp)
+    }
+}
+
 pub struct PutBucketAbac;
 
 impl PutBucketAbac {
@@ -8012,6 +8071,9 @@ pub fn resolve_route(
                     }
                     if qs.has("versions") {
                         return Ok(&ListObjectVersions as &'static dyn super::Operation);
+                    }
+                    if qs.has("events") {
+                        return Ok(&ListenBucketNotification as &'static dyn super::Operation);
                     }
                     if super::check_query_pattern(qs, "list-type", "2") {
                         return Ok(&ListObjectsV2 as &'static dyn super::Operation);

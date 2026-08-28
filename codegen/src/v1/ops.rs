@@ -3,6 +3,7 @@
 
 use super::dto::RustTypes;
 use super::rust::default_value_literal;
+use super::smithy::SmithyTraitsExt;
 use super::xml::{is_xml_output, is_xml_payload};
 use super::{dto, rust, smithy};
 use super::{headers, o};
@@ -36,6 +37,9 @@ pub struct Operation {
     pub http_method: String,
     pub http_uri: String,
     pub http_code: u16,
+
+    /// Whether this operation is a `MinIO` extension (only present in the `MinIO` model variant).
+    pub is_minio: bool,
 }
 
 pub type Operations = BTreeMap<String, Operation>;
@@ -114,6 +118,8 @@ pub fn collect_operations(model: &smithy::Model) -> Operations {
             http_method: sh.traits.http_method().unwrap().to_owned(),
             http_uri: sh.traits.http_uri().unwrap().to_owned(),
             http_code,
+
+            is_minio: sh.traits.minio(),
         };
         insert(&mut operations, op_name, op);
     }
@@ -139,6 +145,8 @@ pub fn collect_operations(model: &smithy::Model) -> Operations {
             http_method: o("POST"),
             http_uri: o("/{Bucket}"),
             http_code: 200,
+
+            is_minio: false,
         };
         insert(&mut operations, op_name, op);
     }

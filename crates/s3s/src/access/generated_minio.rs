@@ -591,6 +591,14 @@ pub trait S3Access: Send + Sync + 'static {
         Ok(())
     }
 
+    #[cfg(feature = "minio")]
+    /// Checks whether the ListenBucketNotification request has accesses to the resources.
+    ///
+    /// This method returns `Ok(())` by default.
+    async fn listen_bucket_notification(&self, _req: &mut S3Request<ListenBucketNotificationInput>) -> S3Result<()> {
+        Ok(())
+    }
+
     /// Checks whether the PostObject request has accesses to the resources.
     ///
     /// This method returns `Ok(())` by default.

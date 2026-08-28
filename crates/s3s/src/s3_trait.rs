@@ -4647,6 +4647,15 @@ pub trait S3: Send + Sync + 'static {
         Err(s3_error!(NotImplemented, "ListParts is not implemented yet"))
     }
 
+    #[cfg(feature = "minio")]
+    /// `MinIO` extension: listen to bucket notification events as a long-polling SSE stream.
+    async fn listen_bucket_notification(
+        &self,
+        _req: S3Request<ListenBucketNotificationInput>,
+    ) -> S3Result<S3Response<ListenBucketNotificationOutput>> {
+        Err(s3_error!(NotImplemented, "ListenBucketNotification is not implemented yet"))
+    }
+
     /// POST Object (multipart form upload)
     ///
     /// This is a synthetic method separated from `PutObject` so implementations can distinguish

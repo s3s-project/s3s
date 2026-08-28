@@ -37,6 +37,10 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
         if op.name == "PostObject" {
             continue;
         }
+        // ListenBucketNotification is a MinIO extension; aws-sdk-s3 has no corresponding operation.
+        if op.name == "ListenBucketNotification" {
+            continue;
+        }
         let method_name = op.name.to_snake_case();
         let s3s_input = f!("s3s::dto::{}", op.input);
         let s3s_output = f!("s3s::dto::{}", op.output);

@@ -3095,3 +3095,51 @@ mod virtual_hosted_style_hint_tests {
         assert!(!body_str.contains("S3Host"));
     }
 }
+
+#[cfg(feature = "minio")]
+mod listen_bucket_notification {
+    use super::*;
+
+    use crate::ops::generated_minio::resolve_route;
+    use crate::path::S3Path;
+
+    fn make_get_request(uri: &str) -> crate::http::Request {
+        crate::http::Request::from(
+            hyper::Request::builder()
+                .method(Method::GET)
+                .uri(uri)
+                .body(crate::http::Body::empty())
+                .unwrap(),
+        )
+    }
+
+    fn resolve(uri: &str) -> &'static str {
+        let req = make_get_request(uri);
+        let path = S3Path::Bucket { bucket: "bucket".into() };
+        let query = req.uri.query().unwrap_or_default();
+        let pairs: Vec<(String, String)> = serde_urlencoded::from_str(query).unwrap();
+        let qs = crate::http::OrderedQs::from_vec_unchecked(pairs);
+        resolve_route(&req, &path, Some(&qs)).unwrap().name()
+    }
+
+    #[test]
+    fn route_events_to_listen_bucket_notification() {
+        // The `events` query parameter is the MinIO ListenBucketNotification extension.
+        assert_eq!(resolve("http://localhost/bucket?events=s3:ObjectCreated:*"), "ListenBucketNotification");
+        // Values are not matched, only presence.
+        assert_eq!(resolve("http://localhost/bucket?events"), "ListenBucketNotification");
+        // Extra query parameters do not change the outcome.
+        assert_eq!(
+            resolve("http://localhost/bucket?events=s3:ObjectCreated:*&prefix=zz&suffix=yy"),
+            "ListenBucketNotification"
+        );
+    }
+
+    #[test]
+    fn route_bucket_without_events_unchanged() {
+        // No `events` parameter: falls through to the usual bucket listing ops.
+        assert_eq!(resolve("http://localhost/bucket"), "ListObjects");
+        assert_eq!(resolve("http://localhost/bucket?list-type=2"), "ListObjectsV2");
+        assert_eq!(resolve("http://localhost/bucket?versions"), "ListObjectVersions");
+    }
+}
