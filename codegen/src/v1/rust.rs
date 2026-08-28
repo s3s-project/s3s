@@ -99,6 +99,10 @@ pub struct StructField {
     pub http_header: Option<String>,
     pub http_query: Option<String>,
 
+    /// Separator for joining repeated query keys into a single value
+    /// (from the `s3s#queryJoined` trait).
+    pub query_joined: Option<String>,
+
     pub xml_name: Option<String>,
     pub xml_flattened: bool,
 

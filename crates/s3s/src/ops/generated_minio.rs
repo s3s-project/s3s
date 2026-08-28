@@ -5035,7 +5035,7 @@ impl ListenBucketNotification {
     pub fn deserialize_http(req: &mut http::Request) -> S3Result<ListenBucketNotificationInput> {
         let bucket = http::unwrap_bucket(req);
 
-        let events: Option<NotificationEvents> = http::parse_opt_query(req, "events")?;
+        let events: Option<NotificationEvents> = http::parse_opt_query_joined(req, "events", ",");
 
         let prefix: Option<Prefix> = http::parse_opt_query(req, "prefix")?;
 

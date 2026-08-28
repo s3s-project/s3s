@@ -292,7 +292,8 @@
                 "Events": {
                     "target": "com.amazonaws.s3#NotificationEvents",
                     "traits": {
-                        "smithy.api#documentation": "Comma-separated notification event names (e.g. s3:ObjectCreated:*).",
+                        "s3s#queryJoined": ",",
+                        "smithy.api#documentation": "Comma-separated notification event names (e.g. s3:ObjectCreated:*). Repeated query keys are joined with commas.",
                         "smithy.api#httpQuery": "events"
                     }
                 },

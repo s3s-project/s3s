@@ -14668,7 +14668,7 @@ impl fmt::Debug for ListPartsOutput {
 pub struct ListenBucketNotificationInput {
     /// The bucket name to listen to.
     pub bucket: BucketName,
-    /// Comma-separated notification event names (e.g. s3:ObjectCreated:*).
+    /// Comma-separated notification event names (e.g. s3:ObjectCreated:*). Repeated query keys are joined with commas.
     pub events: Option<NotificationEvents>,
     /// Listen to events for objects with this prefix.
     pub prefix: Option<Prefix>,

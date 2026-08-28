@@ -258,7 +258,12 @@ pub fn codegen(model: &smithy::Model) {
         for err in errors.values() {
             g!("b\"{}\" => Some(Self::{}),", err.code, err.code);
         }
+        g!("_ => match s.to_ascii_lowercase().as_slice() {{");
+        for err in errors.values() {
+            g!("b\"{}\" => Some(Self::{}),", err.code.to_ascii_lowercase(), err.code);
+        }
         g!("_ => std::str::from_utf8(s).ok().map(|s| Self::Custom(s.into()))");
+        g!("}}");
         g!("}}");
 
         g!("}}");

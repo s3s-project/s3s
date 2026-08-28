@@ -3136,6 +3136,21 @@ mod listen_bucket_notification {
     }
 
     #[test]
+    fn deserialize_repeated_events_keys() {
+        // Clients like `mc watch` send one `events` key per event name.
+        let mut req = make_get_request(
+            "http://localhost/bucket?events=s3:ObjectCreated:*&events=s3:ObjectRemoved:*&events=s3:ObjectAccessed:*",
+        );
+        let query = req.uri.query().unwrap_or_default();
+        let pairs: Vec<(String, String)> = serde_urlencoded::from_str(query).unwrap();
+        req.s3ext.qs = Some(crate::http::OrderedQs::from_vec_unchecked(pairs));
+        req.s3ext.s3_path = Some(S3Path::Bucket { bucket: "bucket".into() });
+        let input = crate::ops::generated_minio::ListenBucketNotification::deserialize_http(&mut req).unwrap();
+        assert_eq!(input.events.as_deref(), Some("s3:ObjectCreated:*,s3:ObjectRemoved:*,s3:ObjectAccessed:*"));
+        assert_eq!(input.prefix.as_deref(), None);
+    }
+
+    #[test]
     fn route_bucket_without_events_unchanged() {
         // No `events` parameter: falls through to the usual bucket listing ops.
         assert_eq!(resolve("http://localhost/bucket"), "ListObjects");

@@ -206,6 +206,23 @@ where
     Ok(Some(val.parse::<T>().map_err(|err| invalid_query(err, name, val))?))
 }
 
+/// Like [`parse_opt_query`], but joins repeated query values with
+/// `separator` instead of rejecting them.
+pub fn parse_opt_query_joined(req: &Request, name: &str, separator: &str) -> Option<String> {
+    let qs = req.s3ext.qs.as_ref()?;
+
+    let mut iter = qs.get_all(name);
+    let first = iter.next()?;
+
+    let mut joined = String::new();
+    joined.push_str(first);
+    for value in iter {
+        joined.push_str(separator);
+        joined.push_str(value);
+    }
+    Some(joined)
+}
+
 pub fn parse_opt_query_timestamp(req: &Request, name: &str, fmt: TimestampFormat) -> S3Result<Option<Timestamp>> {
     let Some(qs) = req.s3ext.qs.as_ref() else { return Ok(None) };
 

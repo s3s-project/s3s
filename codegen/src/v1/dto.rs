@@ -244,6 +244,7 @@ pub fn collect_rust_types(model: &smithy::Model, ops: &Operations) -> RustTypes 
 
                         http_header: field.traits.http_header().map(o),
                         http_query: field.traits.http_query().map(o),
+                        query_joined: field.traits.query_joined().map(o),
                         xml_name: field.traits.xml_name().map(o),
                         xml_flattened: field.traits.xml_flattened(),
 
@@ -427,6 +428,7 @@ fn patch_types(space: &mut RustTypes) {
             position: o("payload"),
             http_header: None,
             http_query: None,
+            query_joined: None,
             xml_name: Some(request.name.clone()),
             xml_flattened: false,
             body_literal: None,

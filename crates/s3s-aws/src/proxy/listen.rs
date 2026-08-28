@@ -24,9 +24,16 @@ pub async fn listen_bucket_notification(
     let input = req.input;
     tracing::debug!(?input);
 
-    // `prefix` and `suffix` go through `extra_query_params` so that the typed
-    // builder chain stays unconditional.
+    // All parameters go through `extra_query_params` so that the typed
+    // builder chain stays unconditional. Repeated `events` keys are the
+    // wire format MinIO expects (clients like `mc watch` send one key per
+    // event name), so the comma-joined DTO value is split back.
     let mut extra_params = Multimap::default();
+    if let Some(ref events) = input.events {
+        for event in events.split(',') {
+            extra_params.add("events", event);
+        }
+    }
     if let Some(ref prefix) = input.prefix {
         extra_params.add("prefix", prefix);
     }
@@ -34,35 +41,53 @@ pub async fn listen_bucket_notification(
         extra_params.add("suffix", suffix);
     }
 
-    let events: Vec<String> = match input.events {
-        Some(ref events) => events
-            .split(',')
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .map(str::to_owned)
-            .collect(),
-        None => ["s3:ObjectCreated:*", "s3:ObjectRemoved:*", "s3:ObjectAccessed:*"]
-            .into_iter()
-            .map(str::to_owned)
-            .collect(),
-    };
-
     let builder = minio
         .listen_bucket_notification(input.bucket.as_str())
         .map_err(|e| s3_error!(e, InternalError, "invalid bucket"))?;
-    let value = builder.extra_query_params(extra_params).events(events).build();
+    let value = builder.extra_query_params(extra_params).build();
     let mut s3_request = value
         .to_s3request()
         .map_err(|e| s3_error!(e, InternalError, "failed to build request"))?;
-    let resp = s3_request
-        .execute()
-        .await
-        .map_err(|e| s3_error!(e, InternalError, "failed to send request"))?;
+    let resp = match s3_request.execute().await {
+        Ok(resp) => resp,
+        // minio-rs wraps non-2xx responses into `S3Server` errors. Map the
+        // MinIO error code to an S3 error code so the s3s protocol derives
+        // the correct HTTP status.
+        Err(minio::s3::error::Error::S3Server(minio::s3::error::S3ServerError::S3Error(e))) => {
+            let mut err = s3s::S3Error::new(s3s::S3ErrorCode::InternalError);
+            if let Some(code) = s3s::S3ErrorCode::from_bytes(e.code().to_string().as_bytes()) {
+                err.set_code(code);
+            }
+            if let Some(message) = e.message() {
+                err.set_message(message.clone());
+            }
+            err.set_request_id(e.request_id().to_owned());
+            return Err(err);
+        }
+        Err(minio::s3::error::Error::S3Server(minio::s3::error::S3ServerError::InvalidServerResponse {
+            http_status_code,
+            ..
+        })) => {
+            let mut err = s3_error!(InternalError, "invalid upstream response");
+            err.set_status_code(
+                hyper::StatusCode::from_u16(http_status_code).unwrap_or(hyper::StatusCode::INTERNAL_SERVER_ERROR),
+            );
+            return Err(err);
+        }
+        Err(minio::s3::error::Error::S3Server(minio::s3::error::S3ServerError::HttpError(status, _))) => {
+            let mut err = s3_error!(InternalError, "upstream http error");
+            err.set_status_code(hyper::StatusCode::from_u16(status).unwrap_or(hyper::StatusCode::INTERNAL_SERVER_ERROR));
+            return Err(err);
+        }
+        Err(e) => return Err(s3_error!(e, InternalError, "failed to send request: {e}")),
+    };
 
     let status = resp.status();
     if !status.is_success() {
         let message = resp.text().await.unwrap_or_else(|_| String::from("<no response body>"));
-        return Err(s3_error!(InternalError, "upstream error: {status}: {message}"));
+        let mut err = s3_error!(InternalError, "upstream error: {status}: {message}");
+        err.set_status_code(status);
+        return Err(err);
     }
 
     let mut headers = HeaderMap::new();

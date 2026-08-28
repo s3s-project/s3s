@@ -777,7 +777,16 @@ fn codegen_field_de_query(field: &rust::StructField, rust_types: &RustTypes) {
 
     let field_type = &rust_types[&field.type_];
 
-    if let rust::Type::List(_) = field_type {
+    if let Some(ref separator) = field.query_joined {
+        assert!(field.option_type);
+        g!(
+            "let {}: Option<{}> = http::parse_opt_query_joined(req, \"{}\", \"{}\");",
+            field.name,
+            field.type_,
+            query,
+            separator,
+        );
+    } else if let rust::Type::List(_) = field_type {
         panic!()
     } else if let rust::Type::Timestamp(ts_ty) = field_type {
         assert!(field.option_type);
