@@ -2,6 +2,22 @@
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
 //! aws-chunked stream
+//!
+//! Decodes an `aws-chunked` request body, verifying the per-chunk signature
+//! chain for signed modes and the trailer signature for
+//! `STREAMING-AWS4-HMAC-SHA256-PAYLOAD-TRAILER`. The decoded bytes are never
+//! yielded before their signature has been verified.
+//!
+//! # Checksum trailers
+//!
+//! `x-amz-checksum-*` trailer values are exposed via [`TrailingHeaders`]
+//! without verification: comparing them against a digest computed while
+//! consuming the body is the responsibility of the [`S3`](crate::S3)
+//! implementation (the reference implementation `s3s-fs` rejects mismatches
+//! with `BadDigest`). The unsigned mode
+//! (`STREAMING-UNSIGNED-PAYLOAD-TRAILER`) relies on those values for data
+//! integrity, so implementations that skip checksum verification accept
+//! unauthenticated data — a trade-off `s3s` leaves to the implementation.
 
 use crate::auth::SecretKey;
 use crate::error::StdError;
