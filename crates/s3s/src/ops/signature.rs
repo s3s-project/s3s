@@ -23,7 +23,7 @@ use s3s_sigv4::AmzContentSha256;
 use s3s_sigv4::AmzDate;
 use s3s_sigv4::PostSignatureV4;
 use s3s_sigv4::PresignedUrlV4;
-use s3s_sigv4::{AuthorizationV4, CredentialV4};
+use s3s_sigv4::{AuthorizationV4, CredentialV4, ParseAuthorizationError};
 
 use std::mem;
 use std::ops::Not;
@@ -60,6 +60,12 @@ fn extract_authorization_v4(hs: &HeaderMap) -> S3Result<Option<AuthorizationV4<'
     };
     match AuthorizationV4::parse(val) {
         Ok(x) => Ok(Some(x)),
+        // A structurally valid header with a non-canonical signature is a
+        // signature problem, not a malformed header: keep the `SignatureDoesNotMatch`
+        // error that the signature-comparison step used to produce.
+        Err(ParseAuthorizationError::InvalidSignature) => {
+            Err(s3_error!(SignatureDoesNotMatch, "invalid header: authorization: invalid signature"))
+        }
         Err(e) => Err(invalid_request!(e, "invalid header: authorization")),
     }
 }
@@ -927,6 +933,34 @@ mod tests {
 
         assert_eq!(err.code(), &S3ErrorCode::SignatureDoesNotMatch);
         assert_eq!(err.message(), Some("invalid header: x-amz-meta-name"));
+    }
+
+    #[test]
+    fn extract_authorization_v4_rejects_invalid_signature_with_signature_error() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            HeaderName::from_static("authorization"),
+            HeaderValue::from_static(
+                "AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request, SignedHeaders=host, Signature=not-a-real-signature",
+            ),
+        );
+
+        let err = extract_authorization_v4(&headers).expect_err("non-canonical signature must be rejected");
+
+        // The error must stay a signature error, not a malformed-header error.
+        assert_eq!(err.code(), &S3ErrorCode::SignatureDoesNotMatch);
+    }
+
+    #[test]
+    fn extract_authorization_v4_rejects_malformed_header_with_invalid_request() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            HeaderName::from_static("authorization"),
+            HeaderValue::from_static("AWS4-HMAC-SHA256 garbage"),
+        );
+
+        let err = extract_authorization_v4(&headers).expect_err("malformed authorization header must be rejected");
+        assert_eq!(err.code(), &S3ErrorCode::InvalidRequest);
     }
 
     #[test]
