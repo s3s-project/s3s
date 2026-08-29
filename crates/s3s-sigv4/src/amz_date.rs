@@ -39,7 +39,14 @@ impl AmzDate {
     }
 
     /// `{YYYY}{MM}{DD}T{HH}{MM}{SS}Z`
+    ///
+    /// # Panics
+    ///
+    /// `ArrayString<16>` has fixed capacity and the formatted value is exactly
+    /// 16 bytes; `fmt::Write` cannot fail here. The lint is allowed so that a
+    /// capacity regression panics instead of silently truncating.
     #[must_use]
+    #[allow(clippy::unwrap_used)]
     pub fn fmt_iso8601(&self) -> ArrayString<16> {
         let mut buf = <ArrayString<16>>::new();
         let (y, m, d, hh, mm, ss) = (self.year, self.month, self.day, self.hour, self.minute, self.second);
@@ -48,7 +55,14 @@ impl AmzDate {
     }
 
     /// `{YYYY}{MM}{DD}`
+    ///
+    /// # Panics
+    ///
+    /// `ArrayString<8>` has fixed capacity and the formatted value is exactly
+    /// 8 bytes; `fmt::Write` cannot fail here. The lint is allowed so that a
+    /// capacity regression panics instead of silently truncating.
     #[must_use]
+    #[allow(clippy::unwrap_used)]
     pub fn fmt_date(&self) -> ArrayString<8> {
         let mut buf = <ArrayString<8>>::new();
         write!(&mut buf, "{:04}{:02}{:02}", self.year, self.month, self.day).unwrap();
@@ -86,9 +100,23 @@ mod parser {
     }
 
     pub fn parse(input: &str) -> Result<AmzDate, Error> {
-        let x = input.as_bytes();
-        ensure!(x.len() == 16);
+        let x: &[u8; 16] = input.as_bytes().try_into().map_err(|_| Error)?;
+        let (year, month, day, hour, minute, second) = parse_date_bytes(x)?;
+        Ok(AmzDate {
+            year,
+            month,
+            day,
+            hour,
+            minute,
+            second,
+        })
+    }
 
+    /// Parses the sixteen fixed bytes of an ISO 8601 date string.
+    ///
+    /// The length is guaranteed by the `&[u8; 16]` reference type; all byte
+    /// accesses are array indexing, checked at compile time.
+    fn parse_date_bytes(x: &[u8; 16]) -> Result<(u16, u8, u8, u8, u8, u8), Error> {
         let year = digit4([x[0], x[1], x[2], x[3]])?;
         let month = digit2([x[4], x[5]])?;
         let day = digit2([x[6], x[7]])?;
@@ -99,18 +127,18 @@ mod parser {
         let second = digit2([x[13], x[14]])?;
         ensure!(x[15] == b'Z');
 
-        Ok(AmzDate {
-            year,
-            month,
-            day,
-            hour,
-            minute,
-            second,
-        })
+        Ok((year, month, day, hour, minute, second))
     }
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::unwrap_used
+)]
 mod tests {
     use super::*;
 

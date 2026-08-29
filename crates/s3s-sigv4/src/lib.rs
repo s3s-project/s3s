@@ -4,6 +4,13 @@
 //! AWS Signature Version 4 — parsing, canonicalization, and signing.
 
 #![deny(missing_docs)]
+#![deny(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::unwrap_used
+)]
 #![allow(
     clippy::multiple_crate_versions,
     clippy::module_name_repetitions,

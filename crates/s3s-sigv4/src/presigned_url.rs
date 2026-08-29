@@ -110,6 +110,13 @@ fn parse_expires(s: &str, max_expires_secs: u32) -> Option<jiff::SignedDuration>
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::unwrap_used
+)]
 mod tests {
     use super::*;
 
