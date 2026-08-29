@@ -554,12 +554,16 @@ mod tests {
     }
 
     #[test]
-    fn request_level_error_no_message() {
+    fn request_level_error_has_default_message() {
         let err = S3Error::new(S3ErrorCode::InternalError);
         let bytes = event_into_bytes(Err(err)).unwrap();
         let (headers, _payload) = parse_message(&bytes);
         assert!(headers.iter().any(|(n, v)| n == ":error-code" && v == "InternalError"));
-        assert!(headers.iter().any(|(n, v)| n == ":error-message" && v.is_empty()));
+        assert!(
+            headers
+                .iter()
+                .any(|(n, v)| n == ":error-message" && v == "We encountered an internal error. Please try again.")
+        );
     }
 
     #[test]

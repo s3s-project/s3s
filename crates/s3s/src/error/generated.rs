@@ -2454,6 +2454,705 @@ static S3_ERROR_CODE_LOWERCASE_MAP: phf::Map<&'static str, S3ErrorCode> = ::phf:
     ],
 };
 
+static S3_ERROR_CODE_DEFAULT_MESSAGE: phf::Map<&'static str, &'static str> = ::phf::Map {
+    key: 16287231350648472473,
+    disps: &[
+        (0, 4),
+        (0, 1),
+        (0, 10),
+        (0, 2),
+        (0, 2),
+        (0, 0),
+        (0, 0),
+        (0, 18),
+        (0, 53),
+        (0, 119),
+        (0, 27),
+        (0, 0),
+        (0, 12),
+        (0, 0),
+        (0, 1),
+        (0, 33),
+        (0, 100),
+        (1, 0),
+        (0, 37),
+        (0, 15),
+        (0, 1),
+        (0, 1),
+        (0, 1),
+        (0, 67),
+        (0, 11),
+        (0, 0),
+        (0, 10),
+        (1, 0),
+        (0, 14),
+        (0, 73),
+        (0, 9),
+        (0, 92),
+        (0, 2),
+        (0, 3),
+        (0, 2),
+        (0, 4),
+        (0, 48),
+        (0, 35),
+        (0, 11),
+        (0, 83),
+        (0, 48),
+        (0, 71),
+        (0, 10),
+        (0, 20),
+        (0, 82),
+        (0, 17),
+        (0, 29),
+        (0, 22),
+        (0, 4),
+        (0, 1),
+        (0, 111),
+        (0, 47),
+        (0, 99),
+        (0, 30),
+        (0, 39),
+        (0, 103),
+        (0, 32),
+        (1, 123),
+        (0, 209),
+        (0, 7),
+        (0, 9),
+        (0, 0),
+        (0, 54),
+        (0, 0),
+        (0, 43),
+        (0, 3),
+        (0, 1),
+        (0, 40),
+        (0, 18),
+        (0, 17),
+        (0, 79),
+        (0, 3),
+        (0, 46),
+        (0, 114),
+        (0, 2),
+        (0, 103),
+        (0, 2),
+        (0, 114),
+        (0, 112),
+        (0, 3),
+    ],
+    entries: &[
+        ("ParseUnExpectedKeyword", "The SQL expression contains an unexpected keyword."),
+        ("MaxMessageLengthExceeded", "Your request was too big."),
+        (
+            "CSVParsingError",
+            "An error occurred while parsing the CSV file. Check the file and try again.",
+        ),
+        ("EmptyRequestBody", "The request body cannot be empty."),
+        ("AccessControlListNotSupported", "The bucket does not allow ACLs."),
+        ("MalformedPolicy", "Your policy contains a principal that is not valid."),
+        (
+            "ParseAsteriskIsNotAloneInSelectList",
+            "Other expressions are not allowed in the SELECT list when * is used without dot notation in the SQL expression.",
+        ),
+        ("InvalidAddressingHeader", "You must specify the Anonymous role."),
+        (
+            "RequestHeaderSectionTooLarge",
+            "The request header and query parameters used to make the request exceed the maximum allowed size.",
+        ),
+        (
+            "MalformedPOSTRequest",
+            "The body of your POST request is not well-formed multipart/form-data.",
+        ),
+        (
+            "OperationAborted",
+            "A conflicting conditional action is currently in progress against this resource. Try again.",
+        ),
+        ("AuthorizationHeaderMalformed", "The authorization header you provided is invalid."),
+        (
+            "InvalidEncryptionAlgorithmError",
+            "The encryption request you specified is not valid. The valid value is AES256.",
+        ),
+        ("IllegalLocationConstraintException", "The specified location constraint is not valid."),
+        ("InvalidStorageClass", "The storage class you specified is not valid."),
+        ("InvalidObjectState", "The action is not valid for the current state of the object."),
+        ("UnsupportedFunction", "We encountered an unsupported SQL function."),
+        ("UnsupportedRangeHeader", "A range header is not supported for this operation."),
+        ("ParseExpectedTypeName", "The expected type name in the SQL expression was not found."),
+        (
+            "PermanentRedirectControlError",
+            "The API operation you are attempting to access must be addressed using the specified endpoint. Send all future requests to this endpoint.",
+        ),
+        (
+            "CSVEscapingRecordDelimiter",
+            "A quoted record delimiter was found in the file. To allow quoted record delimiters, set AllowQuotedRecordDelimiter to 'TRUE'.",
+        ),
+        (
+            "AmbiguousFieldName",
+            "The field name matches to multiple fields in the file. Check the SQL expression and the file, and try again.",
+        ),
+        ("InvalidBucketName", "The specified bucket is not valid."),
+        (
+            "EvaluatorInvalidTimestampFormatPattern",
+            "The timestamp format string in the SQL expression is not valid.",
+        ),
+        ("EntityTooSmall", "Your proposed upload is smaller than the minimum allowed object size."),
+        ("InvalidURI", "Couldn't parse the specified URI."),
+        ("MissingSecurityHeader", "Your request is missing a required header."),
+        ("InvalidTableAlias", "The SQL expression contains a table alias that is not valid."),
+        (
+            "UnsupportedScanRangeInput",
+            "Scan range queries are not supported on this type of object.",
+        ),
+        (
+            "PermanentRedirect",
+            "The bucket you are attempting to access must be addressed using the specified endpoint. Send all future requests to this endpoint.",
+        ),
+        (
+            "AllAccessDisabled",
+            "All access to this Amazon S3 resource has been disabled. Contact AWS Support for further assistance.",
+        ),
+        ("UnsupportedSqlOperation", "We encountered an unsupported SQL operation."),
+        ("NotImplemented", "A header you provided implies functionality that is not implemented."),
+        (
+            "InvalidPayer",
+            "All access to this object has been disabled. Please contact AWS Support for further assistance.",
+        ),
+        ("InvalidDataType", "The SQL expression contains a data type that is not valid."),
+        (
+            "InvalidPolicyDocument",
+            "The content of the form does not meet the conditions specified in the policy document.",
+        ),
+        (
+            "IncorrectEndpoint",
+            "The specified bucket exists in another Region. Direct requests to the correct endpoint.",
+        ),
+        (
+            "ParseExpectedArgumentDelimiter",
+            "The expected argument delimiter in the SQL expression was not found.",
+        ),
+        ("LexerInvalidChar", "The SQL expression contains a character that is not valid."),
+        (
+            "EvaluatorInvalidTimestampFormatPatternSymbolForParsing",
+            "The timestamp format pattern contains a valid format symbol that cannot be applied to timestamp parsing in the SQL expression.",
+        ),
+        (
+            "ConnectionClosedByRequester",
+            "Returned to the original caller when an error is encountered while reading the WriteGetObjectResponse body.",
+        ),
+        (
+            "InvalidDataSource",
+            "The data source type is not valid. Only CSV, JSON, and Parquet are supported.",
+        ),
+        (
+            "EvaluatorInvalidTimestampFormatPatternSymbol",
+            "The timestamp format pattern contains a symbol in the SQL expression that is not valid.",
+        ),
+        (
+            "InvalidJsonType",
+            "The JsonType value is not valid. Only DOCUMENT and LINES are supported.",
+        ),
+        ("NoSuchLifecycleConfiguration", "The lifecycle configuration does not exist."),
+        (
+            "IncompleteBody",
+            "You did not provide the number of bytes specified by the Content-Length HTTP header",
+        ),
+        ("ParseUnexpectedToken", "The SQL expression contains an unexpected token."),
+        (
+            "UnsupportedTypeForQuerying",
+            "Your query contains an unsupported type for comparison (e.g. verifying that a Parquet INT96 column type is greater than 0).",
+        ),
+        (
+            "InvalidQuoteFields",
+            "The QuoteFields value is not valid. Only ALWAYS and ASNEEDED are supported.",
+        ),
+        (
+            "UserKeyMustBeSpecified",
+            "The bucket POST must contain the specified field name. If it is specified, check the order of the fields.",
+        ),
+        (
+            "ClientTokenConflict",
+            "Your Multi-Region Access Point idempotency token was already used for a different request.",
+        ),
+        ("EndpointNotFound", "Direct requests to the correct endpoint."),
+        ("OwnershipControlsNotFoundError", "The bucket ownership controls were not found."),
+        ("ExpiredToken", "The provided token has expired."),
+        ("ParseUnsupportedSyntax", "The SQL expression contains unsupported syntax."),
+        ("InvalidArgument", "Invalid argument."),
+        (
+            "MaxOperatorsExceeded",
+            "Failed to parse SQL expression, try reducing complexity. For example, reduce number of operators used.",
+        ),
+        (
+            "CastFailed",
+            "An attempt to convert from one data type to another using CAST failed in the SQL expression.",
+        ),
+        ("ExternalEvalException", "The query cannot be evaluated. Check the file and try again."),
+        ("NoSuchBucketPolicy", "The specified bucket does not have a bucket policy."),
+        (
+            "InvalidHostHeader",
+            "The host headers provided in the request used the incorrect style addressing.",
+        ),
+        ("LexerInvalidLiteral", "The SQL expression contains an operator that is not valid."),
+        (
+            "InvalidSignature",
+            "The request signature that the server calculated does not match the signature that you provided. Check your AWS secret access key and signing method. For more information, see Signing and authenticating REST requests.",
+        ),
+        ("ParseUnsupportedSelect", "The SQL expression contains an unsupported use of SELECT."),
+        ("ParseExpectedDatePart", "The expected date part in the SQL expression was not found."),
+        ("InvalidBucketState", "The request is not valid with the current state of the bucket."),
+        (
+            "TruncatedInput",
+            "Object decompression failed. Check that the object is properly compressed using the format specified in the request.",
+        ),
+        ("MissingContentLength", "You must provide the Content-Length HTTP header."),
+        (
+            "ParseInvalidPathComponent",
+            "The SQL expression contains a path component that is not valid.",
+        ),
+        ("ParseExpectedIdentForGroupName", "GROUP is not supported in the SQL expression."),
+        ("DeviceNotActiveError", "The device is not currently active."),
+        (
+            "Redirect",
+            "Temporary redirect. You are being redirected to the bucket while the Domain Name System (DNS) server is being updated.",
+        ),
+        ("LexerInvalidOperator", "The SQL expression contains a literal that is not valid."),
+        (
+            "InvalidTargetBucketForLogging",
+            "The target bucket for logging does not exist, is not owned by you, or does not have the appropriate grants for the log-delivery group.",
+        ),
+        ("MethodNotAllowed", "The specified method is not allowed against this resource."),
+        ("MissingAttachment", "A SOAP attachment was expected, but none were found."),
+        ("InvalidRequest", "Invalid request."),
+        ("InvalidSecurity", "The provided security credentials are not valid."),
+        (
+            "ExpressionTooLong",
+            "The SQL expression is too long. The maximum byte-length for an SQL expression is 256 KB.",
+        ),
+        (
+            "ParseNonUnaryAgregateFunctionCall",
+            "Only one argument is supported for aggregate functions in the SQL expression.",
+        ),
+        (
+            "ParseInvalidTypeParam",
+            "The SQL expression contains a parameter value that is not valid.",
+        ),
+        (
+            "MalformedXML",
+            "This happens when the user sends malformed XML (XML that doesn't conform to the published XSD) for the configuration. The error message is, \"The XML you provided was not well-formed or did not validate against our published schema.\"",
+        ),
+        ("ParseExpectedKeyword", "The expected keyword in the SQL expression was not found."),
+        ("RequestTorrentOfBucketError", "Requesting the torrent file of a bucket is not permitted."),
+        (
+            "UnexpectedIPError",
+            "Applicable in China Regions only. This request was rejected because the IP was unexpected.",
+        ),
+        (
+            "InvalidCast",
+            "An attempt to convert from one data type to another using CAST failed in the SQL expression.",
+        ),
+        (
+            "ParseExpectedRightParenBuiltinFunctionCall",
+            "The expected right parenthesis character in the SQL expression was not found.",
+        ),
+        ("ParseExpectedTokenType", "The expected token in the SQL expression was not found."),
+        (
+            "AccountProblem",
+            "There is a problem with your AWS account that prevents the action from completing successfully. Contact AWS Support for further assistance.",
+        ),
+        ("AccessDenied", "Access Denied"),
+        ("InvalidAccessPointAliasError", "The specified access point alias name is not valid."),
+        ("InvalidColumnIndex", "The column index in the SQL expression is not valid."),
+        ("InvalidDigest", "The Content-MD5 you specified is not valid."),
+        (
+            "NotSignedUp",
+            "Your account is not signed up for the Amazon S3 service. You must sign up before you can use Amazon S3. You can sign up at the following URL: Amazon S3",
+        ),
+        (
+            "ParseExpectedIdentForAlias",
+            "The expected identifier for the alias in the SQL expression was not found.",
+        ),
+        (
+            "ObjectSerializationConflict",
+            "InputSerialization specifies more than one format (CSV, JSON, or Parquet), or OutputSerialization specifies more than one format (CSV or JSON). For InputSerialization and OutputSerialization, you can specify only one format for each.",
+        ),
+        ("ParseUnexpectedOperator", "The SQL expression contains an unexpected operator."),
+        ("TokenCodeInvalidError", "The serial number and/or token code you provided is not valid."),
+        ("ParseExpectedExpression", "The expected SQL expression was not found."),
+        ("ParseExpectedMember", "The SQL expression contains an unsupported use of MEMBER."),
+        ("PreconditionFailed", "At least one of the preconditions you specified did not hold."),
+        ("BadDigest", "The Content-MD5 you specified did not match what we received."),
+        (
+            "InvalidPart",
+            "One or more of the specified parts could not be found. The part might not have been uploaded, or the specified entity tag might not have matched the part's entity tag.",
+        ),
+        (
+            "InvalidLocationConstraint",
+            "The specified location constraint is not valid. For more information about Regions, see How to Select a Region for Your Buckets.",
+        ),
+        (
+            "ParquetUnsupportedCompressionCodec",
+            "The specified Parquet compression codec is not supported.",
+        ),
+        ("ParseCastArity", "The SQL expression CAST has incorrect arity."),
+        ("NoTransformationDefined", "No transformation found for this Object Lambda Access Point."),
+        (
+            "InvalidCompressionFormat",
+            "The file is not in a supported compression format. Only GZIP and BZIP2 are supported.",
+        ),
+        ("NoSuchAccessPoint", "The specified access point does not exist."),
+        ("InlineDataTooLarge", "Inline data exceeds the maximum allowed size."),
+        (
+            "TooManyMultiRegionAccessPoints",
+            "You have attempted to create more Multi-Region Access Points than are allowed for an account. For more information, see Amazon Simple Storage Service endpoints and quotas in the AWS General Reference.",
+        ),
+        (
+            "ParseUnsupportedCallWithStar",
+            "Only COUNT with (*) as a parameter is supported in the SQL expression.",
+        ),
+        ("ParseUnexpectedTerm", "The SQL expression contains an unexpected term."),
+        ("Busy", "The service is unavailable. Try again later."),
+        ("InvalidTextEncoding", "The encoding type is not valid. Only UTF-8 encoding is supported."),
+        (
+            "IncorrectSqlFunctionArgumentType",
+            "An incorrect argument type was specified in a function call in the SQL expression.",
+        ),
+        (
+            "UnresolvableGrantByEmailAddress",
+            "The email address you provided does not match any account on record.",
+        ),
+        (
+            "NoSuchVersion",
+            "Indicates that the version ID specified in the request does not match an existing version.",
+        ),
+        ("InvalidRange", "The requested range cannot be satisfied."),
+        (
+            "InvalidPartOrder",
+            "The list of parts was not in ascending order. Parts list must be specified in order by part number.",
+        ),
+        ("BucketNotEmpty", "The bucket you tried to delete is not empty."),
+        ("TemporaryRedirect", "You are being redirected to the bucket while DNS updates."),
+        ("MissingSecurityElement", "The SOAP 1.1 request is missing a security element."),
+        (
+            "TooManyAccessPoints",
+            "You have attempted to create more access points than are allowed for an account. For more information, see Amazon Simple Storage Service endpoints and quotas in the AWS General Reference.",
+        ),
+        (
+            "UnauthorizedAccessError",
+            "Applicable in China Regions only. Returned when a request is made to a bucket that doesn't have an ICP license. For more information, see ICP Recordal.",
+        ),
+        (
+            "NoSuchWebsiteConfiguration",
+            "The specified bucket does not have a website configuration.",
+        ),
+        (
+            "ParseExpectedWhenClause",
+            "The expected WHEN clause in the SQL expression was not found. CASE is not supported.",
+        ),
+        ("RestoreAlreadyInProgress", "Object restore is already in progress."),
+        ("MissingAuthenticationToken", "The request was not signed."),
+        ("ParseExpected2TokenTypes", "The expected token in the SQL expression was not found."),
+        (
+            "AccessPointAlreadyOwnedByYou",
+            "An access point with an identical name already exists in your account.",
+        ),
+        (
+            "UnsupportedSignature",
+            "The provided request is signed with an unsupported STS Token version or the signature version is not supported.",
+        ),
+        ("ParseUnsupportedCaseClause", "The SQL expression contains an unsupported use of CASE."),
+        (
+            "TooManyMultiRegionAccessPointregionsError",
+            "You have attempted to create a Multi-Region Access Point with more Regions than are allowed for an account. For more information, see Amazon Simple Storage Service endpoints and quotas in the AWS General Reference.",
+        ),
+        (
+            "NumberFormatError",
+            "An error occurred while parsing a number. This error can be caused by underflow or overflow of integers.",
+        ),
+        (
+            "ParseExpectedLeftParenValueConstructor",
+            "The expected left parenthesis in the SQL expression was not found.",
+        ),
+        (
+            "MissingRequiredParameter",
+            "The SelectRequest entity is missing a required parameter. Check the service documentation and try again.",
+        ),
+        (
+            "NoSuchObjectLockConfiguration",
+            "The specified object does not have an ObjectLock configuration.",
+        ),
+        ("NoSuchCORSConfiguration", "The specified bucket does not have a CORS configuration."),
+        (
+            "ReplicationConfigurationNotFoundError",
+            "There is no replication configuration for this bucket.",
+        ),
+        ("ParseEmptySelect", "The SQL expression contains an empty SELECT clause."),
+        (
+            "AuthorizationQueryParametersError",
+            "The authorization query parameters that you provided are not valid.",
+        ),
+        (
+            "SignatureDoesNotMatch",
+            "The request signature we calculated does not match the signature you provided. Check your AWS secret access key and signing method. For more information, see REST Authentication and SOAP Authentication for details.",
+        ),
+        ("TooManyTags", "The number of tags exceeds the limit of 50 tags."),
+        (
+            "ColumnTooLong",
+            "The length of a column in the result is greater than maxCharsPerColumn of 1 MB.",
+        ),
+        (
+            "JSONParsingError",
+            "An error occurred while parsing the JSON file. Check the file and try again.",
+        ),
+        (
+            "BucketAlreadyOwnedByYou",
+            "The bucket you tried to create already exists, and you own it. Amazon S3 returns this error in all AWS Regions except in the North Virginia Region. For legacy compatibility, if you re-create an existing bucket that you already own in the North Virginia Region, Amazon S3 returns 200 OK and resets the bucket access control lists (ACLs).",
+        ),
+        (
+            "BucketAlreadyExists",
+            "The requested bucket name is not available. The bucket namespace is shared by all users of the system. Please select a different name and try again.",
+        ),
+        (
+            "AmbiguousGrantByEmailAddress",
+            "The email address you provided is associated with more than one account.",
+        ),
+        (
+            "ServerSideEncryptionConfigurationNotFoundError",
+            "The server-side encryption configuration was not found.",
+        ),
+        (
+            "InvalidFileHeaderInfo",
+            "The FileHeaderInfo value is not valid. Only NONE, USE, and IGNORE are supported.",
+        ),
+        (
+            "TooManyBuckets",
+            "You have attempted to create more buckets than are allowed for an account. For more information, see Amazon Simple Storage Service endpoints and quotas in the AWS General Reference.",
+        ),
+        (
+            "ObjectLockConfigurationNotFoundError",
+            "The Object Lock configuration does not exist for this bucket.",
+        ),
+        (
+            "ResponseInterrupted",
+            "Returned to the original caller when an error is encountered while reading the WriteGetObjectResponse body.",
+        ),
+        ("NoSuchMultiRegionAccessPoint", "The specified Multi-Region Access Point does not exist."),
+        (
+            "BucketHasAccessPointsAttached",
+            "The bucket you tried to delete has access points attached. Delete your access points before deleting your bucket.",
+        ),
+        (
+            "EvaluatorTimestampFormatPatternDuplicateFields",
+            "The timestamp format pattern contains multiple format specifiers representing the timestamp field in the SQL expression.",
+        ),
+        (
+            "InvalidBucketOwnerAWSAccountID",
+            "The value of the expected bucket owner parameter must be an AWS account ID.",
+        ),
+        (
+            "IllegalVersioningConfigurationException",
+            "Indicates that the versioning configuration specified in the request is invalid.",
+        ),
+        (
+            "EvaluatorBindingDoesNotExist",
+            "A column name or a path provided does not exist in the SQL expression.",
+        ),
+        (
+            "MalformedACLError",
+            "The XML you provided was not well-formed or did not validate against our published schema.",
+        ),
+        (
+            "ParseCannotMixSqbAndWildcardInSelectList",
+            "Cannot mix [] and * in the same expression in a SELECT list in the SQL expression.",
+        ),
+        ("UnsupportedParquetType", "The specified Parquet type is not supported."),
+        ("ParseUnsupportedToken", "The SQL expression contains an unsupported token."),
+        (
+            "InvalidTag",
+            "Your request contains tag input that is not valid. For example, your request might contain duplicate keys, keys or values that are too long, or system tags.",
+        ),
+        (
+            "UnsupportedSqlStructure",
+            "We encountered an unsupported SQL structure. Check the SQL Reference.",
+        ),
+        (
+            "NotDeviceOwnerError",
+            "The device that generated the token is not owned by the authenticated user.",
+        ),
+        ("CredentialsNotSupported", "This request does not support credentials."),
+        (
+            "EvaluatorInvalidArguments",
+            "There is an incorrect number of arguments in the function call in the SQL expression.",
+        ),
+        ("NoSuchBucket", "The specified bucket does not exist."),
+        (
+            "TagPolicyException",
+            "The tag policy does not allow the specified value for the following tag key.",
+        ),
+        (
+            "EvaluatorTimestampFormatPatternHourClockAmPmMismatch",
+            "The timestamp format pattern contains a 12-hour hour of day format symbol but doesn't also contain an AM/PM field, or it contains a 24-hour hour of day format specifier and contains an AM/PM field in the SQL expression.",
+        ),
+        ("InvalidScanRange", "The provided scan range is not valid."),
+        (
+            "ParseMissingIdentAfterAt",
+            "The expected identifier after the @ symbol in the SQL expression was not found.",
+        ),
+        ("MetadataTooLarge", "Your metadata headers exceed the maximum allowed metadata size."),
+        (
+            "EvaluatorInvalidTimestampFormatPatternToken",
+            "The timestamp format pattern contains a token in the SQL expression that is not valid.",
+        ),
+        ("ParseMalformedJoin", "JOIN is not supported in the SQL expression."),
+        ("ParseExpectedNumber", "The expected number in the SQL expression was not found."),
+        ("SlowDown", "Reduce your request rate."),
+        (
+            "InvalidExpressionType",
+            "The ExpressionType value is not valid. Only SQL expressions are supported.",
+        ),
+        (
+            "ParseExpectedLeftParenBuiltinFunctionCall",
+            "The expected left parenthesis in the SQL expression was not found.",
+        ),
+        ("ValueParseFailure", "A timestamp parse failure occurred in the SQL expression."),
+        ("ParseUnsupportedCase", "The SQL expression contains an unsupported use of CASE."),
+        (
+            "ParseExpectedIdentForAt",
+            "The expected identifier for AT name in the SQL expression was not found.",
+        ),
+        ("InvalidAccessKeyId", "The AWS access key ID you provided does not exist in our records."),
+        (
+            "EvaluatorUnterminatedTimestampFormatPatternToken",
+            "The timestamp format pattern contains an unterminated token in the SQL expression.",
+        ),
+        ("NoSuchAsyncRequest", "The specified request was not found."),
+        ("NotModified", "The resource was not changed."),
+        ("ServiceUnavailable", "Service is unable to handle request."),
+        ("IllegalSqlFunctionArgument", "An illegal argument was used in the SQL function."),
+        ("UnsupportedArgument", "The request contained an unsupported argument."),
+        ("UnauthorizedAccess", "You are not authorized to perform this operation."),
+        (
+            "CSVUnescapedQuote",
+            "An unescaped quote was found while parsing the CSV file. To allow quoted record delimiters, set AllowQuotedRecordDelimiter to 'TRUE'.",
+        ),
+        ("TokenRefreshRequired", "The provided token must be refreshed."),
+        (
+            "CrossLocationLoggingProhibited",
+            "Cross-location logging not allowed. Buckets in one geographic location cannot log information to a bucket in another location.",
+        ),
+        (
+            "ParseInvalidContextForWildcardInSelectList",
+            "The use of * in the SELECT list in the SQL expression is not valid.",
+        ),
+        ("InvalidAccessPoint", "The specified access point name or account is not valid."),
+        (
+            "UnsupportedStorageClass",
+            "We encountered a storage class that is not supported. Only STANDARD, STANDARD_IA, and ONEZONE_IA storage classes are supported.",
+        ),
+        (
+            "NoSuchUpload",
+            "The specified multipart upload does not exist. The upload ID might be invalid, or the multipart upload might have been aborted or completed.",
+        ),
+        (
+            "RequestIsNotMultiPartContent",
+            "Bucket POST must be of the enclosure-type multipart/form-data.",
+        ),
+        (
+            "InvalidSessionException",
+            "Returned if the session doesn't exist anymore because it timed out or expired.",
+        ),
+        (
+            "EvaluatorLikePatternInvalidEscapeSequence",
+            "An argument given to the LIKE expression was not valid.",
+        ),
+        ("UnexpectedContent", "This request does not support content."),
+        (
+            "NoLoggingStatusForKey",
+            "There is no such thing as a logging status subresource for a key.",
+        ),
+        ("ParseUnknownOperator", "The SQL expression contains an operator that is not valid."),
+        ("EvaluatorNegativeLimit", "LIMIT must not be negative."),
+        (
+            "OverMaxColumn",
+            "The number of columns in the result is greater than the maximum allowable number of columns.",
+        ),
+        (
+            "ConditionalRequestConflict",
+            "A conflicting operation occurred. If using PutObject you can retry the request. If using multipart upload you should initiate another CreateMultipartUpload request and re-upload each part.",
+        ),
+        (
+            "InvalidBucketAclWithObjectOwnership",
+            "Bucket cannot have ACLs set with ObjectOwnership's BucketOwnerEnforced setting.",
+        ),
+        (
+            "InvalidRegion",
+            "You've attempted to create a Multi-Region Access Point in a Region that you haven't opted in to.",
+        ),
+        ("InvalidSOAPRequest", "The SOAP request body is invalid."),
+        ("InvalidKeyPath", "The key path in the SQL expression is not valid."),
+        ("InternalError", "We encountered an internal error. Please try again."),
+        ("OverMaxParquetBlockSize", "The Parquet file is above the max row group size."),
+        ("UnrecognizedFormatException", "We encountered a record type that is not valid."),
+        ("LexerInvalidIONLiteral", "The SQL expression contains an operator that is not valid."),
+        ("InvalidHttpMethod", "The request is made using an unexpected HTTP method."),
+        (
+            "ParquetParsingError",
+            "An error occurred while parsing the Parquet file. Check the file and try again.",
+        ),
+        (
+            "IncorrectNumberOfFilesInPostRequest",
+            "POST requires exactly one file upload per request.",
+        ),
+        (
+            "ParseExpectedLeftParenAfterCast",
+            "The expected left parenthesis after CAST in the SQL expression was not found.",
+        ),
+        ("KeyTooLongError", "Your key is too long."),
+        (
+            "OverMaxRecordSize",
+            "The length of a record in the input or result is greater than the maxCharsPerRecord limit of 1 MB.",
+        ),
+        (
+            "RequestTimeout",
+            "Your socket connection to the server was not read from or written to within the timeout period.",
+        ),
+        (
+            "LikeInvalidInputs",
+            "The argument given to the LIKE clause in the SQL expression is not valid.",
+        ),
+        ("InvalidToken", "The provided token is malformed or otherwise invalid."),
+        (
+            "ParseUnsupportedLiteralsGroupBy",
+            "The SQL expression contains an unsupported use of GROUP BY.",
+        ),
+        ("IntegerOverflow", "An integer overflow or underflow occurred in the SQL expression."),
+        ("UnsupportedSyntax", "We encountered syntax that is not valid."),
+        (
+            "MaxPostPreDataLengthExceededError",
+            "Your POST request fields preceding the upload file were too large.",
+        ),
+        (
+            "RequestTimeTooSkewed",
+            "The difference between the request time and the server's time is too large.",
+        ),
+        (
+            "InvalidRequestParameter",
+            "The value of a parameter in the SelectRequest element is not valid. Check the service API documentation and try again.",
+        ),
+        ("NoSuchTagSet", "The specified tag does not exist."),
+        (
+            "MissingRequestBodyError",
+            "This happens when the user sends an empty XML document as a request. The error message is, \"Request body is empty.\"",
+        ),
+        ("EntityTooLarge", "Your proposed upload exceeds the maximum allowed object size."),
+        ("MultipleDataSourcesUnsupported", "Multiple data sources are not supported."),
+        ("NoSuchResource", "The specified resource doesn't exist."),
+        ("NoSuchKey", "The specified key does not exist."),
+        ("ParseUnsupportedAlias", "The SQL expression contains an unsupported use of ALIAS."),
+        (
+            "ParseSelectMissingFrom",
+            "The SQL expression contains a missing FROM after the SELECT list.",
+        ),
+    ],
+};
+
 impl S3ErrorCode {
     pub(super) const STATIC_CODE_LIST: &'static [&'static str] = &[
         "AccessControlListNotSupported",
@@ -3205,5 +3904,11 @@ impl S3ErrorCode {
             Self::ValueParseFailure => Some(StatusCode::BAD_REQUEST),
             Self::Custom(_) => None,
         }
+    }
+
+    #[must_use]
+    pub fn default_message(&self) -> Option<&'static str> {
+        let s = self.as_static_str()?;
+        S3_ERROR_CODE_DEFAULT_MESSAGE.get(s).copied()
     }
 }

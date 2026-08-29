@@ -52,9 +52,10 @@ struct Inner {
 impl S3Error {
     #[must_use]
     pub fn new(code: S3ErrorCode) -> Self {
+        let message = code.default_message();
         Self(Box::new(Inner {
             code,
-            message: None,
+            message: message.map(Cow::Borrowed),
             // resource: None,
             request_id: None,
             status_code: None,
@@ -263,6 +264,9 @@ impl S3ErrorCode {
 
 #[cfg(test)]
 mod from_bytes_tests;
+
+#[cfg(test)]
+mod default_message_tests;
 
 #[cfg(test)]
 mod tests {
