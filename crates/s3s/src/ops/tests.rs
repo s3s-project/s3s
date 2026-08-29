@@ -1050,6 +1050,118 @@ async fn presigned_url_expires_0_should_be_expired() {
     assert_eq!(err.code(), &S3ErrorCode::AccessDenied);
 }
 
+/// End-to-end: a `SigV4` presigned URL whose host carries an explicit
+/// non-default port must route to the bucket and verify (issue #438,
+/// rustfs/rustfs#1099). Covers the full chain: routing (port-agnostic base
+/// domain match), signature verification (raw Host value), and dispatch to
+/// the `S3` implementation with the correct bucket.
+#[tokio::test]
+async fn presigned_url_with_port_and_vhost_routes_bucket() {
+    use crate::auth::{SecretKey, SimpleAuth};
+    use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
+    use crate::host::MultiDomain;
+    use crate::http::{Body, Request};
+    use std::sync::Arc;
+
+    struct RecordingS3 {
+        received: std::sync::Mutex<Option<(String, String)>>, // (bucket, key)
+    }
+    #[async_trait::async_trait]
+    impl crate::s3_trait::S3 for RecordingS3 {
+        async fn get_object(
+            &self,
+            req: crate::S3Request<crate::dto::GetObjectInput>,
+        ) -> crate::error::S3Result<crate::protocol::S3Response<crate::dto::GetObjectOutput>> {
+            *self.received.lock().unwrap() = Some((req.input.bucket.clone(), req.input.key.clone()));
+            Ok(crate::protocol::S3Response::new(crate::dto::GetObjectOutput::default()))
+        }
+    }
+
+    let access_key = "AKIAIOSFODNN7EXAMPLE";
+    let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".into();
+    let recording = Arc::new(RecordingS3 {
+        received: std::sync::Mutex::new(None),
+    });
+    let s3: Arc<dyn crate::s3_trait::S3> = recording.clone();
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(S3Config {
+        presigned_url_max_skew_time_secs: u32::MAX,
+        ..Default::default()
+    })));
+    let auth = SimpleAuth::from_single(access_key, secret_key.clone());
+    let host = MultiDomain::new(["fs.example.com"]).unwrap();
+    let ccx = CallContext {
+        s3: &s3,
+        config: &config,
+        host: Some(&host),
+        auth: Some(&auth),
+        access: None,
+        route: None,
+        validation: None,
+    };
+
+    // Sign a presigned URL for the port-carrying vhost host.
+    let host_hdr = "user.fs.example.com:19000";
+    let amz_date = s3s_sigv4::AmzDate::parse(&format_current_amz_date()).expect("current time is a valid x-amz-date");
+    let query_fields = [
+        ("X-Amz-Algorithm".to_owned(), "AWS4-HMAC-SHA256".to_owned()),
+        (
+            "X-Amz-Credential".to_owned(),
+            format!("{access_key}/{}/us-east-1/s3/aws4_request", amz_date.fmt_date()),
+        ),
+        ("X-Amz-Date".to_owned(), amz_date.fmt_iso8601().to_string()),
+        ("X-Amz-Expires".to_owned(), "604800".to_owned()),
+        ("X-Amz-SignedHeaders".to_owned(), "host".to_owned()),
+    ];
+    let canonical_request =
+        s3s_sigv4::create_presigned_canonical_request("GET", "/avatar.png", &query_fields, [("host", host_hdr)]);
+    let string_to_sign = s3s_sigv4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
+    let signature = s3s_sigv4::calculate_signature(&string_to_sign, secret_key.expose(), &amz_date, "us-east-1", "s3");
+    let mut query_fields: Vec<(String, String)> = query_fields.into();
+    query_fields.push(("X-Amz-Signature".to_owned(), signature));
+
+    let mut uri = format!("https://{host_hdr}/avatar.png?").to_owned();
+    uri.push_str(
+        &query_fields
+            .iter()
+            .map(|(k, v)| format!("{k}={}", urlencoding::encode(v)))
+            .collect::<Vec<_>>()
+            .join("&"),
+    );
+
+    let mut req = Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri(uri)
+            .header(crate::header::HOST, host_hdr)
+            .body(Body::empty())
+            .unwrap(),
+    );
+
+    let response = super::call(&mut req, &ccx).await.unwrap();
+    assert_eq!(
+        response.status,
+        hyper::StatusCode::OK,
+        "presigned URL with a port-carrying host must succeed"
+    );
+
+    let (bucket, key) = recording.received.lock().unwrap().take().expect("get_object was called");
+    assert_eq!(bucket.as_str(), "user");
+    assert_eq!(key.as_str(), "avatar.png");
+}
+
+fn format_current_amz_date() -> String {
+    let dt = time::OffsetDateTime::now_utc();
+    format!(
+        "{:04}{:02}{:02}T{:02}{:02}{:02}Z",
+        dt.year(),
+        u8::from(dt.month()),
+        dt.day(),
+        dt.hour(),
+        dt.minute(),
+        dt.second()
+    )
+}
+
 #[allow(clippy::too_many_lines)]
 #[tokio::test]
 async fn post_multipart_bucket_routes_to_post_object() {
