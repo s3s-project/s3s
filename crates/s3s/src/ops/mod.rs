@@ -832,7 +832,11 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                         req.s3ext.post_policy = policy;
                         break 'resolve &PostObject as &'static dyn Operation;
                     }
-                    // FIXME: POST /bucket/key hits this branch
+                    // A multipart POST whose path names an object is not a modeled S3
+                    // operation: `PostObject` binds to `/{Bucket}` only — the key is
+                    // carried by the `key` form field, never the URL path. AWS and
+                    // MinIO reject such requests with `MethodNotAllowed`; keep that
+                    // behavior.
                     S3Path::Object { .. } => return Err(s3_error!(MethodNotAllowed)),
                 }
             }
