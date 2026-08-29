@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
-use super::*;
-
-use crate::ops;
+use crate::{ops, S3Error};
 
 use http_body::Body;
 
