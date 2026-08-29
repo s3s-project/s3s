@@ -18,7 +18,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-openssl = ["dep:openssl"]
+openssl = ["dep:openssl", "s3s-sigv4/openssl"]
 minio = []
 
 [target.'cfg(not(windows))'.dependencies]
