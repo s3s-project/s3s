@@ -1019,7 +1019,7 @@ async fn post_multipart_bucket_routes_to_post_object() {
     let credential = "AKIAIOSFODNN7EXAMPLE/20200926/us-east-1/s3/aws4_request";
     let region = "us-east-1";
     let service = "s3";
-    let signature = crate::sig_v4::calculate_signature(policy_b64, &secret_key, &amz_date, region, service);
+    let signature = s3s_sigv4::calculate_signature(policy_b64, secret_key.expose(), &amz_date, region, service);
 
     let body = format!(
         concat!(
@@ -1267,7 +1267,7 @@ mod post_policy_test_helpers {
 
         let policy_json = augment_post_policy_for_test(policy_json, amz_date_str.as_str(), credential, algorithm);
         let policy_b64 = base64_simd::STANDARD.encode_to_string(&policy_json);
-        let signature = crate::sig_v4::calculate_signature(&policy_b64, secret_key, &amz_date, region, service);
+        let signature = s3s_sigv4::calculate_signature(&policy_b64, secret_key.expose(), &amz_date, region, service);
 
         let fields = {
             let mut f = vec![
@@ -1330,7 +1330,7 @@ mod post_policy_test_helpers {
 
         let policy_json = augment_post_policy_for_test(policy_json, amz_date_str.as_str(), credential, algorithm);
         let policy_b64 = base64_simd::STANDARD.encode_to_string(&policy_json);
-        let signature = crate::sig_v4::calculate_signature(&policy_b64, secret_key, &amz_date, region, service);
+        let signature = s3s_sigv4::calculate_signature(&policy_b64, secret_key.expose(), &amz_date, region, service);
 
         let body = build_multipart_fields(
             &[
@@ -1475,27 +1475,30 @@ mod put_object_max_size_tests {
             ("x-amz-date", "20130524T000000Z"),
             ("x-amz-decoded-content-length", decoded_content_length.as_str()),
         ];
-        let canonical_request = crate::sig_v4::create_canonical_request(
-            &method,
+        let canonical_request = s3s_sigv4::create_canonical_request(
+            method.as_str(),
             uri_path,
             &[] as &[(&str, &str)],
             headers_for_signing,
-            crate::sig_v4::Payload::MultipleChunks,
+            s3s_sigv4::Payload::MultipleChunks,
         );
-        let seed_string_to_sign = crate::sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
-        let seed_signature = crate::sig_v4::calculate_signature(&seed_string_to_sign, secret_key, &amz_date, "us-east-1", "s3");
+        let seed_string_to_sign = s3s_sigv4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
+        let seed_signature =
+            s3s_sigv4::calculate_signature(&seed_string_to_sign, secret_key.expose(), &amz_date, "us-east-1", "s3");
 
-        let chunk_string_to_sign = crate::sig_v4::create_chunk_string_to_sign(
+        let chunk_string_to_sign = s3s_sigv4::create_chunk_string_to_sign(
             &amz_date,
             "us-east-1",
             "s3",
             seed_signature.as_str(),
             std::slice::from_ref(chunk_data),
         );
-        let chunk_signature = crate::sig_v4::calculate_signature(&chunk_string_to_sign, secret_key, &amz_date, "us-east-1", "s3");
+        let chunk_signature =
+            s3s_sigv4::calculate_signature(&chunk_string_to_sign, secret_key.expose(), &amz_date, "us-east-1", "s3");
         let final_string_to_sign =
-            crate::sig_v4::create_chunk_string_to_sign(&amz_date, "us-east-1", "s3", chunk_signature.as_str(), &[]);
-        let final_signature = crate::sig_v4::calculate_signature(&final_string_to_sign, secret_key, &amz_date, "us-east-1", "s3");
+            s3s_sigv4::create_chunk_string_to_sign(&amz_date, "us-east-1", "s3", chunk_signature.as_str(), &[] as &[Vec<u8>]);
+        let final_signature =
+            s3s_sigv4::calculate_signature(&final_string_to_sign, secret_key.expose(), &amz_date, "us-east-1", "s3");
 
         let mut streaming_body = Vec::new();
         streaming_body
@@ -2167,7 +2170,7 @@ async fn post_object_chunked_rejects_broken_body() {
 
     let augmented = post_policy_test_helpers::augment_post_policy_for_test(policy_json, &amz_date_str, credential, algorithm);
     let policy_b64 = base64_simd::STANDARD.encode_to_string(&augmented);
-    let signature = crate::sig_v4::calculate_signature(&policy_b64, &secret_key, &amz_date, "us-east-1", "s3");
+    let signature = s3s_sigv4::calculate_signature(&policy_b64, secret_key.expose(), &amz_date, "us-east-1", "s3");
 
     let fields = post_policy_test_helpers::build_multipart_fields(
         &[
@@ -3418,11 +3421,10 @@ fn list_directory_buckets_serialize_http() {
 
 mod bodyless_content_length_tests {
     use super::*;
-    use crate::auth::{SecretKey, SimpleAuth};
+    use crate::auth::SimpleAuth;
     use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
     use crate::http::{Body, OrderedQs, Request};
     use crate::protocol::S3Response;
-    use crate::sig_v4;
     use bytes::Bytes;
     use hyper::header::HeaderValue;
     use hyper::{Method, StatusCode, Uri, Version};
@@ -3435,7 +3437,7 @@ mod bodyless_content_length_tests {
     const AMZ_DATE: &str = "20260828T000000Z";
     const REGION: &str = "us-east-1";
     const SERVICE: &str = "s3";
-    const EMPTY_SHA256: &str = crate::sig_v4::EMPTY_STRING_SHA256_HASH;
+    const EMPTY_SHA256: &str = s3s_sigv4::EMPTY_STRING_SHA256_HASH;
 
     #[derive(Default)]
     struct TestS3 {
@@ -3550,15 +3552,15 @@ mod bodyless_content_length_tests {
             ("x-amz-date", amz_date_str.as_str()),
         ];
 
-        let canonical_request = sig_v4::create_canonical_request(
-            method,
+        let canonical_request = s3s_sigv4::create_canonical_request(
+            method.as_str(),
             uri.path(),
             query,
             signed_headers,
-            sig_v4::Payload::SingleChunk(payload_sha256),
+            s3s_sigv4::Payload::SingleChunk(payload_sha256),
         );
-        let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, REGION, SERVICE);
-        let signature = sig_v4::calculate_signature(&string_to_sign, &SecretKey::from(SECRET_KEY), &amz_date, REGION, SERVICE);
+        let string_to_sign = s3s_sigv4::create_string_to_sign(&canonical_request, &amz_date, REGION, SERVICE);
+        let signature = s3s_sigv4::calculate_signature(&string_to_sign, SECRET_KEY, &amz_date, REGION, SERVICE);
 
         format!(
             "AWS4-HMAC-SHA256 Credential={ACCESS_KEY}/{}/{REGION}/{SERVICE}/aws4_request, \
@@ -3934,7 +3936,7 @@ mod bodyless_content_length_tests {
         let mut req = post_policy_test_helpers::build_post_object_request(policy_json, "hello", &secret_key, false);
         req.headers.insert(
             crate::header::X_AMZ_CONTENT_SHA256,
-            hyper::header::HeaderValue::from_static(crate::sig_v4::EMPTY_STRING_SHA256_HASH),
+            hyper::header::HeaderValue::from_static(s3s_sigv4::EMPTY_STRING_SHA256_HASH),
         );
         req.headers.remove(hyper::header::CONTENT_LENGTH);
 

@@ -1520,4 +1520,82 @@ mod tests {
         // Both values should be normalized and combined with comma
         assert!(canonical_request.contains("x-amz-meta-custom:value1,value2 with spaces\n"));
     }
+
+    #[test]
+    fn raw_uri_path_canonical_requests() {
+        // raw (unencoded) URI path: the path is used as-is for both
+        // canonical request builders
+        let headers = [("host", "s3.amazonaws.com")];
+        let qs: &[(String, String)] = &[];
+
+        let canonical = create_canonical_request_with_raw_uri_path("GET", "/bucket/key=", qs, headers, Payload::Unsigned);
+        assert_eq!(
+            canonical,
+            concat!(
+                "GET\n",
+                "/bucket/key=\n",
+                "\n",
+                "host:s3.amazonaws.com\n",
+                "\n",
+                "host\n",
+                "UNSIGNED-PAYLOAD",
+            )
+        );
+
+        let presigned = create_presigned_canonical_request_with_raw_uri_path("GET", "/bucket/key=", qs, headers);
+        assert_eq!(
+            presigned,
+            concat!(
+                "GET\n",
+                "/bucket/key=\n",
+                "\n",
+                "host:s3.amazonaws.com\n",
+                "\n",
+                "host\n",
+                "UNSIGNED-PAYLOAD",
+            )
+        );
+    }
+
+    #[test]
+    fn authorization_header_is_skipped() {
+        // the authorization header never participates in the canonical
+        // headers or the signed-header list
+        let headers = [
+            (
+                "authorization",
+                "AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request, SignedHeaders=host, Signature=abc",
+            ),
+            ("host", "s3.amazonaws.com"),
+        ];
+        let qs: &[(String, String)] = &[];
+
+        let canonical_request = create_canonical_request("GET", "/bucket/key", qs, headers, Payload::Unsigned);
+        assert_eq!(
+            canonical_request,
+            concat!(
+                "GET\n",
+                "/bucket/key\n",
+                "\n",
+                "host:s3.amazonaws.com\n",
+                "\n",
+                "host\n",
+                "UNSIGNED-PAYLOAD",
+            )
+        );
+
+        let presigned = create_presigned_canonical_request("GET", "/bucket/key", qs, headers);
+        assert_eq!(
+            presigned,
+            concat!(
+                "GET\n",
+                "/bucket/key\n",
+                "\n",
+                "host:s3.amazonaws.com\n",
+                "\n",
+                "host\n",
+                "UNSIGNED-PAYLOAD",
+            )
+        );
+    }
 }

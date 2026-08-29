@@ -16,7 +16,6 @@ use crate::host::SingleDomain;
 use crate::protocol::S3Response;
 use crate::route::S3Route;
 use crate::s3_trait::S3;
-use crate::sig_v4;
 use hyper::http::Extensions;
 use hyper::{HeaderMap, Method, Uri};
 use s3s_sigv4::AmzDate;
@@ -284,15 +283,10 @@ fn signed_vhost_request(host: &str) -> Request {
     ];
 
     let canonical_request =
-        sig_v4::create_canonical_request(&Method::GET, "/", &[] as &[(&str, &str)], signed_headers, sig_v4::Payload::Unsigned);
-    let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, region, "s3");
-    let signature = sig_v4::calculate_signature(
-        &string_to_sign,
-        &SecretKey::from("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"),
-        &amz_date,
-        region,
-        "s3",
-    );
+        s3s_sigv4::create_canonical_request("GET", "/", &[] as &[(&str, &str)], signed_headers, s3s_sigv4::Payload::Unsigned);
+    let string_to_sign = s3s_sigv4::create_string_to_sign(&canonical_request, &amz_date, region, "s3");
+    let signature =
+        s3s_sigv4::calculate_signature(&string_to_sign, "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", &amz_date, region, "s3");
 
     let authorization = format!(
         "AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/{scope_date}/{region}/s3/aws4_request, \

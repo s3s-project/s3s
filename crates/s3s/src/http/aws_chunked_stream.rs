@@ -6,12 +6,11 @@
 use crate::auth::SecretKey;
 use crate::error::StdError;
 use crate::protocol::TrailingHeaders;
-use crate::sig_v4;
-use crate::sig_v4::create_trailer_string_to_sign;
 use crate::stream::{ByteStream, DynByteStream, RemainingLength};
 use crate::utils::SyncBoxFuture;
 use crate::utils::crypto::{Sha256Sum, hex_bytes32};
 use s3s_sigv4::AmzDate;
+use s3s_sigv4::create_trailer_string_to_sign;
 
 use hyper::HeaderMap;
 use hyper::http::{HeaderName, HeaderValue};
@@ -161,10 +160,10 @@ fn check_signature(ctx: &SignatureCtx, expected_signature: &[u8], chunk_data: &[
     let expected = Sha256Sum::from_hex(std::str::from_utf8(expected_signature).ok()?)?;
 
     let string_to_sign = hex_bytes32(ctx.prev_signature.as_bytes(), |prev_signature| {
-        sig_v4::create_chunk_string_to_sign(&ctx.amz_date, &ctx.region, &ctx.service, prev_signature, chunk_data)
+        s3s_sigv4::create_chunk_string_to_sign(&ctx.amz_date, &ctx.region, &ctx.service, prev_signature, chunk_data)
     });
 
-    let signature = sig_v4::calculate_signature_with_key(&string_to_sign, &ctx.signing_key);
+    let signature = Sha256Sum::from_bytes(s3s_sigv4::calculate_signature_with_key(&string_to_sign, &ctx.signing_key));
 
     (expected == signature).then_some(signature)
 }
@@ -201,7 +200,8 @@ impl AwsChunkedStream {
                 pin_mut!(body);
                 let mut prev_bytes = Bytes::new();
                 let mut buf: Vec<u8> = Vec::new();
-                let signing_key = Zeroizing::new(sig_v4::derive_signing_key(&secret_key, &amz_date, &region, &service));
+                let signing_key =
+                    Zeroizing::new(s3s_sigv4::derive_signing_key(secret_key.expose(), &amz_date, &region, &service));
                 drop(secret_key);
                 let mut ctx = SignatureCtx {
                     amz_date,
@@ -372,7 +372,7 @@ impl AwsChunkedStream {
             let string_to_sign = hex_bytes32(ctx.prev_signature.as_bytes(), |prev_signature| {
                 create_trailer_string_to_sign(&ctx.amz_date, &ctx.region, &ctx.service, prev_signature, &canonical_trailers)
             });
-            let signature = sig_v4::calculate_signature_with_key(&string_to_sign, &ctx.signing_key);
+            let signature = Sha256Sum::from_bytes(s3s_sigv4::calculate_signature_with_key(&string_to_sign, &ctx.signing_key));
             if provided != signature {
                 return Some(Err(AwsChunkedStreamError::SignatureMismatch));
             }
@@ -1051,7 +1051,7 @@ mod tests {
     #[tokio::test]
     async fn unsigned_payload_with_trailer_minimal() {
         // Construct a minimal unsigned aws-chunked stream: two data chunks and a 0 chunk, then trailers block.
-        // Here we compute signatures using existing test vectors in sig_v4::methods.rs indirectly by using
+        // Here we compute signatures using existing test vectors in s3s_sigv4::methods.rs indirectly by using
         // a known seed and the create_trailer_string_to_sign path inside AwsChunkedStream.
 
         // For unsigned per-chunk mode, meta lines are plain sizes without extensions.
@@ -1078,7 +1078,7 @@ mod tests {
         // Canonical trailers: one additional header besides x-amz-trailer-signature
         let canonical = b"x-amz-meta-foo:bar\n".to_vec();
         let string_to_sign = create_trailer_string_to_sign(&date, region, service, seed_signature, &canonical);
-        let sig = sig_v4::calculate_signature(&string_to_sign, &SecretKey::from(secret_access_key), &date, region, service);
+        let sig = s3s_sigv4::calculate_signature(&string_to_sign, secret_access_key, &date, region, service);
         let trailers_block = Bytes::from(format!("x-amz-meta-foo: bar\r\nx-amz-trailer-signature:{}", sig.as_str()));
 
         let chunk_results: Vec<Result<Bytes, _>> = vec![Ok(chunk1), Ok(chunk2), Ok(chunk3), Ok(trailers_block)];
