@@ -101,6 +101,9 @@ pub enum AwsChunkedStreamError {
     /// Incomplete stream
     #[error("AwsChunkedStreamError: Incomplete")]
     Incomplete,
+    /// More bytes produced than the declared decoded length
+    #[error("AwsChunkedStreamError: LengthMismatch")]
+    LengthMismatch,
     /// Chunk metadata too large
     #[error("AwsChunkedStreamError: ChunkMetaTooLarge: size {0} exceeds limit {1}")]
     ChunkMetaTooLarge(usize, usize),
@@ -647,10 +650,22 @@ impl AwsChunkedStream {
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Result<Bytes, AwsChunkedStreamError>>> {
         let ans = Pin::new(&mut self.inner).poll_next(cx);
-        if let Poll::Ready(Some(Ok(ref bytes))) = ans {
-            self.remaining_length = self.remaining_length.saturating_sub(bytes.len());
+        match ans {
+            Poll::Ready(Some(Ok(bytes))) => {
+                // The declared decoded length must match the actual chunk data:
+                // producing more bytes than the declaration is an overrun
+                // (previously masked by saturating subtraction).
+                if !bytes.is_empty() && bytes.len() > self.remaining_length {
+                    return Poll::Ready(Some(Err(AwsChunkedStreamError::LengthMismatch)));
+                }
+                self.remaining_length = self.remaining_length.saturating_sub(bytes.len());
+                Poll::Ready(Some(Ok(bytes)))
+            }
+            // The chunk stream ended (0-size chunk and trailers processed)
+            // before the declared decoded length was delivered.
+            Poll::Ready(None) if self.remaining_length != 0 => Poll::Ready(Some(Err(AwsChunkedStreamError::Incomplete))),
+            other => other,
         }
-        ans
     }
 
     #[must_use]
@@ -928,6 +943,59 @@ mod tests {
         let data = chunked_stream.next().await.unwrap().unwrap();
         assert_eq!(data.as_ref(), b"0123456789abcdef");
         assert!(chunked_stream.next().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn unsigned_chunk_overrun_rejected_when_declaration_exceeded() {
+        // The decoded-length declaration says 4 bytes but the chunk carries 6:
+        // structurally valid, yet the produced bytes exceed the declaration.
+        let chunk1 = join(&[b"6\r\n", b"abcdef\r\n", b"0\r\n\r\n"]);
+        let chunk_results = vec![Ok(chunk1)];
+
+        let stream = futures::stream::iter(chunk_results);
+        let mut chunked_stream = AwsChunkedStream::new(
+            stream,
+            Sha256Sum::from_hex("0000000000000000000000000000000000000000000000000000000000000000").unwrap(),
+            AmzDate::parse("20130524T000000Z").unwrap(),
+            "us-east-1".into(),
+            "s3".into(),
+            "test-key".into(),
+            4, // decoded_content_length declaration
+            true,
+            crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
+        );
+
+        // The whole chunk is streamed in one poll, so the overrun is reported
+        // on the first read.
+        let result = chunked_stream.next().await;
+        assert!(matches!(result, Some(Err(AwsChunkedStreamError::LengthMismatch))));
+    }
+
+    #[tokio::test]
+    async fn unsigned_chunk_shortfall_rejected_when_declaration_not_met() {
+        // The decoded-length declaration says 8 bytes but the chunk carries 4
+        // and the stream ends cleanly with a 0-size chunk.
+        let chunk1 = join(&[b"4\r\n", b"abcd\r\n", b"0\r\n\r\n"]);
+        let chunk_results = vec![Ok(chunk1)];
+
+        let stream = futures::stream::iter(chunk_results);
+        let mut chunked_stream = AwsChunkedStream::new(
+            stream,
+            Sha256Sum::from_hex("0000000000000000000000000000000000000000000000000000000000000000").unwrap(),
+            AmzDate::parse("20130524T000000Z").unwrap(),
+            "us-east-1".into(),
+            "s3".into(),
+            "test-key".into(),
+            8, // decoded_content_length declaration
+            true,
+            crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
+        );
+
+        let first = chunked_stream.next().await.unwrap().unwrap();
+        assert_eq!(first.as_ref(), b"abcd");
+
+        let result = chunked_stream.next().await;
+        assert!(matches!(result, Some(Err(AwsChunkedStreamError::Incomplete))));
     }
 
     fn join(bytes: &[&[u8]]) -> Bytes {
@@ -1212,9 +1280,11 @@ mod tests {
             crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
         );
 
-        // Stream ends without proper chunk metadata
+        // Stream ends without proper chunk metadata; the declared decoded
+        // length was never delivered, so the stream reports an incomplete
+        // upload instead of ending silently.
         let result = chunked_stream.next().await;
-        assert!(result.is_none());
+        assert!(matches!(result, Some(Err(AwsChunkedStreamError::Incomplete))));
     }
 
     #[tokio::test]
