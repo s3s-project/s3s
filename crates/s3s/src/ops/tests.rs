@@ -1082,6 +1082,40 @@ async fn post_multipart_bucket_routes_to_post_object() {
     }
 }
 
+/// A multipart POST whose path names an object is not a modeled S3
+/// operation: `PostObject` binds to `/{Bucket}` only — the key is carried by
+/// the form fields, never the URL path. AWS and `MinIO` reject such requests
+/// with `MethodNotAllowed`; this test locks the behavior.
+#[tokio::test]
+async fn post_multipart_object_path_rejected_as_method_not_allowed() {
+    use crate::auth::SecretKey;
+    use std::sync::Arc;
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+    let config = post_policy_test_helpers::create_test_config(1024 * 1024);
+    let auth = post_policy_test_helpers::create_test_auth();
+    let ccx = post_policy_test_helpers::create_test_context(&s3, &config, &auth);
+
+    let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+    let policy_json = &format!(
+        r#"{{"expiration":"2030-01-01T00:00:00.000Z","conditions":[{}]}}"#,
+        post_policy_test_helpers::BASE_CONDITIONS,
+    );
+    let mut req = post_policy_test_helpers::build_post_object_request(policy_json, "hello", &secret_key, false);
+    // Reroute the request to the object level: `POST /bucket/key`.
+    req.uri = req
+        .uri
+        .to_string()
+        .replace("/test-bucket", "/test-bucket/test-key")
+        .parse()
+        .expect("valid test URI");
+
+    let Err(err) = super::prepare(&mut req, &ccx).await else {
+        panic!("multipart POST to an object path must be rejected");
+    };
+    assert_eq!(err.code(), &crate::error::S3ErrorCode::MethodNotAllowed);
+}
+
 // Helper functions for POST policy resource exhaustion tests
 
 /// Helper to create a test S3 service that tracks POST calls
