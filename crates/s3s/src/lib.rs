@@ -102,6 +102,11 @@
 //!   [`S3Config::put_object_max_size`](crate::config::S3Config::put_object_max_size);
 //!   implementations should still enforce their own deployment-specific
 //!   limits, and must do so if the cap is disabled (set to `None`)
+//! - List-type response bodies (`ListObjects`, `ListBuckets`, ...) are
+//!   serialized in full by `s3s`: their memory usage grows with the number of
+//!   entries the [`S3`] implementation returns. Implementations should
+//!   paginate (`max-keys` / continuation tokens) and deployments should bound
+//!   response sizes
 //! - Rate limiting
 //! - Back pressure
 //! - Network-level security (firewalls, VPNs, etc.)
