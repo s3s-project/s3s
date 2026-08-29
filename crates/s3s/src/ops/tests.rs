@@ -4432,6 +4432,11 @@ mod virtual_hosted_style_hint_tests {
             assert!(result.is_ok(), "call failed for {method}");
             let resp = result.unwrap();
             assert_eq!(resp.status, http::StatusCode::NOT_IMPLEMENTED, "wrong status for {method}");
+            if method == Method::HEAD {
+                // RFC 9110 §9.3.2: HEAD responses must not carry a body.
+                assert!(http_body::Body::is_end_stream(&resp.body), "HEAD response must be bodyless");
+                continue;
+            }
             let text = body_str(&resp);
             assert!(
                 text.contains("virtual-hosted-style"),

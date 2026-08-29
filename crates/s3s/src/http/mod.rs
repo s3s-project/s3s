@@ -30,7 +30,7 @@ mod request;
 pub use self::request::Request;
 
 mod response;
-pub use self::response::Response;
+pub use self::response::{Response, is_bodyless_status, strip_body};
 
 pub use hyper::header::{HeaderName, HeaderValue, InvalidHeaderValue};
 pub use hyper::http::StatusCode;
