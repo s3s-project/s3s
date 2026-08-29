@@ -48,6 +48,22 @@ impl From<HttpError> for StdError {
 ///
 /// This handle lets you take streaming-trailer headers after the
 /// request body stream has been fully consumed.
+///
+/// # Integrity contract
+///
+/// `s3s` parses and exposes streaming trailers but does **not** verify their
+/// payloads. In particular, `x-amz-checksum-*` trailer values are the
+/// responsibility of the [`S3`](crate::S3) implementation: it must compare
+/// them against the digest it computed while consuming the body and reject
+/// mismatches (the reference implementation `s3s-fs` returns `BadDigest`).
+/// Implementations may compute digests however they like (asynchronous
+/// pipelines, dedicated hardware, or not at all for an optional-integrity
+/// trade-off); `s3s` only guarantees that the values arrive intact and in
+/// order with the rest of the stream.
+///
+/// Signature-bearing modes (`STREAMING-AWS4-HMAC-SHA256-PAYLOAD-TRAILER`)
+/// additionally protect the trailer block with `x-amz-trailer-signature`,
+/// which `s3s` verifies before exposing the handle.
 #[derive(Clone)]
 pub struct TrailingHeaders(pub(crate) std::sync::Arc<std::sync::Mutex<Option<HeaderMap>>>);
 
