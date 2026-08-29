@@ -7,6 +7,7 @@ use hex_simd::{AsOut, AsciiCase};
 use hmac::{Hmac, KeyInit, Mac};
 use sha2::{Digest, Sha256};
 use smallvec::SmallVec;
+use stdx::str::StrExt;
 use zeroize::Zeroize;
 
 use crate::AmzDate;
@@ -42,7 +43,7 @@ fn uri_encode(output: &mut String, input: &str, encode_slash: bool) {
         }
     }
 
-    let s = str::from_utf8(buf.as_ref()).expect("uri_encode output is ASCII by construction");
+    let s = str::from_ascii_simd(buf.as_ref()).unwrap();
     output.push_str(s);
 }
 

@@ -3556,6 +3556,7 @@ dependencies = [
  "serde",
  "sha2 0.11.0",
  "smallvec",
+ "std-next",
  "thiserror",
  "zeroize",
 ]

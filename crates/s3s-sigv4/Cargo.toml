@@ -23,5 +23,6 @@ nom.workspace = true
 serde.workspace = true
 sha2.workspace = true
 smallvec.workspace = true
+std-next.workspace = true
 thiserror.workspace = true
 zeroize.workspace = true
