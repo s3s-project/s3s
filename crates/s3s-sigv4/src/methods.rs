@@ -3,16 +3,12 @@
 
 //! Canonicalization and signing for AWS Signature Version 4.
 
-use hex_simd::{AsOut, AsciiCase};
-use hmac::{Hmac, KeyInit, Mac};
-#[cfg(not(all(feature = "openssl", not(windows))))]
-use sha2::Digest;
-use sha2::Sha256;
 use smallvec::SmallVec;
 use stdx::str::StrExt;
 use zeroize::Zeroize;
 
 use crate::AmzDate;
+use crate::crypto::{hex_bytes32, hex_sha256, hex_sha256_chunk, hmac_sha256};
 
 /// custom uri encode
 #[allow(clippy::indexing_slicing, clippy::inline_always, clippy::unwrap_used)]
@@ -123,67 +119,6 @@ where
     T: Ord,
 {
     v.sort_by(|lhs, rhs| lhs.0.cmp(&rhs.0));
-}
-
-fn hex_bytes32<R>(src: &[u8; 32], f: impl FnOnce(&str) -> R) -> R {
-    let buf: &mut [_] = &mut [core::mem::MaybeUninit::uninit(); 64];
-    let ans = hex_simd::encode_as_str(src.as_ref(), buf.as_out(), AsciiCase::Lower);
-    f(ans)
-}
-
-#[cfg(not(all(feature = "openssl", not(windows))))]
-fn sha256(data: &[u8]) -> [u8; 32] {
-    <Sha256 as Digest>::digest(data).into()
-}
-
-#[cfg(all(feature = "openssl", not(windows)))]
-fn sha256(data: &[u8]) -> [u8; 32] {
-    use openssl::hash::{Hasher, MessageDigest};
-    let mut h = Hasher::new(MessageDigest::sha256()).unwrap();
-    h.update(data).unwrap();
-    let digest = h.finish().unwrap();
-    let mut ans = [0_u8; 32];
-    ans.copy_from_slice(&digest);
-    ans
-}
-
-#[cfg(not(all(feature = "openssl", not(windows))))]
-fn sha256_chunk(chunk: &[impl AsRef<[u8]>]) -> [u8; 32] {
-    let mut h = <Sha256 as Digest>::new();
-    for data in chunk {
-        h.update(data.as_ref());
-    }
-    h.finalize().into()
-}
-
-#[cfg(all(feature = "openssl", not(windows)))]
-fn sha256_chunk(chunk: &[impl AsRef<[u8]>]) -> [u8; 32] {
-    use openssl::hash::{Hasher, MessageDigest};
-    let mut h = Hasher::new(MessageDigest::sha256()).unwrap();
-    for data in chunk {
-        h.update(data.as_ref()).unwrap();
-    }
-    let digest = h.finish().unwrap();
-    let mut ans = [0_u8; 32];
-    ans.copy_from_slice(&digest);
-    ans
-}
-
-/// `f(hex(sha256(data)))`
-fn hex_sha256<R>(data: &[u8], f: impl FnOnce(&str) -> R) -> R {
-    hex_bytes32(&sha256(data), f)
-}
-
-/// `f(hex(sha256(chunk)))`
-fn hex_sha256_chunk<R>(chunk: &[impl AsRef<[u8]>], f: impl FnOnce(&str) -> R) -> R {
-    hex_bytes32(&sha256_chunk(chunk), f)
-}
-
-/// `hmac_sha256(key, data)`
-fn hmac_sha256(key: impl AsRef<[u8]>, data: impl AsRef<[u8]>) -> [u8; 32] {
-    let mut m = <Hmac<Sha256>>::new_from_slice(key.as_ref()).expect("Hmac accepts keys of any length");
-    m.update(data.as_ref());
-    m.finalize().into_bytes().into()
 }
 
 fn create_canonical_request_with_uri_mode<'a>(
@@ -910,7 +845,7 @@ mod tests {
         let signing_key = derive_signing_key(SECRET_KEY, &date, region, service);
         let raw = calculate_signature_with_key(&string_to_sign, &signing_key);
 
-        assert_eq!(hex_bytes32(&raw, str::to_owned), signature);
+        assert_eq!(crate::crypto::hex_bytes32(&raw, str::to_owned), signature);
     }
 
     #[test]
