@@ -2030,6 +2030,240 @@ file content\r\n\
     }
 
     #[tokio::test]
+    async fn v4_presigned_url_with_port_in_signed_host() {
+        // Signature-invariant nail for the port-agnostic routing fix (#438):
+        // signature verification must keep using the raw Host value including
+        // any port, even though routing now matches without it.
+        use crate::auth::SecretKey;
+        use crate::auth::SimpleAuth;
+        use crate::config::{S3ConfigProvider, StaticConfigProvider};
+        use std::sync::Arc;
+
+        let access_key = "AKIAIOSFODNN7EXAMPLE";
+        let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+        let auth = SimpleAuth::from_single(access_key, secret_key.clone());
+        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+
+        let method = Method::GET;
+        let uri = Uri::from_static("https://user.fs.example.com:19000/test.txt");
+        let decoded_uri_path = "/test.txt";
+        let raw_uri_path = "/test.txt";
+        let amz_date = AmzDate::parse(&fmt_current_amz_date(time::OffsetDateTime::now_utc()))
+            .expect("current time should produce a valid x-amz-date");
+        let host = "user.fs.example.com:19000";
+        let headers_for_signing = [("host", host)];
+        let query_strings_for_signing = presigned_query_fields(&amz_date, "s3");
+        let canonical_request = s3s_sigv4::create_presigned_canonical_request(
+            method.as_str(),
+            decoded_uri_path,
+            &query_strings_for_signing,
+            headers_for_signing,
+        );
+        let string_to_sign = s3s_sigv4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
+        let signature = s3s_sigv4::calculate_signature(&string_to_sign, secret_key.expose(), &amz_date, "us-east-1", "s3");
+        let mut signed_query_strings = query_strings_for_signing;
+        signed_query_strings.push(("X-Amz-Signature".to_owned(), signature.as_str().to_owned()));
+        let qs = OrderedQs::from_vec_unchecked(signed_query_strings);
+
+        let headers = headers_from_slice(&[("host", host)]);
+        let mut body = Body::empty();
+        let mut cx = SignatureContext {
+            auth: Some(&auth),
+            config: &config,
+            req_version: ::http::Version::HTTP_11,
+            req_method: &method,
+            req_uri: &uri,
+            req_body: &mut body,
+            qs: Some(&qs),
+            hs: &headers,
+            decoded_uri_path,
+            raw_uri_path,
+            vh_bucket: Some("user"),
+            content_length: None,
+            mime: None,
+            decoded_content_length: None,
+            transformed_body: None,
+            multipart: None,
+            trailing_headers: None,
+        };
+
+        let cred = cx
+            .v4_check_presigned_url()
+            .await
+            .expect("the raw Host value with its port must be used for verification");
+        assert_eq!(cred.access_key, access_key);
+    }
+
+    #[tokio::test]
+    async fn v4_header_auth_with_port_in_signed_host() {
+        // Header-auth counterpart of the signature-invariant nail above.
+        use crate::auth::SecretKey;
+        use crate::auth::SimpleAuth;
+        use crate::config::{S3ConfigProvider, StaticConfigProvider};
+        use std::sync::Arc;
+
+        let access_key = "AKIAIOSFODNN7EXAMPLE";
+        let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+        let auth = SimpleAuth::from_single(access_key, secret_key.clone());
+        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+
+        let method = Method::GET;
+        let uri = Uri::from_static("https://user.fs.example.com:19000/test.txt");
+        let decoded_uri_path = "/test.txt";
+        let raw_uri_path = "/test.txt";
+        let amz_date = AmzDate::parse(&fmt_current_amz_date(time::OffsetDateTime::now_utc()))
+            .expect("current time should produce a valid x-amz-date");
+        let amz_date_str = amz_date.fmt_iso8601();
+        let host = "user.fs.example.com:19000";
+        let payload_hash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+        let signed_headers = [
+            ("host", host),
+            ("x-amz-content-sha256", payload_hash),
+            ("x-amz-date", amz_date_str.as_str()),
+        ];
+        let canonical_request = s3s_sigv4::create_canonical_request(
+            method.as_str(),
+            decoded_uri_path,
+            &[] as &[(&str, &str)],
+            signed_headers,
+            s3s_sigv4::Payload::SingleChunk(payload_hash),
+        );
+        let string_to_sign = s3s_sigv4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
+        let signature = s3s_sigv4::calculate_signature(&string_to_sign, secret_key.expose(), &amz_date, "us-east-1", "s3");
+        let authorization = format!(
+            "AWS4-HMAC-SHA256 Credential={access_key}/{}/us-east-1/s3/aws4_request, \
+             SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature={}",
+            amz_date.fmt_date(),
+            signature.as_str(),
+        );
+
+        let headers = headers_from_slice(&[
+            ("host", host),
+            ("x-amz-content-sha256", payload_hash),
+            ("x-amz-date", amz_date_str.as_str()),
+            ("authorization", authorization.as_str()),
+        ]);
+        let mut body = Body::empty();
+        let mut cx = SignatureContext {
+            auth: Some(&auth),
+            config: &config,
+            req_version: ::http::Version::HTTP_11,
+            req_method: &method,
+            req_uri: &uri,
+            req_body: &mut body,
+            qs: None,
+            hs: &headers,
+            decoded_uri_path,
+            raw_uri_path,
+            vh_bucket: Some("user"),
+            content_length: None,
+            mime: None,
+            decoded_content_length: None,
+            transformed_body: None,
+            multipart: None,
+            trailing_headers: None,
+        };
+
+        let cred = cx
+            .v4_check()
+            .await
+            .expect("header auth must be detected")
+            .expect("the raw Host value with its port must be used for verification");
+        assert_eq!(cred.access_key, access_key);
+    }
+
+    #[tokio::test]
+    async fn sig_v2_vhost_presigned_url_with_port_uses_wire_host() {
+        // SigV2 counterpart of the signature-invariant nail: the canonicalized
+        // resource must contain the routed bucket prefix (/user) derived from
+        // the port-carrying vhost host, while verification keeps the raw Host.
+        let host = "user.fs.example.com:19000";
+        let secret_key: crate::auth::SecretKey = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".into();
+
+        let method = Method::GET;
+        let uri = Uri::from_static("https://user.fs.example.com:19000/test.txt");
+        let headers = headers_from_slice(&[("host", host)]);
+        let qs_pairs = vec![
+            ("AWSAccessKeyId".to_owned(), "AKIAIOSFODNN7EXAMPLE".to_owned()),
+            ("Expires".to_owned(), "4294967295".to_owned()),
+        ];
+        let string_to_sign = s3s_sigv2::create_string_to_sign(
+            s3s_sigv2::Mode::PresignedUrl,
+            method.as_str(),
+            "/test.txt",
+            Some(&qs_pairs),
+            &[("host", host)],
+            Some("user"),
+        );
+        assert!(
+            string_to_sign.contains("/user/test.txt"),
+            "the routed bucket prefix must enter the canonicalized resource, got: {string_to_sign:?}"
+        );
+        let signature = s3s_sigv2::calculate_signature(secret_key.expose(), &string_to_sign);
+        let mut qs_pairs = qs_pairs;
+        qs_pairs.push(("Signature".to_owned(), signature.as_str().to_owned()));
+        let qs = OrderedQs::from_vec_unchecked(qs_pairs);
+
+        let mut body = Body::empty();
+        let enabled_config = sig_v2_test_config(true);
+        let auth = crate::auth::SimpleAuth::from_single("AKIAIOSFODNN7EXAMPLE", secret_key.clone());
+        let mut cx = SignatureContext {
+            auth: Some(&auth),
+            config: &enabled_config,
+            req_version: ::http::Version::HTTP_11,
+            req_method: &method,
+            req_uri: &uri,
+            req_body: &mut body,
+            qs: Some(&qs),
+            hs: &headers,
+            decoded_uri_path: "/test.txt",
+            raw_uri_path: "/test.txt",
+            vh_bucket: Some("user"),
+            content_length: None,
+            mime: None,
+            decoded_content_length: None,
+            transformed_body: None,
+            multipart: None,
+            trailing_headers: None,
+        };
+        let cred = cx
+            .v2_check()
+            .await
+            .expect("v2 presigned url must be detected")
+            .expect("vhost presigned SigV2 with a port-carrying host must verify");
+        assert_eq!(cred.access_key, "AKIAIOSFODNN7EXAMPLE");
+
+        // negative control: the SigV2 gate takes precedence over the fix
+        let mut body = Body::empty();
+        let disabled_config = sig_v2_test_config(false);
+        let mut cx = SignatureContext {
+            auth: Some(&auth),
+            config: &disabled_config,
+            req_version: ::http::Version::HTTP_11,
+            req_method: &method,
+            req_uri: &uri,
+            req_body: &mut body,
+            qs: Some(&qs),
+            hs: &headers,
+            decoded_uri_path: "/test.txt",
+            raw_uri_path: "/test.txt",
+            vh_bucket: Some("user"),
+            content_length: None,
+            mime: None,
+            decoded_content_length: None,
+            transformed_body: None,
+            multipart: None,
+            trailing_headers: None,
+        };
+        let err = cx
+            .v2_check()
+            .await
+            .expect("v2 presigned url must be detected")
+            .expect_err("SigV2 must be rejected when disabled");
+        assert_eq!(err.code(), &S3ErrorCode::AccessDenied);
+    }
+
+    #[tokio::test]
     async fn v4_presigned_url_put_with_valid_content_sha256() {
         use crate::auth::SecretKey;
         use crate::auth::SimpleAuth;

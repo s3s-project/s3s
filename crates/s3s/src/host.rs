@@ -43,6 +43,17 @@
 //! fallback happens only for hosts that match the rule above or fail the
 //! bucket-name check; see
 //! [s3s-project/s3s#643](https://github.com/s3s-project/s3s/issues/643).
+//!
+//! # Port-agnostic base-domain matching
+//!
+//! Base-domain matching (in [`SingleDomain`] and [`MultiDomain`]) ignores an
+//! explicit `:<port>` suffix on either the request host or the configured
+//! base domain, so `user.example.com:19000` matches the base domain
+//! `example.com` exactly like `user.example.com` does (and a base domain
+//! configured with a port, e.g. `example.com:19000`, matches the same hosts).
+//! The signature path continues to use the raw `Host` value, and the CNAME
+//! fallback and `with_path_style_hosts` matching also keep the full value —
+//! only routing matches strip the port.
 #![deny(missing_docs)]
 
 use crate::error::S3Result;
@@ -184,6 +195,24 @@ pub enum DomainError {
     ZeroDomains,
 }
 
+/// Strips a validated `:<port>` suffix (all digits, fits in `u16`) from a
+/// host authority.
+///
+/// Routing matches use the stripped form; signature verification and wire
+/// passthrough keep the original value. Malformed ports (`:http`, `:65536`,
+/// empty suffix) and bare bracketed IPv6 literals are returned unchanged;
+/// malformed inputs at worst get partially stripped and then fall into the
+/// existing rejection paths.
+pub(crate) fn strip_port_suffix(host: &str) -> &str {
+    if host.ends_with(']') {
+        return host; // bracketed IPv6 literal without a port
+    }
+    match host.rsplit_once(':') {
+        Some((h, port)) if !port.is_empty() && port.bytes().all(|b| b.is_ascii_digit()) && port.parse::<u16>().is_ok() => h,
+        _ => host,
+    }
+}
+
 /// Naive check for a valid domain.
 fn is_valid_domain(mut s: &str) -> bool {
     if s.is_empty() {
@@ -217,10 +246,14 @@ fn is_valid_domain(mut s: &str) -> bool {
 
 /// Checks whether two base domains would compete for the same host header.
 ///
-/// Two domains overlap when they are equal, or when one is a DNS subdomain of the other.
-/// The suffix must end on a label boundary, matching [`parse_host_header`]: `s3.example.com`
-/// is a subdomain of `example.com`, while `s3-example.com` is an unrelated domain.
+/// Two domains overlap when they are equal (after stripping any explicit
+/// `:<port>` suffix), or when one is a DNS subdomain of the other. The suffix
+/// must end on a label boundary, matching [`parse_host_header`]:
+/// `s3.example.com` is a subdomain of `example.com`, while `s3-example.com`
+/// is an unrelated domain.
 fn is_overlapping(a: &str, b: &str) -> bool {
+    let a = strip_port_suffix(a);
+    let b = strip_port_suffix(b);
     a == b || is_subdomain_of(a, b) || is_subdomain_of(b, a)
 }
 
@@ -230,11 +263,16 @@ fn is_subdomain_of(host: &str, base_domain: &str) -> bool {
 }
 
 fn parse_host_header<'a>(base_domain: &'a str, host: &'a str) -> Option<VirtualHost<'a>> {
-    if host == base_domain {
+    // Port-agnostic matching (see the module docs): an explicit `:<port>`
+    // suffix on either side does not participate in the comparison.
+    let host_part = strip_port_suffix(host);
+    let base_part = strip_port_suffix(base_domain);
+
+    if host_part == base_part {
         return Some(VirtualHost::new(base_domain));
     }
 
-    if let Some(bucket) = host.strip_suffix(base_domain).and_then(|h| h.strip_suffix('.')) {
+    if let Some(bucket) = host_part.strip_suffix(base_part).and_then(|h| h.strip_suffix('.')) {
         return Some(VirtualHost::new(base_domain).with_bucket(bucket));
     }
 
@@ -554,6 +592,123 @@ mod tests {
         let vh = result.unwrap();
         assert_eq!(vh.domain(), "example.com");
         assert_eq!(vh.bucket(), Some("example.com.org"));
+    }
+
+    #[test]
+    fn multi_domain_parse_with_port() {
+        // Regression for <https://github.com/s3s-project/s3s/issues/438>:
+        // an explicit non-default port on the host must not prevent
+        // virtual-hosted-style matching.
+        let md = MultiDomain::new(["fs.example.com"]).unwrap();
+
+        let vh = md.parse_host_header("user.fs.example.com:19000").unwrap();
+        assert_eq!(vh.domain(), "fs.example.com");
+        assert_eq!(vh.bucket(), Some("user"));
+
+        // exact match with a port
+        let vh = md.parse_host_header("fs.example.com:19000").unwrap();
+        assert_eq!(vh.domain(), "fs.example.com");
+        assert_eq!(vh.bucket(), None);
+
+        // a default port is treated like any other port
+        let vh = md.parse_host_header("user.fs.example.com:443").unwrap();
+        assert_eq!(vh.domain(), "fs.example.com");
+        assert_eq!(vh.bucket(), Some("user"));
+    }
+
+    #[test]
+    fn single_domain_parse_with_port() {
+        let sd = SingleDomain::new("fs.example.com").unwrap();
+
+        let vh = sd.parse_host_header("user.fs.example.com:19000").unwrap();
+        assert_eq!(vh.domain(), "fs.example.com");
+        assert_eq!(vh.bucket(), Some("user"));
+    }
+
+    #[test]
+    fn base_domain_with_port_matches_requests() {
+        // Base domains may carry a port (the rustfs SERVER_DOMAINS
+        // workaround); matching is port-agnostic on both sides.
+        let sd = SingleDomain::new("fs.example.com:19000").unwrap();
+
+        // client omits the port
+        let vh = sd.parse_host_header("user.fs.example.com").unwrap();
+        assert_eq!(vh.domain(), "fs.example.com:19000");
+        assert_eq!(vh.bucket(), Some("user"));
+
+        // client sends the same port
+        let vh = sd.parse_host_header("user.fs.example.com:19000").unwrap();
+        assert_eq!(vh.domain(), "fs.example.com:19000");
+        assert_eq!(vh.bucket(), Some("user"));
+
+        // a different port still matches exactly (ports do not participate)
+        let vh = sd.parse_host_header("fs.example.com:8080").unwrap();
+        assert_eq!(vh.domain(), "fs.example.com:19000");
+        assert_eq!(vh.bucket(), None);
+    }
+
+    #[test]
+    fn parse_with_malformed_ports_falls_back() {
+        // Malformed ports are not stripped; the host fails to match any
+        // base domain, and the non-numeric port makes it an invalid host
+        // (rejected as today — the helper must not change this).
+        let md = MultiDomain::new(["fs.example.com"]).unwrap();
+
+        for host in [
+            "user.fs.example.com:http",
+            "user.fs.example.com:65536",
+            "user.fs.example.com:",
+        ] {
+            let err = md.parse_host_header(host).unwrap_err();
+            assert_eq!(err.code(), &S3ErrorCode::InvalidRequest, "{host:?}");
+        }
+    }
+
+    #[test]
+    fn parse_without_false_strip() {
+        // A host ending in the base domain suffix-matches regardless of any
+        // embedded port: the full prefix becomes the bucket (with the port).
+        // This is unchanged from before the port-agnostic fix — the strip
+        // only affects the base-domain comparison, not suffix semantics.
+        let md = MultiDomain::new(["fs.example.com"]).unwrap();
+
+        let vh = md.parse_host_header("evil.fs.example.com:1234.fs.example.com").unwrap();
+        assert_eq!(vh.bucket(), Some("evil.fs.example.com:1234"));
+    }
+
+    #[test]
+    fn multi_domain_new_overlap_ignores_ports() {
+        // The overlap check runs on the port-stripped forms, so port variants
+        // of the same domain cannot coexist (they would route the same hosts).
+        for domains in [
+            ["example.com", "example.com:8080"],
+            ["a.com:1", "a.com:2"],
+            ["a.com:1", "b.a.com:2"],
+        ] {
+            let err = MultiDomain::new(domains).unwrap_err();
+            assert_eq!(err, DomainError::OverlappingSubdomains, "{domains:?}");
+        }
+
+        // unrelated domains stay accepted, port or not
+        for domains in [
+            ["example.com:8080", "example.org:8080"],
+            ["example.com:8080", "s3-example.com:8080"],
+        ] {
+            let md = MultiDomain::new(domains).unwrap();
+            assert_eq!(md.base_domains, domains, "{domains:?}");
+        }
+    }
+
+    #[test]
+    fn parse_with_port_and_bracketed_ipv6_stays_rejected() {
+        // Not fixed by this change (out of scope): bracketed IPv6 literals
+        // remain invalid hosts; the helper must not make them worse.
+        let md = MultiDomain::new(["fs.example.com"]).unwrap();
+
+        for host in ["[2001:db8::1]:443", "[::1]", "[::1]:8080"] {
+            let err = md.parse_host_header(host).unwrap_err();
+            assert_eq!(err.code(), &S3ErrorCode::InvalidRequest, "{host:?}");
+        }
     }
 
     #[test]
