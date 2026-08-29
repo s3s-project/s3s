@@ -59,6 +59,17 @@
 //! - **Host**: None (assumes path-style requests)
 //! - **Route**: None (no custom routes)
 //! - **Validation**: None (uses AWS-compatible validation)
+//!
+//! # Authentication is required for production deployments
+//!
+//! Without [`set_auth`](S3ServiceBuilder::set_auth), the service accepts anonymous
+//! (unsigned) requests and **skips authorization entirely**: every S3 operation is
+//! open to any client that can reach the service, with no access checks performed.
+//! Signed requests fail with `NotImplemented` because no authentication provider is
+//! configured. A forgotten `set_auth` therefore turns the service into a publicly
+//! readable and writable endpoint. Call [`set_auth`](S3ServiceBuilder::set_auth) in
+//! any deployment that is not fully trusted, and prefer configuring an access
+//! provider via [`set_access`](S3ServiceBuilder::set_access) as well.
 
 use crate::access::S3Access;
 use crate::auth::S3Auth;
@@ -242,8 +253,11 @@ impl S3ServiceBuilder {
     /// The authentication provider verifies AWS Signature Version 4 or Version 2 signatures
     /// on incoming requests.
     ///
-    /// If not set, unsigned requests are allowed, but signed requests will fail with
-    /// `NotImplemented` ("This service has no authentication provider").
+    /// **Important**: authentication is required before exposing the service beyond a
+    /// trusted network. If not set, unsigned (anonymous) requests are accepted and
+    /// authorization is skipped entirely, so every S3 operation is open to any client;
+    /// signed requests fail with `NotImplemented` ("This service has no authentication
+    /// provider").
     ///
     /// # Example
     ///
