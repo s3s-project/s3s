@@ -10,9 +10,8 @@
 //!
 //! See <https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-query-string-auth.html>
 //!
+//! The canonicalization and signing logic lives in the [`s3s_sigv4`] crate;
+//! this module keeps only the streaming upload decoder.
 
 mod upload_stream;
 pub use self::upload_stream::*;
-
-mod methods;
-pub use self::methods::*;

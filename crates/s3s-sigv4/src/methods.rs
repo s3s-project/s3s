@@ -1,20 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
-//! Signature v4 methods
+//! Canonicalization and signing for AWS Signature Version 4.
 
-use s3s_sigv4::AmzDate;
-
-use crate::auth::SecretKey;
-use crate::auth::signature::Signature;
-use crate::utils::crypto::{Sha256Sum, hex_sha256, hex_sha256_chunk, hmac_sha256};
-use crate::utils::stable_sort_by_first;
-
-use hyper::Method;
-use hyper::body::Bytes;
 use smallvec::SmallVec;
 use stdx::str::StrExt;
 use zeroize::Zeroize;
+
+use crate::AmzDate;
+use crate::crypto::{hex_bytes32, hex_sha256, hex_sha256_chunk, hmac_sha256};
 
 /// custom uri encode
 #[allow(clippy::indexing_slicing, clippy::inline_always, clippy::unwrap_used)]
@@ -94,7 +88,7 @@ fn normalize_header_value(ans: &mut String, value: &str) {
 }
 
 /// sha256 hash of an empty string
-pub(crate) const EMPTY_STRING_SHA256_HASH: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+pub const EMPTY_STRING_SHA256_HASH: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
 /// Payload
 #[derive(Debug, Clone, Copy)]
@@ -113,13 +107,22 @@ pub enum Payload<'a> {
 
 #[cfg(test)]
 impl Payload<'_> {
+    /// Empty single-chunk payload (the SHA-256 of an empty string).
+    #[must_use]
     pub fn empty() -> Self {
         Payload::SingleChunk(EMPTY_STRING_SHA256_HASH)
     }
 }
 
+fn stable_sort_by_first<T>(v: &mut [(T, T)])
+where
+    T: Ord,
+{
+    v.sort_by(|lhs, rhs| lhs.0.cmp(&rhs.0));
+}
+
 fn create_canonical_request_with_uri_mode<'a>(
-    method: &Method,
+    method: &str,
     uri_path: &str,
     decoded_query_strings: &[(impl AsRef<str>, impl AsRef<str>)],
     signed_headers: impl AsRef<[(&'a str, &'a str)]>,
@@ -130,7 +133,7 @@ fn create_canonical_request_with_uri_mode<'a>(
 
     {
         // <HTTPMethod>\n
-        ans.push_str(method.as_str());
+        ans.push_str(method);
         ans.push('\n');
     }
 
@@ -255,7 +258,7 @@ fn create_canonical_request_with_uri_mode<'a>(
 /// create canonical request
 #[must_use]
 pub fn create_canonical_request<'a>(
-    method: &Method,
+    method: &str,
     uri_path: &str,
     decoded_query_strings: &[(impl AsRef<str>, impl AsRef<str>)],
     signed_headers: impl AsRef<[(&'a str, &'a str)]>,
@@ -264,8 +267,10 @@ pub fn create_canonical_request<'a>(
     create_canonical_request_with_uri_mode(method, uri_path, decoded_query_strings, signed_headers, payload, false)
 }
 
-pub(crate) fn create_canonical_request_with_raw_uri_path<'a>(
-    method: &Method,
+/// create canonical request using the raw (unencoded) URI path
+#[must_use]
+pub fn create_canonical_request_with_raw_uri_path<'a>(
+    method: &str,
     raw_uri_path: &str,
     decoded_query_strings: &[(impl AsRef<str>, impl AsRef<str>)],
     signed_headers: impl AsRef<[(&'a str, &'a str)]>,
@@ -309,12 +314,13 @@ pub fn create_string_to_sign(canonical_request: &str, amz_date: &AmzDate, region
 }
 
 /// create `string_to_sign` of a chunk
+#[must_use]
 pub fn create_chunk_string_to_sign(
     amz_date: &AmzDate,
     region: &str,
     service: &str,
     prev_signature: &str,
-    chunk_data: &[Bytes],
+    chunk_data: &[impl AsRef<[u8]>],
 ) -> String {
     let mut ans = String::with_capacity(256);
 
@@ -353,6 +359,7 @@ pub fn create_chunk_string_to_sign(
 }
 
 /// create `string_to_sign` of the final trailer block (0-chunk with trailing headers)
+#[must_use]
 pub fn create_trailer_string_to_sign(
     amz_date: &AmzDate,
     region: &str,
@@ -393,12 +400,12 @@ pub fn create_trailer_string_to_sign(
 ///
 /// `kSigning = HMAC(HMAC(HMAC(HMAC("AWS4" + secret, date), region), service), "aws4_request")`
 #[must_use]
-pub(crate) fn derive_signing_key(secret_key: &SecretKey, amz_date: &AmzDate, region: &str, service: &str) -> [u8; 32] {
+pub fn derive_signing_key(secret_key: impl AsRef<[u8]>, amz_date: &AmzDate, region: &str, service: &str) -> [u8; 32] {
+    let secret_key = secret_key.as_ref();
     let mut secret = {
-        let secret_key = secret_key.expose();
         let mut buf = <SmallVec<[u8; 128]>>::with_capacity(secret_key.len().saturating_add(4));
         buf.extend_from_slice(b"AWS4");
-        buf.extend_from_slice(secret_key.as_bytes());
+        buf.extend_from_slice(secret_key);
         buf
     };
 
@@ -423,23 +430,23 @@ pub(crate) fn derive_signing_key(secret_key: &SecretKey, amz_date: &AmzDate, reg
 #[must_use]
 pub fn calculate_signature(
     string_to_sign: &str,
-    secret_key: &SecretKey,
+    secret_key: impl AsRef<[u8]>,
     amz_date: &AmzDate,
     region: &str,
     service: &str,
-) -> Signature {
+) -> String {
     let signing_key = derive_signing_key(secret_key, amz_date, region, service);
-    Signature::from_computed(calculate_signature_with_key(string_to_sign, &signing_key).to_hex_string())
+    hex_bytes32(&calculate_signature_with_key(string_to_sign, &signing_key), str::to_owned)
 }
 
 /// calculate signature with a derived signing key
 #[must_use]
-pub(crate) fn calculate_signature_with_key(string_to_sign: &str, signing_key: &[u8; 32]) -> Sha256Sum {
-    Sha256Sum::from_bytes(hmac_sha256(signing_key, string_to_sign))
+pub fn calculate_signature_with_key(string_to_sign: &str, signing_key: &[u8; 32]) -> [u8; 32] {
+    hmac_sha256(signing_key, string_to_sign)
 }
 
 fn create_presigned_canonical_request_with_uri_mode<'a>(
-    method: &Method,
+    method: &str,
     uri_path: &str,
     decoded_query_strings: &[(impl AsRef<str>, impl AsRef<str>)],
     signed_headers: impl AsRef<[(&'a str, &'a str)]>,
@@ -448,7 +455,7 @@ fn create_presigned_canonical_request_with_uri_mode<'a>(
     let mut ans = String::with_capacity(256);
     {
         // <HTTPMethod>\n
-        ans.push_str(method.as_str());
+        ans.push_str(method);
         ans.push('\n');
     }
     {
@@ -560,8 +567,9 @@ fn create_presigned_canonical_request_with_uri_mode<'a>(
 }
 
 /// create presigned canonical request
+#[must_use]
 pub fn create_presigned_canonical_request<'a>(
-    method: &Method,
+    method: &str,
     uri_path: &str,
     decoded_query_strings: &[(impl AsRef<str>, impl AsRef<str>)],
     signed_headers: impl AsRef<[(&'a str, &'a str)]>,
@@ -569,8 +577,10 @@ pub fn create_presigned_canonical_request<'a>(
     create_presigned_canonical_request_with_uri_mode(method, uri_path, decoded_query_strings, signed_headers, false)
 }
 
-pub(crate) fn create_presigned_canonical_request_with_raw_uri_path<'a>(
-    method: &Method,
+/// create presigned canonical request using the raw (unencoded) URI path
+#[must_use]
+pub fn create_presigned_canonical_request_with_raw_uri_path<'a>(
+    method: &str,
     raw_uri_path: &str,
     decoded_query_strings: &[(impl AsRef<str>, impl AsRef<str>)],
     signed_headers: impl AsRef<[(&'a str, &'a str)]>,
@@ -582,14 +592,19 @@ pub(crate) fn create_presigned_canonical_request_with_raw_uri_path<'a>(
 mod tests {
     use super::*;
 
-    use crate::http::OrderedQs;
-    use crate::utils::crypto::hex_sha256_string;
-    use s3s_sigv4::PresignedUrlV4;
+    const SECRET_KEY: &str = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+
+    fn hex_sha256_string(data: &[u8]) -> String {
+        hex_sha256(data, str::to_owned)
+    }
+
+    fn header_auth_signature(string_to_sign: &str, amz_date: &AmzDate, region: &str, service: &str) -> String {
+        calculate_signature(string_to_sign, SECRET_KEY, amz_date, region, service)
+    }
 
     #[test]
     fn example_get_object() {
         // let access_key_id = "AKIAIOSFODNN7EXAMPLE";
-        let secret_access_key = SecretKey::from("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
         let timestamp = "20130524T000000Z";
         // let bucket = "examplebucket";
         let region = "us-east-1";
@@ -603,10 +618,10 @@ mod tests {
             ("x-amz-date", "20130524T000000Z"),
         ];
 
-        let method = Method::GET;
+        let method = "GET";
         let qs: &[(String, String)] = &[];
 
-        let canonical_request = create_canonical_request(&method, path, qs, headers, Payload::empty());
+        let canonical_request = create_canonical_request(method, path, qs, headers, Payload::empty());
 
         assert_eq!(
             canonical_request,
@@ -636,14 +651,13 @@ mod tests {
             )
         );
 
-        let signature = calculate_signature(&string_to_sign, &secret_access_key, &date, region, service);
-        assert_eq!(signature.as_str(), "f0e8bdb87c964420e857bd35b5d6ed310bd44f0170aba48dd91039c6036bdb41");
+        let signature = header_auth_signature(&string_to_sign, &date, region, service);
+        assert_eq!(signature, "f0e8bdb87c964420e857bd35b5d6ed310bd44f0170aba48dd91039c6036bdb41");
     }
 
     #[test]
     fn example_put_object_single_chunk() {
         // let access_key_id = "AKIAIOSFODNN7EXAMPLE";
-        let secret_access_key = SecretKey::from("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
         let timestamp = "20130524T000000Z";
         // let bucket = "examplebucket";
         let region = "us-east-1";
@@ -658,11 +672,11 @@ mod tests {
             ("x-amz-storage-class", "REDUCED_REDUNDANCY"),
         ];
 
-        let method = Method::PUT;
-        let payload_checksum = &hex_sha256_string("Welcome to Amazon S3.".as_bytes());
+        let method = "PUT";
+        let payload_checksum = hex_sha256_string("Welcome to Amazon S3.".as_bytes());
         let qs: &[(String, String)] = &[];
 
-        let canonical_request = create_canonical_request(&method, path, qs, headers, Payload::SingleChunk(payload_checksum));
+        let canonical_request = create_canonical_request(method, path, qs, headers, Payload::SingleChunk(&payload_checksum));
 
         assert_eq!(
             canonical_request,
@@ -693,14 +707,13 @@ mod tests {
             )
         );
 
-        let signature = calculate_signature(&string_to_sign, &secret_access_key, &date, region, service);
-        assert_eq!(signature.as_str(), "98ad721746da40c64f1a55b78f14c238d841ea1380cd77a1b5971af0ece108bd");
+        let signature = header_auth_signature(&string_to_sign, &date, region, service);
+        assert_eq!(signature, "98ad721746da40c64f1a55b78f14c238d841ea1380cd77a1b5971af0ece108bd");
     }
 
     #[test]
     fn example_put_object_multiple_chunks_seed_signature() {
         // let access_key_id = "AKIAIOSFODNN7EXAMPLE";
-        let secret_access_key = SecretKey::from("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
         let timestamp = "20130524T000000Z";
         // let bucket = "examplebucket";
         let region = "us-east-1";
@@ -717,10 +730,10 @@ mod tests {
             ("x-amz-storage-class", "REDUCED_REDUNDANCY"),
         ];
 
-        let method = Method::PUT;
+        let method = "PUT";
         let qs: &[(String, String)] = &[];
 
-        let canonical_request = create_canonical_request(&method, path, qs, headers, Payload::MultipleChunks);
+        let canonical_request = create_canonical_request(method, path, qs, headers, Payload::MultipleChunks);
 
         assert_eq!(
             canonical_request,
@@ -753,13 +766,12 @@ mod tests {
             )
         );
 
-        let signature = calculate_signature(&string_to_sign, &secret_access_key, &date, region, service);
-        assert_eq!(signature.as_str(), "4f232c4386841ef735655705268965c44a0e4690baa4adea153f7db9fa80a0a9",);
+        let signature = header_auth_signature(&string_to_sign, &date, region, service);
+        assert_eq!(signature, "4f232c4386841ef735655705268965c44a0e4690baa4adea153f7db9fa80a0a9");
     }
 
     #[test]
     fn example_put_object_multiple_chunks_chunk_signature() {
-        let secret_access_key = SecretKey::from("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
         let timestamp = "20130524T000000Z";
         let region = "us-east-1";
         let service = "s3";
@@ -767,8 +779,8 @@ mod tests {
 
         let seed_signature = "4f232c4386841ef735655705268965c44a0e4690baa4adea153f7db9fa80a0a9";
 
-        let chunk1_string_to_sign =
-            create_chunk_string_to_sign(&date, region, service, seed_signature, &[Bytes::from(vec![b'a'; 64 * 1024])]);
+        let chunk1: Vec<u8> = vec![b'a'; 64 * 1024];
+        let chunk1_string_to_sign = create_chunk_string_to_sign(&date, region, service, seed_signature, &[chunk1]);
         assert_eq!(
             chunk1_string_to_sign,
             concat!(
@@ -781,14 +793,11 @@ mod tests {
             )
         );
 
-        let chunk1_signature = calculate_signature(&chunk1_string_to_sign, &secret_access_key, &date, region, service);
-        assert_eq!(
-            chunk1_signature.as_str(),
-            "ad80c730a21e5b8d04586a2213dd63b9a0e99e0e2307b0ade35a65485a288648"
-        );
+        let chunk1_signature = header_auth_signature(&chunk1_string_to_sign, &date, region, service);
+        assert_eq!(chunk1_signature, "ad80c730a21e5b8d04586a2213dd63b9a0e99e0e2307b0ade35a65485a288648");
 
-        let chunk2_string_to_sign =
-            create_chunk_string_to_sign(&date, region, service, chunk1_signature.as_str(), &[Bytes::from(vec![b'a'; 1024])]);
+        let chunk2: Vec<u8> = vec![b'a'; 1024];
+        let chunk2_string_to_sign = create_chunk_string_to_sign(&date, region, service, &chunk1_signature, &[chunk2]);
         assert_eq!(
             chunk2_string_to_sign,
             concat!(
@@ -801,13 +810,10 @@ mod tests {
             )
         );
 
-        let chunk2_signature = calculate_signature(&chunk2_string_to_sign, &secret_access_key, &date, region, service);
-        assert_eq!(
-            chunk2_signature.as_str(),
-            "0055627c9e194cb4542bae2aa5492e3c1575bbb81b612b7d234b86a503ef5497"
-        );
+        let chunk2_signature = header_auth_signature(&chunk2_string_to_sign, &date, region, service);
+        assert_eq!(chunk2_signature, "0055627c9e194cb4542bae2aa5492e3c1575bbb81b612b7d234b86a503ef5497");
 
-        let chunk3_string_to_sign = create_chunk_string_to_sign(&date, region, service, chunk2_signature.as_str(), &[]);
+        let chunk3_string_to_sign = create_chunk_string_to_sign(&date, region, service, &chunk2_signature, &[] as &[Vec<u8>]);
         assert_eq!(
             chunk3_string_to_sign,
             concat!(
@@ -820,40 +826,32 @@ mod tests {
             )
         );
 
-        let chunk3_signature = calculate_signature(&chunk3_string_to_sign, &secret_access_key, &date, region, service);
-        assert_eq!(
-            chunk3_signature.as_str(),
-            "b6c6ea8a5354eaf15b3cb7646744f4275b71ea724fed81ceb9323e279d449df9"
-        );
+        let chunk3_signature = header_auth_signature(&chunk3_string_to_sign, &date, region, service);
+        assert_eq!(chunk3_signature, "b6c6ea8a5354eaf15b3cb7646744f4275b71ea724fed81ceb9323e279d449df9");
     }
 
     #[test]
     fn calculate_signature_with_key_matches_calculate_signature() {
-        use crate::utils::crypto::Sha256Sum;
-
-        let secret_access_key = SecretKey::from("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
         let timestamp = "20130524T000000Z";
         let region = "us-east-1";
         let service = "s3";
         let date = AmzDate::parse(timestamp).unwrap();
 
         let seed_signature = "4f232c4386841ef735655705268965c44a0e4690baa4adea153f7db9fa80a0a9";
-        let string_to_sign =
-            create_chunk_string_to_sign(&date, region, service, seed_signature, &[Bytes::from(vec![b'a'; 64 * 1024])]);
+        let chunk: Vec<u8> = vec![b'a'; 64 * 1024];
+        let string_to_sign = create_chunk_string_to_sign(&date, region, service, seed_signature, &[chunk]);
 
-        let signature = calculate_signature(&string_to_sign, &secret_access_key, &date, region, service);
-        let signing_key = derive_signing_key(&secret_access_key, &date, region, service);
+        let signature = header_auth_signature(&string_to_sign, &date, region, service);
+        let signing_key = derive_signing_key(SECRET_KEY, &date, region, service);
         let raw = calculate_signature_with_key(&string_to_sign, &signing_key);
 
-        let expected = Sha256Sum::from_hex(signature.as_str()).unwrap();
-        assert_eq!(expected, raw);
+        assert_eq!(crate::crypto::hex_bytes32(&raw, str::to_owned), signature);
     }
 
     #[test]
     fn example_put_object_multiple_chunks_with_trailer_seed_signature() {
         // Example from AWS docs: https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-streaming-trailers.html
         // let access_key_id = "AKIAIOSFODNN7EXAMPLE";
-        let secret_access_key = SecretKey::from("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
         let timestamp = "20130524T000000Z";
         let region = "us-east-1";
         let service = "s3";
@@ -870,10 +868,10 @@ mod tests {
             ("x-amz-trailer", "x-amz-checksum-crc32c"),
         ];
 
-        let method = Method::PUT;
+        let method = "PUT";
         let qs: &[(String, String)] = &[];
 
-        let canonical_request = create_canonical_request(&method, path, qs, headers, Payload::MultipleChunksWithTrailer);
+        let canonical_request = create_canonical_request(method, path, qs, headers, Payload::MultipleChunksWithTrailer);
 
         assert_eq!(
             canonical_request,
@@ -906,14 +904,13 @@ mod tests {
             )
         );
 
-        let signature = calculate_signature(&string_to_sign, &secret_access_key, &date, region, service);
-        assert_eq!(signature.as_str(), "106e2a8a18243abcf37539882f36619c00e2dfc72633413f02d3b74544bfeb8e");
+        let signature = header_auth_signature(&string_to_sign, &date, region, service);
+        assert_eq!(signature, "106e2a8a18243abcf37539882f36619c00e2dfc72633413f02d3b74544bfeb8e");
     }
 
     #[test]
     fn example_put_object_unsigned_multiple_chunks_with_trailer_seed_signature() {
         // Hypothetical canonical request for STREAMING-UNSIGNED-PAYLOAD-TRAILER.
-        let secret_access_key = SecretKey::from("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
         let timestamp = "20130524T000000Z";
         let region = "us-east-1";
         let service = "s3";
@@ -929,10 +926,10 @@ mod tests {
             ("x-amz-trailer", "x-amz-checksum-crc32c"),
         ];
 
-        let method = Method::PUT;
+        let method = "PUT";
         let qs: &[(String, String)] = &[];
 
-        let canonical_request = create_canonical_request(&method, path, qs, headers, Payload::UnsignedMultipleChunksWithTrailer);
+        let canonical_request = create_canonical_request(method, path, qs, headers, Payload::UnsignedMultipleChunksWithTrailer);
 
         assert_eq!(
             canonical_request,
@@ -957,13 +954,12 @@ mod tests {
         let string_to_sign = create_string_to_sign(&canonical_request, &date, region, service);
 
         // We don't assert the exact signature value here; just ensure it can be computed.
-        let _signature = calculate_signature(&string_to_sign, &secret_access_key, &date, region, service);
+        let _signature = header_auth_signature(&string_to_sign, &date, region, service);
     }
 
     #[test]
     fn example_put_object_multiple_chunks_with_trailer_chunk_signature() {
         // Example from AWS docs: https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-streaming-trailers.html
-        let secret_access_key = SecretKey::from("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
         let timestamp = "20130524T000000Z";
         let region = "us-east-1";
         let service = "s3";
@@ -972,8 +968,8 @@ mod tests {
         let seed_signature = "106e2a8a18243abcf37539882f36619c00e2dfc72633413f02d3b74544bfeb8e";
 
         // Chunk 1: 65536 bytes of 'a'
-        let chunk1_string_to_sign =
-            create_chunk_string_to_sign(&date, region, service, seed_signature, &[Bytes::from(vec![b'a'; 64 * 1024])]);
+        let chunk1: Vec<u8> = vec![b'a'; 64 * 1024];
+        let chunk1_string_to_sign = create_chunk_string_to_sign(&date, region, service, seed_signature, &[chunk1]);
         assert_eq!(
             chunk1_string_to_sign,
             concat!(
@@ -986,15 +982,12 @@ mod tests {
             )
         );
 
-        let chunk1_signature = calculate_signature(&chunk1_string_to_sign, &secret_access_key, &date, region, service);
-        assert_eq!(
-            chunk1_signature.as_str(),
-            "b474d8862b1487a5145d686f57f013e54db672cee1c953b3010fb58501ef5aa2"
-        );
+        let chunk1_signature = header_auth_signature(&chunk1_string_to_sign, &date, region, service);
+        assert_eq!(chunk1_signature, "b474d8862b1487a5145d686f57f013e54db672cee1c953b3010fb58501ef5aa2");
 
         // Chunk 2: 1024 bytes of 'a'
-        let chunk2_string_to_sign =
-            create_chunk_string_to_sign(&date, region, service, chunk1_signature.as_str(), &[Bytes::from(vec![b'a'; 1024])]);
+        let chunk2: Vec<u8> = vec![b'a'; 1024];
+        let chunk2_string_to_sign = create_chunk_string_to_sign(&date, region, service, &chunk1_signature, &[chunk2]);
         assert_eq!(
             chunk2_string_to_sign,
             concat!(
@@ -1007,14 +1000,11 @@ mod tests {
             )
         );
 
-        let chunk2_signature = calculate_signature(&chunk2_string_to_sign, &secret_access_key, &date, region, service);
-        assert_eq!(
-            chunk2_signature.as_str(),
-            "1c1344b170168f8e65b41376b44b20fe354e373826ccbbe2c1d40a8cae51e5c7"
-        );
+        let chunk2_signature = header_auth_signature(&chunk2_string_to_sign, &date, region, service);
+        assert_eq!(chunk2_signature, "1c1344b170168f8e65b41376b44b20fe354e373826ccbbe2c1d40a8cae51e5c7");
 
         // Chunk 3: 0 bytes
-        let chunk3_string_to_sign = create_chunk_string_to_sign(&date, region, service, chunk2_signature.as_str(), &[]);
+        let chunk3_string_to_sign = create_chunk_string_to_sign(&date, region, service, &chunk2_signature, &[] as &[Vec<u8>]);
         assert_eq!(
             chunk3_string_to_sign,
             concat!(
@@ -1027,17 +1017,13 @@ mod tests {
             )
         );
 
-        let chunk3_signature = calculate_signature(&chunk3_string_to_sign, &secret_access_key, &date, region, service);
-        assert_eq!(
-            chunk3_signature.as_str(),
-            "2ca2aba2005185cf7159c6277faf83795951dd77a3a99e6e65d5c9f85863f992"
-        );
+        let chunk3_signature = header_auth_signature(&chunk3_string_to_sign, &date, region, service);
+        assert_eq!(chunk3_signature, "2ca2aba2005185cf7159c6277faf83795951dd77a3a99e6e65d5c9f85863f992");
     }
 
     #[test]
     fn example_put_object_multiple_chunks_with_trailer_trailer_signature() {
         // Example from AWS docs: https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-streaming-trailers.html
-        let secret_access_key = SecretKey::from("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
         let timestamp = "20130524T000000Z";
         let region = "us-east-1";
         let service = "s3";
@@ -1059,17 +1045,13 @@ mod tests {
             )
         );
 
-        let trailer_signature = calculate_signature(&trailer_string_to_sign, &secret_access_key, &date, region, service);
-        assert_eq!(
-            trailer_signature.as_str(),
-            "d81f82fc3505edab99d459891051a732e8730629a2e4a59689829ca17fe2e435"
-        );
+        let trailer_signature = header_auth_signature(&trailer_string_to_sign, &date, region, service);
+        assert_eq!(trailer_signature, "d81f82fc3505edab99d459891051a732e8730629a2e4a59689829ca17fe2e435");
     }
 
     #[test]
     fn example_get_bucket_lifecycle_configuration() {
         // let access_key_id = "AKIAIOSFODNN7EXAMPLE";
-        let secret_access_key = SecretKey::from("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
         let timestamp = "20130524T000000Z";
         // let bucket = "examplebucket";
         let region = "us-east-1";
@@ -1084,9 +1066,9 @@ mod tests {
 
         let query_strings = &[("lifecycle", "")];
 
-        let method = Method::GET;
+        let method = "GET";
 
-        let canonical_request = create_canonical_request(&method, path, query_strings, headers, Payload::empty());
+        let canonical_request = create_canonical_request(method, path, query_strings, headers, Payload::empty());
         assert_eq!(
             canonical_request,
             concat!(
@@ -1114,14 +1096,13 @@ mod tests {
             )
         );
 
-        let signature = calculate_signature(&string_to_sign, &secret_access_key, &date, region, service);
-        assert_eq!(signature.as_str(), "fea454ca298b7da1c68078a5d1bdbfbbe0d65c699e0f91ac7a200a0136783543");
+        let signature = header_auth_signature(&string_to_sign, &date, region, service);
+        assert_eq!(signature, "fea454ca298b7da1c68078a5d1bdbfbbe0d65c699e0f91ac7a200a0136783543");
     }
 
     #[test]
     fn example_list_objects() {
         // let access_key_id = "AKIAIOSFODNN7EXAMPLE";
-        let secret_access_key = SecretKey::from("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
         let timestamp = "20130524T000000Z";
         // let bucket = "examplebucket";
         let region = "us-east-1";
@@ -1136,9 +1117,9 @@ mod tests {
 
         let query_strings = &[("max-keys", "2"), ("prefix", "J")];
 
-        let method = Method::GET;
+        let method = "GET";
 
-        let canonical_request = create_canonical_request(&method, path, query_strings, headers, Payload::empty());
+        let canonical_request = create_canonical_request(method, path, query_strings, headers, Payload::empty());
 
         assert_eq!(
             canonical_request,
@@ -1167,28 +1148,14 @@ mod tests {
             )
         );
 
-        let signature = calculate_signature(&string_to_sign, &secret_access_key, &date, region, service);
-        assert_eq!(signature.as_str(), "34b48302e7b5fa45bde8084f4b7868a86f0a534bc59db6670ed5711ef69dc6f7");
+        let signature = header_auth_signature(&string_to_sign, &date, region, service);
+        assert_eq!(signature, "34b48302e7b5fa45bde8084f4b7868a86f0a534bc59db6670ed5711ef69dc6f7");
     }
 
     #[test]
     fn example_presigned_url() {
-        use hyper::Uri;
-
         // let access_key_id = "AKIAIOSFODNN7EXAMPLE";
-        let secret_access_key = SecretKey::from("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
-
-        let method = Method::GET;
-
-        let uri = Uri::from_static(concat!(
-            "https://s3.amazonaws.com/test.txt",
-            "?X-Amz-Algorithm=AWS4-HMAC-SHA256",
-            "&X-Amz-Credential=AKIAIOSFODNN7EXAMPLE%2F20130524%2Fus-east-1%2Fs3%2Faws4_request",
-            "&X-Amz-Date=20130524T000000Z",
-            "&X-Amz-Expires=86400",
-            "&X-Amz-SignedHeaders=host",
-            "&X-Amz-Signature=aeeed9bbccd4d02ee5c0109b86d86835f995330da4c265957d157751f604d404"
-        ));
+        let method = "GET";
 
         let headers = [("host", "examplebucket.s3.amazonaws.com")];
 
@@ -1201,11 +1168,9 @@ mod tests {
             ("X-Amz-Signature", "aeeed9bbccd4d02ee5c0109b86d86835f995330da4c265957d157751f604d404"),
         ];
 
-        let qs = OrderedQs::from_vec_unchecked(query_strings.iter().map(|&(n, v)| (n.to_owned(), v.to_owned())).collect());
+        let info = crate::PresignedUrlV4::parse(query_strings, 604_800).unwrap();
 
-        let info = PresignedUrlV4::parse(qs.as_ref(), crate::config::DEFAULT_PRESIGNED_URL_MAX_EXPIRES_SECS).unwrap();
-
-        let canonical_request = create_presigned_canonical_request(&method, uri.path(), query_strings, headers);
+        let canonical_request = create_presigned_canonical_request(method, "/test.txt", query_strings, headers);
 
         assert_eq!(
             canonical_request,
@@ -1238,27 +1203,18 @@ mod tests {
 
         let signature = calculate_signature(
             &string_to_sign,
-            &secret_access_key,
+            SECRET_KEY,
             &info.amz_date,
             info.credential.aws_region,
             info.credential.aws_service,
         );
-        assert_eq!(signature.as_str(), "aeeed9bbccd4d02ee5c0109b86d86835f995330da4c265957d157751f604d404");
-        assert_eq!(signature.as_str(), info.signature);
+        assert_eq!(signature, "aeeed9bbccd4d02ee5c0109b86d86835f995330da4c265957d157751f604d404");
+        assert_eq!(signature, info.signature);
     }
 
     #[test]
     fn special_20230204() {
-        use hyper::header::HeaderName;
-        use hyper::header::HeaderValue;
-
-        let mut req = http::Request::<hyper::body::Bytes>::default();
-
-        *req.method_mut() = Method::GET;
-        *req.uri_mut() = hyper::Uri::from_static(
-            "http://localhost:8014/minio-java-test-1gqr1v4?prefix=prefix&suffix=suffix&events=s3%3AObjectCreated%3A%2A&events=s3%3AObjectAccessed%3A%2A",
-        );
-
+        // Regression: repeated query parameters (events=...&events=...)
         let x_amz_date = "20230204T155111Z";
         let headers = [
             ("content-md5", "1B2M2Y8AsgTpgAmY7PhCfg=="),
@@ -1266,63 +1222,36 @@ mod tests {
             ("x-amz-content-sha256", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
             ("x-amz-date", x_amz_date),
         ];
-        for (name, value) in &headers {
-            req.headers_mut()
-                .insert(HeaderName::from_static(name), HeaderValue::from_static(value));
-        }
 
         let payload = Payload::empty();
         let date = AmzDate::parse(x_amz_date).unwrap();
         let region = "us-east-1";
         let service = "s3";
 
-        let secret_access_key = SecretKey::from("minioadmin");
-
         {
-            let uri_path = req.uri().path();
-            let qs = req.uri().query().map(|q| OrderedQs::parse(q).unwrap());
-            let query_strings: &[_] = qs.as_ref().map_or(&[], |x| x.as_ref());
+            let uri_path = "/minio-java-test-1gqr1v4";
+            let query_strings = &[
+                ("prefix", "prefix"),
+                ("suffix", "suffix"),
+                ("events", "s3:ObjectCreated:*"),
+                ("events", "s3:ObjectAccessed:*"),
+            ];
 
-            let canonical_request = create_canonical_request(req.method(), uri_path, query_strings, headers, payload);
+            let canonical_request = create_canonical_request("GET", uri_path, query_strings, headers, payload);
 
             let string_to_sign = create_string_to_sign(&canonical_request, &date, region, service);
 
-            let signature = calculate_signature(&string_to_sign, &secret_access_key, &date, region, service);
-            assert_eq!(signature.as_str(), "96ad058ca27352e0fc2bd4efd8973792077570667bdaf749655f42e204bc649c");
+            let signature = calculate_signature(&string_to_sign, "minioadmin", &date, region, service);
+            assert_eq!(signature, "96ad058ca27352e0fc2bd4efd8973792077570667bdaf749655f42e204bc649c");
         }
     }
 
     #[test]
     fn special_20250414() {
-        use hyper::header::HeaderName;
-        use hyper::header::HeaderValue;
-
-        let mut req = http::Request::<hyper::body::Bytes>::default();
-
-        *req.method_mut() = Method::POST;
-        *req.uri_mut() = hyper::Uri::from_static("https://play.rustfs.com:7000/");
-
+        // Regression: STS AssumeRole request with user-agent headers
         let x_amz_date = "20250414T022518Z";
         let x_amz_user_agent =
             "aws-sdk-js/3.777.0 ua/2.1 os/macOS#10.15.7 lang/js md/browser#Chrome_135.0.0.0 api/sts#3.777.0 m/N,E,e";
-        let headers = [
-            ("amz-sdk-invocation-id", "8c875471-a10a-45ad-b37e-e67e82de17d6"),
-            ("amz-sdk-request", "attempt=1; max=3"),
-            ("content-length", "130"),
-            ("content-type", "application/x-www-form-urlencoded"),
-            ("x-amz-content-sha256", "8e333076fe36da6633c89f2e38100cecb8e7587a1e0d6ce31838b6f68262b949"),
-            ("x-amz-date", x_amz_date),
-            ("x-amz-user-agent", x_amz_user_agent),
-        ];
-        for (name, value) in &headers {
-            req.headers_mut()
-                .insert(HeaderName::from_static(name), HeaderValue::from_static(value));
-        }
-
-        {
-            let authorithy = HeaderValue::from_str(req.uri().authority().unwrap().as_str()).unwrap();
-            req.headers_mut().insert(HeaderName::from_static("host"), authorithy);
-        }
 
         let body = b"RoleArn=arn%3Aaws%3Aiam%3A%3A%2A%3Arole%2FAdmin&RoleSessionName=console&DurationSeconds=43200&Action=AssumeRole&Version=2011-06-15";
         let payload_checksum = hex_sha256_string(body);
@@ -1330,25 +1259,22 @@ mod tests {
         let region = "cn-east-1";
         let service = "sts";
 
-        let secret_access_key = SecretKey::from("rustfsadmin");
-
         {
-            let uri_path = req.uri().path();
-            let qs = req.uri().query().map(|q| OrderedQs::parse(q).unwrap());
-            let query_strings: &[_] = qs.as_ref().map_or(&[], |x| x.as_ref());
+            let uri_path = "/";
+            let query_strings: &[(&str, &str)] = &[];
             let signed_headers = [
                 ("amz-sdk-invocation-id", "8c875471-a10a-45ad-b37e-e67e82de17d6"),
                 ("amz-sdk-request", "attempt=1; max=3"),
                 ("content-length", "130"),
                 ("content-type", "application/x-www-form-urlencoded"),
-                ("host", req.uri().authority().unwrap().as_str()),
+                ("host", "play.rustfs.com:7000"),
                 ("x-amz-content-sha256", "8e333076fe36da6633c89f2e38100cecb8e7587a1e0d6ce31838b6f68262b949"),
                 ("x-amz-date", x_amz_date),
                 ("x-amz-user-agent", x_amz_user_agent),
             ];
 
             let canonical_request = create_canonical_request(
-                req.method(),
+                "POST",
                 uri_path,
                 query_strings,
                 signed_headers,
@@ -1357,8 +1283,8 @@ mod tests {
 
             let string_to_sign = create_string_to_sign(&canonical_request, &date, region, service);
 
-            let signature = calculate_signature(&string_to_sign, &secret_access_key, &date, region, service);
-            assert_eq!(signature.as_str(), "7ed3ea6c69ed841068bbdd3cc1eb92a9ae5a4b1b0635267066bd676f6edc0189");
+            let signature = calculate_signature(&string_to_sign, "rustfsadmin", &date, region, service);
+            assert_eq!(signature, "7ed3ea6c69ed841068bbdd3cc1eb92a9ae5a4b1b0635267066bd676f6edc0189");
         }
     }
 
@@ -1391,8 +1317,7 @@ mod tests {
         // Test PUT presigned URL signing - similar to GET but with PUT method
         // This is used for uploading files to S3 using presigned URLs
         // Reference: https://docs.aws.amazon.com/AmazonS3/latest/userguide/PresignedUrlUploadObject.html
-        let secret_access_key = SecretKey::from("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
-        let method = Method::PUT;
+        let method = "PUT";
         let headers = [("host", "examplebucket.s3.amazonaws.com")];
 
         // Query strings for signing (without signature - signature is computed from these)
@@ -1404,7 +1329,7 @@ mod tests {
             ("X-Amz-SignedHeaders", "host"),
         ];
 
-        let canonical_request = create_presigned_canonical_request(&method, "/test.txt", query_strings_for_signing, headers);
+        let canonical_request = create_presigned_canonical_request(method, "/test.txt", query_strings_for_signing, headers);
 
         // Canonical request for PUT should be similar to GET, just with PUT method
         assert_eq!(
@@ -1422,18 +1347,17 @@ mod tests {
 
         let amz_date = AmzDate::parse("20130524T000000Z").unwrap();
         let string_to_sign = create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
-        let signature = calculate_signature(&string_to_sign, &secret_access_key, &amz_date, "us-east-1", "s3");
+        let signature = header_auth_signature(&string_to_sign, &amz_date, "us-east-1", "s3");
 
         // Signature value derived from the above test inputs (not from official AWS test vectors)
-        assert_eq!(signature.as_str(), "f4db56459304dafaa603a99a23c6bea8821890259a65c18ff503a4a72a80efd9");
+        assert_eq!(signature, "f4db56459304dafaa603a99a23c6bea8821890259a65c18ff503a4a72a80efd9");
     }
 
     #[test]
     fn example_put_presigned_url_with_content_type() {
         // Test PUT presigned URL with content-type signed header
         // When content-type is in signed headers, it must match the request header exactly
-        let secret_access_key = SecretKey::from("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
-        let method = Method::PUT;
+        let method = "PUT";
 
         // Headers include content-type which is signed
         let headers = [
@@ -1449,7 +1373,7 @@ mod tests {
             ("X-Amz-SignedHeaders", "content-type;host"),
         ];
 
-        let canonical_request = create_presigned_canonical_request(&method, "/test.txt", query_strings_for_signing, headers);
+        let canonical_request = create_presigned_canonical_request(method, "/test.txt", query_strings_for_signing, headers);
 
         // Canonical request should include content-type header
         assert_eq!(
@@ -1468,10 +1392,10 @@ mod tests {
 
         let amz_date = AmzDate::parse("20130524T000000Z").unwrap();
         let string_to_sign = create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
-        let signature = calculate_signature(&string_to_sign, &secret_access_key, &amz_date, "us-east-1", "s3");
+        let signature = header_auth_signature(&string_to_sign, &amz_date, "us-east-1", "s3");
 
         // Signature value derived from the test inputs above; not from official AWS test vectors.
-        assert_eq!(signature.as_str(), "fd31b71961609f4b313497cb07ab0aedd268863bd547cc198db23cf04b8f663d");
+        assert_eq!(signature, "fd31b71961609f4b313497cb07ab0aedd268863bd547cc198db23cf04b8f663d");
     }
 
     #[test]
@@ -1488,10 +1412,10 @@ mod tests {
             ("x-amz-object-attributes", "StorageClass"),
         ];
 
-        let method = Method::GET;
+        let method = "GET";
         let qs: &[(String, String)] = &[];
 
-        let canonical_request = create_canonical_request(&method, "/bucket/key", qs, headers, Payload::empty());
+        let canonical_request = create_canonical_request(method, "/bucket/key", qs, headers, Payload::empty());
 
         // According to AWS SigV4 spec:
         // - Multiple headers with the same name should be combined with comma-separated values
@@ -1522,7 +1446,7 @@ mod tests {
             ("x-amz-object-attributes", "ObjectSize"),
         ];
 
-        let method = Method::GET;
+        let method = "GET";
         let qs: &[(String, String)] = &[
             ("X-Amz-Algorithm".to_string(), "AWS4-HMAC-SHA256".to_string()),
             (
@@ -1531,7 +1455,7 @@ mod tests {
             ),
         ];
 
-        let canonical_request = create_presigned_canonical_request(&method, "/bucket/key", qs, headers);
+        let canonical_request = create_presigned_canonical_request(method, "/bucket/key", qs, headers);
 
         // Verify that x-amz-object-attributes values are comma-separated
         // and the header name appears only once in SignedHeaders
@@ -1552,12 +1476,90 @@ mod tests {
             ("x-amz-meta-custom", "value2   with   spaces"),
         ];
 
-        let method = Method::GET;
+        let method = "GET";
         let qs: &[(String, String)] = &[];
 
-        let canonical_request = create_canonical_request(&method, "/bucket/key", qs, headers, Payload::empty());
+        let canonical_request = create_canonical_request(method, "/bucket/key", qs, headers, Payload::empty());
 
         // Both values should be normalized and combined with comma
         assert!(canonical_request.contains("x-amz-meta-custom:value1,value2 with spaces\n"));
+    }
+
+    #[test]
+    fn raw_uri_path_canonical_requests() {
+        // raw (unencoded) URI path: the path is used as-is for both
+        // canonical request builders
+        let headers = [("host", "s3.amazonaws.com")];
+        let qs: &[(String, String)] = &[];
+
+        let canonical = create_canonical_request_with_raw_uri_path("GET", "/bucket/key=", qs, headers, Payload::Unsigned);
+        assert_eq!(
+            canonical,
+            concat!(
+                "GET\n",
+                "/bucket/key=\n",
+                "\n",
+                "host:s3.amazonaws.com\n",
+                "\n",
+                "host\n",
+                "UNSIGNED-PAYLOAD",
+            )
+        );
+
+        let presigned = create_presigned_canonical_request_with_raw_uri_path("GET", "/bucket/key=", qs, headers);
+        assert_eq!(
+            presigned,
+            concat!(
+                "GET\n",
+                "/bucket/key=\n",
+                "\n",
+                "host:s3.amazonaws.com\n",
+                "\n",
+                "host\n",
+                "UNSIGNED-PAYLOAD",
+            )
+        );
+    }
+
+    #[test]
+    fn authorization_header_is_skipped() {
+        // the authorization header never participates in the canonical
+        // headers or the signed-header list
+        let headers = [
+            (
+                "authorization",
+                "AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request, SignedHeaders=host, Signature=abc",
+            ),
+            ("host", "s3.amazonaws.com"),
+        ];
+        let qs: &[(String, String)] = &[];
+
+        let canonical_request = create_canonical_request("GET", "/bucket/key", qs, headers, Payload::Unsigned);
+        assert_eq!(
+            canonical_request,
+            concat!(
+                "GET\n",
+                "/bucket/key\n",
+                "\n",
+                "host:s3.amazonaws.com\n",
+                "\n",
+                "host\n",
+                "UNSIGNED-PAYLOAD",
+            )
+        );
+
+        let presigned = create_presigned_canonical_request("GET", "/bucket/key", qs, headers);
+        assert_eq!(
+            presigned,
+            concat!(
+                "GET\n",
+                "/bucket/key\n",
+                "\n",
+                "host:s3.amazonaws.com\n",
+                "\n",
+                "host\n",
+                "UNSIGNED-PAYLOAD",
+            )
+        );
     }
 }

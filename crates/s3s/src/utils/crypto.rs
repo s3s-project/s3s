@@ -4,7 +4,6 @@
 use std::mem::MaybeUninit;
 
 use hex_simd::{AsOut, AsciiCase};
-use hyper::body::Bytes;
 
 /// A normalized SHA-256 digest.
 ///
@@ -39,12 +38,6 @@ impl Sha256Sum {
         Self(value)
     }
 
-    /// Encodes the digest as lowercase hexadecimal.
-    #[must_use]
-    pub fn to_hex_string(self) -> String {
-        hex(self.0)
-    }
-
     /// Returns the raw digest bytes.
     #[must_use]
     pub(crate) const fn as_bytes(&self) -> &[u8; 32] {
@@ -66,20 +59,6 @@ pub fn is_sha256_checksum(s: &str) -> bool {
     // TODO: optimize
     let is_lowercase_hex = |c: u8| matches!(c, b'0'..=b'9' | b'a'..=b'f');
     s.len() == 64 && s.as_bytes().iter().copied().all(is_lowercase_hex)
-}
-
-/// `hmac_sha256(key, data)`
-pub fn hmac_sha256(key: impl AsRef<[u8]>, data: impl AsRef<[u8]>) -> [u8; 32] {
-    use hmac::{Hmac, KeyInit, Mac};
-    use sha2::Sha256;
-
-    let mut m = <Hmac<Sha256>>::new_from_slice(key.as_ref()).unwrap();
-    m.update(data.as_ref());
-    m.finalize().into_bytes().into()
-}
-
-pub fn hex(data: impl AsRef<[u8]>) -> String {
-    hex_simd::encode_to_string(data, hex_simd::AsciiCase::Lower)
 }
 
 /// `f(hex(src))`
@@ -106,42 +85,9 @@ fn sha256(data: &[u8]) -> [u8; 32] {
     ans
 }
 
-#[cfg(not(all(feature = "openssl", not(windows))))]
-fn sha256_chunk(chunk: &[Bytes]) -> [u8; 32] {
-    use sha2::{Digest, Sha256};
-    let mut h = <Sha256 as Digest>::new();
-    for data in chunk {
-        h.update(data);
-    }
-    h.finalize().into()
-}
-
-#[cfg(all(feature = "openssl", not(windows)))]
-fn sha256_chunk(chunk: &[Bytes]) -> [u8; 32] {
-    use openssl::hash::{Hasher, MessageDigest};
-    let mut h = Hasher::new(MessageDigest::sha256()).unwrap();
-    for data in chunk {
-        h.update(data).unwrap();
-    }
-    let digest = h.finish().unwrap();
-    let mut ans = [0_u8; 32];
-    ans.copy_from_slice(&digest);
-    ans
-}
-
 /// `f(hex(sha256(data)))`
 pub fn hex_sha256<R>(data: &[u8], f: impl FnOnce(&str) -> R) -> R {
     hex_bytes32(&sha256(data), f)
-}
-
-/// `f(hex(sha256(chunk)))`
-pub fn hex_sha256_chunk<R>(chunk: &[Bytes], f: impl FnOnce(&str) -> R) -> R {
-    hex_bytes32(&sha256_chunk(chunk), f)
-}
-
-#[cfg(test)]
-pub fn hex_sha256_string(data: &[u8]) -> String {
-    hex_sha256(data, str::to_owned)
 }
 
 #[cfg(test)]
@@ -161,7 +107,7 @@ mod tests {
                 0xce, 0x5a, 0xf7, 0x35, 0x83, 0x27, 0x9c, 0xe8, 0x5e, 0xb6, 0x6e, 0x6f, 0xcd
             ])
         );
-        assert_eq!(from_hex.to_hex_string(), hex);
+        assert_eq!(hex_bytes32(from_hex.as_bytes(), str::to_owned), hex);
     }
 
     #[test]

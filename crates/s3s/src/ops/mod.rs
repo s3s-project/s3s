@@ -267,7 +267,7 @@ fn signature_content_length(req: &Request, content_length: Option<u64>, request_
     if content_length.is_none()
         && !request_has_payload
         && http::get_unique_header_str(&req.headers, header::X_AMZ_CONTENT_SHA256.as_str())
-            == Some(crate::sig_v4::EMPTY_STRING_SHA256_HASH)
+            == Some(s3s_sigv4::EMPTY_STRING_SHA256_HASH)
     {
         Some(0)
     } else {

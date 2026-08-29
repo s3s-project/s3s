@@ -56,7 +56,7 @@ impl Signature {
     }
 
     /// Wraps a signature produced by `s3s_sigv2::calculate_signature` /
-    /// `sig_v4::calculate_signature`, whose output is canonical by construction.
+    /// `s3s_sigv4::calculate_signature`, whose output is canonical by construction.
     ///
     /// Called only inside the two `calculate_signature` functions.
     /// Do not use for data received from the wire; use [`Self::from_hex`] /
