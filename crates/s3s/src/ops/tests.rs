@@ -582,6 +582,111 @@ async fn host_fallback_path_style_and_cname() {
     );
 }
 
+/// A virtual-hosted-style request carrying an explicit non-default port must
+/// still route to the bucket (issue #438). Routing matches the port-stripped
+/// host; the signature path keeps the raw value (pinned in the signature
+/// tests). See
+/// [s3s-project/s3s#438](https://github.com/s3s-project/s3s/issues/438).
+#[tokio::test]
+async fn vhost_with_port_routes_bucket() {
+    use crate::config::{S3ConfigProvider, StaticConfigProvider};
+    use crate::host::MultiDomain;
+    use crate::http::{Body, Request};
+    use crate::path::S3Path;
+    use std::sync::Arc;
+
+    struct NoOpS3;
+    #[async_trait::async_trait]
+    impl crate::s3_trait::S3 for NoOpS3 {}
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(NoOpS3);
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+    let host = MultiDomain::new(["fs.example.com"]).unwrap();
+    let ccx = CallContext {
+        s3: &s3,
+        config: &config,
+        host: Some(&host),
+        auth: None,
+        access: None,
+        route: None,
+        validation: None,
+    };
+
+    // HTTP/1.1: the Host header carries the port.
+    let mut req = Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri("http://user.fs.example.com:19000/avatar.png")
+            .header(crate::header::HOST, "user.fs.example.com:19000")
+            .body(Body::empty())
+            .unwrap(),
+    );
+    let _ = super::prepare(&mut req, &ccx).await;
+    assert!(
+        matches!(req.s3ext.s3_path, Some(S3Path::Object { ref bucket, .. }) if bucket.as_ref() == "user"),
+        "port-carrying vhost host must route to its bucket"
+    );
+
+    // HTTP/2: no Host header; the :authority is injected as the host.
+    let mut req = Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .version(::http::Version::HTTP_2)
+            .uri("http://user.fs.example.com:19000/avatar.png")
+            .body(Body::empty())
+            .unwrap(),
+    );
+    assert!(req.headers.get(crate::header::HOST).is_none());
+    let _ = super::prepare(&mut req, &ccx).await;
+    assert!(
+        matches!(req.s3ext.s3_path, Some(S3Path::Object { ref bucket, .. }) if bucket.as_ref() == "user"),
+        "HTTP/2 :authority with a port must route to its bucket"
+    );
+}
+
+/// Control group for the port-agnostic fix: when the base domain is not
+/// configured, the port-carrying host must keep the pre-fix path-style
+/// behavior (#643 semantics untouched).
+#[tokio::test]
+async fn vhost_with_port_unconfigured_domain_falls_back_to_path_style() {
+    use crate::config::{S3ConfigProvider, StaticConfigProvider};
+    use crate::host::MultiDomain;
+    use crate::http::{Body, Request};
+    use crate::path::S3Path;
+    use std::sync::Arc;
+
+    struct NoOpS3;
+    #[async_trait::async_trait]
+    impl crate::s3_trait::S3 for NoOpS3 {}
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(NoOpS3);
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+    let host = MultiDomain::new(["other.example.com"]).unwrap();
+    let ccx = CallContext {
+        s3: &s3,
+        config: &config,
+        host: Some(&host),
+        auth: None,
+        access: None,
+        route: None,
+        validation: None,
+    };
+
+    let mut req = Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri("http://user.fs.example.com:19000/avatar.png")
+            .header(crate::header::HOST, "user.fs.example.com:19000")
+            .body(Body::empty())
+            .unwrap(),
+    );
+    let _ = super::prepare(&mut req, &ccx).await;
+    assert!(
+        !matches!(req.s3ext.s3_path, Some(S3Path::Object { ref bucket, .. }) if bucket.as_ref() == "user"),
+        "an unconfigured domain with a port must not route to a vhost bucket"
+    );
+}
+
 /// With a path-style host rule configured, an unrecognized host matching it
 /// is parsed as path-style even when it is a valid bucket name. See
 /// [s3s-project/s3s#643](https://github.com/s3s-project/s3s/issues/643).
