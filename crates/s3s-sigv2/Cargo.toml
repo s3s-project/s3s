@@ -14,5 +14,9 @@ rust-version.workspace = true
 workspace = true
 
 [dependencies]
+base64-simd.workspace = true
+hmac.workspace = true
 jiff.workspace = true
+sha1.workspace = true
+smallvec.workspace = true
 thiserror.workspace = true
