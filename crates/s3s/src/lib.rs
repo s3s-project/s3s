@@ -147,7 +147,6 @@ mod ops;
 mod protocol;
 mod s3_op;
 mod s3_trait;
-mod sig_v4;
 mod time;
 
 pub mod access;

@@ -6,8 +6,13 @@
 //! This module defines the [`ByteStream`] trait, the [`DynByteStream`] type
 //! alias for heap-allocated streams, and [`RemainingLength`] which
 //! communicates a known or estimated byte count remaining in a stream.
+//!
+//! [`upload_stream`] provides a wrapper that verifies a payload SHA-256 while
+//! forwarding bytes.
 
 #![deny(missing_docs)]
+
+pub mod upload_stream;
 
 use crate::error::StdError;
 
