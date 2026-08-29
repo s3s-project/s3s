@@ -264,10 +264,14 @@ async fn extract_full_body(content_length: Option<u64>, body: &mut Body, max_bod
     Ok(bytes)
 }
 
-fn reject_custom_route_body_too_large(content_length: Option<u64>, max_body_size: u64) -> S3Result {
-    if let Some(content_length) = content_length
-        && content_length > max_body_size
-    {
+fn reject_custom_route_body_too_large(content_length: Option<u64>, max_body_size: Option<u64>) -> S3Result {
+    let Some(max_body_size) = max_body_size else {
+        return Ok(());
+    };
+    let Some(content_length) = content_length else {
+        return Ok(());
+    };
+    if content_length > max_body_size {
         return Err(s3_error!(
             EntityTooLarge,
             "Custom route request body exceeds the configured maximum size."
@@ -362,7 +366,10 @@ pub async fn call(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Response
                 return serialize_error(err, false);
             }
 
-            let body = mem::take(&mut req.body).limited(max_body_size);
+            let mut body = mem::take(&mut req.body);
+            if let Some(max_body_size) = max_body_size {
+                body = body.limited(max_body_size);
+            }
             let mut s3_req = build_s3_request(body, req);
             let route = ccx.route.unwrap();
 

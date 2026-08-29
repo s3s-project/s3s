@@ -2362,7 +2362,7 @@ mod custom_route_body_limit_tests {
         }
     }
 
-    fn config(custom_route_max_body_size: u64) -> Arc<dyn S3ConfigProvider> {
+    fn config(custom_route_max_body_size: Option<u64>) -> Arc<dyn S3ConfigProvider> {
         Arc::new(StaticConfigProvider::new(Arc::new(S3Config {
             custom_route_max_body_size,
             ..Default::default()
@@ -2404,7 +2404,7 @@ mod custom_route_body_limit_tests {
     #[tokio::test]
     async fn custom_route_body_under_limit_passes_through() {
         let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(TestS3);
-        let config = config(16);
+        let config = config(Some(16));
         let route = ReadBodyRoute::default();
         let ccx = context(&s3, &config, &route);
         let body = Bytes::from_static(b"hello");
@@ -2421,7 +2421,7 @@ mod custom_route_body_limit_tests {
     #[tokio::test]
     async fn custom_route_content_length_over_limit_is_rejected_before_dispatch() {
         let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(TestS3);
-        let config = config(4);
+        let config = config(Some(4));
         let route = ReadBodyRoute::default();
         let ccx = context(&s3, &config, &route);
         let mut req = custom_route_request(Body::from(Bytes::from_static(b"hello")), Some(5));
@@ -2438,7 +2438,7 @@ mod custom_route_body_limit_tests {
     #[tokio::test]
     async fn custom_route_streaming_body_over_limit_fails_when_read() {
         let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(TestS3);
-        let config = config(4);
+        let config = config(Some(4));
         let route = ReadBodyRoute::default();
         let ccx = context(&s3, &config, &route);
         let mut req = custom_route_request(Body::from(Bytes::from_static(b"hello")), None);
@@ -2454,10 +2454,27 @@ mod custom_route_body_limit_tests {
     }
 
     #[tokio::test]
+    async fn custom_route_body_limit_disabled_when_none() {
+        let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(TestS3);
+        let config = config(None);
+        let route = ReadBodyRoute::default();
+        let ccx = context(&s3, &config, &route);
+        let body = Bytes::from_static(b"hello world");
+        let mut req = custom_route_request(Body::from(body.clone()), Some(body.len()));
+
+        let resp = super::call(&mut req, &ccx).await.expect("disabled limit should pass through");
+
+        assert_eq!(resp.status, StatusCode::OK);
+        assert_eq!(resp.body.bytes().expect("response body should be buffered"), body);
+        assert_eq!(route.call_count(), 1);
+        assert_eq!(route.body_seen(), Some(body));
+    }
+
+    #[tokio::test]
     async fn custom_route_limit_is_configurable_above_default() {
         let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(TestS3);
         let body = Bytes::from(vec![b'a'; 1024 * 1024 + 1]);
-        let config = config(u64::try_from(body.len()).unwrap());
+        let config = config(Some(u64::try_from(body.len()).unwrap()));
         let route = ReadBodyRoute::default();
         let ccx = context(&s3, &config, &route);
         let mut req = custom_route_request(Body::from(body.clone()), Some(body.len()));
@@ -2475,7 +2492,7 @@ mod custom_route_body_limit_tests {
     async fn xml_operation_uses_xml_limit_not_custom_route_limit() {
         let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(TestS3);
         let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(S3Config {
-            custom_route_max_body_size: 1,
+            custom_route_max_body_size: Some(1),
             xml_max_body_size: 1024,
             ..Default::default()
         })));
@@ -2514,7 +2531,7 @@ mod custom_route_body_limit_tests {
 
         let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
         let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(S3Config {
-            custom_route_max_body_size: 1,
+            custom_route_max_body_size: Some(1),
             post_object_max_file_size: 1024,
             presigned_url_max_skew_time_secs: u32::MAX,
             expected_region: Some("us-east-1".parse().expect("valid test region")),
