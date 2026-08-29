@@ -167,8 +167,15 @@ fn extract_http2_authority(req: &Request) -> Option<&str> {
 }
 
 fn extract_host(req: &Request) -> S3Result<Option<String>> {
-    // First try to get from Host header.
-    if let Some(val) = req.headers.get(crate::header::HOST) {
+    // First try to get from Host header. Repeated Host lines are rejected
+    // instead of silently picking the first value: signature verification
+    // signs every value of a repeated header, so accepting only one here
+    // would let routing and the signature disagree about the host.
+    let mut iter = req.headers.get_all(crate::header::HOST).iter();
+    if let Some(val) = iter.next() {
+        if iter.next().is_some() {
+            return Err(invalid_request!("duplicate header: Host"));
+        }
         let on_err = |e| s3_error!(e, InvalidRequest, "invalid header: Host: {val:?}");
         let host = val.to_str().map_err(on_err)?;
         return Ok(Some(host.into()));
