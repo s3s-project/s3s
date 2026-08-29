@@ -519,6 +519,56 @@ async fn vh_region_fallback_for_anonymous_request() {
     );
 }
 
+/// A repeated `Host` header must be rejected by `extract_host` instead of
+/// silently picking the first value: signature verification signs every
+/// value of a repeated header, so accepting only one would let routing and
+/// the signature disagree about the host.
+#[test]
+fn extract_host_rejects_duplicate_host_header() {
+    use crate::http::{Body, Request};
+
+    let req = Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri("http://example.com/test-key")
+            .header(crate::header::HOST, "example.com")
+            .header(crate::header::HOST, "attacker.example.com")
+            .body(Body::empty())
+            .unwrap(),
+    );
+
+    let err = super::extract_host(&req).expect_err("duplicate Host must be rejected");
+    assert_eq!(err.code(), &crate::S3ErrorCode::InvalidRequest);
+    assert_eq!(err.message(), Some("duplicate header: Host"));
+}
+
+/// `extract_host` keeps resolving a single Host value and the HTTP/2/3
+/// authority fallback.
+#[test]
+fn extract_host_accepts_single_value_and_authority() {
+    use crate::http::{Body, Request};
+
+    let req = Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri("http://example.com/test-key")
+            .header(crate::header::HOST, "example.com")
+            .body(Body::empty())
+            .unwrap(),
+    );
+    assert_eq!(super::extract_host(&req).unwrap().as_deref(), Some("example.com"));
+
+    let req = Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .version(::http::Version::HTTP_2)
+            .uri("http://bucket.example.com:19000/test-key")
+            .body(Body::empty())
+            .unwrap(),
+    );
+    assert_eq!(super::extract_host(&req).unwrap().as_deref(), Some("bucket.example.com:19000"));
+}
+
 /// With an `S3Host` configured, an unrecognized host carrying a port
 /// (e.g. `localhost:8014`) can never be a CNAME bucket and must fall back
 /// to path-style parsing; a portless host that is a valid bucket name keeps
