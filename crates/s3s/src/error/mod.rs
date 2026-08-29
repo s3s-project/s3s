@@ -262,6 +262,9 @@ impl S3ErrorCode {
 }
 
 #[cfg(test)]
+mod from_bytes_tests;
+
+#[cfg(test)]
 mod tests {
     // not needed since the macro is globally in scope
     // use super::*;

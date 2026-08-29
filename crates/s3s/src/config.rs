@@ -129,6 +129,17 @@ pub struct S3Config {
     /// Default: 5 GB (5 * 1024 * 1024 * 1024)
     pub post_object_max_file_size: u64,
 
+    /// Maximum size for custom-route request bodies in bytes.
+    ///
+    /// Custom routes may read request bodies outside the generated S3 operation
+    /// deserializers. This limit bounds those bodies before route dispatch to
+    /// reduce denial-of-service risk from oversized custom-route payloads.
+    ///
+    /// Set to `None` to disable the limit.
+    ///
+    /// Default: 1 MB (1024 * 1024)
+    pub custom_route_max_body_size: Option<u64>,
+
     /// Maximum chunk data size for aws-chunked streaming uploads in bytes.
     ///
     /// Signed chunks must be buffered in full before their signature can be verified,
@@ -232,6 +243,7 @@ impl Default for S3Config {
         Self {
             xml_max_body_size: 20 * 1024 * 1024,               // 20 MB
             post_object_max_file_size: 5 * 1024 * 1024 * 1024, // 5 GB
+            custom_route_max_body_size: Some(1024 * 1024),     // 1 MB
             aws_chunked_stream_max_chunk_size: DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
             form_max_field_size: 1024 * 1024,       // 1 MB
             form_max_fields_size: 20 * 1024 * 1024, // 20 MB
@@ -355,6 +367,7 @@ mod tests {
         let config = S3Config::default();
         assert_eq!(config.xml_max_body_size, 20 * 1024 * 1024);
         assert_eq!(config.post_object_max_file_size, 5 * 1024 * 1024 * 1024);
+        assert_eq!(config.custom_route_max_body_size, Some(1024 * 1024));
         assert_eq!(config.form_max_field_size, 1024 * 1024);
         assert_eq!(config.form_max_fields_size, 20 * 1024 * 1024);
         assert_eq!(config.form_max_parts, 1000);
@@ -447,6 +460,7 @@ mod tests {
         let config = S3Config {
             xml_max_body_size: 10 * 1024 * 1024,
             post_object_max_file_size: 1024 * 1024 * 1024,
+            custom_route_max_body_size: Some(512 * 1024),
             aws_chunked_stream_max_chunk_size: DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
             form_max_field_size: 512 * 1024,
             form_max_fields_size: 5 * 1024 * 1024,
@@ -474,6 +488,7 @@ mod tests {
         assert_eq!(config.xml_max_body_size, 1024);
         // Other fields should have defaults
         assert_eq!(config.post_object_max_file_size, 5 * 1024 * 1024 * 1024);
+        assert_eq!(config.custom_route_max_body_size, Some(1024 * 1024));
         assert_eq!(config.form_max_field_size, 1024 * 1024);
         assert_eq!(config.sig_v4_allowed_services, ["s3", "sts"]);
         assert_eq!(config.presigned_url_max_expires_secs, DEFAULT_PRESIGNED_URL_MAX_EXPIRES_SECS);
