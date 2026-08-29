@@ -21,4 +21,4 @@ serde_json = { workspace = true, features = ["preserve_order"] }
 serde_urlencoded = "0.7.1"
 s3s-model = { version = "0.15.0", path = "../crates/s3s-model" }
 http.workspace = true
-phf_codegen = "0.14.0"
+phf_codegen.workspace = true
