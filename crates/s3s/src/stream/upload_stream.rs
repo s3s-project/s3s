@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
+//! `UploadStream`: a body wrapper that verifies a payload SHA-256 while
+//! forwarding bytes, used to enforce the signed body hash of single-chunk
+//! `SigV4` uploads.
+
 use crate::crypto::Checksum as _;
 use crate::crypto::Sha256;
 use crate::error::StdError;
