@@ -5,7 +5,9 @@
 
 use hex_simd::{AsOut, AsciiCase};
 use hmac::{Hmac, KeyInit, Mac};
-use sha2::{Digest, Sha256};
+#[cfg(not(all(feature = "openssl", not(windows))))]
+use sha2::Digest;
+use sha2::Sha256;
 use smallvec::SmallVec;
 use stdx::str::StrExt;
 use zeroize::Zeroize;
@@ -129,16 +131,42 @@ fn hex_bytes32<R>(src: &[u8; 32], f: impl FnOnce(&str) -> R) -> R {
     f(ans)
 }
 
+#[cfg(not(all(feature = "openssl", not(windows))))]
 fn sha256(data: &[u8]) -> [u8; 32] {
     <Sha256 as Digest>::digest(data).into()
 }
 
+#[cfg(all(feature = "openssl", not(windows)))]
+fn sha256(data: &[u8]) -> [u8; 32] {
+    use openssl::hash::{Hasher, MessageDigest};
+    let mut h = Hasher::new(MessageDigest::sha256()).unwrap();
+    h.update(data).unwrap();
+    let digest = h.finish().unwrap();
+    let mut ans = [0_u8; 32];
+    ans.copy_from_slice(&digest);
+    ans
+}
+
+#[cfg(not(all(feature = "openssl", not(windows))))]
 fn sha256_chunk(chunk: &[impl AsRef<[u8]>]) -> [u8; 32] {
     let mut h = <Sha256 as Digest>::new();
     for data in chunk {
         h.update(data.as_ref());
     }
     h.finalize().into()
+}
+
+#[cfg(all(feature = "openssl", not(windows)))]
+fn sha256_chunk(chunk: &[impl AsRef<[u8]>]) -> [u8; 32] {
+    use openssl::hash::{Hasher, MessageDigest};
+    let mut h = Hasher::new(MessageDigest::sha256()).unwrap();
+    for data in chunk {
+        h.update(data.as_ref()).unwrap();
+    }
+    let digest = h.finish().unwrap();
+    let mut ans = [0_u8; 32];
+    ans.copy_from_slice(&digest);
+    ans
 }
 
 /// `f(hex(sha256(data)))`

@@ -13,6 +13,12 @@ rust-version.workspace = true
 [lints]
 workspace = true
 
+[features]
+openssl = ["dep:openssl"]
+
+[target.'cfg(not(windows))'.dependencies]
+openssl = { workspace = true, optional = true }
+
 [dependencies]
 arrayvec.workspace = true
 base64-simd.workspace = true
