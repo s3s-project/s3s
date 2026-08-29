@@ -1660,6 +1660,58 @@ mod put_object_max_size_tests {
         );
     }
 
+    /// A `ListObjects` response that echoes a request-controlled object key
+    /// containing a control character must not produce an invalid XML body:
+    /// the serialization layer rejects it with an internal error.
+    #[tokio::test]
+    async fn list_objects_with_control_character_key_rejected_at_serialization() {
+        use crate::config::{S3ConfigProvider, StaticConfigProvider};
+        use crate::http::{Body, Request};
+
+        struct ControlCharS3;
+        #[async_trait::async_trait]
+        impl crate::s3_trait::S3 for ControlCharS3 {
+            async fn list_objects(
+                &self,
+                _req: crate::S3Request<crate::dto::ListObjectsInput>,
+            ) -> crate::error::S3Result<crate::protocol::S3Response<crate::dto::ListObjectsOutput>> {
+                let output = crate::dto::ListObjectsOutput {
+                    name: Some("bucket".into()),
+                    contents: Some(vec![crate::dto::Object {
+                        key: Some("a\x01b".into()),
+                        ..Default::default()
+                    }]),
+                    ..Default::default()
+                };
+                Ok(crate::protocol::S3Response::new(output))
+            }
+        }
+
+        let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(ControlCharS3);
+        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+        let ccx = CallContext {
+            s3: &s3,
+            config: &config,
+            host: None,
+            auth: None,
+            access: None,
+            route: None,
+            validation: None,
+        };
+
+        let mut req = Request::from(
+            hyper::Request::builder()
+                .method(Method::GET)
+                .uri("http://localhost/bucket")
+                .header(crate::header::HOST, "localhost")
+                .body(Body::empty())
+                .unwrap(),
+        );
+
+        let resp = super::call(&mut req, &ccx).await.unwrap();
+        assert_eq!(resp.status, hyper::StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
     #[tokio::test]
     async fn post_object_keeps_post_object_max_file_size_when_put_limit_is_set() {
         let s3: Arc<dyn S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
