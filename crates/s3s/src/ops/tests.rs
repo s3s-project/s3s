@@ -2831,7 +2831,7 @@ mod bodyless_content_length_tests {
     const AMZ_DATE: &str = "20260828T000000Z";
     const REGION: &str = "us-east-1";
     const SERVICE: &str = "s3";
-    const EMPTY_SHA256: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+    const EMPTY_SHA256: &str = crate::sig_v4::EMPTY_STRING_SHA256_HASH;
 
     #[derive(Default)]
     struct TestS3 {

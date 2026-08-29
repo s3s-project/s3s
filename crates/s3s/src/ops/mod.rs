@@ -66,8 +66,6 @@ use hyper::Uri;
 use mime::Mime;
 use tracing::{debug, error, warn};
 
-const EMPTY_PAYLOAD_SHA256: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
-
 #[async_trait::async_trait]
 pub trait Operation: Send + Sync + 'static {
     fn name(&self) -> &'static str;
@@ -265,7 +263,8 @@ fn request_has_request_payload(req: &Request, custom_route_hit: bool) -> bool {
 fn signature_content_length(req: &Request, content_length: Option<u64>, request_has_payload: bool) -> Option<u64> {
     if content_length.is_none()
         && !request_has_payload
-        && http::get_unique_header_str(&req.headers, header::X_AMZ_CONTENT_SHA256.as_str()) == Some(EMPTY_PAYLOAD_SHA256)
+        && http::get_unique_header_str(&req.headers, header::X_AMZ_CONTENT_SHA256.as_str())
+            == Some(crate::sig_v4::EMPTY_STRING_SHA256_HASH)
     {
         Some(0)
     } else {
