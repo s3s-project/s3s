@@ -367,9 +367,7 @@ pub async fn call(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Response
             }
 
             let mut body = mem::take(&mut req.body);
-            if let Some(max_body_size) = max_body_size {
-                body = body.limited(max_body_size);
-            }
+            body.set_limit(max_body_size);
             let mut s3_req = build_s3_request(body, req);
             let route = ccx.route.unwrap();
 
