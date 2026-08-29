@@ -397,7 +397,7 @@ pub async fn call(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Response
         }
         Prepare::CustomRoute => {
             let max_body_size = ccx.config.snapshot().custom_route_max_body_size;
-            let result = reject_custom_route_body_too_large(extract_content_length(req), max_body_size);
+            let result = reject_custom_route_body_too_large(extract_content_length(req)?, max_body_size);
             if let Err(err) = result {
                 error!(?err, "custom route request body is too large");
                 return serialize_error(err, false);
