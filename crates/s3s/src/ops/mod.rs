@@ -77,6 +77,13 @@ pub trait Operation: Send + Sync + 'static {
     /// `CompleteMultipartUpload`) and PUT configuration operations.
     fn needs_full_body(&self) -> bool;
 
+    /// Whether this operation consumes a request payload.
+    ///
+    /// `true` for XML-payload, streaming, and policy operations (e.g.
+    /// `DeleteObjects`, `PutObject`, `PutBucketPolicy`), `false` for
+    /// bodyless operations such as `GetObject` and `DeleteObject`.
+    fn has_request_payload(&self) -> bool;
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut Request) -> S3Result<Response>;
 }
 
@@ -244,22 +251,6 @@ fn extract_content_length(req: &Request) -> S3Result<Option<u64>> {
     raw.parse::<u64>().map(Some).map_err(|_| invalid_content_length(val))
 }
 
-fn operation_has_request_payload(op: &dyn Operation) -> bool {
-    op.needs_full_body() || matches!(op.name(), "PostObject" | "PutObject" | "UploadPart" | "WriteGetObjectResponse")
-}
-
-fn request_has_request_payload(req: &Request, custom_route_hit: bool) -> bool {
-    if custom_route_hit {
-        return true;
-    }
-
-    let Some(s3_path) = req.s3ext.s3_path.as_ref() else {
-        return true;
-    };
-
-    generated::resolve_route(req, s3_path, req.s3ext.qs.as_ref()).map_or(true, operation_has_request_payload)
-}
-
 fn signature_content_length(req: &Request, content_length: Option<u64>, request_has_payload: bool) -> Option<u64> {
     if content_length.is_none()
         && !request_has_payload
@@ -270,6 +261,11 @@ fn signature_content_length(req: &Request, content_length: Option<u64>, request_
     } else {
         content_length
     }
+}
+
+fn is_multipart_post(req: &Request) -> bool {
+    req.method == Method::POST
+        && extract_mime(&req.headers).is_some_and(|mime| mime.type_() == mime::MULTIPART && mime.subtype() == mime::FORM_DATA)
 }
 
 fn extract_decoded_content_length(headers: &'_ HeaderMap) -> S3Result<Option<usize>> {
@@ -769,7 +765,25 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
 
     req.s3ext.qs = extract_qs(&req.uri)?;
     content_length = extract_content_length(req)?;
-    let request_has_payload = request_has_request_payload(req, custom_route_hit);
+
+    // Resolve the operation early (tolerantly) to decide whether the request
+    // carries a payload: signature verification rejects missing
+    // `Content-Length` for payload-consuming operations. The result is cached
+    // and reused by the real resolution below, so `resolve_route` runs exactly
+    // once on the success path. Errors are swallowed here and reported by the
+    // real resolution, preserving error precedence. Custom routes and
+    // multipart POST requests are skipped (conservatively treated as having a
+    // payload) because their routing depends on state parsed during signature
+    // verification.
+    let resolved_op = if custom_route_hit || is_multipart_post(req) {
+        None
+    } else {
+        req.s3ext
+            .s3_path
+            .as_ref()
+            .and_then(|s3_path| generated::resolve_route(req, s3_path, req.s3ext.qs.as_ref()).ok())
+    };
+    let request_has_payload = resolved_op.as_ref().is_none_or(|op| op.has_request_payload());
     let content_length_for_signature = signature_content_length(req, content_length, request_has_payload);
     content_length = verify_signature(req, ccx, vh_bucket, vh_region.as_deref(), content_length_for_signature).await?;
 
@@ -777,24 +791,28 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
         return Ok(Prepare::CustomRoute);
     }
 
-    let op = 'resolve: {
-        let s3_path = req.s3ext.s3_path.as_ref().expect("classified above");
-        if let Some(multipart) = &mut req.s3ext.multipart
-            && req.method == Method::POST
-        {
-            match s3_path {
-                S3Path::Root => return Err(unknown_operation()),
-                S3Path::Bucket { bucket } => {
-                    let (stream, policy) = resolve_post_object(ccx, bucket, multipart).await?;
-                    req.s3ext.post_object_stream = Some(stream);
-                    req.s3ext.post_policy = policy;
-                    break 'resolve &PostObject as &'static dyn Operation;
+    let op = if let Some(op) = resolved_op {
+        op
+    } else {
+        'resolve: {
+            let s3_path = req.s3ext.s3_path.as_ref().expect("classified above");
+            if let Some(multipart) = &mut req.s3ext.multipart
+                && req.method == Method::POST
+            {
+                match s3_path {
+                    S3Path::Root => return Err(unknown_operation()),
+                    S3Path::Bucket { bucket } => {
+                        let (stream, policy) = resolve_post_object(ccx, bucket, multipart).await?;
+                        req.s3ext.post_object_stream = Some(stream);
+                        req.s3ext.post_policy = policy;
+                        break 'resolve &PostObject as &'static dyn Operation;
+                    }
+                    // FIXME: POST /bucket/key hits this branch
+                    S3Path::Object { .. } => return Err(s3_error!(MethodNotAllowed)),
                 }
-                // FIXME: POST /bucket/key hits this branch
-                S3Path::Object { .. } => return Err(s3_error!(MethodNotAllowed)),
             }
+            resolve_operation(req, s3_path, host_header.as_deref(), ccx)?
         }
-        resolve_operation(req, s3_path, host_header.as_deref(), ccx)?
     };
 
     let s3_path = req.s3ext.s3_path.as_ref().unwrap();

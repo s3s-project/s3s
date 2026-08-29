@@ -3126,6 +3126,45 @@ mod bodyless_content_length_tests {
 
         assert_eq!(test_s3.total_bodyless_calls(), 0);
     }
+
+    #[tokio::test]
+    async fn multipart_post_without_content_length_keeps_actual_file_length() {
+        use crate::auth::SecretKey;
+
+        let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(S3Config {
+            post_object_max_file_size: 1024,
+            presigned_url_max_skew_time_secs: u32::MAX,
+            expected_region: Some("us-east-1".parse().expect("valid test region")),
+            ..Default::default()
+        })));
+        let auth = post_policy_test_helpers::create_test_auth();
+        let ccx = post_policy_test_helpers::create_test_context(&s3, &config, &auth);
+        let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+        let policy_json = &format!(
+            r#"{{"expiration":"2030-01-01T00:00:00.000Z","conditions":[{}]}}"#,
+            post_policy_test_helpers::BASE_CONDITIONS,
+        );
+        let mut req = post_policy_test_helpers::build_post_object_request(policy_json, "hello", &secret_key, false);
+        req.headers.insert(
+            crate::header::X_AMZ_CONTENT_SHA256,
+            hyper::header::HeaderValue::from_static(crate::sig_v4::EMPTY_STRING_SHA256_HASH),
+        );
+        req.headers.remove(hyper::header::CONTENT_LENGTH);
+
+        let result = super::prepare(&mut req, &ccx).await;
+
+        match result.expect("multipart POST without Content-Length should prepare") {
+            Prepare::S3(op) => assert_eq!(op.name(), "PostObject"),
+            Prepare::CustomRoute => panic!("multipart POST should not dispatch to a custom route"),
+        }
+        let stream = req.s3ext.post_object_stream.as_ref().expect("post object stream");
+        assert_eq!(
+            stream.remaining_length().exact(),
+            Some(5),
+            "the file must be aggregated at its real length, not treated as zero-length"
+        );
+    }
 }
 
 mod extract_decoded_content_length_tests {
