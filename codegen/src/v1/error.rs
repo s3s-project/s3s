@@ -169,6 +169,7 @@ pub fn codegen(model: &smithy::Model) {
     g([
         "#![allow(clippy::doc_markdown)]",
         "#![allow(clippy::too_many_lines)]",
+        "#![allow(clippy::unreadable_literal)]",
         "",
         "use bytestring::ByteString;",
         "use hyper::StatusCode;",
@@ -221,10 +222,43 @@ pub fn codegen(model: &smithy::Model) {
     g!("}}");
     g!();
 
+    {
+        let mut exact_code_map = phf_codegen::Map::new();
+        let mut lowercase_code_map = phf_codegen::Map::new();
+        let mut lowercased = BTreeMap::new();
+        let mut lowercase_codes = Vec::new();
+
+        for err in errors.values() {
+            let code = err.code.as_str();
+            exact_code_map.entry(code, format!("S3ErrorCode::{code}"));
+
+            let lowercase = err.code.to_ascii_lowercase();
+            if let Some(prev) = lowercased.insert(lowercase.clone(), code) {
+                panic!("{prev} and {code} collide after ASCII lowercasing as {lowercase}");
+            }
+            lowercase_codes.push((lowercase, code));
+        }
+
+        for (lowercase, code) in &lowercase_codes {
+            lowercase_code_map.entry(lowercase.as_str(), format!("S3ErrorCode::{code}"));
+        }
+
+        g!(
+            "static S3_ERROR_CODE_MAP: phf::Map<&'static str, S3ErrorCode> = {};",
+            exact_code_map.build()
+        );
+        g!();
+        g!(
+            "static S3_ERROR_CODE_LOWERCASE_MAP: phf::Map<&'static str, S3ErrorCode> = {};",
+            lowercase_code_map.build()
+        );
+        g!();
+    }
+
     g!("impl S3ErrorCode {{");
 
     {
-        g!("const STATIC_CODE_LIST: &'static [&'static str] = &[");
+        g!("pub(super) const STATIC_CODE_LIST: &'static [&'static str] = &[");
         for err in errors.values() {
             g!("\"{}\",", err.code);
         }
@@ -253,19 +287,15 @@ pub fn codegen(model: &smithy::Model) {
     {
         g!("#[must_use]");
         g!("pub fn from_bytes(s: &[u8]) -> Option<Self> {{");
-
-        g!("match s {{");
-        for err in errors.values() {
-            g!("b\"{}\" => Some(Self::{}),", err.code, err.code);
-        }
-        g!("_ => match s.to_ascii_lowercase().as_slice() {{");
-        for err in errors.values() {
-            g!("b\"{}\" => Some(Self::{}),", err.code.to_ascii_lowercase(), err.code);
-        }
-        g!("_ => std::str::from_utf8(s).ok().map(|s| Self::Custom(s.into()))");
+        g!("let s = std::str::from_utf8(s).ok()?;");
+        g!("if let Some(code) = S3_ERROR_CODE_MAP.get(s) {{");
+        g!("return Some(code.clone());");
         g!("}}");
+        g!("let lowercase = s.to_ascii_lowercase();");
+        g!("if let Some(code) = S3_ERROR_CODE_LOWERCASE_MAP.get(lowercase.as_str()) {{");
+        g!("return Some(code.clone());");
         g!("}}");
-
+        g!("Some(Self::Custom(s.into()))");
         g!("}}");
         g!();
     }
