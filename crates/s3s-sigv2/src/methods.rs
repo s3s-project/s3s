@@ -76,6 +76,13 @@ fn get_unique_header_str<'a>(headers: &'a [(&'a str, &'a str)], name: &str) -> O
 ///
 /// The query pairs must be sorted by name (the `OrderedQs` contract) for the
 /// binary search to be valid; repeated names are treated as absent.
+///
+/// # Panics
+///
+/// The `qs[lower_bound..]` access cannot panic: `partition_point` returns a
+/// `lower_bound ≤ qs.len()`. clippy cannot prove this statically, so the lint
+/// is allowed here and the invariant is documented.
+#[allow(clippy::indexing_slicing)]
 fn get_unique_qs<'a>(qs: &'a [(String, String)], name: &str) -> Option<&'a str> {
     let lower_bound = qs.partition_point(|x| x.0.as_str() < name);
 
@@ -168,25 +175,7 @@ pub fn create_string_to_sign(
         }
         amz_headers.sort_by(|lhs, rhs| lhs.0.cmp(rhs.0));
 
-        let mut i = 0;
-        while i < amz_headers.len() {
-            let (name, value) = amz_headers[i];
-
-            ans.push_str(name);
-            ans.push(':');
-
-            ans.push_str(value.trim());
-
-            let mut j = i + 1;
-            while j < amz_headers.len() && amz_headers[j].0 == name {
-                ans.push(',');
-                ans.push_str(amz_headers[j].1.trim());
-                j += 1;
-            }
-
-            ans.push('\n');
-            i = j;
-        }
+        push_canonicalized_amz_headers(&mut ans, &amz_headers);
     }
 
     {
@@ -222,6 +211,37 @@ pub fn create_string_to_sign(
     ans
 }
 
+/// Appends the canonicalized `x-amz-*` headers: each group of adjacent
+/// same-named headers becomes `name:v1,v2\n`.
+///
+/// # Panics
+///
+/// The index accesses are guarded by the loop conditions (`i < len`,
+/// `j < len`); clippy cannot prove this statically, so the lint is allowed
+/// here and the invariants are documented.
+#[allow(clippy::indexing_slicing)]
+fn push_canonicalized_amz_headers(ans: &mut String, amz_headers: &[(&str, &str)]) {
+    let mut i = 0;
+    while i < amz_headers.len() {
+        let (name, value) = amz_headers[i];
+
+        ans.push_str(name);
+        ans.push(':');
+
+        ans.push_str(value.trim());
+
+        let mut j = i + 1;
+        while j < amz_headers.len() && amz_headers[j].0 == name {
+            ans.push(',');
+            ans.push_str(amz_headers[j].1.trim());
+            j += 1;
+        }
+
+        ans.push('\n');
+        i = j;
+    }
+}
+
 /// Computes the `SigV2` request signature: HMAC-SHA1 of the `StringToSign`
 /// under the secret key, encoded as standard Base64.
 ///
@@ -230,13 +250,26 @@ pub fn create_string_to_sign(
 /// `HMAC-SHA1` accepts keys of any length, so this never panics in practice.
 #[must_use]
 pub fn calculate_signature(secret_key: impl AsRef<[u8]>, string_to_sign: &str) -> String {
-    let mut m = <Hmac<Sha1>>::new_from_slice(secret_key.as_ref()).expect("Hmac accepts keys of any length");
+    let mut m = new_hmac_sha1(secret_key.as_ref());
     m.update(string_to_sign.as_bytes());
     let digest = m.finalize().into_bytes();
     STANDARD.encode_to_string(digest)
 }
 
+/// `HMAC-SHA1` accepts keys of any length, so `new_from_slice` never fails.
+///
+/// # Panics
+///
+/// This `expect` is a structural invariant of the `hmac` crate API; no
+/// request input can influence it. The lint is allowed here and the
+/// invariant is documented.
+#[allow(clippy::expect_used)]
+fn new_hmac_sha1(key: &[u8]) -> Hmac<Sha1> {
+    <Hmac<Sha1>>::new_from_slice(key).expect("Hmac accepts keys of any length")
+}
+
 #[cfg(test)]
+#[allow(clippy::indexing_slicing, clippy::unwrap_used)]
 mod tests {
     use super::*;
 
