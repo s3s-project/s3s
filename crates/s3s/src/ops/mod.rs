@@ -31,6 +31,9 @@ mod tests;
 mod bodyless_error_tests;
 
 #[cfg(test)]
+mod head_error_tests;
+
+#[cfg(test)]
 mod route_skip_validation_tests;
 
 #[cfg(test)]
@@ -158,6 +161,16 @@ pub(crate) fn serialize_error(mut e: S3Error, no_decl: bool) -> S3Result<Respons
         http::strip_body(&mut res);
     }
     drop(e);
+    Ok(res)
+}
+/// Serializes an error response for the given request method. `HEAD` responses
+/// must not carry a body (RFC 9110 §9.3.2): the body is stripped while the
+/// metadata headers are preserved.
+pub(crate) fn serialize_error_for_method(method: &Method, e: S3Error, no_decl: bool) -> S3Result<Response> {
+    let mut res = serialize_error(e, no_decl)?;
+    if *method == Method::HEAD {
+        http::strip_body(&mut res);
+    }
     Ok(res)
 }
 
@@ -412,7 +425,7 @@ pub async fn call(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Response
         Ok(op) => op,
         Err(err) => {
             error!(?err, "failed to prepare");
-            return serialize_error(err, false);
+            return serialize_error_for_method(&req.method, err, false);
         }
     };
 
@@ -424,7 +437,7 @@ pub async fn call(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Response
                 }
                 Err(err) => {
                     error!(op = %op.name(), ?err, "op returns error");
-                    serialize_error(err, false)
+                    serialize_error_for_method(&req.method, err, false)
                 }
             }
         }
@@ -433,7 +446,7 @@ pub async fn call(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Response
             let result = reject_custom_route_body_too_large(extract_content_length(req)?, max_body_size);
             if let Err(err) = result {
                 error!(?err, "custom route request body is too large");
-                return serialize_error(err, false);
+                return serialize_error_for_method(&req.method, err, false);
             }
 
             let mut body = mem::take(&mut req.body);
@@ -456,7 +469,7 @@ pub async fn call(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Response
                 }),
                 Err(err) => {
                     error!(?err, "custom route returns error");
-                    serialize_error(err, false)
+                    serialize_error_for_method(&req.method, err, false)
                 }
             }
         }
