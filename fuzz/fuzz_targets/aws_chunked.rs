@@ -24,10 +24,10 @@ use bytes::Bytes;
 use futures::StreamExt;
 use libfuzzer_sys::fuzz_target;
 use s3s::AmzDate;
-use s3s::AwsChunkedStream;
 use s3s::Sha256Sum;
 use s3s::StdError;
 use s3s::auth::SecretKey;
+use s3s::stream::aws_chunked_stream::AwsChunkedStream;
 
 // AWS SigV4 streaming test vectors (see aws_chunked_stream.rs tests).
 const SEED_SIGNATURE: &str = "4f232c4386841ef735655705268965c44a0e4690baa4adea153f7db9fa80a0a9";

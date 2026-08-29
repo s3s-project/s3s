@@ -684,11 +684,13 @@ impl AwsChunkedStream {
         }
     }
 
+    /// Returns the declared decoded length minus the bytes produced so far.
     #[must_use]
     pub fn exact_remaining_length(&self) -> usize {
         self.remaining_length
     }
 
+    /// Converts this stream into a dynamic byte stream.
     #[must_use]
     pub fn into_byte_stream(self) -> DynByteStream {
         crate::stream::into_dyn(self)

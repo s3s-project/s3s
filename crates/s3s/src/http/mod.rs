@@ -15,9 +15,6 @@ pub use self::de::*;
 mod ordered_qs;
 pub use self::ordered_qs::*;
 
-mod aws_chunked_stream;
-pub use self::aws_chunked_stream::*;
-
 mod multipart;
 pub use self::multipart::*;
 
