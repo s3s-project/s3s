@@ -3535,7 +3535,11 @@ dependencies = [
 name = "s3s-sigv2"
 version = "0.16.0-alpha.1"
 dependencies = [
+ "base64-simd",
+ "hmac 0.13.0",
  "jiff",
+ "sha1 0.11.0",
+ "smallvec",
  "thiserror",
 ]
 
