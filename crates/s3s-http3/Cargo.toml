@@ -1,0 +1,14 @@
+[package]
+name = "s3s-http3"
+version = "0.15.0"
+description = "Experimental HTTP/3 transport for s3s"
+readme = "../../README.md"
+keywords = ["s3", "http3", "quic"]
+categories = ["web-programming::http-server"]
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
