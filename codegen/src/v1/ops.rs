@@ -334,6 +334,7 @@ fn codegen_post_object_fork_op(rust_types: &RustTypes) {
     g(["#[async_trait::async_trait]", "impl super::Operation for PostObject {"]);
     g(["    fn name(&self) -> &'static str {", "        \"PostObject\"", "    }", ""]);
     g(["    fn needs_full_body(&self) -> bool {", "        false", "    }", ""]);
+    g(["    fn has_request_payload(&self) -> bool {", "        true", "    }", ""]);
 
     g([
         "    async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {",
@@ -935,6 +936,11 @@ fn codegen_op_http_call(op: &Operation, rust_types: &RustTypes) {
     g!("}}");
     g!();
 
+    g!("fn has_request_payload(&self) -> bool {{");
+    g!("{}", has_request_payload(op, rust_types));
+    g!("}}");
+    g!();
+
     g!("async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {{");
 
     let method = op.name.to_snake_case();
@@ -1128,6 +1134,11 @@ fn needs_full_body(op: &Operation, rust_types: &RustTypes) -> bool {
     let has_xml_payload = ty.fields.iter().any(is_xml_payload);
     let has_string_payload = ty.fields.iter().any(|field| field.type_ == "Policy");
     has_xml_payload || has_string_payload
+}
+
+fn has_request_payload(op: &Operation, rust_types: &RustTypes) -> bool {
+    let rust::Type::Struct(ty) = &rust_types[op.input.as_str()] else { return false };
+    ty.fields.iter().any(|field| field.position == "payload")
 }
 
 #[allow(clippy::too_many_lines)]
