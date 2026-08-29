@@ -49,7 +49,9 @@ It is up to the user to implement security enhancements such as **HTTP body leng
 
 **Authentication is required for production deployments.** Without calling `set_auth`, the service accepts anonymous (unsigned) requests and skips authorization entirely: every S3 operation is open to any client that can reach the service, and signed requests fail with `NotImplemented` because no authentication provider is configured. A forgotten `set_auth` turns the service into a publicly readable and writable endpoint.
 
-For streaming uploads (`PUT Object`, `UploadPart`), `s3s` applies a default 5 GiB object-size limit matching the AWS single-PUT limit; set `S3Config::put_object_max_size` to `None` to disable it and enforce deployment-specific caps in the `S3` implementation. `POST Object` keeps using `S3Config::post_object_max_file_size`.
+For streaming uploads (`PUT Object`, `UploadPart`), `s3s` applies a default 5 GiB object-size limit matching the AWS single-PUT limit; set `S3Config::put_object_max_size` to `None` to disable it and enforce deployment-specific caps in the `S3` implementation. For production, set it explicitly even though the default is already 5 GiB. `POST Object` keeps using `S3Config::post_object_max_file_size`.
+
+List-type responses (`ListObjects`, `ListBuckets`, ...) are serialized in full by `s3s`: their memory usage grows with the number of entries the `S3` implementation returns. Implementations should paginate (`max-keys` / continuation tokens) and deployments should bound response sizes.
 
 ## Docker
 
