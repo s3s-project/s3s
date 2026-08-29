@@ -53,6 +53,9 @@ use crate::region::Region;
 // AWS-compatible default: https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-presigned-url.html#PresignedUrl-Expiration
 pub(crate) const DEFAULT_PRESIGNED_URL_MAX_EXPIRES_SECS: u32 = 7 * 24 * 60 * 60;
 
+/// Default `S3Config::put_object_max_size`: 5 GiB, matching the AWS single-PUT object size limit.
+pub(crate) const DEFAULT_PUT_OBJECT_MAX_SIZE: u64 = 5 * 1024 * 1024 * 1024;
+
 // Aligned with MinIO: https://github.com/minio/minio/blob/master/cmd/streaming-signature-v4.go
 pub(crate) const DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE: usize = 256 * 1024 * 1024;
 
@@ -130,14 +133,14 @@ pub struct S3Config {
     /// This limit prevents unbounded memory allocation for operations that require
     /// the full body in memory (e.g., XML parsing).
     ///
-    /// Default: 20 MB (20 * 1024 * 1024)
+    /// Default: 20 MiB (20 * 1024 * 1024)
     pub xml_max_body_size: usize,
 
     /// Maximum file size for POST object in bytes.
     ///
-    /// S3 has a 5GB limit for single PUT object, so this is a reasonable default.
+    /// S3 has a 5 GiB limit for single PUT object, so this is a reasonable default.
     ///
-    /// Default: 5 GB (5 * 1024 * 1024 * 1024)
+    /// Default: 5 GiB (5 * 1024 * 1024 * 1024)
     pub post_object_max_file_size: u64,
 
     /// Optional maximum object size for streaming uploads in bytes.
@@ -152,7 +155,8 @@ pub struct S3Config {
     /// `POST Object` keeps using [`S3Config::post_object_max_file_size`] as its
     /// file-size limit.
     ///
-    /// Default: None
+    /// Default: 5 GiB (5 * 1024 * 1024 * 1024), matching the AWS single-PUT object
+    /// size limit. Set this to `None` explicitly to disable the limit.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub put_object_max_size: Option<u64>,
 
@@ -164,7 +168,7 @@ pub struct S3Config {
     ///
     /// Set to `None` to disable the limit.
     ///
-    /// Default: 1 MB (1024 * 1024)
+    /// Default: 1 MiB (1024 * 1024)
     pub custom_route_max_body_size: Option<u64>,
 
     /// Maximum chunk data size for aws-chunked streaming uploads in bytes.
@@ -173,21 +177,21 @@ pub struct S3Config {
     /// so this limit bounds the memory retained per chunk. Unsigned chunks are streamed
     /// without buffering and are not subject to this limit.
     ///
-    /// Default: 256 MB (256 * 1024 * 1024)
+    /// Default: 256 MiB (256 * 1024 * 1024)
     pub aws_chunked_stream_max_chunk_size: usize,
 
     /// Maximum size per form field in bytes.
     ///
     /// This prevents denial-of-service attacks via oversized individual fields.
     ///
-    /// Default: 1 MB (1024 * 1024)
+    /// Default: 1 MiB (1024 * 1024)
     pub form_max_field_size: usize,
 
     /// Maximum total size for all form fields combined in bytes.
     ///
     /// This prevents denial-of-service attacks via accumulation of many fields.
     ///
-    /// Default: 20 MB (20 * 1024 * 1024)
+    /// Default: 20 MiB (20 * 1024 * 1024)
     pub form_max_fields_size: usize,
 
     /// Maximum number of parts in multipart form.
@@ -288,13 +292,13 @@ pub struct S3Config {
 impl Default for S3Config {
     fn default() -> Self {
         Self {
-            xml_max_body_size: 20 * 1024 * 1024,               // 20 MB
-            post_object_max_file_size: 5 * 1024 * 1024 * 1024, // 5 GB
-            put_object_max_size: None,
-            custom_route_max_body_size: Some(1024 * 1024), // 1 MB
+            xml_max_body_size: 20 * 1024 * 1024,               // 20 MiB
+            post_object_max_file_size: 5 * 1024 * 1024 * 1024, // 5 GiB
+            put_object_max_size: Some(DEFAULT_PUT_OBJECT_MAX_SIZE),
+            custom_route_max_body_size: Some(1024 * 1024), // 1 MiB
             aws_chunked_stream_max_chunk_size: DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
-            form_max_field_size: 1024 * 1024,       // 1 MB
-            form_max_fields_size: 20 * 1024 * 1024, // 20 MB
+            form_max_field_size: 1024 * 1024,       // 1 MiB
+            form_max_fields_size: 20 * 1024 * 1024, // 20 MiB
             form_max_parts: 1000,
             presigned_url_max_skew_time_secs: 900, // 15 minutes
             expected_region: None,
@@ -416,7 +420,7 @@ mod tests {
         let config = S3Config::default();
         assert_eq!(config.xml_max_body_size, 20 * 1024 * 1024);
         assert_eq!(config.post_object_max_file_size, 5 * 1024 * 1024 * 1024);
-        assert_eq!(config.put_object_max_size, None);
+        assert_eq!(config.put_object_max_size, Some(DEFAULT_PUT_OBJECT_MAX_SIZE));
         assert_eq!(config.custom_route_max_body_size, Some(1024 * 1024));
         assert_eq!(config.form_max_field_size, 1024 * 1024);
         assert_eq!(config.form_max_fields_size, 20 * 1024 * 1024);
@@ -495,7 +499,7 @@ mod tests {
         let snapshot = provider.snapshot();
         assert_eq!(snapshot.xml_max_body_size, 20 * 1024 * 1024);
         assert_eq!(snapshot.post_object_max_file_size, 5 * 1024 * 1024 * 1024);
-        assert_eq!(snapshot.put_object_max_size, None);
+        assert_eq!(snapshot.put_object_max_size, Some(DEFAULT_PUT_OBJECT_MAX_SIZE));
     }
 
     #[test]
@@ -504,7 +508,7 @@ mod tests {
         let snapshot = provider.snapshot();
         assert_eq!(snapshot.xml_max_body_size, 20 * 1024 * 1024);
         assert_eq!(snapshot.post_object_max_file_size, 5 * 1024 * 1024 * 1024);
-        assert_eq!(snapshot.put_object_max_size, None);
+        assert_eq!(snapshot.put_object_max_size, Some(DEFAULT_PUT_OBJECT_MAX_SIZE));
     }
 
     #[test]
@@ -542,12 +546,27 @@ mod tests {
         assert_eq!(config.xml_max_body_size, 1024);
         // Other fields should have defaults
         assert_eq!(config.post_object_max_file_size, 5 * 1024 * 1024 * 1024);
-        assert_eq!(config.put_object_max_size, None);
+        assert_eq!(config.put_object_max_size, Some(DEFAULT_PUT_OBJECT_MAX_SIZE));
         assert_eq!(config.custom_route_max_body_size, Some(1024 * 1024));
         assert_eq!(config.form_max_field_size, 1024 * 1024);
         assert_eq!(config.sig_v4_allowed_services, ["s3", "sts"]);
         assert_eq!(config.presigned_url_max_expires_secs, DEFAULT_PRESIGNED_URL_MAX_EXPIRES_SECS);
         assert!(config.normalize_content_length);
+    }
+
+    #[test]
+    fn test_serde_null_disables_put_object_max_size() {
+        // An explicit `null` opts out of the default limit (the opt-out path).
+        let json = r#"{"put_object_max_size": null}"#;
+        let config: S3Config = serde_json::from_str(json).expect("deserialize failed");
+        assert_eq!(config.put_object_max_size, None);
+    }
+
+    #[test]
+    fn test_serde_explicit_put_object_max_size_overrides_default() {
+        let json = r#"{"put_object_max_size": 1024}"#;
+        let config: S3Config = serde_json::from_str(json).expect("deserialize failed");
+        assert_eq!(config.put_object_max_size, Some(1024));
     }
 
     #[test]
@@ -557,8 +576,13 @@ mod tests {
     }
 
     #[test]
-    fn test_serde_omits_unset_put_object_max_size() {
-        let json = serde_json::to_value(S3Config::default()).expect("serialize failed");
+    fn test_serde_omits_explicit_none_put_object_max_size() {
+        // The default now serializes as a value; only an explicit `None` is omitted.
+        let config = S3Config {
+            put_object_max_size: None,
+            ..S3Config::default()
+        };
+        let json = serde_json::to_value(config).expect("serialize failed");
         assert!(json.get("put_object_max_size").is_none());
     }
 

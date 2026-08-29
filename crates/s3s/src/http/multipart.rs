@@ -40,8 +40,8 @@ pub struct MultipartLimits {
 impl Default for MultipartLimits {
     fn default() -> Self {
         Self {
-            max_field_size: 1024 * 1024,       // 1 MB
-            max_fields_size: 20 * 1024 * 1024, // 20 MB
+            max_field_size: 1024 * 1024,       // 1 MiB
+            max_fields_size: 20 * 1024 * 1024, // 20 MiB
             max_parts: 1000,
         }
     }

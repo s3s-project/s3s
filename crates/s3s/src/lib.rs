@@ -98,9 +98,10 @@
 //!   operation is open to any client
 //! - HTTP body length limits
 //! - Object-size limits in the [`S3`] implementation for streaming uploads
-//!   (`PUT Object`, `UploadPart`) when
-//!   [`S3Config::put_object_max_size`](crate::config::S3Config::put_object_max_size)
-//!   is not configured
+//!   (`PUT Object`, `UploadPart`): `s3s` applies a default 5 GiB cap via
+//!   [`S3Config::put_object_max_size`](crate::config::S3Config::put_object_max_size);
+//!   implementations should still enforce their own deployment-specific
+//!   limits, and must do so if the cap is disabled (set to `None`)
 //! - Rate limiting
 //! - Back pressure
 //! - Network-level security (firewalls, VPNs, etc.)
