@@ -194,9 +194,16 @@ struct SignatureVerificationContext<'a> {
 
 fn validate_sig_v4_clock_skew(amz_date: &AmzDate, now: jiff::Timestamp, config: &S3Config) -> S3Result<()> {
     let request_time = amz_date.to_time().ok_or_else(|| invalid_request!("invalid amz date"))?;
+    validate_clock_skew(request_time, now, config)
+}
+
+/// Rejects requests whose `date` / `x-amz-date` is farther from the server
+/// time than the configured skew allowance. Shared by `SigV4` and `SigV2`
+/// header authentication.
+fn validate_clock_skew(request_time: jiff::Timestamp, now: jiff::Timestamp, config: &S3Config) -> S3Result<()> {
     let duration = (now - request_time)
         .to_duration(jiff::SpanRelativeTo::days_are_24_hours())
-        .map_err(|_| invalid_request!("invalid amz date"))?;
+        .map_err(|_| invalid_request!("invalid request time"))?;
     let max_skew_time = jiff::SignedDuration::from_secs(i64::from(config.presigned_url_max_skew_time_secs));
 
     if duration.abs() > max_skew_time {
@@ -796,9 +803,28 @@ impl<'a> SignatureContext<'a> {
         let method = &self.req_method;
 
         let date = http::get_unique_header_str(self.hs, "date").or_else(|| http::get_unique_header_str(self.hs, "x-amz-date"));
-        if date.is_none() {
+        let Some(date) = date else {
             return Err(invalid_request!("missing date"));
-        }
+        };
+
+        // Reject stale requests before doing any signing work: a repeated
+        // `x-amz-date` carries the authoritative timestamp (when present, the
+        // `Date` header is not signed), otherwise the `Date` header must be a
+        // fresh RFC 1123 date. Without this check, captured `SigV2` requests
+        // could be replayed indefinitely.
+        let config = self.config.snapshot();
+        let request_time = if let Some(x) = http::get_unique_header_str(self.hs, "x-amz-date") {
+            AmzDate::parse(x)
+                .map_err(|_| invalid_request!("invalid x-amz-date"))?
+                .to_time()
+                .ok_or_else(|| invalid_request!("invalid x-amz-date"))?
+        } else {
+            let ts = crate::dto::Timestamp::parse(crate::dto::TimestampFormat::HttpDate, date)
+                .map_err(|_| invalid_request!("invalid date"))?;
+            let odt: time::OffsetDateTime = ts.into();
+            jiff::Timestamp::from_second(odt.unix_timestamp()).map_err(|_| invalid_request!("invalid date"))?
+        };
+        validate_clock_skew(request_time, jiff::Timestamp::now(), &config)?;
 
         let auth = require_auth(self.auth)?;
         let access_key = auth_v2.access_key;
@@ -1416,6 +1442,7 @@ file content\r\n\
     #[allow(clippy::too_many_arguments)]
     fn sig_v2_test_context<'a>(
         config: &'a Arc<dyn S3ConfigProvider>,
+        auth: Option<&'a dyn crate::auth::S3Auth>,
         method: &'a Method,
         uri: &'a Uri,
         body: &'a mut Body,
@@ -1424,7 +1451,7 @@ file content\r\n\
         mime: Option<Mime>,
     ) -> SignatureContext<'a> {
         SignatureContext {
-            auth: None,
+            auth,
             config,
             req_version: ::http::Version::HTTP_11,
             req_method: method,
@@ -1451,7 +1478,7 @@ file content\r\n\
         let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
         let headers = headers_from_slice(&[("authorization", "AWS AKIAIOSFODNN7EXAMPLE:qgk2+6Sv9/oM7G3qLEjTH1a1l1g=")]);
         let mut body = Body::empty();
-        let mut cx = sig_v2_test_context(&config, &method, &uri, &mut body, None, &headers, None);
+        let mut cx = sig_v2_test_context(&config, None, &method, &uri, &mut body, None, &headers, None);
 
         let err = cx
             .v2_check()
@@ -1469,7 +1496,7 @@ file content\r\n\
         let qs = OrderedQs::parse("AWSAccessKeyId=AKIAIOSFODNN7EXAMPLE&Signature=abc&Expires=1175139620").unwrap();
         let headers = HeaderMap::new();
         let mut body = Body::empty();
-        let mut cx = sig_v2_test_context(&config, &method, &uri, &mut body, Some(&qs), &headers, None);
+        let mut cx = sig_v2_test_context(&config, None, &method, &uri, &mut body, Some(&qs), &headers, None);
 
         let err = cx
             .v2_check()
@@ -1502,7 +1529,7 @@ file content\r\n\
         let method = Method::POST;
         let uri = Uri::from_static("http://localhost/test-bucket");
         let headers = HeaderMap::new();
-        let mut cx = sig_v2_test_context(&config, &method, &uri, &mut body, None, &headers, Some(mime));
+        let mut cx = sig_v2_test_context(&config, None, &method, &uri, &mut body, None, &headers, Some(mime));
 
         let err = cx.check().await.expect_err("SigV2 POST must be rejected when disabled");
         assert_eq!(err.code(), &S3ErrorCode::AccessDenied);
@@ -1516,13 +1543,15 @@ file content\r\n\
 
         // When SigV2 is explicitly enabled, the gate passes and the request proceeds to
         // signature verification; without an auth provider it fails at the auth
-        // lookup with NotImplemented, not AccessDenied.
+        // lookup with NotImplemented, not AccessDenied. The date must be fresh
+        // to pass the freshness check first.
+        let date = fmt_rfc1123(time::OffsetDateTime::now_utc());
         let headers = headers_from_slice(&[
             ("authorization", "AWS AKIAIOSFODNN7EXAMPLE:qgk2+6Sv9/oM7G3qLEjTH1a1l1g="),
-            ("date", "Mon, 26 Nov 2024 00:00:00 GMT"),
+            ("date", &date),
         ]);
         let mut body = Body::empty();
-        let mut cx = sig_v2_test_context(&config, &method, &uri, &mut body, None, &headers, None);
+        let mut cx = sig_v2_test_context(&config, None, &method, &uri, &mut body, None, &headers, None);
 
         let err = cx
             .v2_check()
@@ -1533,8 +1562,167 @@ file content\r\n\
     }
 
     #[tokio::test]
+    async fn sig_v2_header_auth_accepts_fresh_date() {
+        use crate::auth::SimpleAuth;
+
+        let access_key = "AKIAIOSFODNN7EXAMPLE";
+        let secret_key: crate::auth::SecretKey = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".into();
+        let auth = SimpleAuth::from_single(access_key, secret_key.clone());
+
+        let date = fmt_rfc1123(time::OffsetDateTime::now_utc());
+        let signature = sig_v2_header_auth_signature(&secret_key, &date);
+        let headers = headers_from_slice(&[("authorization", &format!("AWS {access_key}:{signature}")), ("date", &date)]);
+
+        let config = sig_v2_test_config(true);
+        let method = Method::GET;
+        let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+        let mut body = Body::empty();
+        let mut cx = sig_v2_test_context(&config, Some(&auth), &method, &uri, &mut body, None, &headers, None);
+
+        let cred = cx
+            .v2_check()
+            .await
+            .expect("v2 header auth must be detected")
+            .expect("a fresh date with a valid signature must pass");
+        assert_eq!(cred.access_key, access_key);
+    }
+
+    #[tokio::test]
+    async fn sig_v2_header_auth_rejects_stale_date() {
+        use crate::auth::SimpleAuth;
+
+        let access_key = "AKIAIOSFODNN7EXAMPLE";
+        let secret_key: crate::auth::SecretKey = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".into();
+        let auth = SimpleAuth::from_single(access_key, secret_key.clone());
+
+        let stale = time::OffsetDateTime::now_utc() - time::Duration::hours(2);
+        let date = fmt_rfc1123(stale);
+        let signature = sig_v2_header_auth_signature(&secret_key, &date);
+        let headers = headers_from_slice(&[("authorization", &format!("AWS {access_key}:{signature}")), ("date", &date)]);
+
+        let config = sig_v2_test_config(true);
+        let method = Method::GET;
+        let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+        let mut body = Body::empty();
+        let mut cx = sig_v2_test_context(&config, Some(&auth), &method, &uri, &mut body, None, &headers, None);
+
+        let err = cx
+            .v2_check()
+            .await
+            .expect("v2 header auth must be detected")
+            .expect_err("a stale date must be rejected");
+        assert_eq!(err.code(), &S3ErrorCode::RequestTimeTooSkewed);
+    }
+
+    #[tokio::test]
+    async fn sig_v2_header_auth_rejects_future_date() {
+        use crate::auth::SimpleAuth;
+
+        let access_key = "AKIAIOSFODNN7EXAMPLE";
+        let secret_key: crate::auth::SecretKey = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".into();
+        let auth = SimpleAuth::from_single(access_key, secret_key.clone());
+
+        let future = time::OffsetDateTime::now_utc() + time::Duration::hours(2);
+        let date = fmt_rfc1123(future);
+        let signature = sig_v2_header_auth_signature(&secret_key, &date);
+        let headers = headers_from_slice(&[("authorization", &format!("AWS {access_key}:{signature}")), ("date", &date)]);
+
+        let config = sig_v2_test_config(true);
+        let method = Method::GET;
+        let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+        let mut body = Body::empty();
+        let mut cx = sig_v2_test_context(&config, Some(&auth), &method, &uri, &mut body, None, &headers, None);
+
+        let err = cx
+            .v2_check()
+            .await
+            .expect("v2 header auth must be detected")
+            .expect_err("a future date must be rejected");
+        assert_eq!(err.code(), &S3ErrorCode::RequestTimeTooSkewed);
+    }
+
+    #[tokio::test]
+    async fn sig_v2_header_auth_rejects_invalid_date_format() {
+        use crate::auth::SimpleAuth;
+
+        let access_key = "AKIAIOSFODNN7EXAMPLE";
+        let secret_key: crate::auth::SecretKey = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".into();
+        let auth = SimpleAuth::from_single(access_key, secret_key.clone());
+
+        let date = "not-a-date";
+        let headers = headers_from_slice(&[("authorization", &format!("AWS {access_key}:whatever")), ("date", date)]);
+
+        let config = sig_v2_test_config(true);
+        let method = Method::GET;
+        let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+        let mut body = Body::empty();
+        let mut cx = sig_v2_test_context(&config, Some(&auth), &method, &uri, &mut body, None, &headers, None);
+
+        let err = cx
+            .v2_check()
+            .await
+            .expect("v2 header auth must be detected")
+            .expect_err("an unparseable date must be rejected");
+        assert_eq!(err.code(), &S3ErrorCode::InvalidRequest);
+    }
+
+    #[tokio::test]
+    async fn sig_v2_header_auth_prefers_x_amz_date() {
+        use crate::auth::SimpleAuth;
+
+        let access_key = "AKIAIOSFODNN7EXAMPLE";
+        let secret_key: crate::auth::SecretKey = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".into();
+        let auth = SimpleAuth::from_single(access_key, secret_key.clone());
+
+        // x-amz-date is authoritative: a stale `Date` header must be ignored
+        // when x-amz-date is present and fresh.
+        let x_amz_date = fmt_current_amz_date(time::OffsetDateTime::now_utc());
+        let stale_date = fmt_rfc1123(time::OffsetDateTime::now_utc() - time::Duration::hours(2));
+        let string_to_sign = s3s_sigv2::create_string_to_sign(
+            s3s_sigv2::Mode::HeaderAuth,
+            "GET",
+            "/test.txt",
+            None,
+            &[("x-amz-date", &x_amz_date)],
+            None,
+        );
+        let signature = s3s_sigv2::calculate_signature(secret_key.expose(), &string_to_sign);
+        let headers = headers_from_slice(&[
+            ("authorization", &format!("AWS {access_key}:{signature}")),
+            ("date", &stale_date),
+            ("x-amz-date", &x_amz_date),
+        ]);
+
+        let config = sig_v2_test_config(true);
+        let method = Method::GET;
+        let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+        let mut body = Body::empty();
+        let mut cx = sig_v2_test_context(&config, Some(&auth), &method, &uri, &mut body, None, &headers, None);
+
+        let cred = cx
+            .v2_check()
+            .await
+            .expect("v2 header auth must be detected")
+            .expect("a fresh x-amz-date must win over a stale Date header");
+        assert_eq!(cred.access_key, access_key);
+    }
+
+    fn fmt_rfc1123(odt: time::OffsetDateTime) -> String {
+        use time::format_description::FormatItem;
+        use time::macros::format_description;
+        const RFC1123: &[FormatItem<'_>] =
+            format_description!("[weekday repr:short], [day] [month repr:short] [year] [hour]:[minute]:[second] GMT");
+        odt.format(RFC1123).expect("valid RFC 1123 date")
+    }
+
+    fn sig_v2_header_auth_signature(secret_key: &crate::auth::SecretKey, date: &str) -> String {
+        let string_to_sign =
+            s3s_sigv2::create_string_to_sign(s3s_sigv2::Mode::HeaderAuth, "GET", "/test.txt", None, &[("date", date)], None);
+        s3s_sigv2::calculate_signature(secret_key.expose(), &string_to_sign)
+    }
+
+    #[tokio::test]
     async fn test_sts_body_hash_computation() {
-        // Test that STS request body hash is computed correctly
         // Typical STS AssumeRole request body
         let body_content = b"Action=AssumeRole&RoleArn=arn:aws:iam::123456789012:role/test-role&RoleSessionName=test-session";
 
@@ -2504,8 +2692,8 @@ file content\r\n\
         };
         let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(config)));
 
-        let date = "Fri, 24 Jan 2030 12:00:00 +0000";
-        let hs = headers_from_slice(&[("date", date), ("host", "s3.amazonaws.com")]);
+        let date = fmt_rfc1123(time::OffsetDateTime::now_utc());
+        let hs = headers_from_slice(&[("date", &date), ("host", "s3.amazonaws.com")]);
 
         let method = Method::GET;
         let uri = Uri::from_static("https://s3.amazonaws.com/test-bucket/test-key");
