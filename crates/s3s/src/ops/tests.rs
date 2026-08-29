@@ -2933,7 +2933,7 @@ mod bodyless_content_length_tests {
         }
     }
 
-    fn sign_request(method: &Method, uri: &Uri) -> String {
+    fn sign_request(method: &Method, uri: &Uri, payload_sha256: &str) -> String {
         let amz_date = s3s_sigv4::AmzDate::parse(AMZ_DATE).unwrap();
         let amz_date_str = amz_date.fmt_iso8601();
         let host = uri.authority().expect("test URI has authority").as_str();
@@ -2942,7 +2942,7 @@ mod bodyless_content_length_tests {
         let query = qs.as_ref().map_or(empty_query, AsRef::as_ref);
         let signed_headers = [
             ("host", host),
-            ("x-amz-content-sha256", EMPTY_SHA256),
+            ("x-amz-content-sha256", payload_sha256),
             ("x-amz-date", amz_date_str.as_str()),
         ];
 
@@ -2951,7 +2951,7 @@ mod bodyless_content_length_tests {
             uri.path(),
             query,
             signed_headers,
-            sig_v4::Payload::SingleChunk(EMPTY_SHA256),
+            sig_v4::Payload::SingleChunk(payload_sha256),
         );
         let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, REGION, SERVICE);
         let signature = sig_v4::calculate_signature(&string_to_sign, &SecretKey::from(SECRET_KEY), &amz_date, REGION, SERVICE);
@@ -2966,7 +2966,7 @@ mod bodyless_content_length_tests {
 
     fn signed_request(method: Method, version: Version, uri: &str, extra_headers: &[(&'static str, &'static str)]) -> Request {
         let uri = uri.parse::<Uri>().unwrap();
-        let authorization = sign_request(&method, &uri);
+        let authorization = sign_request(&method, &uri, EMPTY_SHA256);
         let mut builder = hyper::Request::builder()
             .method(method)
             .version(version)
@@ -3125,6 +3125,71 @@ mod bodyless_content_length_tests {
         assert_eq!(response.status, StatusCode::BAD_REQUEST);
 
         assert_eq!(test_s3.total_bodyless_calls(), 0);
+    }
+
+    #[tokio::test]
+    async fn signed_bodyless_operations_reject_modified_signature() {
+        let test_s3 = Arc::new(TestS3::default());
+        let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
+        let config = test_config();
+        let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
+        let ccx = test_context(&s3, &config, &auth);
+
+        let mut req = signed_request(Method::GET, Version::HTTP_2, "http://localhost/test-bucket/test-key.txt", &[]);
+        let authorization = req
+            .headers
+            .get(crate::header::AUTHORIZATION)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
+        let idx = authorization.find("Signature=").expect("test authorization has a signature") + "Signature=".len();
+        let mut tampered = authorization.into_bytes();
+        tampered[idx..idx + 8].copy_from_slice(b"00000000");
+        req.headers
+            .insert(crate::header::AUTHORIZATION, hyper::header::HeaderValue::from_bytes(&tampered).unwrap());
+
+        let response = super::call(&mut req, &ccx).await.unwrap();
+        assert_eq!(
+            response.status,
+            StatusCode::FORBIDDEN,
+            "tampered signatures must still be rejected on the bodyless path"
+        );
+        assert_eq!(test_s3.get_object.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn signed_bodyless_operations_reject_non_empty_payload_hash() {
+        const NON_EMPTY_SHA256: &str = "0000000000000000000000000000000000000000000000000000000000000000";
+
+        let test_s3 = Arc::new(TestS3::default());
+        let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
+        let config = test_config();
+        let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
+        let ccx = test_context(&s3, &config, &auth);
+
+        let uri = "http://localhost/test-bucket/test-key.txt".parse::<Uri>().unwrap();
+        let authorization = sign_request(&Method::GET, &uri, NON_EMPTY_SHA256);
+        let mut req = Request::from(
+            hyper::Request::builder()
+                .method(Method::GET)
+                .version(Version::HTTP_11)
+                .uri(uri.clone())
+                .header(crate::header::HOST, uri.authority().unwrap().as_str())
+                .header(crate::header::X_AMZ_CONTENT_SHA256, NON_EMPTY_SHA256)
+                .header(crate::header::X_AMZ_DATE, AMZ_DATE)
+                .header(crate::header::AUTHORIZATION, authorization)
+                .body(empty_unknown_length_body())
+                .unwrap(),
+        );
+
+        let response = super::call(&mut req, &ccx).await.unwrap();
+        assert_eq!(
+            response.status,
+            StatusCode::LENGTH_REQUIRED,
+            "a non-empty payload hash claim must still require Content-Length"
+        );
+        assert_eq!(test_s3.get_object.load(Ordering::SeqCst), 0);
     }
 
     #[tokio::test]
