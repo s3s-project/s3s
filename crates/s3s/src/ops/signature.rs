@@ -1830,14 +1830,14 @@ file content\r\n\
         let host = "user.fs.example.com:19000";
         let headers_for_signing = [("host", host)];
         let query_strings_for_signing = presigned_query_fields(&amz_date, "s3");
-        let canonical_request = sig_v4::create_presigned_canonical_request(
-            &method,
+        let canonical_request = s3s_sigv4::create_presigned_canonical_request(
+            method.as_str(),
             decoded_uri_path,
             &query_strings_for_signing,
             headers_for_signing,
         );
-        let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
-        let signature = sig_v4::calculate_signature(&string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
+        let string_to_sign = s3s_sigv4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
+        let signature = s3s_sigv4::calculate_signature(&string_to_sign, secret_key.expose(), &amz_date, "us-east-1", "s3");
         let mut signed_query_strings = query_strings_for_signing;
         signed_query_strings.push(("X-Amz-Signature".to_owned(), signature.as_str().to_owned()));
         let qs = OrderedQs::from_vec_unchecked(signed_query_strings);
@@ -1898,15 +1898,15 @@ file content\r\n\
             ("x-amz-content-sha256", payload_hash),
             ("x-amz-date", amz_date_str.as_str()),
         ];
-        let canonical_request = sig_v4::create_canonical_request(
-            &method,
+        let canonical_request = s3s_sigv4::create_canonical_request(
+            method.as_str(),
             decoded_uri_path,
             &[] as &[(&str, &str)],
             signed_headers,
-            sig_v4::Payload::SingleChunk(payload_hash),
+            s3s_sigv4::Payload::SingleChunk(payload_hash),
         );
-        let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
-        let signature = sig_v4::calculate_signature(&string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
+        let string_to_sign = s3s_sigv4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
+        let signature = s3s_sigv4::calculate_signature(&string_to_sign, secret_key.expose(), &amz_date, "us-east-1", "s3");
         let authorization = format!(
             "AWS4-HMAC-SHA256 Credential={access_key}/{}/us-east-1/s3/aws4_request, \
              SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature={}",
@@ -1964,20 +1964,19 @@ file content\r\n\
             ("AWSAccessKeyId".to_owned(), "AKIAIOSFODNN7EXAMPLE".to_owned()),
             ("Expires".to_owned(), "4294967295".to_owned()),
         ];
-        let string_to_sign = crate::sig_v2::create_string_to_sign(
-            crate::sig_v2::Mode::PresignedUrl,
-            &method,
+        let string_to_sign = s3s_sigv2::create_string_to_sign(
+            s3s_sigv2::Mode::PresignedUrl,
+            method.as_str(),
             "/test.txt",
-            Some(&OrderedQs::from_vec_unchecked(qs_pairs.clone())),
-            &headers,
+            Some(&qs_pairs),
+            &[("host", host)],
             Some("user"),
-        )
-        .expect("presigned string-to-sign construction cannot fail");
+        );
         assert!(
             string_to_sign.contains("/user/test.txt"),
             "the routed bucket prefix must enter the canonicalized resource, got: {string_to_sign:?}"
         );
-        let signature = crate::sig_v2::calculate_signature(&secret_key, &string_to_sign);
+        let signature = s3s_sigv2::calculate_signature(secret_key.expose(), &string_to_sign);
         let mut qs_pairs = qs_pairs;
         qs_pairs.push(("Signature".to_owned(), signature.as_str().to_owned()));
         let qs = OrderedQs::from_vec_unchecked(qs_pairs);
