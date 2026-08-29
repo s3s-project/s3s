@@ -28,6 +28,9 @@ mod multipart;
 mod tests;
 
 #[cfg(test)]
+mod bodyless_error_tests;
+
+#[cfg(test)]
 mod route_skip_validation_tests;
 
 #[cfg(test)]
@@ -135,13 +138,24 @@ fn build_s3_request<T>(input: T, req: &mut Request) -> S3Request<T> {
 pub(crate) fn serialize_error(mut e: S3Error, no_decl: bool) -> S3Result<Response> {
     let status = e.status_code().unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
     let mut res = Response::with_status(status);
-    if no_decl {
-        http::set_xml_body_no_decl(&mut res, &e)?;
-    } else {
-        http::set_xml_body(&mut res, &e)?;
+    let bodyless = http::is_bodyless_status(status);
+    if !bodyless {
+        if no_decl {
+            http::set_xml_body_no_decl(&mut res, &e)?;
+        } else {
+            http::set_xml_body(&mut res, &e)?;
+        }
     }
     if let Some(headers) = e.take_headers() {
         res.headers = headers;
+    }
+    if bodyless {
+        // RFC 9110 §6.4.1: 1xx/204/205/304 responses MUST NOT carry a body. The
+        // XML body is skipped above; drop any body-describing headers too
+        // (e.g. `content-type` from a custom error or the error's own headers).
+        res.headers.remove(hyper::header::CONTENT_LENGTH);
+        res.headers.remove(hyper::header::CONTENT_TYPE);
+        http::strip_body(&mut res);
     }
     drop(e);
     Ok(res)
