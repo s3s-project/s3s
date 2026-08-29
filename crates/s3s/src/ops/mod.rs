@@ -84,6 +84,17 @@ pub trait Operation: Send + Sync + 'static {
     /// bodyless operations such as `GetObject` and `DeleteObject`.
     fn has_request_payload(&self) -> bool;
 
+    /// Whether this operation streams the request body directly to the
+    /// user-implemented [`S3`] handler without buffering.
+    ///
+    /// `true` for operations whose input carries a `StreamingBlob` payload
+    /// (e.g. `PutObject`, `UploadPart`). These bodies are not bounded by
+    /// [`S3Config::xml_max_body_size`]; see
+    /// [`S3Config::put_object_max_size`].
+    fn has_streaming_body(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut Request) -> S3Result<Response>;
 }
 
@@ -861,9 +872,11 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
 
     debug!(op = %op.name(), ?s3_path, "checked access");
 
+    let config = ccx.config.snapshot();
     if op.needs_full_body() {
-        let config = ccx.config.snapshot();
         extract_full_body(content_length, &mut req.body, config.xml_max_body_size).await?;
+    } else if op.has_streaming_body() {
+        req.body.set_limit(config.put_object_max_size);
     }
 
     Ok(Prepare::S3(op))

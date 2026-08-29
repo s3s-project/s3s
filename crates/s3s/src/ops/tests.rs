@@ -1369,6 +1369,323 @@ mod post_policy_test_helpers {
     }
 }
 
+mod put_object_max_size_tests {
+    use super::*;
+
+    use crate::auth::{SecretKey, SimpleAuth};
+    use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
+    use crate::dto::StreamingBlob;
+    use crate::error::StdError;
+    use crate::s3_trait::S3;
+    use bytes::Bytes;
+    use futures::StreamExt;
+    use std::sync::Arc;
+
+    /// The streaming-body predicate is model-driven: exactly the operations
+    /// whose input carries a `StreamingBlob` payload (`PutObject`,
+    /// `UploadPart`, `WriteGetObjectResponse`). `PostObject` is excluded —
+    /// its body is the multipart file stream governed by
+    /// `post_object_max_file_size`.
+    #[test]
+    fn has_streaming_body_matches_streaming_payload_operations() {
+        assert!(PutObject.has_streaming_body());
+        assert!(UploadPart.has_streaming_body());
+        assert!(WriteGetObjectResponse.has_streaming_body());
+        assert!(!PostObject.has_streaming_body());
+        assert!(!GetObject.has_streaming_body());
+        assert!(!DeleteObjects.has_streaming_body());
+        assert!(!PutBucketPolicy.has_streaming_body());
+    }
+
+    fn test_config(put_object_max_size: Option<u64>) -> Arc<dyn S3ConfigProvider> {
+        Arc::new(StaticConfigProvider::new(Arc::new(S3Config {
+            put_object_max_size,
+            presigned_url_max_skew_time_secs: u32::MAX,
+            ..Default::default()
+        })))
+    }
+
+    fn test_context<'a>(
+        s3: &'a Arc<dyn S3>,
+        config: &'a Arc<dyn S3ConfigProvider>,
+        auth: Option<&'a dyn crate::auth::S3Auth>,
+    ) -> CallContext<'a> {
+        CallContext {
+            s3,
+            config,
+            host: None,
+            auth,
+            access: None,
+            route: None,
+            validation: None,
+        }
+    }
+
+    fn plain_put_request(body: Bytes) -> Request {
+        Request::from(
+            hyper::Request::builder()
+                .method(Method::PUT)
+                .uri("http://localhost/test-bucket/test-key")
+                .header(crate::header::HOST, "localhost")
+                .header(hyper::header::CONTENT_LENGTH, body.len())
+                .body(Body::from(body))
+                .unwrap(),
+        )
+    }
+
+    fn upload_part_request(body: Bytes) -> Request {
+        Request::from(
+            hyper::Request::builder()
+                .method(Method::PUT)
+                .uri("http://localhost/test-bucket/test-key?partNumber=1&uploadId=test-upload")
+                .header(crate::header::HOST, "localhost")
+                .header(hyper::header::CONTENT_LENGTH, body.len())
+                .body(Body::from(body))
+                .unwrap(),
+        )
+    }
+
+    async fn collect_stream<S>(mut stream: S) -> Result<Bytes, StdError>
+    where
+        S: futures::Stream<Item = Result<Bytes, StdError>> + Unpin,
+    {
+        let mut collected = Vec::new();
+        while let Some(chunk) = stream.next().await {
+            collected.extend_from_slice(&chunk?);
+        }
+        Ok(Bytes::from(collected))
+    }
+
+    async fn expect_limit_error(blob: StreamingBlob) -> StdError {
+        let err = collect_stream(blob)
+            .await
+            .expect_err("stream should fail once the object-size limit is exceeded");
+        assert!(err.to_string().contains("exceeds limit"), "limit error should be clear, got: {err}");
+        err
+    }
+
+    fn signed_aws_chunked_put_request(chunk_data: &Bytes, access_key: &str, secret_key: &SecretKey) -> Request {
+        let method = Method::PUT;
+        let uri_path = "/test-bucket/test-key";
+        let amz_date = s3s_sigv4::AmzDate::parse("20130524T000000Z").unwrap();
+        let decoded_content_length = chunk_data.len().to_string();
+        let headers_for_signing = [
+            ("host", "s3.amazonaws.com"),
+            ("x-amz-content-sha256", "STREAMING-AWS4-HMAC-SHA256-PAYLOAD"),
+            ("x-amz-date", "20130524T000000Z"),
+            ("x-amz-decoded-content-length", decoded_content_length.as_str()),
+        ];
+        let canonical_request = crate::sig_v4::create_canonical_request(
+            &method,
+            uri_path,
+            &[] as &[(&str, &str)],
+            headers_for_signing,
+            crate::sig_v4::Payload::MultipleChunks,
+        );
+        let seed_string_to_sign = crate::sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
+        let seed_signature = crate::sig_v4::calculate_signature(&seed_string_to_sign, secret_key, &amz_date, "us-east-1", "s3");
+
+        let chunk_string_to_sign = crate::sig_v4::create_chunk_string_to_sign(
+            &amz_date,
+            "us-east-1",
+            "s3",
+            seed_signature.as_str(),
+            std::slice::from_ref(chunk_data),
+        );
+        let chunk_signature = crate::sig_v4::calculate_signature(&chunk_string_to_sign, secret_key, &amz_date, "us-east-1", "s3");
+        let final_string_to_sign =
+            crate::sig_v4::create_chunk_string_to_sign(&amz_date, "us-east-1", "s3", chunk_signature.as_str(), &[]);
+        let final_signature = crate::sig_v4::calculate_signature(&final_string_to_sign, secret_key, &amz_date, "us-east-1", "s3");
+
+        let mut streaming_body = Vec::new();
+        streaming_body
+            .extend_from_slice(format!("{:x};chunk-signature={}\r\n", chunk_data.len(), chunk_signature.as_str()).as_bytes());
+        streaming_body.extend_from_slice(chunk_data);
+        streaming_body.extend_from_slice(b"\r\n");
+        streaming_body.extend_from_slice(format!("0;chunk-signature={}\r\n\r\n", final_signature.as_str()).as_bytes());
+
+        let authorization = format!(
+            "AWS4-HMAC-SHA256 Credential={access_key}/20130524/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date;x-amz-decoded-content-length, Signature={}",
+            seed_signature.as_str(),
+        );
+
+        Request::from(
+            hyper::Request::builder()
+                .method(method)
+                .uri("https://s3.amazonaws.com/test-bucket/test-key")
+                .header(crate::header::HOST, "s3.amazonaws.com")
+                .header(hyper::header::CONTENT_LENGTH, streaming_body.len())
+                .header("content-encoding", "aws-chunked")
+                .header(crate::header::AUTHORIZATION, authorization)
+                .header(crate::header::X_AMZ_CONTENT_SHA256, "STREAMING-AWS4-HMAC-SHA256-PAYLOAD")
+                .header(crate::header::X_AMZ_DATE, "20130524T000000Z")
+                .header(crate::header::X_AMZ_DECODED_CONTENT_LENGTH, decoded_content_length)
+                .body(Body::from(Bytes::from(streaming_body)))
+                .unwrap(),
+        )
+    }
+
+    #[tokio::test]
+    async fn none_leaves_plain_put_stream_unchanged() {
+        let s3: Arc<dyn S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+        let config = test_config(None);
+        let ccx = test_context(&s3, &config, None);
+        let expected_body = Bytes::from_static(b"hello");
+        let mut req = plain_put_request(expected_body.clone());
+
+        let Prepare::S3(op) = super::prepare(&mut req, &ccx).await.expect("prepare should succeed") else {
+            panic!("plain PUT should resolve to an S3 operation");
+        };
+        assert_eq!(op.name(), "PutObject");
+
+        let input = generated::PutObject::deserialize_http(&mut req).expect("deserialize should succeed");
+        let body = input.body.expect("put object input should carry a body");
+        let collected = collect_stream(body).await.expect("unlimited stream should be readable");
+        assert_eq!(collected, expected_body);
+    }
+
+    #[tokio::test]
+    async fn rejects_oversized_plain_put_at_read_time() {
+        let s3: Arc<dyn S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+        let config = test_config(Some(4));
+        let ccx = test_context(&s3, &config, None);
+        let mut req = plain_put_request(Bytes::from_static(b"hello"));
+
+        let Prepare::S3(op) = super::prepare(&mut req, &ccx).await.expect("prepare should succeed") else {
+            panic!("plain PUT should resolve to an S3 operation");
+        };
+        assert_eq!(op.name(), "PutObject");
+
+        let input = generated::PutObject::deserialize_http(&mut req).expect("deserialize should succeed");
+        expect_limit_error(input.body.expect("put object input should carry a body")).await;
+    }
+
+    #[tokio::test]
+    async fn rejects_oversized_upload_part_at_read_time() {
+        let s3: Arc<dyn S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+        let config = test_config(Some(4));
+        let ccx = test_context(&s3, &config, None);
+        let mut req = upload_part_request(Bytes::from_static(b"hello"));
+
+        let Prepare::S3(op) = super::prepare(&mut req, &ccx).await.expect("prepare should succeed") else {
+            panic!("upload part should resolve to an S3 operation");
+        };
+        assert_eq!(op.name(), "UploadPart");
+
+        let input = generated::UploadPart::deserialize_http(&mut req).expect("deserialize should succeed");
+        expect_limit_error(input.body.expect("upload part input should carry a body")).await;
+    }
+
+    #[tokio::test]
+    async fn empty_body_operations_are_unaffected_when_limit_is_set() {
+        let s3: Arc<dyn S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+        let config = test_config(Some(0));
+        let ccx = test_context(&s3, &config, None);
+        let mut req = Request::from(
+            hyper::Request::builder()
+                .method(Method::GET)
+                .uri("http://localhost/test-bucket/test-key")
+                .header(crate::header::HOST, "localhost")
+                .body(Body::empty())
+                .unwrap(),
+        );
+
+        let Prepare::S3(op) = super::prepare(&mut req, &ccx).await.expect("prepare should succeed") else {
+            panic!("GET object should resolve to an S3 operation");
+        };
+        assert_eq!(op.name(), "GetObject");
+
+        let input = generated::GetObject::deserialize_http(&mut req).expect("deserialize should succeed");
+        assert_eq!(input.bucket, "test-bucket");
+        assert_eq!(input.key, "test-key");
+        assert!(
+            req.body
+                .store_all_limited(0)
+                .await
+                .expect("empty limited body should be readable")
+                .is_empty()
+        );
+    }
+
+    #[tokio::test]
+    async fn post_object_keeps_post_object_max_file_size_when_put_limit_is_set() {
+        let s3: Arc<dyn S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(S3Config {
+            post_object_max_file_size: 1024,
+            put_object_max_size: Some(1),
+            expected_region: Some("us-east-1".parse().expect("valid test region")),
+            presigned_url_max_skew_time_secs: u32::MAX,
+            ..Default::default()
+        })));
+        let auth = post_policy_test_helpers::create_test_auth();
+        let ccx = test_context(&s3, &config, Some(&auth));
+        let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+        let policy_json = &format!(
+            r#"{{"expiration":"2030-01-01T00:00:00.000Z","conditions":[{}]}}"#,
+            post_policy_test_helpers::BASE_CONDITIONS,
+        );
+        let file_content = "hello";
+        let mut req = post_policy_test_helpers::build_post_object_request(policy_json, file_content, &secret_key, false);
+
+        let Prepare::S3(op) = super::prepare(&mut req, &ccx).await.expect("prepare should succeed") else {
+            panic!("POST Object should resolve to an S3 operation");
+        };
+        assert_eq!(op.name(), "PostObject");
+
+        let stream = req
+            .s3ext
+            .post_object_stream
+            .take()
+            .expect("post object stream should be prepared");
+        let collected = collect_stream(stream)
+            .await
+            .expect("POST Object stream should use its own limit");
+        assert_eq!(collected, Bytes::from_static(b"hello"));
+    }
+
+    #[tokio::test]
+    async fn aws_chunked_put_limit_applies_after_decoding() {
+        let s3: Arc<dyn S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+        let access_key = "AKIAIOSFODNN7EXAMPLE";
+        let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+        let auth = SimpleAuth::from_single(access_key, secret_key.clone());
+
+        let config = test_config(Some(5));
+        let ccx = test_context(&s3, &config, Some(&auth));
+        let decoded = Bytes::from_static(b"hello");
+        let mut req = signed_aws_chunked_put_request(&decoded, access_key, &secret_key);
+
+        let Prepare::S3(op) = super::prepare(&mut req, &ccx)
+            .await
+            .expect("prepare should decode before limiting")
+        else {
+            panic!("aws-chunked PUT should resolve to an S3 operation");
+        };
+        assert_eq!(op.name(), "PutObject");
+
+        let input = generated::PutObject::deserialize_http(&mut req).expect("deserialize should succeed");
+        let body = input.body.expect("put object input should carry a body");
+        let collected = collect_stream(body)
+            .await
+            .expect("decoded stream at limit should be readable");
+        assert_eq!(collected, decoded);
+
+        let config = test_config(Some(4));
+        let ccx = test_context(&s3, &config, Some(&auth));
+        let mut req = signed_aws_chunked_put_request(&decoded, access_key, &secret_key);
+        let Prepare::S3(op) = super::prepare(&mut req, &ccx)
+            .await
+            .expect("prepare should still finish before read-time limit")
+        else {
+            panic!("aws-chunked PUT should resolve to an S3 operation");
+        };
+        assert_eq!(op.name(), "PutObject");
+
+        let input = generated::PutObject::deserialize_http(&mut req).expect("deserialize should succeed");
+        expect_limit_error(input.body.expect("put object input should carry a body")).await;
+    }
+}
+
 #[tokio::test]
 async fn post_object_rejects_wrong_region() {
     use crate::auth::SecretKey;

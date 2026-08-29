@@ -43,11 +43,13 @@ The data types, serialization and deserialization are generated from the smithy 
 
 ## Security
 
-`S3Service` and other adapters in this project have no security protection. If they are exposed to the Internet directly, they may be **attacked**.
+`S3Service` and other adapters in this project are not a complete security boundary. If they are exposed to the Internet directly, they may be **attacked**.
 
 It is up to the user to implement security enhancements such as **HTTP body length limits**, object-size limits, rate limits and back pressure.
 
 **Authentication is required for production deployments.** Without calling `set_auth`, the service accepts anonymous (unsigned) requests and skips authorization entirely: every S3 operation is open to any client that can reach the service, and signed requests fail with `NotImplemented` because no authentication provider is configured. A forgotten `set_auth` turns the service into a publicly readable and writable endpoint.
+
+For streaming uploads (`PUT Object`, `UploadPart`), `s3s` does not impose an object-size limit by default. If `S3Config::put_object_max_size` is not configured, the `S3` implementation is responsible for enforcing deployment-specific object caps. `POST Object` keeps using `S3Config::post_object_max_file_size`.
 
 ## Docker
 
