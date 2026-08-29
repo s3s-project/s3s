@@ -23,11 +23,13 @@
 //! // Using custom config values
 //! let mut config = S3Config::default();
 //! config.xml_max_body_size = 10 * 1024 * 1024;
+//! config.put_object_max_size = Some(5 * 1024 * 1024 * 1024);
 //!
 //! // Using static config provider (immutable)
 //! let static_provider = Arc::new(StaticConfigProvider::new(Arc::new(config.clone())));
 //! let snapshot = static_provider.snapshot();
 //! assert_eq!(snapshot.xml_max_body_size, 10 * 1024 * 1024);
+//! assert_eq!(snapshot.put_object_max_size, Some(5 * 1024 * 1024 * 1024));
 //!
 //! // Using hot-reload config provider (can be updated at runtime)
 //! let hot_reload_provider = Arc::new(HotReloadConfigProvider::default());
@@ -90,6 +92,13 @@ pub trait S3ConfigProvider: Send + Sync + 'static {
 /// Contains configurable parameters for the S3 service with sensible defaults.
 /// The configuration is immutable after creation.
 ///
+/// Streaming uploads such as `PUT Object` and `UploadPart` are not capped by
+/// default. When [`S3Config::put_object_max_size`] is unset, the
+/// [`S3`](crate::S3) implementation is responsible for enforcing object-size
+/// limits for those streams. Set it only when the adapter should enforce an
+/// opt-in deployment hardening limit before handing the stream to the
+/// implementation.
+///
 /// Use with [`StaticConfigProvider`] or [`HotReloadConfigProvider`].
 ///
 /// # Example
@@ -99,11 +108,13 @@ pub trait S3ConfigProvider: Send + Sync + 'static {
 ///
 /// let mut config = S3Config::default();
 /// config.xml_max_body_size = 10 * 1024 * 1024;
+/// config.put_object_max_size = Some(5 * 1024 * 1024 * 1024);
 ///
 /// // Wrap in StaticConfigProvider for immutable config
 /// let static_provider = Arc::new(StaticConfigProvider::new(Arc::new(config.clone())));
 /// let snapshot = static_provider.snapshot();
 /// assert_eq!(snapshot.xml_max_body_size, 10 * 1024 * 1024);
+/// assert_eq!(snapshot.put_object_max_size, Some(5 * 1024 * 1024 * 1024));
 ///
 /// // Or wrap in HotReloadConfigProvider for runtime updates
 /// let hot_config = Arc::new(HotReloadConfigProvider::new(Arc::new(config)));
@@ -128,6 +139,22 @@ pub struct S3Config {
     ///
     /// Default: 5 GB (5 * 1024 * 1024 * 1024)
     pub post_object_max_file_size: u64,
+
+    /// Optional maximum object size for streaming uploads in bytes.
+    ///
+    /// When set, `s3s` limits decoded streaming request bodies for operations
+    /// such as `PUT Object` and `UploadPart` before passing them to the
+    /// [`S3`](crate::S3) implementation. For aws-chunked requests, signature
+    /// verification installs the decoded stream before this limit is applied.
+    /// When unset, `s3s` does not impose a streaming object-size limit and the
+    /// implementation must enforce any deployment-specific cap.
+    ///
+    /// `POST Object` keeps using [`S3Config::post_object_max_file_size`] as its
+    /// file-size limit.
+    ///
+    /// Default: None
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub put_object_max_size: Option<u64>,
 
     /// Maximum size for custom-route request bodies in bytes.
     ///
@@ -243,7 +270,8 @@ impl Default for S3Config {
         Self {
             xml_max_body_size: 20 * 1024 * 1024,               // 20 MB
             post_object_max_file_size: 5 * 1024 * 1024 * 1024, // 5 GB
-            custom_route_max_body_size: Some(1024 * 1024),     // 1 MB
+            put_object_max_size: None,
+            custom_route_max_body_size: Some(1024 * 1024), // 1 MB
             aws_chunked_stream_max_chunk_size: DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
             form_max_field_size: 1024 * 1024,       // 1 MB
             form_max_fields_size: 20 * 1024 * 1024, // 20 MB
@@ -367,6 +395,7 @@ mod tests {
         let config = S3Config::default();
         assert_eq!(config.xml_max_body_size, 20 * 1024 * 1024);
         assert_eq!(config.post_object_max_file_size, 5 * 1024 * 1024 * 1024);
+        assert_eq!(config.put_object_max_size, None);
         assert_eq!(config.custom_route_max_body_size, Some(1024 * 1024));
         assert_eq!(config.form_max_field_size, 1024 * 1024);
         assert_eq!(config.form_max_fields_size, 20 * 1024 * 1024);
@@ -445,6 +474,7 @@ mod tests {
         let snapshot = provider.snapshot();
         assert_eq!(snapshot.xml_max_body_size, 20 * 1024 * 1024);
         assert_eq!(snapshot.post_object_max_file_size, 5 * 1024 * 1024 * 1024);
+        assert_eq!(snapshot.put_object_max_size, None);
     }
 
     #[test]
@@ -453,6 +483,7 @@ mod tests {
         let snapshot = provider.snapshot();
         assert_eq!(snapshot.xml_max_body_size, 20 * 1024 * 1024);
         assert_eq!(snapshot.post_object_max_file_size, 5 * 1024 * 1024 * 1024);
+        assert_eq!(snapshot.put_object_max_size, None);
     }
 
     #[test]
@@ -460,6 +491,7 @@ mod tests {
         let config = S3Config {
             xml_max_body_size: 10 * 1024 * 1024,
             post_object_max_file_size: 1024 * 1024 * 1024,
+            put_object_max_size: Some(512 * 1024 * 1024),
             custom_route_max_body_size: Some(512 * 1024),
             aws_chunked_stream_max_chunk_size: DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
             form_max_field_size: 512 * 1024,
@@ -488,6 +520,7 @@ mod tests {
         assert_eq!(config.xml_max_body_size, 1024);
         // Other fields should have defaults
         assert_eq!(config.post_object_max_file_size, 5 * 1024 * 1024 * 1024);
+        assert_eq!(config.put_object_max_size, None);
         assert_eq!(config.custom_route_max_body_size, Some(1024 * 1024));
         assert_eq!(config.form_max_field_size, 1024 * 1024);
         assert_eq!(config.sig_v4_allowed_services, ["s3", "sts"]);
@@ -498,6 +531,12 @@ mod tests {
     fn test_serde_omits_unset_expected_region() {
         let json = serde_json::to_value(S3Config::default()).expect("serialize failed");
         assert!(json.get("expected_region").is_none());
+    }
+
+    #[test]
+    fn test_serde_omits_unset_put_object_max_size() {
+        let json = serde_json::to_value(S3Config::default()).expect("serialize failed");
+        assert!(json.get("put_object_max_size").is_none());
     }
 
     #[test]

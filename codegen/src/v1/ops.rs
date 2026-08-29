@@ -335,6 +335,15 @@ fn codegen_post_object_fork_op(rust_types: &RustTypes) {
     g(["    fn name(&self) -> &'static str {", "        \"PostObject\"", "    }", ""]);
     g(["    fn needs_full_body(&self) -> bool {", "        false", "    }", ""]);
     g(["    fn has_request_payload(&self) -> bool {", "        true", "    }", ""]);
+    g([
+        "    fn has_streaming_body(&self) -> bool {",
+        "        // POST Object's body is the multipart file stream governed by",
+        "        // `post_object_max_file_size`, not the request body wrapped by",
+        "        // `put_object_max_size`.",
+        "        false",
+        "    }",
+        "",
+    ]);
 
     g([
         "    async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {",
@@ -941,6 +950,11 @@ fn codegen_op_http_call(op: &Operation, rust_types: &RustTypes) {
     g!("}}");
     g!();
 
+    g!("fn has_streaming_body(&self) -> bool {{");
+    g!("{}", has_streaming_body(op, rust_types));
+    g!("}}");
+    g!();
+
     g!("async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {{");
 
     let method = op.name.to_snake_case();
@@ -1139,6 +1153,23 @@ fn needs_full_body(op: &Operation, rust_types: &RustTypes) -> bool {
 fn has_request_payload(op: &Operation, rust_types: &RustTypes) -> bool {
     let rust::Type::Struct(ty) = &rust_types[op.input.as_str()] else { return false };
     ty.fields.iter().any(|field| field.position == "payload")
+}
+
+/// Whether the operation streams a request body directly to the `S3`
+/// implementation without buffering: its input carries a `StreamingBlob`
+/// payload (`PutObject`, `UploadPart`, `WriteGetObjectResponse`).
+fn has_streaming_body(op: &Operation, rust_types: &RustTypes) -> bool {
+    if op.name == "PostObject" {
+        // Synthetic operation: the body is the multipart file stream governed
+        // by `post_object_max_file_size`, not the request body wrapped by
+        // `put_object_max_size`.
+        return false;
+    }
+
+    let rust::Type::Struct(ty) = &rust_types[op.input.as_str()] else { panic!() };
+    ty.fields
+        .iter()
+        .any(|field| field.position == "payload" && field.type_ == "StreamingBlob")
 }
 
 #[allow(clippy::too_many_lines)]

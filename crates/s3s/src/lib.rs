@@ -97,6 +97,10 @@
 //!   accepts anonymous requests and skips authorization entirely — every S3
 //!   operation is open to any client
 //! - HTTP body length limits
+//! - Object-size limits in the [`S3`] implementation for streaming uploads
+//!   (`PUT Object`, `UploadPart`) when
+//!   [`S3Config::put_object_max_size`](crate::config::S3Config::put_object_max_size)
+//!   is not configured
 //! - Rate limiting
 //! - Back pressure
 //! - Network-level security (firewalls, VPNs, etc.)
