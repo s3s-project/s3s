@@ -81,11 +81,12 @@
 //! Streaming uploads (`PUT Object` and `UploadPart`) are passed to the
 //! [`S3`](crate::S3) implementation as streams. By default,
 //! [`S3Config::put_object_max_size`](crate::config::S3Config::put_object_max_size)
-//! is `None`, so `s3s` does not impose an object-size limit for those streams;
-//! the [`S3`](crate::S3) implementation is responsible for enforcing any
-//! deployment-specific object cap. Set `put_object_max_size` to opt in to an
-//! adapter-level limit; aws-chunked requests are capped after signature
-//! verification has installed the decoded stream. `POST Object` keeps using
+//! is `Some(5 GiB)`, matching the AWS single-PUT object size limit, so `s3s`
+//! caps those streams; set it to `None` to disable the adapter-level limit
+//! and leave object-size enforcement to the
+//! [`S3`](crate::S3) implementation. aws-chunked requests are capped after
+//! signature verification has installed the decoded stream. `POST Object`
+//! keeps using
 //! [`S3Config::post_object_max_file_size`](crate::config::S3Config::post_object_max_file_size)
 //! as its file-size limit.
 
@@ -850,7 +851,7 @@ mod tests {
         assert_eq!(config.xml_max_body_size, 20 * 1024 * 1024);
         assert_eq!(config.post_object_max_file_size, 5 * 1024 * 1024 * 1024);
         assert_eq!(config.custom_route_max_body_size, Some(1024 * 1024));
-        assert_eq!(config.put_object_max_size, None);
+        assert_eq!(config.put_object_max_size, Some(5 * 1024 * 1024 * 1024));
     }
 
     #[test]
