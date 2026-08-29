@@ -182,8 +182,6 @@ pub use self::s3_trait::S3;
 // cargo-fuzz / oss-fuzz build environments (no cargo feature, hence no
 // public feature surface and no semver impact).
 #[cfg(fuzzing)]
-pub use self::http::{AwsChunkedStream, AwsChunkedStreamError};
-#[cfg(fuzzing)]
 pub use self::http::{MultipartError, MultipartLimits, OrderedQs, ParseOrderedQsError, transform_multipart};
 #[cfg(fuzzing)]
 #[cfg(fuzzing)]

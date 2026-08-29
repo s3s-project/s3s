@@ -9,9 +9,12 @@
 //!
 //! [`upload_stream`] provides a wrapper that verifies a payload SHA-256 while
 //! forwarding bytes.
+//! [`aws_chunked_stream`] decodes `aws-chunked` request bodies and verifies
+//! their chunk signature chain.
 
 #![deny(missing_docs)]
 
+pub mod aws_chunked_stream;
 pub mod upload_stream;
 
 use crate::error::StdError;
