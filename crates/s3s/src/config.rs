@@ -263,6 +263,26 @@ pub struct S3Config {
     ///
     /// Default: false
     pub normalize_forward_slash_path: bool,
+
+    /// Whether to backfill a known request-body length into the
+    /// `Content-Length` header when the client omitted it.
+    ///
+    /// When enabled (default), a `Content-Length` is inserted before the
+    /// [`S3`](crate::S3) implementation observes the request if the body
+    /// length is known: the `x-amz-decoded-content-length` value for
+    /// aws-chunked uploads, or an exact remaining length (e.g. an empty
+    /// body without `Content-Length`, which is empty by definition per
+    /// RFC 9112 §6.3). This lets storage implementations obtain the object
+    /// size up front instead of treating `None` as ambiguous. The inserted
+    /// header is visible in [`S3Request`](crate::S3Request) via `headers`,
+    /// so they may not be the exact wire headers.
+    ///
+    /// Requests whose length is unknown (e.g. chunked `Transfer-Encoding`
+    /// without aws-chunked) are never backfilled and keep a missing
+    /// `Content-Length`.
+    ///
+    /// Default: true
+    pub normalize_content_length: bool,
 }
 
 impl Default for S3Config {
@@ -282,6 +302,7 @@ impl Default for S3Config {
             enable_sig_v2: false,
             presigned_url_max_expires_secs: DEFAULT_PRESIGNED_URL_MAX_EXPIRES_SECS,
             normalize_forward_slash_path: false,
+            normalize_content_length: true,
         }
     }
 }
@@ -503,6 +524,7 @@ mod tests {
             enable_sig_v2: true,
             presigned_url_max_expires_secs: 86_400,
             normalize_forward_slash_path: false,
+            normalize_content_length: true,
         };
 
         let json = serde_json::to_string(&config).expect("serialize failed");
@@ -525,6 +547,7 @@ mod tests {
         assert_eq!(config.form_max_field_size, 1024 * 1024);
         assert_eq!(config.sig_v4_allowed_services, ["s3", "sts"]);
         assert_eq!(config.presigned_url_max_expires_secs, DEFAULT_PRESIGNED_URL_MAX_EXPIRES_SECS);
+        assert!(config.normalize_content_length);
     }
 
     #[test]

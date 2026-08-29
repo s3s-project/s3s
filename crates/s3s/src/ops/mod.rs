@@ -51,6 +51,7 @@ use crate::post_policy::PostPolicy;
 use crate::protocol::S3Request;
 use crate::route::S3Route;
 use crate::s3_trait::S3;
+use crate::stream::ByteStream as _;
 use crate::validation::{AwsNameValidation, NameValidation};
 
 use std::mem;
@@ -877,6 +878,22 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
         extract_full_body(content_length, &mut req.body, config.xml_max_body_size).await?;
     } else if op.has_streaming_body() {
         req.body.set_limit(config.put_object_max_size);
+        // Backfill a known request-body length so that the `S3`
+        // implementation never sees an ambiguous missing `Content-Length`.
+        // The `x-amz-decoded-content-length` value wins (aws-chunked uploads),
+        // otherwise an exact remaining length (e.g. an empty body without
+        // `Content-Length`, which is empty by definition per RFC 9112 §6.3).
+        // Unknown-length bodies (chunked transfer-encoding without
+        // aws-chunked) stay untouched.
+        if config.normalize_content_length && content_length.is_none() {
+            let known = extract_decoded_content_length(&req.headers)?
+                .map(|x| x as u64)
+                .or_else(|| req.body.remaining_length().exact().map(|x| x as u64));
+            if let Some(known) = known {
+                req.headers
+                    .insert(hyper::header::CONTENT_LENGTH, hyper::header::HeaderValue::from(known));
+            }
+        }
     }
 
     Ok(Prepare::S3(op))

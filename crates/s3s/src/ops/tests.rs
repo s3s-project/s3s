@@ -3424,8 +3424,10 @@ mod bodyless_content_length_tests {
     use crate::protocol::S3Response;
     use crate::sig_v4;
     use bytes::Bytes;
+    use hyper::header::HeaderValue;
     use hyper::{Method, StatusCode, Uri, Version};
     use std::sync::Arc;
+    use std::sync::Mutex;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     const ACCESS_KEY: &str = "test-access";
@@ -3691,6 +3693,123 @@ mod bodyless_content_length_tests {
         }
 
         assert_eq!(test_s3.put_object.load(Ordering::SeqCst), 0);
+    }
+
+    struct ContentLengthRecordingS3 {
+        received: Mutex<Option<(Option<i64>, Option<u64>)>>, // (input.content_length, headers content-length)
+    }
+
+    #[async_trait::async_trait]
+    impl crate::s3_trait::S3 for ContentLengthRecordingS3 {
+        async fn put_object(
+            &self,
+            req: crate::S3Request<crate::dto::PutObjectInput>,
+        ) -> crate::error::S3Result<S3Response<crate::dto::PutObjectOutput>> {
+            let header_cl = req.headers.get(hyper::header::CONTENT_LENGTH).map(|v| {
+                v.to_str()
+                    .expect("test header is ASCII")
+                    .parse::<u64>()
+                    .expect("test header parses")
+            });
+            *self.received.lock().unwrap() = Some((req.input.content_length, header_cl));
+            Ok(S3Response::new(crate::dto::PutObjectOutput::default()))
+        }
+    }
+
+    fn empty_body_signed_put(version: Version) -> Request {
+        let uri = "http://localhost/test-bucket/test-key.txt".parse::<Uri>().unwrap();
+        let authorization = sign_request(&Method::PUT, &uri, EMPTY_SHA256);
+        Request::from(
+            hyper::Request::builder()
+                .method(Method::PUT)
+                .version(version)
+                .uri(uri.clone())
+                .header(crate::header::HOST, uri.authority().unwrap().as_str())
+                .header(crate::header::X_AMZ_CONTENT_SHA256, EMPTY_SHA256)
+                .header(crate::header::X_AMZ_DATE, AMZ_DATE)
+                .header(crate::header::AUTHORIZATION, authorization)
+                .body(Body::empty())
+                .unwrap(),
+        )
+    }
+
+    #[tokio::test]
+    async fn backfills_known_content_length_for_zero_length_put() {
+        // RFC 9112 §6.3: a PUT without `Content-Length` and without
+        // `Transfer-Encoding` has an empty body. The length is known (exact
+        // zero), so with the default `normalize_content_length` the `S3`
+        // implementation must observe `Some(0)` and an inserted
+        // `Content-Length: 0` header instead of an ambiguous `None`.
+        let recording = Arc::new(ContentLengthRecordingS3 {
+            received: Mutex::new(None),
+        });
+        let s3: Arc<dyn crate::s3_trait::S3> = recording.clone();
+        let config = test_config();
+        let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
+        let ccx = test_context(&s3, &config, &auth);
+
+        for version in [Version::HTTP_11, Version::HTTP_2] {
+            let mut req = empty_body_signed_put(version);
+            assert!(req.headers.get(hyper::header::CONTENT_LENGTH).is_none());
+
+            let response = super::call(&mut req, &ccx).await.unwrap();
+            assert_eq!(response.status, StatusCode::OK, "empty-body PutObject over {version:?} must be accepted");
+
+            let (input_len, header_len) = recording.received.lock().unwrap().take().expect("put_object was called");
+            assert_eq!(input_len, Some(0), "dto content_length must be backfilled over {version:?}");
+            assert_eq!(header_len, Some(0), "Content-Length header must be inserted over {version:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn decoded_content_length_takes_priority_over_exact_length() {
+        // aws-chunked uploads express the object size via
+        // `x-amz-decoded-content-length`; when present it must win over the
+        // exact remaining length of the (empty) body.
+        let recording = Arc::new(ContentLengthRecordingS3 {
+            received: Mutex::new(None),
+        });
+        let s3: Arc<dyn crate::s3_trait::S3> = recording.clone();
+        let config = test_config();
+        let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
+        let ccx = test_context(&s3, &config, &auth);
+
+        let mut req = empty_body_signed_put(Version::HTTP_11);
+        req.headers
+            .insert(crate::header::X_AMZ_DECODED_CONTENT_LENGTH, HeaderValue::from_static("5"));
+
+        let response = super::call(&mut req, &ccx).await.unwrap();
+        assert_eq!(response.status, StatusCode::OK);
+
+        let (input_len, header_len) = recording.received.lock().unwrap().take().expect("put_object was called");
+        assert_eq!(input_len, Some(5), "decoded content length must take priority");
+        assert_eq!(header_len, Some(5));
+    }
+
+    #[tokio::test]
+    async fn normalize_content_length_disabled_keeps_strict_header_semantics() {
+        let recording = Arc::new(ContentLengthRecordingS3 {
+            received: Mutex::new(None),
+        });
+        let s3: Arc<dyn crate::s3_trait::S3> = recording.clone();
+        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(S3Config {
+            presigned_url_max_skew_time_secs: u32::MAX,
+            expected_region: Some(REGION.parse().expect("valid test region")),
+            normalize_content_length: false,
+            ..Default::default()
+        })));
+        let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
+        let ccx = test_context(&s3, &config, &auth);
+
+        let mut req = empty_body_signed_put(Version::HTTP_11);
+        assert!(req.headers.get(hyper::header::CONTENT_LENGTH).is_none());
+
+        let response = super::call(&mut req, &ccx).await.unwrap();
+        assert_eq!(response.status, StatusCode::OK, "s3s still accepts the request");
+
+        let (input_len, header_len) = recording.received.lock().unwrap().take().expect("put_object was called");
+        assert_eq!(input_len, None, "dto content_length must reflect the wire headers when disabled");
+        assert_eq!(header_len, None, "no Content-Length may be inserted when disabled");
     }
 
     #[tokio::test]
