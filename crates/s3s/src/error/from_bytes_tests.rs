@@ -63,5 +63,12 @@ fn from_bytes_handles_custom_and_invalid_utf8() {
 
     assert!(matches!(parsed, S3ErrorCode::Custom(_)));
     assert_eq!(parsed.as_str(), custom);
+
+    let unicode_custom = "vendor-specific-错误";
+    let parsed = S3ErrorCode::from_bytes(unicode_custom.as_bytes()).unwrap();
+
+    assert!(matches!(parsed, S3ErrorCode::Custom(_)));
+    assert_eq!(parsed.as_str(), unicode_custom);
+
     assert_eq!(S3ErrorCode::from_bytes(&[0xff]), None);
 }
