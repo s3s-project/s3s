@@ -4,6 +4,13 @@
 //! AWS Signature Version 2 — parsing, canonicalization, and signing.
 
 #![deny(missing_docs)]
+#![deny(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::unwrap_used
+)]
 
 mod authorization;
 pub use self::authorization::*;

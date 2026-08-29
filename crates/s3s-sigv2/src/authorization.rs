@@ -38,6 +38,7 @@ impl<'a> AuthorizationV2<'a> {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::indexing_slicing, clippy::unwrap_used)]
 mod tests {
     use super::*;
 
