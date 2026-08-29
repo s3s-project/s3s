@@ -1010,11 +1010,14 @@ dependencies = [
  "arrayvec",
  "base64-simd",
  "hex-simd",
+ "hmac",
  "jiff",
  "nom",
  "serde",
+ "sha2",
  "smallvec",
  "thiserror",
+ "zeroize",
 ]
 
 [[package]]
