@@ -37,7 +37,6 @@ fi
     --secret-key SKEXAMPLES3S \
     --host 127.0.0.1 \
     --port "$S3S_RCLONE_PORT" \
-    --domain "localhost:$S3S_RCLONE_PORT" \
     --domain localhost \
     "$DATA_DIR" > "$SERVER_LOG" 2>&1 &
 S3S_FS_PID=$!
