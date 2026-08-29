@@ -94,7 +94,7 @@ fn normalize_header_value(ans: &mut String, value: &str) {
 }
 
 /// sha256 hash of an empty string
-const EMPTY_STRING_SHA256_HASH: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+pub(crate) const EMPTY_STRING_SHA256_HASH: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
 /// Payload
 #[derive(Debug, Clone, Copy)]

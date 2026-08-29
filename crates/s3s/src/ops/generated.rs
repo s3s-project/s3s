@@ -566,6 +566,10 @@ impl super::Operation for AbortMultipartUpload {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -676,6 +680,10 @@ impl super::Operation for CompleteMultipartUpload {
     }
 
     fn needs_full_body(&self) -> bool {
+        true
+    }
+
+    fn has_request_payload(&self) -> bool {
         true
     }
 
@@ -869,6 +877,10 @@ impl super::Operation for CopyObject {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -947,6 +959,10 @@ impl super::Operation for CreateBucket {
         true
     }
 
+    fn has_request_payload(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -1004,6 +1020,10 @@ impl super::Operation for CreateBucketMetadataConfiguration {
         true
     }
 
+    fn has_request_payload(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -1058,6 +1078,10 @@ impl super::Operation for CreateBucketMetadataTableConfiguration {
     }
 
     fn needs_full_body(&self) -> bool {
+        true
+    }
+
+    fn has_request_payload(&self) -> bool {
         true
     }
 
@@ -1214,6 +1238,10 @@ impl super::Operation for CreateMultipartUpload {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -1282,6 +1310,10 @@ impl super::Operation for CreateSession {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -1327,6 +1359,10 @@ impl super::Operation for DeleteBucket {
     }
 
     fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    fn has_request_payload(&self) -> bool {
         false
     }
 
@@ -1381,6 +1417,10 @@ impl super::Operation for DeleteBucketAnalyticsConfiguration {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -1429,6 +1469,10 @@ impl super::Operation for DeleteBucketCors {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -1474,6 +1518,10 @@ impl super::Operation for DeleteBucketEncryption {
     }
 
     fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    fn has_request_payload(&self) -> bool {
         false
     }
 
@@ -1528,6 +1576,10 @@ impl super::Operation for DeleteBucketIntelligentTieringConfiguration {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -1579,6 +1631,10 @@ impl super::Operation for DeleteBucketInventoryConfiguration {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -1624,6 +1680,10 @@ impl super::Operation for DeleteBucketLifecycle {
     }
 
     fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    fn has_request_payload(&self) -> bool {
         false
     }
 
@@ -1675,6 +1735,10 @@ impl super::Operation for DeleteBucketMetadataConfiguration {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -1720,6 +1784,10 @@ impl super::Operation for DeleteBucketMetadataTableConfiguration {
     }
 
     fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    fn has_request_payload(&self) -> bool {
         false
     }
 
@@ -1774,6 +1842,10 @@ impl super::Operation for DeleteBucketMetricsConfiguration {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -1819,6 +1891,10 @@ impl super::Operation for DeleteBucketOwnershipControls {
     }
 
     fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    fn has_request_payload(&self) -> bool {
         false
     }
 
@@ -1870,6 +1946,10 @@ impl super::Operation for DeleteBucketPolicy {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -1915,6 +1995,10 @@ impl super::Operation for DeleteBucketReplication {
     }
 
     fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    fn has_request_payload(&self) -> bool {
         false
     }
 
@@ -1966,6 +2050,10 @@ impl super::Operation for DeleteBucketTagging {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -2011,6 +2099,10 @@ impl super::Operation for DeleteBucketWebsite {
     }
 
     fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    fn has_request_payload(&self) -> bool {
         false
     }
 
@@ -2090,6 +2182,10 @@ impl super::Operation for DeleteObject {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -2141,6 +2237,10 @@ impl super::Operation for DeleteObjectTagging {
     }
 
     fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    fn has_request_payload(&self) -> bool {
         false
     }
 
@@ -2211,6 +2311,10 @@ impl super::Operation for DeleteObjects {
         true
     }
 
+    fn has_request_payload(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -2256,6 +2360,10 @@ impl super::Operation for DeletePublicAccessBlock {
     }
 
     fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    fn has_request_payload(&self) -> bool {
         false
     }
 
@@ -2308,6 +2416,10 @@ impl super::Operation for GetBucketAbac {
     }
 
     fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    fn has_request_payload(&self) -> bool {
         false
     }
 
@@ -2365,6 +2477,10 @@ impl super::Operation for GetBucketAccelerateConfiguration {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -2412,6 +2528,10 @@ impl super::Operation for GetBucketAcl {
     }
 
     fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    fn has_request_payload(&self) -> bool {
         false
     }
 
@@ -2470,6 +2590,10 @@ impl super::Operation for GetBucketAnalyticsConfiguration {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -2517,6 +2641,10 @@ impl super::Operation for GetBucketCors {
     }
 
     fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    fn has_request_payload(&self) -> bool {
         false
     }
 
@@ -2569,6 +2697,10 @@ impl super::Operation for GetBucketEncryption {
     }
 
     fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    fn has_request_payload(&self) -> bool {
         false
     }
 
@@ -2627,6 +2759,10 @@ impl super::Operation for GetBucketIntelligentTieringConfiguration {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -2679,6 +2815,10 @@ impl super::Operation for GetBucketInventoryConfiguration {
     }
 
     fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    fn has_request_payload(&self) -> bool {
         false
     }
 
@@ -2737,6 +2877,10 @@ impl super::Operation for GetBucketLifecycleConfiguration {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -2787,6 +2931,10 @@ impl super::Operation for GetBucketLocation {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -2834,6 +2982,10 @@ impl super::Operation for GetBucketLogging {
     }
 
     fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    fn has_request_payload(&self) -> bool {
         false
     }
 
@@ -2889,6 +3041,10 @@ impl super::Operation for GetBucketMetadataConfiguration {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -2938,6 +3094,10 @@ impl super::Operation for GetBucketMetadataTableConfiguration {
     }
 
     fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    fn has_request_payload(&self) -> bool {
         false
     }
 
@@ -2996,6 +3156,10 @@ impl super::Operation for GetBucketMetricsConfiguration {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -3043,6 +3207,10 @@ impl super::Operation for GetBucketNotificationConfiguration {
     }
 
     fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    fn has_request_payload(&self) -> bool {
         false
     }
 
@@ -3098,6 +3266,10 @@ impl super::Operation for GetBucketOwnershipControls {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -3147,6 +3319,10 @@ impl super::Operation for GetBucketPolicy {
     }
 
     fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    fn has_request_payload(&self) -> bool {
         false
     }
 
@@ -3202,6 +3378,10 @@ impl super::Operation for GetBucketPolicyStatus {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -3251,6 +3431,10 @@ impl super::Operation for GetBucketReplication {
     }
 
     fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    fn has_request_payload(&self) -> bool {
         false
     }
 
@@ -3304,6 +3488,10 @@ impl super::Operation for GetBucketRequestPayment {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -3351,6 +3539,10 @@ impl super::Operation for GetBucketTagging {
     }
 
     fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    fn has_request_payload(&self) -> bool {
         false
     }
 
@@ -3404,6 +3596,10 @@ impl super::Operation for GetBucketVersioning {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -3451,6 +3647,10 @@ impl super::Operation for GetBucketWebsite {
     }
 
     fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    fn has_request_payload(&self) -> bool {
         false
     }
 
@@ -3617,6 +3817,10 @@ impl super::Operation for GetObject {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -3674,6 +3878,10 @@ impl super::Operation for GetObjectAcl {
     }
 
     fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    fn has_request_payload(&self) -> bool {
         false
     }
 
@@ -3758,6 +3966,10 @@ impl super::Operation for GetObjectAttributes {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -3817,6 +4029,10 @@ impl super::Operation for GetObjectLegalHold {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -3866,6 +4082,10 @@ impl super::Operation for GetObjectLockConfiguration {
     }
 
     fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    fn has_request_payload(&self) -> bool {
         false
     }
 
@@ -3928,6 +4148,10 @@ impl super::Operation for GetObjectRetention {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -3983,6 +4207,10 @@ impl super::Operation for GetObjectTagging {
     }
 
     fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    fn has_request_payload(&self) -> bool {
         false
     }
 
@@ -4043,6 +4271,10 @@ impl super::Operation for GetObjectTorrent {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -4092,6 +4324,10 @@ impl super::Operation for GetPublicAccessBlock {
     }
 
     fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    fn has_request_payload(&self) -> bool {
         false
     }
 
@@ -4145,6 +4381,10 @@ impl super::Operation for HeadBucket {
     }
 
     fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    fn has_request_payload(&self) -> bool {
         false
     }
 
@@ -4305,6 +4545,10 @@ impl super::Operation for HeadObject {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -4355,6 +4599,10 @@ impl super::Operation for ListBucketAnalyticsConfigurations {
     }
 
     fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    fn has_request_payload(&self) -> bool {
         false
     }
 
@@ -4411,6 +4659,10 @@ impl super::Operation for ListBucketIntelligentTieringConfigurations {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -4464,6 +4716,10 @@ impl super::Operation for ListBucketInventoryConfigurations {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -4514,6 +4770,10 @@ impl super::Operation for ListBucketMetricsConfigurations {
     }
 
     fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    fn has_request_payload(&self) -> bool {
         false
     }
 
@@ -4573,6 +4833,10 @@ impl super::Operation for ListBuckets {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -4620,6 +4884,10 @@ impl super::Operation for ListDirectoryBuckets {
     }
 
     fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    fn has_request_payload(&self) -> bool {
         false
     }
 
@@ -4692,6 +4960,10 @@ impl super::Operation for ListMultipartUploads {
     }
 
     fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    fn has_request_payload(&self) -> bool {
         false
     }
 
@@ -4771,6 +5043,10 @@ impl super::Operation for ListObjectVersions {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -4841,6 +5117,10 @@ impl super::Operation for ListObjects {
     }
 
     fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    fn has_request_payload(&self) -> bool {
         false
     }
 
@@ -4923,6 +5203,10 @@ impl super::Operation for ListObjectsV2 {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -5000,6 +5284,10 @@ impl super::Operation for ListParts {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -5057,6 +5345,10 @@ impl super::Operation for PutBucketAbac {
         true
     }
 
+    fn has_request_payload(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -5108,6 +5400,10 @@ impl super::Operation for PutBucketAccelerateConfiguration {
     }
 
     fn needs_full_body(&self) -> bool {
+        true
+    }
+
+    fn has_request_payload(&self) -> bool {
         true
     }
 
@@ -5186,6 +5482,10 @@ impl super::Operation for PutBucketAcl {
         true
     }
 
+    fn has_request_payload(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -5237,6 +5537,10 @@ impl super::Operation for PutBucketAnalyticsConfiguration {
     }
 
     fn needs_full_body(&self) -> bool {
+        true
+    }
+
+    fn has_request_payload(&self) -> bool {
         true
     }
 
@@ -5297,6 +5601,10 @@ impl super::Operation for PutBucketCors {
         true
     }
 
+    fn has_request_payload(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -5354,6 +5662,10 @@ impl super::Operation for PutBucketEncryption {
         true
     }
 
+    fn has_request_payload(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -5408,6 +5720,10 @@ impl super::Operation for PutBucketIntelligentTieringConfiguration {
         true
     }
 
+    fn has_request_payload(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -5459,6 +5775,10 @@ impl super::Operation for PutBucketInventoryConfiguration {
     }
 
     fn needs_full_body(&self) -> bool {
+        true
+    }
+
+    fn has_request_payload(&self) -> bool {
         true
     }
 
@@ -5526,6 +5846,10 @@ impl super::Operation for PutBucketLifecycleConfiguration {
         true
     }
 
+    fn has_request_payload(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -5583,6 +5907,10 @@ impl super::Operation for PutBucketLogging {
         true
     }
 
+    fn has_request_payload(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -5634,6 +5962,10 @@ impl super::Operation for PutBucketMetricsConfiguration {
     }
 
     fn needs_full_body(&self) -> bool {
+        true
+    }
+
+    fn has_request_payload(&self) -> bool {
         true
     }
 
@@ -5692,6 +6024,10 @@ impl super::Operation for PutBucketNotificationConfiguration {
         true
     }
 
+    fn has_request_payload(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -5746,6 +6082,10 @@ impl super::Operation for PutBucketOwnershipControls {
     }
 
     fn needs_full_body(&self) -> bool {
+        true
+    }
+
+    fn has_request_payload(&self) -> bool {
         true
     }
 
@@ -5810,6 +6150,10 @@ impl super::Operation for PutBucketPolicy {
         true
     }
 
+    fn has_request_payload(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -5870,6 +6214,10 @@ impl super::Operation for PutBucketReplication {
         true
     }
 
+    fn has_request_payload(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -5927,6 +6275,10 @@ impl super::Operation for PutBucketRequestPayment {
         true
     }
 
+    fn has_request_payload(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -5981,6 +6333,10 @@ impl super::Operation for PutBucketTagging {
     }
 
     fn needs_full_body(&self) -> bool {
+        true
+    }
+
+    fn has_request_payload(&self) -> bool {
         true
     }
 
@@ -6044,6 +6400,10 @@ impl super::Operation for PutBucketVersioning {
         true
     }
 
+    fn has_request_payload(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -6098,6 +6458,10 @@ impl super::Operation for PutBucketWebsite {
     }
 
     fn needs_full_body(&self) -> bool {
+        true
+    }
+
+    fn has_request_payload(&self) -> bool {
         true
     }
 
@@ -6481,6 +6845,10 @@ impl super::Operation for PutObject {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -6565,6 +6933,10 @@ impl super::Operation for PutObjectAcl {
         true
     }
 
+    fn has_request_payload(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -6637,6 +7009,10 @@ impl super::Operation for PutObjectLegalHold {
         true
     }
 
+    fn has_request_payload(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -6699,6 +7075,10 @@ impl super::Operation for PutObjectLockConfiguration {
     }
 
     fn needs_full_body(&self) -> bool {
+        true
+    }
+
+    fn has_request_payload(&self) -> bool {
         true
     }
 
@@ -6778,6 +7158,10 @@ impl super::Operation for PutObjectRetention {
         true
     }
 
+    fn has_request_payload(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -6844,6 +7228,10 @@ impl super::Operation for PutObjectTagging {
         true
     }
 
+    fn has_request_payload(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -6898,6 +7286,10 @@ impl super::Operation for PutPublicAccessBlock {
     }
 
     fn needs_full_body(&self) -> bool {
+        true
+    }
+
+    fn has_request_payload(&self) -> bool {
         true
     }
 
@@ -6982,6 +7374,10 @@ impl super::Operation for RenameObject {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -7043,6 +7439,10 @@ impl super::Operation for RestoreObject {
     }
 
     fn needs_full_body(&self) -> bool {
+        true
+    }
+
+    fn has_request_payload(&self) -> bool {
         true
     }
 
@@ -7113,6 +7513,10 @@ impl super::Operation for SelectObjectContent {
         true
     }
 
+    fn has_request_payload(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -7167,6 +7571,10 @@ impl super::Operation for UpdateBucketMetadataAnnotationTableConfiguration {
     }
 
     fn needs_full_body(&self) -> bool {
+        true
+    }
+
+    fn has_request_payload(&self) -> bool {
         true
     }
 
@@ -7229,6 +7637,10 @@ impl super::Operation for UpdateBucketMetadataInventoryTableConfiguration {
         true
     }
 
+    fn has_request_payload(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -7285,6 +7697,10 @@ impl super::Operation for UpdateBucketMetadataJournalTableConfiguration {
     }
 
     fn needs_full_body(&self) -> bool {
+        true
+    }
+
+    fn has_request_payload(&self) -> bool {
         true
     }
 
@@ -7417,6 +7833,10 @@ impl super::Operation for UploadPart {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -7530,6 +7950,10 @@ impl super::Operation for UploadPartCopy {
     }
 
     fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    fn has_request_payload(&self) -> bool {
         false
     }
 
@@ -7728,6 +8152,10 @@ impl super::Operation for WriteGetObjectResponse {
         false
     }
 
+    fn has_request_payload(&self) -> bool {
+        true
+    }
+
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
         let input = Self::deserialize_http(req)?;
         let mut s3_req = super::build_s3_request(input, req);
@@ -7839,6 +8267,10 @@ impl super::Operation for PostObject {
 
     fn needs_full_body(&self) -> bool {
         false
+    }
+
+    fn has_request_payload(&self) -> bool {
+        true
     }
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
