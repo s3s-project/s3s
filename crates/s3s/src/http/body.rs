@@ -32,6 +32,10 @@ pin_project_lite::pin_project! {
     pub struct Body {
         #[pin]
         kind: Kind,
+        // The remaining byte allowance before reads start failing.
+        // `None` means unlimited; `Some(n)` means at most `n` more bytes may
+        // be yielded before a read error is returned.
+        remaining_limit: Option<u64>,
     }
 }
 
@@ -73,18 +77,21 @@ impl Body {
     fn once(bytes: Bytes) -> Self {
         Self {
             kind: Kind::Once { inner: bytes },
+            remaining_limit: None,
         }
     }
 
     fn hyper(body: hyper::body::Incoming) -> Self {
         Self {
             kind: Kind::Hyper { inner: body },
+            remaining_limit: None,
         }
     }
 
     fn dyn_stream(stream: DynByteStream) -> Self {
         Self {
             kind: Kind::DynStream { inner: stream },
+            remaining_limit: None,
         }
     }
 
@@ -101,6 +108,7 @@ impl Body {
             kind: Kind::BoxBody {
                 inner: BoxBody::new(http_body_util::BodyExt::map_err(body, From::from)),
             },
+            remaining_limit: None,
         }
     }
 
@@ -118,7 +126,18 @@ impl Body {
             kind: Kind::UnsyncBoxBody {
                 inner: Mutex::new(UnsyncBoxBody::new(http_body_util::BodyExt::map_err(body, From::from))),
             },
+            remaining_limit: None,
         }
+    }
+
+    /// Sets the byte limit for this body.
+    ///
+    /// Reads fail if the body yields more than `limit` bytes. This is useful
+    /// when forwarding streaming bodies to handlers that may aggregate them.
+    ///
+    /// Pass `None` to disable the limit.
+    pub fn set_limit(&mut self, limit: Option<u64>) {
+        self.remaining_limit = limit;
     }
 }
 
@@ -159,7 +178,7 @@ impl http_body::Body for Body {
 
     fn poll_frame(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
         let mut this = self.project();
-        match this.kind.as_mut().project() {
+        let poll = match this.kind.as_mut().project() {
             KindProj::Empty => {
                 Poll::Ready(None) //
             }
@@ -189,7 +208,20 @@ impl http_body::Body for Body {
                 Stream::poll_next(inner, cx).map_ok(Frame::data)
                 //
             }
+        };
+        if let Some(remaining) = this.remaining_limit.as_mut()
+            && let Poll::Ready(Some(Ok(frame))) = &poll
+            && let Some(data) = frame.data_ref()
+        {
+            let len = data.len() as u64;
+            if len > *remaining {
+                let size = data.len();
+                let limit = usize::try_from(*remaining).unwrap_or(usize::MAX);
+                return Poll::Ready(Some(Err(StdError::from(BodySizeLimitExceeded { size, limit }))));
+            }
+            *remaining -= len;
         }
+        poll
     }
 
     fn is_end_stream(&self) -> bool {
@@ -268,6 +300,7 @@ impl fmt::Debug for Body {
                 d.field("remaining_length", &inner.remaining_length());
             }
         }
+        d.field("remaining_limit", &self.remaining_limit);
         d.finish()
     }
 }
@@ -356,6 +389,35 @@ mod tests {
         let result = body.store_all_limited(10).await;
         assert!(result.is_ok());
         assert!(result.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn limited_allows_body_within_limit() {
+        let data = Bytes::from_static(b"hello world");
+        let mut body = Body::from(data.clone());
+        body.set_limit(Some(u64::try_from(data.len()).unwrap()));
+        let result = http_body_util::BodyExt::collect(body).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().to_bytes(), data);
+    }
+
+    #[tokio::test]
+    async fn limited_rejects_body_over_limit() {
+        let mut body = Body::from(Bytes::from_static(b"hello world"));
+        body.set_limit(Some(5));
+        let result = http_body_util::BodyExt::collect(body).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn set_limit_none_disables_limit() {
+        let data = Bytes::from_static(b"hello world");
+        let mut body = Body::from(data.clone());
+        body.set_limit(Some(5));
+        body.set_limit(None);
+        let result = http_body_util::BodyExt::collect(body).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().to_bytes(), data);
     }
 
     #[test]
