@@ -7,7 +7,7 @@
 
 use crate::crypto::Checksum as _;
 use crate::crypto::Sha256;
-use crate::error::StdError;
+use crate::error::{S3ErrorCode, StdError};
 use crate::stream::{ByteStream, DynByteStream, RemainingLength};
 use crate::utils::crypto::Sha256Sum;
 
@@ -60,6 +60,19 @@ pub enum UploadStreamError {
     /// Stream ended before reading declared length.
     #[error("UploadStreamError: Incomplete")]
     Incomplete,
+}
+
+impl UploadStreamError {
+    /// Maps a stream-verification error to the `S3` error code a conforming
+    /// implementation should report.
+    #[must_use]
+    pub fn to_s3_error_code(&self) -> S3ErrorCode {
+        match self {
+            Self::Underlying(_) => S3ErrorCode::InternalError,
+            Self::Sha256Mismatch => S3ErrorCode::BadDigest,
+            Self::LengthMismatch | Self::Incomplete => S3ErrorCode::IncompleteBody,
+        }
+    }
 }
 
 impl<S> UploadStream<S> {
@@ -223,6 +236,22 @@ mod tests {
 
     use futures::StreamExt as _;
     use std::io;
+
+    #[test]
+    fn to_s3_error_code_maps_all_variants() {
+        let cases = [
+            (UploadStreamError::Sha256Mismatch, S3ErrorCode::BadDigest),
+            (UploadStreamError::LengthMismatch, S3ErrorCode::IncompleteBody),
+            (UploadStreamError::Incomplete, S3ErrorCode::IncompleteBody),
+            (
+                UploadStreamError::Underlying(Box::new(io::Error::other("boom"))),
+                S3ErrorCode::InternalError,
+            ),
+        ];
+        for (err, expected) in cases {
+            assert_eq!(err.to_s3_error_code(), expected, "{err:?}");
+        }
+    }
 
     #[allow(clippy::unnecessary_wraps)]
     fn ok_bytes(data: &'static [u8]) -> Result<Bytes, StdError> {

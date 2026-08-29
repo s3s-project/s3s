@@ -43,7 +43,20 @@ where
 
 impl From<Error> for S3Error {
     fn from(e: Error) -> Self {
-        S3Error::with_source(S3ErrorCode::InternalError, e.source)
+        let source = e.source;
+
+        // Stream-verification errors from `s3s` (payload checksum, chunk
+        // signature, decoded length) carry a precise `S3` error code; map them
+        // so clients get `BadDigest` / `IncompleteBody` / `SignatureDoesNotMatch`
+        // instead of a generic 500.
+        if let Some(err) = source.downcast_ref::<s3s::stream::upload_stream::UploadStreamError>() {
+            return S3Error::with_source(err.to_s3_error_code(), source);
+        }
+        if let Some(err) = source.downcast_ref::<s3s::stream::aws_chunked_stream::AwsChunkedStreamError>() {
+            return S3Error::with_source(err.to_s3_error_code(), source);
+        }
+
+        S3Error::with_source(S3ErrorCode::InternalError, source)
     }
 }
 
@@ -73,4 +86,30 @@ macro_rules! try_ {
             }
         }
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn maps_upload_stream_errors_to_s3_error_codes() {
+        let e = Error::new(Box::new(s3s::stream::upload_stream::UploadStreamError::Sha256Mismatch));
+        let s3err: S3Error = e.into();
+        assert_eq!(s3err.code(), &S3ErrorCode::BadDigest);
+    }
+
+    #[test]
+    fn maps_aws_chunked_stream_errors_to_s3_error_codes() {
+        let e = Error::new(Box::new(s3s::stream::aws_chunked_stream::AwsChunkedStreamError::SignatureMismatch));
+        let s3err: S3Error = e.into();
+        assert_eq!(s3err.code(), &S3ErrorCode::SignatureDoesNotMatch);
+    }
+
+    #[test]
+    fn keeps_internal_error_for_unrecognized_sources() {
+        let e = Error::new(Box::new(std::io::Error::other("boom")));
+        let s3err: S3Error = e.into();
+        assert_eq!(s3err.code(), &S3ErrorCode::InternalError);
+    }
 }

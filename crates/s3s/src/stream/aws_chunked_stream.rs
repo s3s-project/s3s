@@ -20,7 +20,7 @@
 //! unauthenticated data — a trade-off `s3s` leaves to the implementation.
 
 use crate::auth::SecretKey;
-use crate::error::StdError;
+use crate::error::{S3ErrorCode, StdError};
 use crate::protocol::TrailingHeaders;
 use crate::stream::{ByteStream, DynByteStream, RemainingLength};
 use crate::utils::SyncBoxFuture;
@@ -132,6 +132,24 @@ pub enum AwsChunkedStreamError {
     /// Too many trailer headers
     #[error("AwsChunkedStreamError: TooManyTrailerHeaders: count {0} exceeds limit {1}")]
     TooManyTrailerHeaders(usize, usize),
+}
+
+impl AwsChunkedStreamError {
+    /// Maps a stream-verification error to the `S3` error code a conforming
+    /// implementation should report.
+    #[must_use]
+    pub fn to_s3_error_code(&self) -> S3ErrorCode {
+        match self {
+            Self::Underlying(_) => S3ErrorCode::InternalError,
+            Self::SignatureMismatch => S3ErrorCode::SignatureDoesNotMatch,
+            Self::FormatError
+            | Self::Incomplete
+            | Self::LengthMismatch
+            | Self::TrailersTooLarge(..)
+            | Self::TooManyTrailerHeaders(..) => S3ErrorCode::IncompleteBody,
+            Self::ChunkMetaTooLarge(..) | Self::ChunkDataTooLarge(..) => S3ErrorCode::EntityTooLarge,
+        }
+    }
 }
 
 /// Chunk meta
@@ -738,6 +756,27 @@ fn trim_ascii_whitespace(mut s: &[u8]) -> &[u8] {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn to_s3_error_code_maps_all_variants() {
+        let cases = [
+            (
+                AwsChunkedStreamError::Underlying(Box::new(std::io::Error::other("boom"))),
+                S3ErrorCode::InternalError,
+            ),
+            (AwsChunkedStreamError::SignatureMismatch, S3ErrorCode::SignatureDoesNotMatch),
+            (AwsChunkedStreamError::FormatError, S3ErrorCode::IncompleteBody),
+            (AwsChunkedStreamError::Incomplete, S3ErrorCode::IncompleteBody),
+            (AwsChunkedStreamError::LengthMismatch, S3ErrorCode::IncompleteBody),
+            (AwsChunkedStreamError::ChunkMetaTooLarge(1, 2), S3ErrorCode::EntityTooLarge),
+            (AwsChunkedStreamError::ChunkDataTooLarge(1, 2), S3ErrorCode::EntityTooLarge),
+            (AwsChunkedStreamError::TrailersTooLarge(1, 2), S3ErrorCode::IncompleteBody),
+            (AwsChunkedStreamError::TooManyTrailerHeaders(1, 2), S3ErrorCode::IncompleteBody),
+        ];
+        for (err, expected) in cases {
+            assert_eq!(err.to_s3_error_code(), expected, "{err:?}");
+        }
+    }
 
     #[test]
     fn signature_ctx_debug_redacts_signing_key() {
