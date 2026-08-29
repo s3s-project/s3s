@@ -69,9 +69,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
-
+      # Native runners build one platform each (no QEMU emulation), so the only
+      # reliable cross-run cache on ephemeral runners is the GitHub Actions layer
+      # cache, scoped per platform to avoid amd64/arm64 clashes. mode=max exports
+      # intermediate layers (toolchain + cargo-chef dependency plan) so source-only
+      # changes reuse the compiled dependencies.
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
@@ -85,6 +87,8 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           tags: ${{ env.REGISTRY_IMAGE }}
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=docker-${{ env.PLATFORM_PAIR }}
+          cache-to: type=gha,mode=max,scope=docker-${{ env.PLATFORM_PAIR }}
 
       - name: Export digest
         run: |
