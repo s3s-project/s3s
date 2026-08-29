@@ -10,7 +10,6 @@ use crate::http::{self, OrderedQs};
 use crate::http::{AwsChunkedStream, Body, Multipart, MultipartLimits};
 use crate::post_policy::PostPolicy;
 use crate::protocol::TrailingHeaders;
-use crate::sig_v2;
 use crate::sig_v4;
 use crate::sig_v4::UploadStream;
 use crate::stream::ByteStream as _;
@@ -103,6 +102,29 @@ fn collect_signed_headers<'a>(
             };
             headers.push((name, value));
         }
+    }
+
+    Ok(headers)
+}
+
+/// Collects header pairs for `s3s_sigv2::create_string_to_sign`.
+///
+/// `&str` cannot represent non-UTF-8 values, so the rejection that used to
+/// happen inside `SigV2` canonicalization is handled here: a non-UTF-8
+/// `x-amz-*` header value fails the signature check with the same message;
+/// non-UTF-8 values of other headers are skipped, as they are not signed.
+fn sig_v2_headers(hs: &HeaderMap) -> S3Result<SignedHeaderPairs<'_>> {
+    let mut headers = SignedHeaderPairs::new();
+
+    for (name, value) in hs {
+        let name = name.as_str();
+        let Some(value) = http::header_value_to_str(value) else {
+            if name.starts_with("x-amz-") {
+                return Err(s3_error!(SignatureDoesNotMatch, "invalid header: {name}"));
+            }
+            continue;
+        };
+        headers.push((name, value));
     }
 
     Ok(headers)
@@ -748,15 +770,15 @@ impl<'a> SignatureContext<'a> {
         let access_key = auth_v2.access_key;
         let secret_key = auth.get_secret_key(access_key).await?;
 
-        let string_to_sign = sig_v2::create_string_to_sign(
-            sig_v2::Mode::HeaderAuth,
-            method,
+        let string_to_sign = s3s_sigv2::create_string_to_sign(
+            s3s_sigv2::Mode::HeaderAuth,
+            method.as_str(),
             self.req_uri.path(),
-            self.qs,
-            self.hs,
+            self.qs.map(AsRef::as_ref),
+            &sig_v2_headers(self.hs)?,
             self.vh_bucket,
-        )?;
-        let signature = sig_v2::calculate_signature(&secret_key, &string_to_sign);
+        );
+        let signature = Signature::from_computed(s3s_sigv2::calculate_signature(secret_key.expose(), &string_to_sign));
 
         debug!(?string_to_sign, "sig_v2 header_auth");
 
@@ -791,7 +813,7 @@ impl<'a> SignatureContext<'a> {
 
         // For v2 POST signature, the string to sign is the base64-encoded policy
         let string_to_sign = info.policy;
-        let signature = sig_v2::calculate_signature(&secret_key, string_to_sign);
+        let signature = Signature::from_computed(s3s_sigv2::calculate_signature(secret_key.expose(), string_to_sign));
 
         let expected_signature = Signature::from_base64(info.signature).ok_or_else(|| s3_error!(SignatureDoesNotMatch))?;
         if !Signature::compare(&signature, &expected_signature) {
@@ -822,15 +844,15 @@ impl<'a> SignatureContext<'a> {
         let access_key = presigned_url.access_key;
         let secret_key = auth.get_secret_key(access_key).await?;
 
-        let string_to_sign = sig_v2::create_string_to_sign(
-            sig_v2::Mode::PresignedUrl,
-            self.req_method,
+        let string_to_sign = s3s_sigv2::create_string_to_sign(
+            s3s_sigv2::Mode::PresignedUrl,
+            self.req_method.as_str(),
             self.req_uri.path(),
-            self.qs,
-            self.hs,
+            self.qs.map(AsRef::as_ref),
+            &sig_v2_headers(self.hs)?,
             self.vh_bucket,
-        )?;
-        let signature = sig_v2::calculate_signature(&secret_key, &string_to_sign);
+        );
+        let signature = Signature::from_computed(s3s_sigv2::calculate_signature(secret_key.expose(), &string_to_sign));
 
         let expected_signature =
             Signature::from_base64(presigned_url.signature).ok_or_else(|| s3_error!(SignatureDoesNotMatch))?;
@@ -863,6 +885,37 @@ mod tests {
             );
         }
         headers
+    }
+
+    #[test]
+    fn sig_v2_headers_rejects_non_utf8_amz_header() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            HeaderName::from_static("x-amz-meta-name"),
+            HeaderValue::from_bytes(b"JULI\xC1N").expect("valid opaque header value"),
+        );
+
+        let err = sig_v2_headers(&headers).expect_err("non-UTF-8 x-amz headers must fail signature verification");
+
+        assert_eq!(err.code(), &S3ErrorCode::SignatureDoesNotMatch);
+        assert_eq!(err.message(), Some("invalid header: x-amz-meta-name"));
+    }
+
+    #[test]
+    fn sig_v2_headers_skips_non_utf8_non_amz_header() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            HeaderName::from_static("content-type"),
+            HeaderValue::from_bytes(b"\xC1").expect("valid opaque header value"),
+        );
+        headers.insert(
+            HeaderName::from_static("date"),
+            HeaderValue::from_static("Fri, 24 Jan 2030 12:00:00 +0000"),
+        );
+
+        let pairs = sig_v2_headers(&headers).expect("non-x-amz non-UTF-8 headers are skipped");
+        assert_eq!(pairs.len(), 1);
+        assert_eq!(pairs[0], ("date", "Fri, 24 Jan 2030 12:00:00 +0000"));
     }
 
     fn fmt_current_amz_date(dt: time::OffsetDateTime) -> String {
@@ -2394,16 +2447,16 @@ file content\r\n\
         let mut body = Body::empty();
 
         // Compute the expected signature using the same logic as the verification path.
-        let string_to_sign = crate::sig_v2::create_string_to_sign(
-            crate::sig_v2::Mode::HeaderAuth,
-            &method,
+        let headers = sig_v2_headers(&hs).expect("test headers are valid");
+        let string_to_sign = s3s_sigv2::create_string_to_sign(
+            s3s_sigv2::Mode::HeaderAuth,
+            method.as_str(),
             "/test-bucket/test-key",
             None,
-            &hs,
+            &headers,
             None,
-        )
-        .unwrap();
-        let signature = crate::sig_v2::calculate_signature(&secret_key, &string_to_sign);
+        );
+        let signature = Signature::from_computed(s3s_sigv2::calculate_signature(secret_key.expose(), &string_to_sign));
 
         let auth_v2 = AuthorizationV2 {
             access_key,
