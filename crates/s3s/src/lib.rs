@@ -92,6 +92,10 @@
 //! protection. If exposed to the Internet directly, they may be vulnerable to attacks.
 //!
 //! It is the user's responsibility to implement security enhancements such as:
+//! - Authentication: without
+//!   [`set_auth`](crate::service::S3ServiceBuilder::set_auth), the service
+//!   accepts anonymous requests and skips authorization entirely — every S3
+//!   operation is open to any client
 //! - HTTP body length limits
 //! - Rate limiting
 //! - Back pressure
