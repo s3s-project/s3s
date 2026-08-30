@@ -17,6 +17,11 @@ workspace = true
 name = "s3s-fs"
 required-features = ["binary"]
 
+[[test]]
+name = "aws"
+path = "tests/aws/main.rs"
+harness = false
+
 [features]
 binary = ["tokio/full", "dep:clap", "dep:tracing-subscriber", "dep:hyper-util"]
 
@@ -64,5 +69,9 @@ hyper = { workspace = true, features = ["http1", "http2"] }
 hyper-util = { workspace = true, features = ["server-auto", "server-graceful", "http1", "http2", "tokio"] }
 opendal = { workspace = true, default-features = false, features = ["services-s3", "executors-tokio", "reqwest-rustls-tls"] }
 s3s-aws = { version = "0.15.0", path = "../s3s-aws" }
+s3s-test = { version = "0.15.0", path = "../s3s-test" }
 tokio = { workspace = true, features = ["full"] }
 tracing-subscriber.workspace = true
+
+[build-dependencies]
+s3s-test = { version = "0.15.0", path = "../s3s-test" }
