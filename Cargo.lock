@@ -3481,6 +3481,7 @@ dependencies = [
  "path-absolutize",
  "s3s",
  "s3s-aws",
+ "s3s-test",
  "serde",
  "serde_json",
  "std-next",
