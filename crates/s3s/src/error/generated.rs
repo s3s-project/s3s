@@ -756,7 +756,7 @@ pub enum S3ErrorCode {
 
     /// The requested range cannot be satisfied.
     ///
-    /// HTTP Status Code: 416 Requested Range NotSatisfiable
+    /// HTTP Status Code: 416 Requested Range Not Satisfiable
     ///
     InvalidRange,
 
