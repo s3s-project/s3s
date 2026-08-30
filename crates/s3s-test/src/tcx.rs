@@ -29,6 +29,12 @@ type FixtureTeardownFn = Box<dyn Fn(ArcAny) -> BoxFuture<'static, Result>>;
 
 type CaseRunFn = Box<dyn Fn(ArcAny) -> BoxFuture<'static, Result>>;
 
+/// The registry of suites, fixtures, and cases.
+///
+/// Create one with [`TestContext::new`], register suites via
+/// [`TestContext::suite`], then either let the [`main!`](crate::main) macro
+/// drive the whole process or drive it yourself with `cli::main` and
+/// `cli::Options`.
 pub struct TestContext {
     pub(crate) suites: IndexMap<String, SuiteInfo>,
 }
@@ -59,7 +65,10 @@ pub(crate) struct CaseInfo {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CaseTag {
+    /// The case is skipped unless `--run-ignored` is passed.
     Ignored,
+    /// The case is expected to panic: it passes when it panics and fails
+    /// when it does not.
     ShouldPanic,
 }
 
@@ -79,11 +88,21 @@ fn unwrap<T: Send + Sync + 'static>(any: ArcAny) -> Result<T> {
 }
 
 impl TestContext {
+    /// Creates an empty test context.
     #[must_use]
     pub fn new() -> Self {
         Self { suites: IndexMap::new() }
     }
 
+    /// Registers a suite and returns its builder.
+    ///
+    /// Calling this again with the same name and the same suite type returns
+    /// the same builder, so multiple modules can register cases into one
+    /// suite.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the name is already registered with a different suite type.
     pub fn suite<S: TestSuite>(&mut self, name: impl Into<String>) -> SuiteBuilder<'_, S> {
         let name = name.into();
         if let Some(suite) = self.suites.get(&name) {
@@ -112,6 +131,8 @@ impl TestContext {
         }
     }
 
+    /// Keeps only suites, fixtures, and cases whose `suite/fixture/case` path
+    /// matches any pattern in the filter set.
     pub fn filter(&mut self, filter_set: &RegexSet) {
         self.suites.retain(|_, suite| {
             suite.fixtures.retain(|_, fixture| {
@@ -125,6 +146,8 @@ impl TestContext {
         });
     }
 
+    /// Removes the [`CaseTag::Ignored`] tag from all cases, so that
+    /// `--run-ignored` runs them.
     pub fn include_ignored(&mut self) {
         for suite in self.suites.values_mut() {
             for fixture in suite.fixtures.values_mut() {
@@ -136,12 +159,22 @@ impl TestContext {
     }
 }
 
+/// The builder returned by [`TestContext::suite`].
 pub struct SuiteBuilder<'a, S> {
     suite: &'a mut SuiteInfo,
     _marker: PhantomData<S>,
 }
 
 impl<S: TestSuite> SuiteBuilder<'_, S> {
+    /// Registers a fixture and returns its builder.
+    ///
+    /// Calling this again with the same name and the same fixture type
+    /// returns the same builder.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the name is already registered with a different fixture
+    /// type.
     pub fn fixture<X: TestFixture<S>>(&mut self, name: impl Into<String>) -> FixtureBuilder<'_, X, S> {
         let name = name.into();
         if let Some(fixture) = self.suite.fixtures.get(&name) {
@@ -171,6 +204,7 @@ impl<S: TestSuite> SuiteBuilder<'_, S> {
     }
 }
 
+/// The builder returned by [`SuiteBuilder::fixture`].
 pub struct FixtureBuilder<'a, X, S> {
     fixture: &'a mut FixtureInfo,
     _marker: PhantomData<(X, S)>,
@@ -181,6 +215,9 @@ where
     X: TestFixture<S>,
     S: TestSuite,
 {
+    /// Registers a case and returns its builder.
+    ///
+    /// Re-registering the same name replaces the previous case.
     pub fn case<C: TestCase<X, S>>(&mut self, name: impl Into<String>, case: C) -> CaseBuilder<'_, C, X, S> {
         let name = name.into();
         self.fixture.cases.insert(
@@ -198,12 +235,14 @@ where
     }
 }
 
+/// The builder returned by [`FixtureBuilder::case`].
 pub struct CaseBuilder<'a, C, X, S> {
     case: &'a mut CaseInfo,
     _marker: PhantomData<(C, X, S)>,
 }
 
 impl<C, X, S> CaseBuilder<'_, C, X, S> {
+    /// Adds a tag to the case.
     pub fn tag(&mut self, tag: CaseTag) -> &mut Self {
         self.case.tags.push(tag);
         self

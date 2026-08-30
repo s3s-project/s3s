@@ -22,15 +22,23 @@ pub use clap;
 #[doc(hidden)]
 pub use const_str;
 
+/// The CLI options understood by [`main`] and the [`main!`](crate::main) macro.
 #[doc(hidden)]
 pub struct Options {
+    /// Path to write the JSON report to.
     pub json: Option<PathBuf>,
+    /// Regex patterns matching `suite/fixture/case` paths.
     pub filter: Vec<String>,
+    /// Print all registered cases without running them.
     pub list: bool,
+    /// Run cases tagged [`CaseTag::Ignored`](crate::CaseTag::Ignored).
     pub run_ignored: bool,
+    /// Run cases within a fixture concurrently.
     pub concurrent: bool,
 }
 
+/// Initializes the environment: loads `.env`, then sets up the tracing
+/// subscriber with an `EnvFilter` from `RUST_LOG`.
 #[doc(hidden)]
 pub fn setup() {
     use std::io::IsTerminal;
@@ -160,6 +168,10 @@ async fn async_main(reg: impl FnOnce(&mut TestContext), opt: &Options) -> ExitCo
     }
 }
 
+/// Runs the harness and returns the process exit code.
+///
+/// The exit code is nonzero when any suite fails. Use this function directly
+/// for a custom entry point, or [`main!`](crate::main) for the standard CLI.
 #[doc(hidden)]
 #[must_use]
 pub fn main(reg: impl FnOnce(&mut TestContext), opt: &Options) -> ExitCode {
@@ -176,6 +188,19 @@ pub const fn unwrap<'a>(s: Option<&'a str>, default: &'a str) -> &'a str {
     }
 }
 
+/// Generates the binary entry point for a test harness.
+///
+/// The macro expands to a `main` function that parses the standard CLI
+/// (`--filter`, `--list`, `--json`, `--run-ignored`, `--concurrent`),
+/// registers the suites via the given function, and runs them.
+///
+/// ```no_run
+/// use s3s_test::tcx::TestContext;
+///
+/// fn register(_tcx: &mut TestContext) {}
+///
+/// s3s_test::main!(register);
+/// ```
 #[macro_export]
 macro_rules! main {
     ($register:expr) => {

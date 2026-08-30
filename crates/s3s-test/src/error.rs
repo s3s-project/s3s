@@ -4,8 +4,18 @@
 use std::env;
 use std::fmt;
 
+/// The result type used by suites, fixtures, and cases.
+///
+/// A case fails either by returning `Err(Failed)` (e.g. via `?`) or by
+/// panicking (e.g. via `assert!`). The two failures are reported distinctly
+/// in the report (`FnResult::Err` vs `FnResult::Panicked`).
 pub type Result<T = (), E = Failed> = std::result::Result<T, E>;
 
+/// The error type used by the harness.
+///
+/// Wraps any `std::error::Error` source. When `RUST_BACKTRACE` is set, the
+/// conversion from a source error prints the source chain and a backtrace
+/// filtered to s3s paths.
 #[derive(Debug)]
 pub struct Failed {
     source: Option<Box<dyn std::error::Error + Send + Sync + 'static>>,
@@ -47,6 +57,8 @@ impl fmt::Display for Failed {
 }
 
 impl Failed {
+    /// Creates a failure from an arbitrary string message.
+    #[must_use]
     pub fn from_string(s: impl Into<String>) -> Self {
         Self {
             source: Some(s.into().into()),
