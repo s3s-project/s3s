@@ -165,7 +165,7 @@ enum CaseHandle {
 }
 
 #[allow(clippy::similar_names)]
-async fn run_case(case_name: String, case_future: BoxFuture<'static, crate::Result>) -> CaseReport {
+async fn run_case(case_name: String, case_future: BoxFuture<'static, crate::Result>, should_panic: bool) -> CaseReport {
     info!("Test case start");
     let t0 = Instant::now();
 
@@ -173,31 +173,19 @@ async fn run_case(case_name: String, case_future: BoxFuture<'static, crate::Resu
     let elapsed_ns = t0.elapsed().as_nanos() as u64;
     let elapsed_ms = elapsed_ns as f64 / 1e6;
 
-    let summary = match result {
-        Ok(Ok(())) => FnSummary {
-            result: FnResult::Ok,
-            duration_ns: elapsed_ns,
-            duration_ms: elapsed_ms,
-        },
-        Ok(Err(ref e)) => FnSummary {
-            result: FnResult::Err(e.to_string()),
-            duration_ns: elapsed_ns,
-            duration_ms: elapsed_ms,
-        },
-        Err(ref e) if e.is_panic() => FnSummary {
-            result: FnResult::Panicked,
-            duration_ns: elapsed_ns,
-            duration_ms: elapsed_ms,
-        },
-        Err(ref e) => FnSummary {
-            result: FnResult::Err(e.to_string()),
-            duration_ns: elapsed_ns,
-            duration_ms: elapsed_ms,
-        },
+    let (passed, result) = match result {
+        Ok(Ok(())) => (!should_panic, FnResult::Ok),
+        Ok(Err(ref e)) => (!should_panic, FnResult::Err(e.to_string())),
+        Err(ref e) if e.is_panic() => (should_panic, FnResult::Panicked),
+        Err(ref e) => (false, FnResult::Err(e.to_string())),
+    };
+    let summary = FnSummary {
+        result,
+        duration_ns: elapsed_ns,
+        duration_ms: elapsed_ms,
     };
 
     info!(?summary, "Test case end");
-    let passed = summary.result.is_ok();
 
     CaseReport {
         name: case_name,
@@ -247,11 +235,12 @@ async fn run_fixture(fixture: &FixtureInfo, suite_data: &ArcAny, concurrent: boo
                     continue;
                 }
 
+                let should_panic = case.tags.contains(&CaseTag::ShouldPanic);
                 let case_name = case.name.clone();
                 let case_future = (case.run)(Arc::clone(&fixture_data));
                 let span = info_span!("case", name = case_name.as_str());
 
-                let handle = spawn(run_case(case_name, case_future).instrument(span));
+                let handle = spawn(run_case(case_name, case_future, should_panic).instrument(span));
                 handles.push(CaseHandle::Running(handle));
             }
 
@@ -280,11 +269,12 @@ async fn run_fixture(fixture: &FixtureInfo, suite_data: &ArcAny, concurrent: boo
                     continue;
                 }
 
+                let should_panic = case.tags.contains(&CaseTag::ShouldPanic);
                 let case_name = case.name.clone();
                 let case_future = (case.run)(Arc::clone(&fixture_data));
                 let span = info_span!("case", name = case_name.as_str());
 
-                let report = run_case(case_name, case_future).instrument(span).await;
+                let report = run_case(case_name, case_future, should_panic).instrument(span).await;
                 cases.push(report);
             }
         }
@@ -307,5 +297,83 @@ async fn run_fixture(fixture: &FixtureInfo, suite_data: &ArcAny, concurrent: boo
         duration_ns,
         duration_ms: duration_ns as f64 / 1e6,
         cases,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tcx::TestContext;
+
+    use std::sync::Arc;
+
+    struct TestSuiteType;
+
+    impl crate::traits::TestSuite for TestSuiteType {
+        fn setup() -> impl Future<Output = crate::Result<Self>> + Send + 'static {
+            std::future::ready(Ok(Self))
+        }
+    }
+
+    struct TestFixtureType;
+
+    impl crate::traits::TestFixture<TestSuiteType> for TestFixtureType {
+        fn setup(_: Arc<TestSuiteType>) -> impl Future<Output = crate::Result<Self>> + Send + 'static {
+            std::future::ready(Ok(Self))
+        }
+    }
+
+    async fn ok_case(_: Arc<TestFixtureType>) -> crate::Result {
+        Ok(())
+    }
+
+    async fn panic_case(_: Arc<TestFixtureType>) -> crate::Result {
+        panic!("boom");
+    }
+
+    fn register_case(
+        name: &str,
+        case: impl crate::traits::TestCase<TestFixtureType, TestSuiteType> + 'static,
+        should_panic: bool,
+    ) -> TestContext {
+        let mut tcx = TestContext::new();
+        let mut suite = tcx.suite::<TestSuiteType>("suite");
+        let mut fixture = suite.fixture::<TestFixtureType>("fixture");
+        let mut builder = fixture.case(name, case);
+        if should_panic {
+            builder.tag(CaseTag::ShouldPanic);
+        }
+        tcx
+    }
+
+    async fn run_case_passed(tcx: &mut TestContext) -> bool {
+        let report = run(tcx, false).await;
+        let suite = &report.suites[0];
+        let fixture = &suite.fixtures[0];
+        fixture.cases[0].passed
+    }
+
+    #[tokio::test]
+    async fn should_panic_tag_with_panic_passes() {
+        let mut tcx = register_case("panics", panic_case, true);
+        assert!(run_case_passed(&mut tcx).await, "should_panic case that panics should pass");
+    }
+
+    #[tokio::test]
+    async fn should_panic_tag_without_panic_fails() {
+        let mut tcx = register_case("no-panic", ok_case, true);
+        assert!(!run_case_passed(&mut tcx).await, "should_panic case that does not panic should fail");
+    }
+
+    #[tokio::test]
+    async fn untagged_case_with_panic_fails() {
+        let mut tcx = register_case("panics", panic_case, false);
+        assert!(!run_case_passed(&mut tcx).await, "untagged case that panics should fail");
+    }
+
+    #[tokio::test]
+    async fn untagged_case_without_panic_passes() {
+        let mut tcx = register_case("ok", ok_case, false);
+        assert!(run_case_passed(&mut tcx).await, "untagged case that returns Ok should pass");
     }
 }

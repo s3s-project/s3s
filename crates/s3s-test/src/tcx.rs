@@ -7,6 +7,7 @@ use crate::traits::TestCase;
 use crate::traits::TestFixture;
 use crate::traits::TestSuite;
 
+use std::any::TypeId;
 use std::any::type_name;
 use std::future::Future;
 use std::marker::PhantomData;
@@ -34,7 +35,8 @@ pub struct TestContext {
 
 pub(crate) struct SuiteInfo {
     pub(crate) name: String,
-    // pub(crate) type_id: TypeId,
+    pub(crate) type_id: TypeId,
+    pub(crate) type_name: &'static str,
     pub(crate) setup: SuiteSetupFn,
     pub(crate) teardown: SuiteTeardownFn,
     pub(crate) fixtures: IndexMap<String, FixtureInfo>,
@@ -42,7 +44,8 @@ pub(crate) struct SuiteInfo {
 
 pub(crate) struct FixtureInfo {
     pub(crate) name: String,
-    // pub(crate) type_id: TypeId,
+    pub(crate) type_id: TypeId,
+    pub(crate) type_name: &'static str,
     pub(crate) setup: FixtureSetupFn,
     pub(crate) teardown: FixtureTeardownFn,
     pub(crate) cases: IndexMap<String, CaseInfo>,
@@ -76,18 +79,27 @@ fn unwrap<T: Send + Sync + 'static>(any: ArcAny) -> Result<T> {
 }
 
 impl TestContext {
-    pub(crate) fn new() -> Self {
+    #[must_use]
+    pub fn new() -> Self {
         Self { suites: IndexMap::new() }
     }
 
     pub fn suite<S: TestSuite>(&mut self, name: impl Into<String>) -> SuiteBuilder<'_, S> {
         let name = name.into();
-        if !self.suites.contains_key(&name) {
+        if let Some(suite) = self.suites.get(&name) {
+            assert!(
+                suite.type_id == TypeId::of::<S>(),
+                "suite `{name}` is already registered with type `{}`, cannot register it again with type `{}`",
+                suite.type_name,
+                type_name::<S>(),
+            );
+        } else {
             self.suites.insert(
                 name.clone(),
                 SuiteInfo {
                     name: name.clone(),
-                    // type_id: TypeId::of::<S>(),
+                    type_id: TypeId::of::<S>(),
+                    type_name: type_name::<S>(),
                     setup: Box::new(|| Box::pin(async { S::setup().await.map(wrap) })),
                     teardown: Box::new(|any| Box::pin(async move { S::teardown(unwrap(any)?).await })),
                     fixtures: IndexMap::new(),
@@ -132,12 +144,20 @@ pub struct SuiteBuilder<'a, S> {
 impl<S: TestSuite> SuiteBuilder<'_, S> {
     pub fn fixture<X: TestFixture<S>>(&mut self, name: impl Into<String>) -> FixtureBuilder<'_, X, S> {
         let name = name.into();
-        if !self.suite.fixtures.contains_key(&name) {
+        if let Some(fixture) = self.suite.fixtures.get(&name) {
+            assert!(
+                fixture.type_id == TypeId::of::<X>(),
+                "fixture `{name}` is already registered with type `{}`, cannot register it again with type `{}`",
+                fixture.type_name,
+                type_name::<X>(),
+            );
+        } else {
             self.suite.fixtures.insert(
                 name.clone(),
                 FixtureInfo {
                     name: name.clone(),
-                    // type_id: TypeId::of::<X>(),
+                    type_id: TypeId::of::<X>(),
+                    type_name: type_name::<X>(),
                     setup: Box::new(|any| Box::pin(async move { X::setup(downcast(any)).await.map(wrap) })),
                     teardown: Box::new(|any| Box::pin(async move { X::teardown(unwrap(any)?).await })),
                     cases: IndexMap::new(),
@@ -187,5 +207,11 @@ impl<C, X, S> CaseBuilder<'_, C, X, S> {
     pub fn tag(&mut self, tag: CaseTag) -> &mut Self {
         self.case.tags.push(tag);
         self
+    }
+}
+
+impl Default for TestContext {
+    fn default() -> Self {
+        Self::new()
     }
 }

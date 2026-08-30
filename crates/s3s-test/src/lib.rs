@@ -16,4 +16,5 @@ pub mod report;
 pub mod tcx;
 
 pub use self::error::{Failed, Result};
+pub use self::tcx::TestContext;
 pub use self::traits::*;
