@@ -222,6 +222,15 @@
                 "smithy.api#documentation": "<p>A container for information about access control for replicas.</p>"
             }
         },
+        "com.amazonaws.s3#AccessDenied": {
+            "type": "structure",
+            "members": {},
+            "traits": {
+                "smithy.api#documentation": "<p>\n      You might receive this error for several reasons. For details, see the description of this API \n      operation.</p>",
+                "smithy.api#error": "client",
+                "smithy.api#httpError": 403
+            }
+        },
         "com.amazonaws.s3#AccessKeyIdValue": {
             "type": "string"
         },
@@ -27393,6 +27402,21 @@
                 }
             }
         },
+        "com.amazonaws.s3#BlockedEncryptionTypes": {
+            "type": "structure",
+            "members": {
+                "EncryptionType": {
+                    "target": "com.amazonaws.s3#EncryptionTypeList",
+                    "traits": {
+                        "smithy.api#documentation": "<p>The object encryption type that you want to block or unblock for an Amazon S3 general purpose bucket.</p>\n         <note>\n            <p>Currently, this parameter only supports blocking or unblocking server side encryption with customer-provided keys (SSE-C). For more information about SSE-C, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/ServerSideEncryptionCustomerKeys.html\">Using server-side encryption with customer-provided keys (SSE-C)</a>.</p>\n         </note>",
+                        "smithy.api#xmlFlattened": {}
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#documentation": "<p>A bucket-level setting for Amazon S3 general purpose buckets used to prevent the upload of new objects encrypted with the specified server-side encryption type. For example, blocking an encryption type will block <code>PutObject</code>, <code>CopyObject</code>, <code>PostObject</code>, multipart upload, and replication requests to the bucket for objects with the specified encryption type. However, you can continue to read and list any pre-existing objects already encrypted with the specified encryption type. For more information, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/blocking-unblocking-s3-c-encryption-gpb.html\">Blocking or unblocking SSE-C for a general purpose bucket</a>.</p>\n         <p>This data type is used with the following actions:</p>\n         <ul>\n            <li>\n               <p>\n                  <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketEncryption.html\">PutBucketEncryption</a>\n               </p>\n            </li>\n            <li>\n               <p>\n                  <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketEncryption.html\">GetBucketEncryption</a>\n               </p>\n            </li>\n            <li>\n               <p>\n                  <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketEncryption.html\">DeleteBucketEncryption</a>\n               </p>\n            </li>\n         </ul>\n         <dl>\n            <dt>Permissions</dt>\n            <dd>\n               <p>You must have the <code>s3:PutEncryptionConfiguration</code> permission to block or unblock an encryption type for a bucket. </p>\n               <p>You must have the <code>s3:GetEncryptionConfiguration</code> permission to view a bucket's encryption type. </p>\n            </dd>\n         </dl>"
+            }
+        },
         "com.amazonaws.s3#Body": {
             "type": "blob"
         },
@@ -31939,6 +31963,32 @@
             },
             "traits": {
                 "smithy.api#documentation": "<p>Specifies encryption-related information for an Amazon S3 bucket that is a destination for\n         replicated objects.</p>\n         <note>\n            <p>If you're specifying a customer managed KMS key, we recommend using a fully\n            qualified KMS key ARN. If you use a KMS key alias instead, then KMS resolves the\n            key within the requester’s account. This behavior can result in data that's encrypted\n            with a KMS key that belongs to the requester, and not the bucket owner.</p>\n         </note>"
+            }
+        },
+        "com.amazonaws.s3#EncryptionType": {
+            "type": "enum",
+            "members": {
+                "NONE": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "NONE"
+                    }
+                },
+                "SSE_C": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "SSE-C"
+                    }
+                }
+            }
+        },
+        "com.amazonaws.s3#EncryptionTypeList": {
+            "type": "list",
+            "member": {
+                "target": "com.amazonaws.s3#EncryptionType",
+                "traits": {
+                    "smithy.api#xmlName": "EncryptionType"
+                }
             }
         },
         "com.amazonaws.s3#EncryptionTypeMismatch": {
@@ -39710,6 +39760,17 @@
                 "smithy.api#httpError": 404
             }
         },
+        "com.amazonaws.s3#NonEmptyKmsKeyArnString": {
+            "type": "string",
+            "traits": {
+                "smithy.api#length": {
+                    "min": 20,
+                    "max": 2048
+                },
+                "smithy.api#pattern": "^arn:aws[a-zA-Z0-9-]*:kms:[a-z0-9-]+:[0-9]{12}:key/[a-zA-Z0-9-]+$",
+                "smithy.api#sensitive": {}
+            }
+        },
         "com.amazonaws.s3#NoncurrentVersionExpiration": {
             "type": "structure",
             "members": {
@@ -39986,6 +40047,21 @@
                         "smithy.api#enumValue": "bucket-owner-full-control"
                     }
                 }
+            }
+        },
+        "com.amazonaws.s3#ObjectEncryption": {
+            "type": "union",
+            "members": {
+                "SSEKMS": {
+                    "target": "com.amazonaws.s3#SSEKMSEncryption",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      Specifies to update the object encryption type to server-side encryption with Key Management Service (KMS) keys \n      (SSE-KMS). \n    </p>",
+                        "smithy.api#xmlName": "SSE-KMS"
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#documentation": "<p>\n      The updated server-side encryption type for this object. The <code>UpdateObjectEncryption</code> \n      operation supports the SSE-S3 and SSE-KMS encryption types.\n    </p>\n         <p>Valid Values: <code>SSES3</code> | <code>SSEKMS</code>\n         </p>"
             }
         },
         "com.amazonaws.s3#ObjectIdentifier": {
@@ -45054,6 +45130,28 @@
                 "smithy.api#xmlName": "SSE-KMS"
             }
         },
+        "com.amazonaws.s3#SSEKMSEncryption": {
+            "type": "structure",
+            "members": {
+                "KMSKeyArn": {
+                    "target": "com.amazonaws.s3#NonEmptyKmsKeyArnString",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      Specifies the Amazon Web Services KMS key Amazon Resource Name (ARN) to use for the updated server-side encryption \n      type. Required if <code>ObjectEncryption</code> specifies <code>SSEKMS</code>. \n    </p>\n         <note>\n            <p>You must specify the full Amazon Web Services KMS key ARN. The KMS key ID and KMS key alias aren't \n        supported.</p>\n         </note>\n         <p>Pattern: (<code>arn:aws[-a-z0-9]*:kms:[-a-z0-9]*:[0-9]{12}:key/.+</code>)</p>",
+                        "smithy.api#required": {}
+                    }
+                },
+                "BucketKeyEnabled": {
+                    "target": "com.amazonaws.s3#BucketKeyEnabled",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      Specifies whether Amazon S3 should use an S3 Bucket Key for object encryption with server-side encryption \n      using Key Management Service (KMS) keys (SSE-KMS). If this value isn't specified, it defaults to <code>false</code>. \n      Setting this value to <code>true</code> causes Amazon S3 to use an S3 Bucket Key for object encryption with \n      SSE-KMS. For more information, see \n      <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucket-key.html\">\n        Using Amazon S3 Bucket Keys</a> in the <i>Amazon S3 User Guide</i>.\n    </p>\n         <p>Valid Values: <code>true</code> | <code>false</code>\n         </p>"
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#documentation": "<p>\n      If <code>SSEKMS</code> is specified for <code>ObjectEncryption</code>, this data type specifies\n      the Amazon Web Services KMS key Amazon Resource Name (ARN) to use and whether to use an S3 Bucket Key for \n      server-side encryption using Key Management Service (KMS) keys (SSE-KMS).\n    </p>",
+                "smithy.api#xmlName": "SSE-KMS"
+            }
+        },
         "com.amazonaws.s3#SSEKMSEncryptionContext": {
             "type": "string",
             "traits": {
@@ -45306,6 +45404,18 @@
                         "smithy.api#enumValue": "AES256"
                     }
                 },
+                "aws_fsx": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "aws:fsx"
+                    }
+                },
+                "aws_backup": {
+                    "target": "smithy.api#Unit",
+                    "traits": {
+                        "smithy.api#enumValue": "aws:backup"
+                    }
+                },
                 "aws_kms": {
                     "target": "smithy.api#Unit",
                     "traits": {
@@ -45364,18 +45474,24 @@
                 "ApplyServerSideEncryptionByDefault": {
                     "target": "com.amazonaws.s3#ServerSideEncryptionByDefault",
                     "traits": {
-                        "smithy.api#documentation": "<p>Specifies the default server-side encryption to apply to new objects in the bucket. If a\n         PUT Object request doesn't specify any server-side encryption, this default encryption will\n         be applied.</p>"
+                        "smithy.api#documentation": "<p>Specifies the default server-side encryption to apply to new objects in the bucket. If a PUT Object\n      request doesn't specify any server-side encryption, this default encryption will be applied.</p>"
                     }
                 },
                 "BucketKeyEnabled": {
                     "target": "com.amazonaws.s3#BucketKeyEnabled",
                     "traits": {
-                        "smithy.api#documentation": "<p>Specifies whether Amazon S3 should use an S3 Bucket Key with server-side encryption using KMS\n         (SSE-KMS) for new objects in the bucket. Existing objects are not affected. Setting the\n            <code>BucketKeyEnabled</code> element to <code>true</code> causes Amazon S3 to use an S3\n         Bucket Key. </p>\n         <note>\n            <ul>\n               <li>\n                  <p>\n                     <b>General purpose buckets</b> - By default, S3\n                  Bucket Key is not enabled. For more information, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/dev/bucket-key.html\">Amazon S3 Bucket Keys</a> in the\n                     <i>Amazon S3 User Guide</i>.</p>\n               </li>\n               <li>\n                  <p>\n                     <b>Directory buckets</b> -\n                  S3 Bucket Keys are always enabled for <code>GET</code> and <code>PUT</code> operations in a directory bucket and can’t be disabled. S3 Bucket Keys aren't supported, when you copy SSE-KMS encrypted objects from general purpose buckets  \nto directory buckets, from directory buckets to general purpose buckets, or between directory buckets, through <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_CopyObject.html\">CopyObject</a>, <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_UploadPartCopy.html\">UploadPartCopy</a>, <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/directory-buckets-objects-Batch-Ops\">the Copy operation in Batch Operations</a>, or \n                            <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/create-import-job\">the import jobs</a>. In this case, Amazon S3 makes a call to KMS every time a copy request is made for a KMS-encrypted object.</p>\n               </li>\n            </ul>\n         </note>"
+                        "smithy.api#documentation": "<p>Specifies whether Amazon S3 should use an S3 Bucket Key with server-side encryption using KMS (SSE-KMS)\n      for new objects in the bucket. Existing objects are not affected. Setting the\n        <code>BucketKeyEnabled</code> element to <code>true</code> causes Amazon S3 to use an S3 Bucket Key. </p>\n         <note>\n            <ul>\n               <li>\n                  <p>\n                     <b>General purpose buckets</b> - By default, S3 Bucket Key is not\n            enabled. For more information, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/dev/bucket-key.html\">Amazon S3 Bucket Keys</a> in the\n              <i>Amazon S3 User Guide</i>.</p>\n               </li>\n               <li>\n                  <p>\n                     <b>Directory buckets</b> -\n            S3 Bucket Keys are always enabled for <code>GET</code> and <code>PUT</code> operations in a directory bucket and can’t be disabled. S3 Bucket Keys aren't supported, when you copy SSE-KMS encrypted objects from general purpose buckets  \nto directory buckets, from directory buckets to general purpose buckets, or between directory buckets, through <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_CopyObject.html\">CopyObject</a>, <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_UploadPartCopy.html\">UploadPartCopy</a>, <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/directory-buckets-objects-Batch-Ops\">the Copy operation in Batch Operations</a>, or \n                            <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/create-import-job\">the import jobs</a>. In this case, Amazon S3 makes a call to KMS every time a copy request is made for a KMS-encrypted object.</p>\n               </li>\n            </ul>\n         </note>"
+                    }
+                },
+                "BlockedEncryptionTypes": {
+                    "target": "com.amazonaws.s3#BlockedEncryptionTypes",
+                    "traits": {
+                        "smithy.api#documentation": "<p>A bucket-level setting for Amazon S3 general purpose buckets used to prevent the upload of new objects encrypted with the specified server-side encryption type. For example, blocking an encryption type will block <code>PutObject</code>, <code>CopyObject</code>, <code>PostObject</code>, multipart upload, and replication requests to the bucket for objects with the specified encryption type. However, you can continue to read and list any pre-existing objects already encrypted with the specified encryption type. For more information, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/blocking-unblocking-s3-c-encryption-gpb.html\">Blocking or unblocking SSE-C for a general purpose bucket</a>.</p>\n         <note>\n            <p>Currently, this parameter only supports blocking or unblocking server-side encryption with customer-provided keys (SSE-C). For more information about SSE-C, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/ServerSideEncryptionCustomerKeys.html\">Using server-side encryption with customer-provided keys (SSE-C)</a>.</p>\n         </note>"
                     }
                 }
             },
             "traits": {
-                "smithy.api#documentation": "<p>Specifies the default server-side encryption configuration.</p>\n         <note>\n            <ul>\n               <li>\n                  <p>\n                     <b>General purpose buckets</b> - If you're specifying\n                  a customer managed KMS key, we recommend using a fully qualified KMS key ARN.\n                  If you use a KMS key alias instead, then KMS resolves the key within the\n                  requester’s account. This behavior can result in data that's encrypted with a\n                  KMS key that belongs to the requester, and not the bucket owner.</p>\n               </li>\n               <li>\n                  <p>\n                     <b>Directory buckets</b> -\n                  When you specify an <a href=\"https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#customer-cmk\">KMS customer managed key</a> for encryption in your directory bucket, only use the key ID or key ARN. The key alias format of the KMS key isn't supported.</p>\n               </li>\n            </ul>\n         </note>"
+                "smithy.api#documentation": "<p>Specifies the default server-side encryption configuration.</p>\n         <note>\n            <ul>\n               <li>\n                  <p>\n                     <b>General purpose buckets</b> - If you're specifying a customer\n            managed KMS key, we recommend using a fully qualified KMS key ARN. If you use a KMS key\n            alias instead, then KMS resolves the key within the requester’s account. This behavior can\n            result in data that's encrypted with a KMS key that belongs to the requester, and not the bucket\n            owner.</p>\n               </li>\n               <li>\n                  <p>\n                     <b>Directory buckets</b> -\n            When you specify an <a href=\"https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#customer-cmk\">KMS customer managed key</a> for encryption in your directory bucket, only use the key ID or key ARN. The key alias format of the KMS key isn't supported.</p>\n               </li>\n            </ul>\n         </note>"
             }
         },
         "com.amazonaws.s3#ServerSideEncryptionRules": {
@@ -46306,6 +46422,121 @@
             },
             "traits": {
                 "smithy.api#input": {}
+            }
+        },
+        "com.amazonaws.s3#UpdateObjectEncryption": {
+            "type": "operation",
+            "input": {
+                "target": "com.amazonaws.s3#UpdateObjectEncryptionRequest"
+            },
+            "output": {
+                "target": "com.amazonaws.s3#UpdateObjectEncryptionResponse"
+            },
+            "errors": [
+                {
+                    "target": "com.amazonaws.s3#AccessDenied"
+                },
+                {
+                    "target": "com.amazonaws.s3#InvalidRequest"
+                },
+                {
+                    "target": "com.amazonaws.s3#NoSuchKey"
+                }
+            ],
+            "traits": {
+                "aws.protocols#httpChecksum": {
+                    "requestAlgorithmMember": "ChecksumAlgorithm",
+                    "requestChecksumRequired": true
+                },
+                "smithy.api#documentation": "<note>\n            <p>This operation is not supported for directory buckets or Amazon S3 on Outposts buckets.\n      </p>\n         </note>\n         <p>\n      Updates the server-side encryption type of an existing encrypted object in a general purpose bucket. \n      You can use the <code>UpdateObjectEncryption</code> operation to change encrypted objects from \n      server-side encryption with Amazon S3 managed keys (SSE-S3) to server-side encryption with Key Management Service (KMS) \n      keys (SSE-KMS), or to apply S3 Bucket Keys. You can also use the <code>UpdateObjectEncryption</code> operation \n      to change the customer-managed KMS key used to encrypt your data so that you can comply with custom \n      key-rotation standards.\n    </p>\n         <p>Using the <code>UpdateObjectEncryption</code> operation, you can atomically update the server-side \n      encryption type of an existing object in a general purpose bucket without any data movement. The \n      <code>UpdateObjectEncryption</code> operation uses envelope encryption to re-encrypt the data key used to \n      encrypt and decrypt your object with your newly specified server-side encryption type. In other words, \n      when you use the <code>UpdateObjectEncryption</code> operation, your data isn't copied, archived \n      objects in the S3 Glacier Flexible Retrieval and S3 Glacier Deep Archive storage classes aren't \n      restored, and objects in the S3 Intelligent-Tiering storage class aren't moved between tiers. \n      Additionally, the <code>UpdateObjectEncryption</code> operation preserves all object metadata \n      properties, including the storage class, creation date, last modified date, ETag, and checksum \n      properties. For more information, see \n      <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/update-sse-encryption.html\">\n        Updating server-side encryption for existing objects</a> in the \n      <i>Amazon S3 User Guide</i>.</p>\n         <p>By default, all <code>UpdateObjectEncryption</code> requests that specify a  customer-managed \n      KMS key are restricted to KMS keys that are owned by the  bucket owner's Amazon Web Services account. If you're \n      using Organizations, you can request the ability to use KMS keys owned by other member \n      accounts  within your organization by contacting Amazon Web Services Support.</p>\n         <note>\n            <p>Source objects that are unencrypted, or encrypted with either dual-layer server-side encryption \n        with KMS keys (DSSE-KMS) or server-side encryption with customer-provided keys (SSE-C) aren't \n        supported by this operation. Additionally, you cannot specify SSE-S3 encryption as the requested\n        new encryption type <code>UpdateObjectEncryption</code> request.</p>\n         </note>\n         <dl>\n            <dt>Permissions</dt>\n            <dd>\n               <ul>\n                  <li>\n                     <p>To use the <code>UpdateObjectEncryption</code> operation, you must have the following \n                permissions:</p>\n                     <ul>\n                        <li>\n                           <p>\n                              <code>s3:UpdateObjectEncryption</code>\n                           </p>\n                        </li>\n                        <li>\n                           <p>\n                              <code>kms:Encrypt</code>\n                           </p>\n                        </li>\n                        <li>\n                           <p>\n                              <code>kms:Decrypt</code>\n                           </p>\n                        </li>\n                        <li>\n                           <p>\n                              <code>kms:GenerateDataKey</code>\n                           </p>\n                        </li>\n                        <li>\n                           <p>\n                              <code>kms:ReEncrypt*</code>\n                           </p>\n                        </li>\n                     </ul>\n                  </li>\n                  <li>\n                     <p>If you're using Organizations, to use this operation with customer-managed \n                KMS keys from other Amazon Web Services accounts within your organization, you must have the \n                <code>organizations:DescribeAccount</code> permission.</p>\n                  </li>\n               </ul>\n            </dd>\n         </dl>\n         <dl>\n            <dt>Errors</dt>\n            <dd>\n               <ul>\n                  <li>\n                     <p>You might receive an <code>InvalidRequest</code> error for several reasons. Depending \n                on the reason for the error, you might receive one of the following messages:</p>\n                     <ul>\n                        <li>\n                           <p>The <code>UpdateObjectEncryption</code> operation doesn't supported unencrypted \n                    source objects. Only source objects encrypted with SSE-S3 or SSE-KMS are supported.</p>\n                        </li>\n                        <li>\n                           <p>The <code>UpdateObjectEncryption</code> operation doesn't support source objects \n                    with the encryption type DSSE-KMS or SSE-C. Only source objects encrypted with SSE-S3 \n                    or SSE-KMS are supported.</p>\n                        </li>\n                        <li>\n                           <p>The <code>UpdateObjectEncryption</code> operation doesn't support updating the \n                    encryption type to DSSE-KMS or SSE-C. Modify the request to specify SSE-KMS \n                    for the updated encryption type, and then try again.</p>\n                        </li>\n                        <li>\n                           <p>Requests that modify an object encryption configuration require Amazon Web Services Signature \n                    Version 4. Modify the request to use Amazon Web Services Signature Version 4, and then try again.</p>\n                        </li>\n                        <li>\n                           <p>Requests that modify an object encryption configuration require a valid new \n                    encryption type. Valid values are <code>SSEKMS</code>. Modify the request to specify\n                    SSE-KMS for the updated encryption type, and then try again.</p>\n                        </li>\n                        <li>\n                           <p>Requests that modify an object's encryption type to SSE-KMS require an Amazon Web Services KMS key \n                    Amazon Resource Name (ARN). Modify the request to specify a KMS key ARN, and then \n                    try again.</p>\n                        </li>\n                        <li>\n                           <p>Requests that modify an object's encryption type to SSE-KMS require a valid \n                    Amazon Web Services KMS key Amazon Resource Name (ARN). Confirm that you have a correctly formatted \n                    KMS key ARN in your request, and then try again.</p>\n                        </li>\n                        <li>\n                           <p>The <code>BucketKeyEnabled</code> value isn't valid. Valid values are \n                    <code>true</code> or <code>false</code>. Modify the request to specify a valid value, \n                    and then try again.</p>\n                        </li>\n                     </ul>\n                  </li>\n                  <li>\n                     <p>You might receive an <code>AccessDenied</code> error for several reasons. Depending on \n                the reason for the error, you might receive one of the following messages:</p>\n                     <ul>\n                        <li>\n                           <p>The Amazon Web Services KMS key in the request must be owned by the same account as the bucket. Modify \n                    the request to specify a KMS key from the same account, and then try again.</p>\n                        </li>\n                        <li>\n                           <p>The bucket owner's account was approved to make <code>UpdateObjectEncryption</code> requests \n                    that use any Amazon Web Services KMS key in their organization, but the bucket owner's account isn't part of \n                    an organization in Organizations. Make sure that the bucket owner's account and the \n                    specified KMS key belong to the same organization, and then try again. </p>\n                        </li>\n                        <li>\n                           <p>The specified Amazon Web Services KMS key must be from the same organization in Organizations as \n                    the bucket. Specify a KMS key that belongs to the same organization as the bucket, and then \n                    try again. </p>\n                        </li>\n                        <li>\n                           <p>The encryption type for the specified object can’t be updated because that object is \n                    protected by S3 Object Lock. If the object has a governance-mode retention period or a legal \n                    hold, you must first remove the Object Lock status on the object before you issue your \n                    <code>UpdateObjectEncryption</code> request. You can't use the <code>UpdateObjectEncryption</code>\n                    operation with objects that have an Object Lock compliance mode retention period applied to them.</p>\n                        </li>\n                     </ul>\n                  </li>\n               </ul>\n            </dd>\n         </dl>",
+                "smithy.api#http": {
+                    "method": "PUT",
+                    "uri": "/{Bucket}/{Key+}?encryption",
+                    "code": 200
+                }
+            }
+        },
+        "com.amazonaws.s3#UpdateObjectEncryptionRequest": {
+            "type": "structure",
+            "members": {
+                "Bucket": {
+                    "target": "com.amazonaws.s3#BucketName",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The name of the general purpose bucket that contains the specified object key name.\n    </p>\n         <p>When you use this operation with an access point attached to a general purpose bucket, you \n      must either provide the alias of the access point in place of the bucket name or you must specify \n      the access point Amazon Resource Name (ARN). When using the access point ARN, you must direct \n      requests to the access point hostname. The access point hostname takes the form \n      <code>\n               <i>AccessPointName</i>-<i>AccountId</i>.s3-accesspoint.<i>Region</i>.amazonaws.com</code>. \n      When using this operation with an access point through the Amazon Web Services SDKs, you provide the access point \n      ARN in place of the bucket name. For more information about access point ARNs, see \n      <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-points-naming.html\">\n        Referencing access points</a> in the <i>Amazon S3 User Guide</i>.</p>",
+                        "smithy.api#httpLabel": {},
+                        "smithy.api#required": {},
+                        "smithy.rules#contextParam": {
+                            "name": "Bucket"
+                        }
+                    }
+                },
+                "Key": {
+                    "target": "com.amazonaws.s3#ObjectKey",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The key name of the object that you want to update the server-side encryption type for.\n    </p>",
+                        "smithy.api#httpLabel": {},
+                        "smithy.api#required": {}
+                    }
+                },
+                "VersionId": {
+                    "target": "com.amazonaws.s3#ObjectVersionId",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The version ID of the object that you want to update the server-side encryption type for.\n    </p>",
+                        "smithy.api#httpQuery": "versionId"
+                    }
+                },
+                "ObjectEncryption": {
+                    "target": "com.amazonaws.s3#ObjectEncryption",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The updated server-side encryption type for this object. The <code>UpdateObjectEncryption</code> \n      operation supports the SSE-S3 and SSE-KMS encryption types.\n    </p>\n         <p>Valid Values: <code>SSES3</code> | <code>SSEKMS</code>\n         </p>",
+                        "smithy.api#httpPayload": {},
+                        "smithy.api#required": {}
+                    }
+                },
+                "RequestPayer": {
+                    "target": "com.amazonaws.s3#RequestPayer",
+                    "traits": {
+                        "smithy.api#httpHeader": "x-amz-request-payer"
+                    }
+                },
+                "ExpectedBucketOwner": {
+                    "target": "com.amazonaws.s3#AccountId",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The account ID of the expected bucket owner. If the account ID that you provide doesn't match the \n      actual owner of the bucket, the request fails with the HTTP status code <code>403 Forbidden</code> \n      (access denied).\n    </p>",
+                        "smithy.api#httpHeader": "x-amz-expected-bucket-owner"
+                    }
+                },
+                "ContentMD5": {
+                    "target": "com.amazonaws.s3#ContentMD5",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      The MD5 hash for the request body. For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.\n   </p>",
+                        "smithy.api#httpHeader": "Content-MD5"
+                    }
+                },
+                "ChecksumAlgorithm": {
+                    "target": "com.amazonaws.s3#ChecksumAlgorithm",
+                    "traits": {
+                        "smithy.api#documentation": "<p>\n      Indicates the algorithm used to create the checksum for the object when you use an Amazon Web Services SDK. This header \n      doesn't provide any additional functionality if you don't use the SDK. When you send this header, \n      there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. \n      Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more \n      information, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html\">\n        Checking object integrity </a> in the <i>Amazon S3 User Guide</i>.  \n    </p>\n         <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> \n      parameter.</p>",
+                        "smithy.api#httpHeader": "x-amz-sdk-checksum-algorithm"
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#input": {}
+            }
+        },
+        "com.amazonaws.s3#UpdateObjectEncryptionResponse": {
+            "type": "structure",
+            "members": {
+                "RequestCharged": {
+                    "target": "com.amazonaws.s3#RequestCharged",
+                    "traits": {
+                        "smithy.api#httpHeader": "x-amz-request-charged"
+                    }
+                }
+            },
+            "traits": {
+                "smithy.api#output": {}
             }
         },
         "com.amazonaws.s3#UploadIdMarker": {

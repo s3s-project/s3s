@@ -857,6 +857,13 @@ pub trait S3Access: Send + Sync + 'static {
         Ok(())
     }
 
+    /// Checks whether the UpdateObjectEncryption request has accesses to the resources.
+    ///
+    /// This method returns `Ok(())` by default.
+    async fn update_object_encryption(&self, _req: &mut S3Request<UpdateObjectEncryptionInput>) -> S3Result<()> {
+        Ok(())
+    }
+
     /// Checks whether the UploadPart request has accesses to the resources.
     ///
     /// This method returns `Ok(())` by default.

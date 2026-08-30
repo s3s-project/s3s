@@ -136,6 +136,22 @@ impl AwsConversion for s3s::dto::AccessControlTranslation {
     }
 }
 
+impl AwsConversion for s3s::dto::AccessDenied {
+    type Target = aws_sdk_s3::types::error::AccessDenied;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        let _ = x;
+        Ok(Self {})
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let _ = x;
+        let y = Self::Target::builder();
+        Ok(y.build())
+    }
+}
+
 impl AwsConversion for s3s::dto::AnalyticsAndOperator {
     type Target = aws_sdk_s3::types::AnalyticsAndOperator;
     type Error = S3Error;
@@ -355,6 +371,23 @@ impl AwsConversion for s3s::dto::ArchiveStatus {
 
     fn try_into_aws(x: Self) -> S3Result<Self::Target> {
         Ok(aws_sdk_s3::types::ArchiveStatus::from(x.as_str()))
+    }
+}
+
+impl AwsConversion for s3s::dto::BlockedEncryptionTypes {
+    type Target = aws_sdk_s3::types::BlockedEncryptionTypes;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            encryption_type: try_from_aws(x.encryption_type)?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_encryption_type(try_into_aws(x.encryption_type)?);
+        Ok(y.build())
     }
 }
 
@@ -2682,6 +2715,23 @@ impl AwsConversion for s3s::dto::EncryptionConfiguration {
         let mut y = Self::Target::builder();
         y = y.set_replica_kms_key_id(try_into_aws(x.replica_kms_key_id)?);
         Ok(y.build())
+    }
+}
+
+impl AwsConversion for s3s::dto::EncryptionType {
+    type Target = aws_sdk_s3::types::EncryptionType;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(match x {
+            aws_sdk_s3::types::EncryptionType::None => Self::from_static(Self::NONE),
+            aws_sdk_s3::types::EncryptionType::SseC => Self::from_static(Self::SSE_C),
+            _ => Self::from(x.as_str().to_owned()),
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        Ok(aws_sdk_s3::types::EncryptionType::from(x.as_str()))
     }
 }
 
@@ -6675,6 +6725,25 @@ impl AwsConversion for s3s::dto::ObjectCannedACL {
     }
 }
 
+impl AwsConversion for s3s::dto::ObjectEncryption {
+    type Target = aws_sdk_s3::types::ObjectEncryption;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(match x {
+            aws_sdk_s3::types::ObjectEncryption::Ssekms(v) => Self::SSEKMS(try_from_aws(v)?),
+            _ => unimplemented!("unknown variant of aws_sdk_s3::types::ObjectEncryption: {x:?}"),
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        Ok(match x {
+            Self::SSEKMS(v) => aws_sdk_s3::types::ObjectEncryption::Ssekms(try_into_aws(v)?),
+            _ => unimplemented!("unknown variant of ObjectEncryption: {x:?}"),
+        })
+    }
+}
+
 impl AwsConversion for s3s::dto::ObjectIdentifier {
     type Target = aws_sdk_s3::types::ObjectIdentifier;
     type Error = S3Error;
@@ -9392,6 +9461,25 @@ impl AwsConversion for s3s::dto::SSEKMS {
     }
 }
 
+impl AwsConversion for s3s::dto::SSEKMSEncryption {
+    type Target = aws_sdk_s3::types::SsekmsEncryption;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            bucket_key_enabled: try_from_aws(x.bucket_key_enabled)?,
+            kms_key_arn: try_from_aws(x.kms_key_arn)?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_bucket_key_enabled(try_into_aws(x.bucket_key_enabled)?);
+        y = y.set_kms_key_arn(Some(try_into_aws(x.kms_key_arn)?));
+        y.build().map_err(S3Error::internal_error)
+    }
+}
+
 impl AwsConversion for s3s::dto::SSES3 {
     type Target = aws_sdk_s3::types::Sses3;
     type Error = S3Error;
@@ -9500,6 +9588,8 @@ impl AwsConversion for s3s::dto::ServerSideEncryption {
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
         Ok(match x {
             aws_sdk_s3::types::ServerSideEncryption::Aes256 => Self::from_static(Self::AES256),
+            aws_sdk_s3::types::ServerSideEncryption::AwsBackup => Self::from_static(Self::AWS_BACKUP),
+            aws_sdk_s3::types::ServerSideEncryption::AwsFsx => Self::from_static(Self::AWS_FSX),
             aws_sdk_s3::types::ServerSideEncryption::AwsKms => Self::from_static(Self::AWS_KMS),
             aws_sdk_s3::types::ServerSideEncryption::AwsKmsDsse => Self::from_static(Self::AWS_KMS_DSSE),
             _ => Self::from(x.as_str().to_owned()),
@@ -9554,6 +9644,7 @@ impl AwsConversion for s3s::dto::ServerSideEncryptionRule {
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
         Ok(Self {
             apply_server_side_encryption_by_default: try_from_aws(x.apply_server_side_encryption_by_default)?,
+            blocked_encryption_types: try_from_aws(x.blocked_encryption_types)?,
             bucket_key_enabled: try_from_aws(x.bucket_key_enabled)?,
         })
     }
@@ -9561,6 +9652,7 @@ impl AwsConversion for s3s::dto::ServerSideEncryptionRule {
     fn try_into_aws(x: Self) -> S3Result<Self::Target> {
         let mut y = Self::Target::builder();
         y = y.set_apply_server_side_encryption_by_default(try_into_aws(x.apply_server_side_encryption_by_default)?);
+        y = y.set_blocked_encryption_types(try_into_aws(x.blocked_encryption_types)?);
         y = y.set_bucket_key_enabled(try_into_aws(x.bucket_key_enabled)?);
         Ok(y.build())
     }
@@ -10160,6 +10252,54 @@ impl AwsConversion for s3s::dto::UpdateBucketMetadataJournalTableConfigurationOu
     fn try_into_aws(x: Self) -> S3Result<Self::Target> {
         let _ = x;
         let y = Self::Target::builder();
+        Ok(y.build())
+    }
+}
+
+impl AwsConversion for s3s::dto::UpdateObjectEncryptionInput {
+    type Target = aws_sdk_s3::operation::update_object_encryption::UpdateObjectEncryptionInput;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            bucket: unwrap_from_aws(x.bucket, "bucket")?,
+            checksum_algorithm: try_from_aws(x.checksum_algorithm)?,
+            content_md5: try_from_aws(x.content_md5)?,
+            expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
+            key: unwrap_from_aws(x.key, "key")?,
+            object_encryption: unwrap_from_aws(x.object_encryption, "object_encryption")?,
+            request_payer: try_from_aws(x.request_payer)?,
+            version_id: try_from_aws(x.version_id)?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_bucket(Some(try_into_aws(x.bucket)?));
+        y = y.set_checksum_algorithm(try_into_aws(x.checksum_algorithm)?);
+        y = y.set_content_md5(try_into_aws(x.content_md5)?);
+        y = y.set_expected_bucket_owner(try_into_aws(x.expected_bucket_owner)?);
+        y = y.set_key(Some(try_into_aws(x.key)?));
+        y = y.set_object_encryption(Some(try_into_aws(x.object_encryption)?));
+        y = y.set_request_payer(try_into_aws(x.request_payer)?);
+        y = y.set_version_id(try_into_aws(x.version_id)?);
+        y.build().map_err(S3Error::internal_error)
+    }
+}
+
+impl AwsConversion for s3s::dto::UpdateObjectEncryptionOutput {
+    type Target = aws_sdk_s3::operation::update_object_encryption::UpdateObjectEncryptionOutput;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            request_charged: try_from_aws(x.request_charged)?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_request_charged(try_into_aws(x.request_charged)?);
         Ok(y.build())
     }
 }

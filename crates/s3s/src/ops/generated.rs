@@ -108,6 +108,7 @@
 // UpdateBucketMetadataAnnotationTableConfiguration
 // UpdateBucketMetadataInventoryTableConfiguration
 // UpdateBucketMetadataJournalTableConfiguration
+// UpdateObjectEncryption
 // UploadPart
 // UploadPartCopy
 // WriteGetObjectResponse
@@ -8868,6 +8869,80 @@ impl super::Operation for UpdateBucketMetadataJournalTableConfiguration {
     }
 }
 
+pub struct UpdateObjectEncryption;
+
+impl UpdateObjectEncryption {
+    pub fn deserialize_http(req: &mut http::Request) -> S3Result<UpdateObjectEncryptionInput> {
+        let (bucket, key) = http::unwrap_object(req);
+
+        let checksum_algorithm: Option<ChecksumAlgorithm> = http::parse_checksum_algorithm_header(req)?;
+
+        let content_md5: Option<ContentMD5> = http::parse_opt_header(req, &CONTENT_MD5)?;
+
+        let expected_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_EXPECTED_BUCKET_OWNER)?;
+
+        let object_encryption: ObjectEncryption = http::take_xml_body(req)?;
+
+        let request_payer: Option<RequestPayer> = http::parse_opt_header(req, &X_AMZ_REQUEST_PAYER)?;
+
+        let version_id: Option<ObjectVersionId> = http::parse_opt_query(req, "versionId")?;
+
+        Ok(UpdateObjectEncryptionInput {
+            bucket,
+            checksum_algorithm,
+            content_md5,
+            expected_bucket_owner,
+            key,
+            object_encryption,
+            request_payer,
+            version_id,
+        })
+    }
+
+    pub fn serialize_http(x: UpdateObjectEncryptionOutput) -> S3Result<http::Response> {
+        let mut res = http::Response::with_status(http::StatusCode::OK);
+        http::add_opt_header(&mut res, X_AMZ_REQUEST_CHARGED, x.request_charged)?;
+        Ok(res)
+    }
+}
+
+#[async_trait::async_trait]
+impl super::Operation for UpdateObjectEncryption {
+    fn name(&self) -> &'static str {
+        "UpdateObjectEncryption"
+    }
+
+    fn needs_full_body(&self) -> bool {
+        true
+    }
+
+    fn has_request_payload(&self) -> bool {
+        true
+    }
+
+    fn has_streaming_body(&self) -> bool {
+        false
+    }
+
+    async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
+        let input = Self::deserialize_http(req)?;
+        let mut s3_req = super::build_s3_request(input, req);
+        let s3 = ccx.s3;
+        if let Some(access) = ccx.access {
+            access.update_object_encryption(&mut s3_req).await?;
+        }
+        let result = s3.update_object_encryption(s3_req).await;
+        let s3_resp = match result {
+            Ok(val) => val,
+            Err(err) => return super::serialize_error(err, false),
+        };
+        let mut resp = Self::serialize_http(s3_resp.output)?;
+        resp.headers.extend(s3_resp.headers);
+        resp.extensions.extend(s3_resp.extensions);
+        Ok(resp)
+    }
+}
+
 pub struct UploadPart;
 
 impl UploadPart {
@@ -9763,6 +9838,9 @@ pub fn resolve_route(
                     if qs.has("tagging") {
                         return Ok(&PutObjectTagging as &'static dyn super::Operation);
                     }
+                    if qs.has("encryption") {
+                        return Ok(&UpdateObjectEncryption as &'static dyn super::Operation);
+                    }
                 }
                 if let Some(qs) = qs
                     && qs.has("partNumber")
@@ -10144,6 +10222,9 @@ pub fn resolve_route(
                     }
                     if qs.has("tagging") {
                         return Ok(&PutObjectTagging as &'static dyn super::Operation);
+                    }
+                    if qs.has("encryption") {
+                        return Ok(&UpdateObjectEncryption as &'static dyn super::Operation);
                     }
                 }
                 if let Some(qs) = qs

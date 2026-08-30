@@ -81,7 +81,13 @@ pub fn collect_operations(model: &smithy::Model) -> Operations {
 
         let output = {
             if smithy_output != "Unit" && smithy_output != "NotificationConfiguration" {
-                assert_eq!(smithy_output.strip_suffix("Output").unwrap(), op_name);
+                // The upstream model mostly names op outputs `<Op>Output`, but a few
+                // use `<Op>Response`; both are normalized to the `<Op>Output` convention.
+                let op_base = smithy_output
+                    .strip_suffix("Output")
+                    .or_else(|| smithy_output.strip_suffix("Response"))
+                    .unwrap();
+                assert_eq!(op_base, op_name);
             }
             f!("{op_name}Output")
         };
