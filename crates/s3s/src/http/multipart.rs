@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
+#![deny(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::unwrap_used
+)]
 //! multipart/form-data encoding for POST Object
 //!
 //! See <https://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectPOST.html>
@@ -82,21 +89,18 @@ impl Multipart {
     #[must_use]
     pub fn find_field_value<'a>(&'a self, name: &str) -> Option<&'a str> {
         let idx = Self::find_field_index(&self.fields, name)?;
-        Some(self.fields[idx].1.as_str())
+        Some(self.fields.get(idx)?.1.as_str())
     }
 
     fn find_field_value_mut<'a>(fields: &'a mut [(String, String)], name: &str) -> Option<&'a mut String> {
         let idx = Self::find_field_index(fields, name)?;
-        Some(&mut fields[idx].1)
+        Some(&mut fields.get_mut(idx)?.1)
     }
 
     fn find_field_index(fields: &[(String, String)], name: &str) -> Option<usize> {
         let upper_bound = fields.partition_point(|x| x.0.as_str() <= name);
-        if upper_bound == 0 {
-            return None;
-        }
-        let idx = upper_bound - 1;
-        let pair = &fields[idx];
+        let idx = upper_bound.checked_sub(1)?;
+        let pair = fields.get(idx)?;
         if pair.0.as_str() != name {
             return None;
         }
@@ -129,6 +133,13 @@ impl Multipart {
     /// - lowercasing field names
     /// - sorting fields by name
     #[cfg(test)]
+    #[allow(
+        clippy::expect_used,
+        clippy::indexing_slicing,
+        clippy::panic,
+        clippy::unreachable,
+        clippy::unwrap_used
+    )]
     pub(crate) fn new_for_test(mut fields: Vec<(String, String)>, file: File) -> Self {
         // Normalize field names to lowercase to match production behavior.
         for (name, _) in &mut fields {
@@ -796,6 +807,13 @@ fn parse_content_disposition(input: &[u8]) -> nom::IResult<&[u8], ContentDisposi
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::unwrap_used
+)]
 mod tests {
     use super::*;
 
