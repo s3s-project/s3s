@@ -1390,6 +1390,13 @@ impl DtoExt for BlockedEncryptionTypes {
 /// <p> In terms of implementation, a Bucket is a resource. </p>
 #[derive(Clone, Default, PartialEq)]
 pub struct Bucket {
+    /// <p>The Amazon Resource Name (ARN) of the S3 bucket. ARNs uniquely identify Amazon Web Services resources across all
+    /// of Amazon Web Services.</p>
+    /// <note>
+    /// <p>This parameter is only supported for S3 directory buckets. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/directory-buckets-tagging.html">Using tags with
+    /// directory buckets</a>.</p>
+    /// </note>
+    pub bucket_arn: Option<S3RegionalOrS3ExpressBucketArnString>,
     /// <p>
     /// <code>BucketRegion</code> indicates the Amazon Web Services region where the bucket is located. If the
     /// request contains at least one valid parameter, it is included in the response.</p>
@@ -1404,6 +1411,9 @@ pub struct Bucket {
 impl fmt::Debug for Bucket {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut d = f.debug_struct("Bucket");
+        if let Some(ref val) = self.bucket_arn {
+            d.field("bucket_arn", val);
+        }
         if let Some(ref val) = self.bucket_region {
             d.field("bucket_region", val);
         }
@@ -1418,6 +1428,9 @@ impl fmt::Debug for Bucket {
 }
 impl DtoExt for Bucket {
     fn ignore_empty_strings(&mut self) {
+        if self.bucket_arn.as_deref() == Some("") {
+            self.bucket_arn = None;
+        }
         if self.bucket_region.as_deref() == Some("") {
             self.bucket_region = None;
         }
@@ -5430,6 +5443,11 @@ pub struct CreateBucketConfiguration {
     /// <p>This functionality is not supported for directory buckets.</p>
     /// </note>
     pub location_constraint: Option<BucketLocationConstraint>,
+    /// <p>An array of tags that you can apply to the bucket that you're creating. Tags are key-value pairs of metadata used to categorize and organize your buckets, track costs, and control access. </p>
+    /// <p>You must have the <code>s3:TagResource</code> permission to create a general
+    /// purpose bucket with tags or the <code>s3express:TagResource</code> permission to create a directory bucket with tags.</p>
+    /// <p>When creating buckets with tags, note that tag-based conditions using <code>aws:ResourceTag</code> and <code>s3:BucketTag</code> condition keys are applicable only after ABAC is enabled on the bucket. To learn more, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/buckets-tagging-enable-abac.html">Enabling ABAC in general purpose buckets</a>.</p>
+    pub tags: Option<TagSet>,
 }
 
 impl fmt::Debug for CreateBucketConfiguration {
@@ -5443,6 +5461,9 @@ impl fmt::Debug for CreateBucketConfiguration {
         }
         if let Some(ref val) = self.location_constraint {
             d.field("location_constraint", val);
+        }
+        if let Some(ref val) = self.tags {
+            d.field("tags", val);
         }
         d.finish_non_exhaustive()
     }
@@ -5769,6 +5790,13 @@ impl fmt::Debug for CreateBucketMetadataTableConfigurationOutput {
 
 #[derive(Clone, Default, PartialEq)]
 pub struct CreateBucketOutput {
+    /// <p>The Amazon Resource Name (ARN) of the S3 bucket. ARNs uniquely identify Amazon Web Services resources across all
+    /// of Amazon Web Services.</p>
+    /// <note>
+    /// <p>This parameter is only supported for S3 directory buckets. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/directory-buckets-tagging.html">Using tags with
+    /// directory buckets</a>.</p>
+    /// </note>
+    pub bucket_arn: Option<S3RegionalOrS3ExpressBucketArnString>,
     /// <p>A forward slash followed by the name of the bucket.</p>
     pub location: Option<Location>,
 }
@@ -5776,6 +5804,9 @@ pub struct CreateBucketOutput {
 impl fmt::Debug for CreateBucketOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut d = f.debug_struct("CreateBucketOutput");
+        if let Some(ref val) = self.bucket_arn {
+            d.field("bucket_arn", val);
+        }
         if let Some(ref val) = self.location {
             d.field("location", val);
         }
@@ -5784,6 +5815,9 @@ impl fmt::Debug for CreateBucketOutput {
 }
 impl DtoExt for CreateBucketOutput {
     fn ignore_empty_strings(&mut self) {
+        if self.bucket_arn.as_deref() == Some("") {
+            self.bucket_arn = None;
+        }
         if self.location.as_deref() == Some("") {
             self.location = None;
         }
@@ -15521,6 +15555,13 @@ pub struct HeadBucketOutput {
     /// <p>For directory buckets, the value of this field is <code>false</code>.</p>
     /// </note>
     pub access_point_alias: Option<AccessPointAlias>,
+    /// <p>The Amazon Resource Name (ARN) of the S3 bucket. ARNs uniquely identify Amazon Web Services resources across all
+    /// of Amazon Web Services.</p>
+    /// <note>
+    /// <p>This parameter is only supported for S3 directory buckets. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/directory-buckets-tagging.html">Using tags with
+    /// directory buckets</a>.</p>
+    /// </note>
+    pub bucket_arn: Option<S3RegionalOrS3ExpressBucketArnString>,
     /// <p>The name of the location where the bucket will be created.</p>
     /// <p>For directory buckets, the Zone ID of the Availability Zone or the Local Zone where the bucket is created. An example Zone ID value for an Availability Zone is <code>usw2-az1</code>.</p>
     /// <note>
@@ -15542,6 +15583,9 @@ impl fmt::Debug for HeadBucketOutput {
         if let Some(ref val) = self.access_point_alias {
             d.field("access_point_alias", val);
         }
+        if let Some(ref val) = self.bucket_arn {
+            d.field("bucket_arn", val);
+        }
         if let Some(ref val) = self.bucket_location_name {
             d.field("bucket_location_name", val);
         }
@@ -15556,6 +15600,9 @@ impl fmt::Debug for HeadBucketOutput {
 }
 impl DtoExt for HeadBucketOutput {
     fn ignore_empty_strings(&mut self) {
+        if self.bucket_arn.as_deref() == Some("") {
+            self.bucket_arn = None;
+        }
         if self.bucket_location_name.as_deref() == Some("") {
             self.bucket_location_name = None;
         }
@@ -16066,6 +16113,13 @@ pub struct HeadObjectOutput {
     /// Only the S3 Express One Zone storage class is supported by directory buckets to store objects.</p>
     /// </note>
     pub storage_class: Option<StorageClass>,
+    /// <p>The number of tags, if any, on the object, when you have the relevant permission to read object
+    /// tags.</p>
+    /// <p>You can use <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObjectTagging.html">GetObjectTagging</a> to retrieve the tag set associated with an object.</p>
+    /// <note>
+    /// <p>This functionality is not supported for directory buckets.</p>
+    /// </note>
+    pub tag_count: Option<TagCount>,
     /// <p>Version ID of the object.</p>
     /// <note>
     /// <p>This functionality is not supported for directory buckets.</p>
@@ -16202,6 +16256,9 @@ impl fmt::Debug for HeadObjectOutput {
         }
         if let Some(ref val) = self.storage_class {
             d.field("storage_class", val);
+        }
+        if let Some(ref val) = self.tag_count {
+            d.field("tag_count", val);
         }
         if let Some(ref val) = self.version_id {
             d.field("version_id", val);
@@ -30487,6 +30544,8 @@ impl DtoExt for S3Location {
         }
     }
 }
+
+pub type S3RegionalOrS3ExpressBucketArnString = String;
 
 pub type S3TablesArn = String;
 

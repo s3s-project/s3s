@@ -57,6 +57,8 @@ pub const X_AMZ_ACL: HeaderName = HeaderName::from_static("x-amz-acl");
 
 pub const X_AMZ_ARCHIVE_STATUS: HeaderName = HeaderName::from_static("x-amz-archive-status");
 
+pub const X_AMZ_BUCKET_ARN: HeaderName = HeaderName::from_static("x-amz-bucket-arn");
+
 pub const X_AMZ_BUCKET_LOCATION_NAME: HeaderName = HeaderName::from_static("x-amz-bucket-location-name");
 
 pub const X_AMZ_BUCKET_LOCATION_TYPE: HeaderName = HeaderName::from_static("x-amz-bucket-location-type");

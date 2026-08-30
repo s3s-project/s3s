@@ -473,6 +473,7 @@ impl AwsConversion for s3s::dto::Bucket {
 
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
         Ok(Self {
+            bucket_arn: try_from_aws(x.bucket_arn)?,
             bucket_region: try_from_aws(x.bucket_region)?,
             creation_date: try_from_aws(x.creation_date)?,
             name: try_from_aws(x.name)?,
@@ -481,6 +482,7 @@ impl AwsConversion for s3s::dto::Bucket {
 
     fn try_into_aws(x: Self) -> S3Result<Self::Target> {
         let mut y = Self::Target::builder();
+        y = y.set_bucket_arn(try_into_aws(x.bucket_arn)?);
         y = y.set_bucket_region(try_into_aws(x.bucket_region)?);
         y = y.set_creation_date(try_into_aws(x.creation_date)?);
         y = y.set_name(try_into_aws(x.name)?);
@@ -1475,6 +1477,7 @@ impl AwsConversion for s3s::dto::CreateBucketConfiguration {
             bucket: try_from_aws(x.bucket)?,
             location: try_from_aws(x.location)?,
             location_constraint: try_from_aws(x.location_constraint)?,
+            tags: try_from_aws(x.tags)?,
         })
     }
 
@@ -1483,6 +1486,7 @@ impl AwsConversion for s3s::dto::CreateBucketConfiguration {
         y = y.set_bucket(try_into_aws(x.bucket)?);
         y = y.set_location(try_into_aws(x.location)?);
         y = y.set_location_constraint(try_into_aws(x.location_constraint)?);
+        y = y.set_tags(try_into_aws(x.tags)?);
         Ok(y.build())
     }
 }
@@ -1612,12 +1616,14 @@ impl AwsConversion for s3s::dto::CreateBucketOutput {
 
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
         Ok(Self {
+            bucket_arn: try_from_aws(x.bucket_arn)?,
             location: try_from_aws(x.location)?,
         })
     }
 
     fn try_into_aws(x: Self) -> S3Result<Self::Target> {
         let mut y = Self::Target::builder();
+        y = y.set_bucket_arn(try_into_aws(x.bucket_arn)?);
         y = y.set_location(try_into_aws(x.location)?);
         Ok(y.build())
     }
@@ -4728,6 +4734,7 @@ impl AwsConversion for s3s::dto::HeadBucketOutput {
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
         Ok(Self {
             access_point_alias: try_from_aws(x.access_point_alias)?,
+            bucket_arn: try_from_aws(x.bucket_arn)?,
             bucket_location_name: try_from_aws(x.bucket_location_name)?,
             bucket_location_type: try_from_aws(x.bucket_location_type)?,
             bucket_region: try_from_aws(x.bucket_region)?,
@@ -4737,6 +4744,7 @@ impl AwsConversion for s3s::dto::HeadBucketOutput {
     fn try_into_aws(x: Self) -> S3Result<Self::Target> {
         let mut y = Self::Target::builder();
         y = y.set_access_point_alias(try_into_aws(x.access_point_alias)?);
+        y = y.set_bucket_arn(try_into_aws(x.bucket_arn)?);
         y = y.set_bucket_location_name(try_into_aws(x.bucket_location_name)?);
         y = y.set_bucket_location_type(try_into_aws(x.bucket_location_type)?);
         y = y.set_bucket_region(try_into_aws(x.bucket_region)?);
@@ -4848,6 +4856,7 @@ impl AwsConversion for s3s::dto::HeadObjectOutput {
             ssekms_key_id: try_from_aws(x.ssekms_key_id)?,
             server_side_encryption: try_from_aws(x.server_side_encryption)?,
             storage_class: try_from_aws(x.storage_class)?,
+            tag_count: try_from_aws(x.tag_count)?,
             version_id: try_from_aws(x.version_id)?,
             website_redirect_location: try_from_aws(x.website_redirect_location)?,
         })
@@ -4896,6 +4905,7 @@ impl AwsConversion for s3s::dto::HeadObjectOutput {
         y = y.set_ssekms_key_id(try_into_aws(x.ssekms_key_id)?);
         y = y.set_server_side_encryption(try_into_aws(x.server_side_encryption)?);
         y = y.set_storage_class(try_into_aws(x.storage_class)?);
+        y = y.set_tag_count(try_into_aws(x.tag_count)?);
         y = y.set_version_id(try_into_aws(x.version_id)?);
         y = y.set_website_redirect_location(try_into_aws(x.website_redirect_location)?);
         Ok(y.build())

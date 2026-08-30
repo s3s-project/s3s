@@ -619,6 +619,7 @@ impl S3 for FileSystem {
                 creation_date: Some(created_or_modified_date),
                 name: Some(name.to_owned()),
                 bucket_region: None,
+                bucket_arn: None,
             };
             buckets.push(bucket);
         }
