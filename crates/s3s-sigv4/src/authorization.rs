@@ -181,10 +181,7 @@ mod parser {
     }
 
     fn verify_date(s: &str) -> Result<(), Error> {
-        let x = s.as_bytes();
-        if x.len() != 8 {
-            return Err(Error);
-        }
+        let x: &[u8; 8] = s.as_bytes().try_into().map_err(|_| Error)?;
 
         let yyyy = digit4([x[0], x[1], x[2], x[3]])?;
         let mm = digit2([x[4], x[5]])?;
@@ -201,6 +198,13 @@ mod parser {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::unwrap_used
+)]
 mod tests {
     use super::*;
 

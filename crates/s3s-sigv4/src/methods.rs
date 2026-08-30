@@ -121,6 +121,74 @@ where
     v.sort_by(|lhs, rhs| lhs.0.cmp(&rhs.0));
 }
 
+/// Appends the canonicalized headers: each group of adjacent same-named
+/// headers becomes `name:value1,value2\n` (skipped headers are omitted).
+///
+/// # Panics
+///
+/// The index accesses are guarded by the loop conditions (`i < len`,
+/// `j < len`); clippy cannot prove this statically, so the lint is allowed
+/// here and the invariants are documented.
+#[allow(clippy::indexing_slicing)]
+fn push_canonical_headers(ans: &mut String, headers: &[(&str, &str)]) {
+    let mut i = 0;
+    while i < headers.len() {
+        let (name, value) = headers[i];
+        if is_skipped_header(name) {
+            i += 1;
+            continue;
+        }
+
+        ans.push_str(name);
+        ans.push(':');
+        normalize_header_value(ans, value);
+
+        // Combine values for headers with the same name (comma-separated)
+        let mut j = i + 1;
+        while j < headers.len() && headers[j].0 == name {
+            ans.push(',');
+            normalize_header_value(ans, headers[j].1);
+            j += 1;
+        }
+
+        ans.push('\n');
+        i = j;
+    }
+}
+
+/// Appends the signed header names, each appearing once even if the header
+/// has multiple values (skipped headers are omitted).
+///
+/// # Panics
+///
+/// The index accesses are guarded by the loop conditions (`i < len`);
+/// clippy cannot prove this statically, so the lint is allowed here and
+/// the invariants are documented.
+#[allow(clippy::indexing_slicing)]
+fn push_signed_headers(ans: &mut String, headers: &[(&str, &str)]) {
+    let mut first_flag = true;
+    let mut i = 0;
+    while i < headers.len() {
+        let (name, _) = headers[i];
+        if is_skipped_header(name) {
+            i += 1;
+            continue;
+        }
+
+        if first_flag {
+            first_flag = false;
+        } else {
+            ans.push(';');
+        }
+        ans.push_str(name);
+
+        // Skip duplicate header names
+        while i < headers.len() && headers[i].0 == name {
+            i += 1;
+        }
+    }
+}
+
 fn create_canonical_request_with_uri_mode<'a>(
     method: &str,
     uri_path: &str,
@@ -185,59 +253,14 @@ fn create_canonical_request_with_uri_mode<'a>(
 
         // FIXME: check HOST, Content-Type, x-amz-security-token, x-amz-content-sha256
 
-        let headers_slice = signed_headers.as_ref();
-        let mut i = 0;
-        while i < headers_slice.len() {
-            let (name, value) = headers_slice[i];
-            if is_skipped_header(name) {
-                i += 1;
-                continue;
-            }
-
-            ans.push_str(name);
-            ans.push(':');
-            normalize_header_value(&mut ans, value);
-
-            // Combine values for headers with the same name (comma-separated)
-            let mut j = i + 1;
-            while j < headers_slice.len() && headers_slice[j].0 == name {
-                ans.push(',');
-                normalize_header_value(&mut ans, headers_slice[j].1);
-                j += 1;
-            }
-
-            ans.push('\n');
-            i = j;
-        }
+        push_canonical_headers(&mut ans, signed_headers.as_ref());
         ans.push('\n');
     }
 
     {
         // <SignedHeaders>\n
         // Each header name should only appear once, even if the header has multiple values
-        let headers_slice = signed_headers.as_ref();
-        let mut first_flag = true;
-        let mut i = 0;
-        while i < headers_slice.len() {
-            let (name, _) = headers_slice[i];
-            if is_skipped_header(name) {
-                i += 1;
-                continue;
-            }
-
-            if first_flag {
-                first_flag = false;
-            } else {
-                ans.push(';');
-            }
-            ans.push_str(name);
-
-            // Skip duplicate header names
-            while i < headers_slice.len() && headers_slice[i].0 == name {
-                i += 1;
-            }
-        }
-
+        push_signed_headers(&mut ans, signed_headers.as_ref());
         ans.push('\n');
     }
 
@@ -505,58 +528,13 @@ fn create_presigned_canonical_request_with_uri_mode<'a>(
         // According to AWS SigV4 spec, multiple headers with the same name should be
         // combined into a single header with values separated by commas.
 
-        let headers_slice = signed_headers.as_ref();
-        let mut i = 0;
-        while i < headers_slice.len() {
-            let (name, value) = headers_slice[i];
-            if is_skipped_header(name) {
-                i += 1;
-                continue;
-            }
-
-            ans.push_str(name);
-            ans.push(':');
-            normalize_header_value(&mut ans, value);
-
-            // Combine values for headers with the same name (comma-separated)
-            let mut j = i + 1;
-            while j < headers_slice.len() && headers_slice[j].0 == name {
-                ans.push(',');
-                normalize_header_value(&mut ans, headers_slice[j].1);
-                j += 1;
-            }
-
-            ans.push('\n');
-            i = j;
-        }
+        push_canonical_headers(&mut ans, signed_headers.as_ref());
         ans.push('\n');
     }
     {
         // <SignedHeaders>\n
         // Each header name should only appear once, even if the header has multiple values
-        let headers_slice = signed_headers.as_ref();
-        let mut first_flag = true;
-        let mut i = 0;
-        while i < headers_slice.len() {
-            let (name, _) = headers_slice[i];
-            if is_skipped_header(name) {
-                i += 1;
-                continue;
-            }
-
-            if first_flag {
-                first_flag = false;
-            } else {
-                ans.push(';');
-            }
-            ans.push_str(name);
-
-            // Skip duplicate header names
-            while i < headers_slice.len() && headers_slice[i].0 == name {
-                i += 1;
-            }
-        }
-
+        push_signed_headers(&mut ans, signed_headers.as_ref());
         ans.push('\n');
     }
     {
@@ -589,6 +567,13 @@ pub fn create_presigned_canonical_request_with_raw_uri_path<'a>(
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::unwrap_used
+)]
 mod tests {
     use super::*;
 
