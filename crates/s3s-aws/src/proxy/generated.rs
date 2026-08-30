@@ -5,7 +5,7 @@
 
 use super::*;
 
-use crate::conv::string_from_integer;
+use crate::conv::{expires_into_aws, string_from_integer};
 use crate::conv::{try_from_aws, try_into_aws};
 
 use s3s::S3;
@@ -110,7 +110,7 @@ impl S3 for Proxy {
         b = b.set_copy_source_sse_customer_key_md5(try_into_aws(input.copy_source_sse_customer_key_md5)?);
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
         b = b.set_expected_source_bucket_owner(try_into_aws(input.expected_source_bucket_owner)?);
-        b = b.set_expires(try_into_aws(input.expires)?);
+        b = b.set_expires(expires_into_aws(input.expires)?);
         b = b.set_grant_full_control(try_into_aws(input.grant_full_control)?);
         b = b.set_grant_read(try_into_aws(input.grant_read)?);
         b = b.set_grant_read_acp(try_into_aws(input.grant_read_acp)?);
@@ -246,7 +246,7 @@ impl S3 for Proxy {
         b = b.set_content_language(try_into_aws(input.content_language)?);
         b = b.set_content_type(try_into_aws(input.content_type)?);
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
-        b = b.set_expires(try_into_aws(input.expires)?);
+        b = b.set_expires(expires_into_aws(input.expires)?);
         b = b.set_grant_full_control(try_into_aws(input.grant_full_control)?);
         b = b.set_grant_read(try_into_aws(input.grant_read)?);
         b = b.set_grant_read_acp(try_into_aws(input.grant_read_acp)?);
@@ -2427,7 +2427,7 @@ impl S3 for Proxy {
         b = b.set_content_md5(try_into_aws(input.content_md5)?);
         b = b.set_content_type(try_into_aws(input.content_type)?);
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
-        b = b.set_expires(try_into_aws(input.expires)?);
+        b = b.set_expires(expires_into_aws(input.expires)?);
         b = b.set_grant_full_control(try_into_aws(input.grant_full_control)?);
         b = b.set_grant_read(try_into_aws(input.grant_read)?);
         b = b.set_grant_read_acp(try_into_aws(input.grant_read_acp)?);
@@ -2979,7 +2979,7 @@ impl S3 for Proxy {
         b = b.set_error_code(try_into_aws(input.error_code)?);
         b = b.set_error_message(try_into_aws(input.error_message)?);
         b = b.set_expiration(try_into_aws(input.expiration)?);
-        b = b.set_expires(try_into_aws(input.expires)?);
+        b = b.set_expires(expires_into_aws(input.expires)?);
         b = b.set_last_modified(try_into_aws(input.last_modified)?);
         b = b.set_metadata(try_into_aws(input.metadata)?);
         b = b.set_missing_meta(try_into_aws(input.missing_meta)?);

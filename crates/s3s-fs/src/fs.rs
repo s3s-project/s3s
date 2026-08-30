@@ -58,26 +58,6 @@ pub(crate) struct ObjectAttributes {
     pub checksum_type: Option<String>,
 }
 
-impl ObjectAttributes {
-    /// Convert expires Timestamp to String for storage
-    pub fn set_expires_timestamp(&mut self, expires: Option<dto::Timestamp>) {
-        self.expires = expires.and_then(|ts| {
-            let mut buf = Vec::new();
-            match ts.format(dto::TimestampFormat::DateTime, &mut buf) {
-                Ok(()) => Some(String::from_utf8_lossy(&buf).into_owned()),
-                Err(_) => None,
-            }
-        });
-    }
-
-    /// Parse expires String back to Timestamp
-    pub fn get_expires_timestamp(&self) -> Option<dto::Timestamp> {
-        self.expires
-            .as_ref()
-            .and_then(|s| dto::Timestamp::parse(dto::TimestampFormat::DateTime, s).ok())
-    }
-}
-
 fn clean_old_tmp_files(root: &Path) -> std::io::Result<()> {
     let entries = match std::fs::read_dir(root) {
         Ok(entries) => Ok(entries),

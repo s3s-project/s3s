@@ -32612,7 +32612,7 @@
             "type": "boolean"
         },
         "com.amazonaws.s3#Expires": {
-            "type": "timestamp"
+            "type": "string"
         },
         "com.amazonaws.s3#ExposeHeader": {
             "type": "string"

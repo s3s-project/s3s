@@ -4805,6 +4805,9 @@ impl DtoExt for CopyObjectInput {
         if self.expected_source_bucket_owner.as_deref() == Some("") {
             self.expected_source_bucket_owner = None;
         }
+        if self.expires.as_deref() == Some("") {
+            self.expires = None;
+        }
         if self.grant_full_control.as_deref() == Some("") {
             self.grant_full_control = None;
         }
@@ -4918,6 +4921,9 @@ impl DtoExt for CopyObjectInput {
         }
         if self.expected_source_bucket_owner.as_deref() == Some("") {
             self.expected_source_bucket_owner = None;
+        }
+        if self.expires.as_deref() == Some("") {
+            self.expires = None;
         }
         if self.grant_full_control.as_deref() == Some("") {
             self.grant_full_control = None;
@@ -7020,6 +7026,9 @@ impl DtoExt for CreateMultipartUploadInput {
         if self.expected_bucket_owner.as_deref() == Some("") {
             self.expected_bucket_owner = None;
         }
+        if self.expires.as_deref() == Some("") {
+            self.expires = None;
+        }
         if self.grant_full_control.as_deref() == Some("") {
             self.grant_full_control = None;
         }
@@ -7111,6 +7120,9 @@ impl DtoExt for CreateMultipartUploadInput {
         }
         if self.expected_bucket_owner.as_deref() == Some("") {
             self.expected_bucket_owner = None;
+        }
+        if self.expires.as_deref() == Some("") {
+            self.expires = None;
         }
         if self.grant_full_control.as_deref() == Some("") {
             self.grant_full_control = None;
@@ -11815,7 +11827,7 @@ pub type ExpiredObjectAllVersions = bool;
 
 pub type ExpiredObjectDeleteMarker = bool;
 
-pub type Expires = Timestamp;
+pub type Expires = String;
 
 pub type ExposeHeader = String;
 
@@ -15000,6 +15012,9 @@ impl DtoExt for GetObjectOutput {
         if self.expiration.as_deref() == Some("") {
             self.expiration = None;
         }
+        if self.expires.as_deref() == Some("") {
+            self.expires = None;
+        }
         if let Some(ref val) = self.object_lock_legal_hold_status
             && val.as_str() == ""
         {
@@ -16331,6 +16346,9 @@ impl DtoExt for HeadObjectOutput {
         }
         if self.expiration.as_deref() == Some("") {
             self.expiration = None;
+        }
+        if self.expires.as_deref() == Some("") {
+            self.expires = None;
         }
         if let Some(ref val) = self.object_lock_legal_hold_status
             && val.as_str() == ""
@@ -24184,6 +24202,9 @@ impl DtoExt for PostObjectInput {
         if self.expected_bucket_owner.as_deref() == Some("") {
             self.expected_bucket_owner = None;
         }
+        if self.expires.as_deref() == Some("") {
+            self.expires = None;
+        }
         if self.grant_full_control.as_deref() == Some("") {
             self.grant_full_control = None;
         }
@@ -24303,6 +24324,9 @@ impl DtoExt for PostObjectInput {
         }
         if self.expected_bucket_owner.as_deref() == Some("") {
             self.expected_bucket_owner = None;
+        }
+        if self.expires.as_deref() == Some("") {
+            self.expires = None;
         }
         if self.grant_full_control.as_deref() == Some("") {
             self.grant_full_control = None;
@@ -27990,6 +28014,9 @@ impl DtoExt for PutObjectInput {
         if self.expected_bucket_owner.as_deref() == Some("") {
             self.expected_bucket_owner = None;
         }
+        if self.expires.as_deref() == Some("") {
+            self.expires = None;
+        }
         if self.grant_full_control.as_deref() == Some("") {
             self.grant_full_control = None;
         }
@@ -28109,6 +28136,9 @@ impl DtoExt for PutObjectInput {
         }
         if self.expected_bucket_owner.as_deref() == Some("") {
             self.expected_bucket_owner = None;
+        }
+        if self.expires.as_deref() == Some("") {
+            self.expires = None;
         }
         if self.grant_full_control.as_deref() == Some("") {
             self.grant_full_control = None;
@@ -33933,6 +33963,9 @@ impl DtoExt for WriteGetObjectResponseInput {
         }
         if self.expiration.as_deref() == Some("") {
             self.expiration = None;
+        }
+        if self.expires.as_deref() == Some("") {
+            self.expires = None;
         }
         if let Some(ref val) = self.object_lock_legal_hold_status
             && val.as_str() == ""
