@@ -23,7 +23,6 @@ pub use clap;
 pub use const_str;
 
 /// The CLI options understood by [`main`] and the [`main!`](crate::main) macro.
-#[doc(hidden)]
 pub struct Options {
     /// Path to write the JSON report to.
     pub json: Option<PathBuf>,
@@ -31,7 +30,7 @@ pub struct Options {
     pub filter: Vec<String>,
     /// Print all registered cases without running them.
     pub list: bool,
-    /// Run cases tagged [`CaseTag::Ignored`](crate::CaseTag::Ignored).
+    /// Run cases tagged [`CaseTag::Ignored`](crate::tcx::CaseTag::Ignored).
     pub run_ignored: bool,
     /// Run cases within a fixture concurrently.
     pub concurrent: bool,
@@ -172,7 +171,6 @@ async fn async_main(reg: impl FnOnce(&mut TestContext), opt: &Options) -> ExitCo
 ///
 /// The exit code is nonzero when any suite fails. Use this function directly
 /// for a custom entry point, or [`main!`](crate::main) for the standard CLI.
-#[doc(hidden)]
 #[must_use]
 pub fn main(reg: impl FnOnce(&mut TestContext), opt: &Options) -> ExitCode {
     setup();
