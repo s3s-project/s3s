@@ -7007,7 +7007,11 @@ impl PutObject {
         let bucket = http::unwrap_bucket(req);
         let key = http::parse_field_value(&m, "key")?.ok_or_else(|| invalid_request!("missing key"))?;
 
-        let body_stream = req.s3ext.post_object_stream.take().expect("missing body stream");
+        let body_stream = req
+            .s3ext
+            .post_object_stream
+            .take()
+            .ok_or_else(|| s3_error!(InternalError, "missing body stream"))?;
 
         let content_length = body_stream
             .remaining_length()
