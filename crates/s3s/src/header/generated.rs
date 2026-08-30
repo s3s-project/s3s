@@ -264,7 +264,11 @@ pub const X_AMZ_MP_OBJECT_SIZE: HeaderName = HeaderName::from_static("x-amz-mp-o
 
 pub const X_AMZ_MP_PARTS_COUNT: HeaderName = HeaderName::from_static("x-amz-mp-parts-count");
 
+pub const X_AMZ_OBJECT_ANNOTATION_DIRECTIVE: HeaderName = HeaderName::from_static("x-amz-object-annotation-directive");
+
 pub const X_AMZ_OBJECT_ATTRIBUTES: HeaderName = HeaderName::from_static("x-amz-object-attributes");
+
+pub const X_AMZ_OBJECT_IF_MATCH: HeaderName = HeaderName::from_static("x-amz-object-if-match");
 
 pub const X_AMZ_OBJECT_LOCK_LEGAL_HOLD: HeaderName = HeaderName::from_static("x-amz-object-lock-legal-hold");
 
@@ -275,6 +279,8 @@ pub const X_AMZ_OBJECT_LOCK_RETAIN_UNTIL_DATE: HeaderName = HeaderName::from_sta
 pub const X_AMZ_OBJECT_OWNERSHIP: HeaderName = HeaderName::from_static("x-amz-object-ownership");
 
 pub const X_AMZ_OBJECT_SIZE: HeaderName = HeaderName::from_static("x-amz-object-size");
+
+pub const X_AMZ_OBJECT_VERSION_ID: HeaderName = HeaderName::from_static("x-amz-object-version-id");
 
 pub const X_AMZ_OPTIONAL_OBJECT_ATTRIBUTES: HeaderName = HeaderName::from_static("x-amz-optional-object-attributes");
 

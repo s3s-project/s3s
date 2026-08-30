@@ -288,6 +288,82 @@ impl AwsConversion for s3s::dto::AnnotationConfigurationState {
     }
 }
 
+impl AwsConversion for s3s::dto::AnnotationDirective {
+    type Target = aws_sdk_s3::types::AnnotationDirective;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(match x {
+            aws_sdk_s3::types::AnnotationDirective::Copy => Self::from_static(Self::COPY),
+            aws_sdk_s3::types::AnnotationDirective::Exclude => Self::from_static(Self::EXCLUDE),
+            _ => Self::from(x.as_str().to_owned()),
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        Ok(aws_sdk_s3::types::AnnotationDirective::from(x.as_str()))
+    }
+}
+
+impl AwsConversion for s3s::dto::AnnotationEntry {
+    type Target = aws_sdk_s3::types::AnnotationEntry;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            annotation_name: try_from_aws(x.annotation_name)?,
+            checksum_algorithm: try_from_aws(x.checksum_algorithm)?,
+            e_tag: try_from_aws(x.e_tag)?,
+            last_modified: try_from_aws(x.last_modified)?,
+            replication_status: try_from_aws(x.replication_status)?,
+            size: try_from_aws(x.size)?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_annotation_name(Some(try_into_aws(x.annotation_name)?));
+        y = y.set_checksum_algorithm(try_into_aws(x.checksum_algorithm)?);
+        y = y.set_e_tag(try_into_aws(x.e_tag)?);
+        y = y.set_last_modified(Some(try_into_aws(x.last_modified)?));
+        y = y.set_replication_status(try_into_aws(x.replication_status)?);
+        y = y.set_size(Some(try_into_aws(x.size)?));
+        y.build().map_err(S3Error::internal_error)
+    }
+}
+
+impl AwsConversion for s3s::dto::AnnotationLimitExceeded {
+    type Target = aws_sdk_s3::types::error::AnnotationLimitExceeded;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        let _ = x;
+        Ok(Self {})
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let _ = x;
+        let y = Self::Target::builder();
+        Ok(y.build())
+    }
+}
+
+impl AwsConversion for s3s::dto::AnnotationNameTooLong {
+    type Target = aws_sdk_s3::types::error::AnnotationNameTooLong;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        let _ = x;
+        Ok(Self {})
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let _ = x;
+        let y = Self::Target::builder();
+        Ok(y.build())
+    }
+}
+
 impl AwsConversion for s3s::dto::AnnotationTableConfiguration {
     type Target = aws_sdk_s3::types::AnnotationTableConfiguration;
     type Error = S3Error;
@@ -1126,6 +1202,7 @@ impl AwsConversion for s3s::dto::CopyObjectInput {
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
         Ok(Self {
             acl: try_from_aws(x.acl)?,
+            annotation_directive: try_from_aws(x.annotation_directive)?,
             bucket: unwrap_from_aws(x.bucket, "bucket")?,
             bucket_key_enabled: try_from_aws(x.bucket_key_enabled)?,
             cache_control: try_from_aws(x.cache_control)?,
@@ -1149,6 +1226,8 @@ impl AwsConversion for s3s::dto::CopyObjectInput {
             grant_read: try_from_aws(x.grant_read)?,
             grant_read_acp: try_from_aws(x.grant_read_acp)?,
             grant_write_acp: try_from_aws(x.grant_write_acp)?,
+            if_match: try_from_aws(x.if_match)?,
+            if_none_match: try_from_aws(x.if_none_match)?,
             key: unwrap_from_aws(x.key, "key")?,
             metadata: try_from_aws(x.metadata)?,
             metadata_directive: try_from_aws(x.metadata_directive)?,
@@ -1173,6 +1252,7 @@ impl AwsConversion for s3s::dto::CopyObjectInput {
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
         Ok(Self {
             acl: try_from_aws(x.acl)?,
+            annotation_directive: try_from_aws(x.annotation_directive)?,
             bucket: unwrap_from_aws(x.bucket, "bucket")?,
             bucket_key_enabled: try_from_aws(x.bucket_key_enabled)?,
             cache_control: try_from_aws(x.cache_control)?,
@@ -1196,6 +1276,8 @@ impl AwsConversion for s3s::dto::CopyObjectInput {
             grant_read: try_from_aws(x.grant_read)?,
             grant_read_acp: try_from_aws(x.grant_read_acp)?,
             grant_write_acp: try_from_aws(x.grant_write_acp)?,
+            if_match: try_from_aws(x.if_match)?,
+            if_none_match: try_from_aws(x.if_none_match)?,
             key: unwrap_from_aws(x.key, "key")?,
             metadata: try_from_aws(x.metadata)?,
             metadata_directive: try_from_aws(x.metadata_directive)?,
@@ -1220,6 +1302,7 @@ impl AwsConversion for s3s::dto::CopyObjectInput {
     fn try_into_aws(x: Self) -> S3Result<Self::Target> {
         let mut y = Self::Target::builder();
         y = y.set_acl(try_into_aws(x.acl)?);
+        y = y.set_annotation_directive(try_into_aws(x.annotation_directive)?);
         y = y.set_bucket(Some(try_into_aws(x.bucket)?));
         y = y.set_bucket_key_enabled(try_into_aws(x.bucket_key_enabled)?);
         y = y.set_cache_control(try_into_aws(x.cache_control)?);
@@ -1243,6 +1326,8 @@ impl AwsConversion for s3s::dto::CopyObjectInput {
         y = y.set_grant_read(try_into_aws(x.grant_read)?);
         y = y.set_grant_read_acp(try_into_aws(x.grant_read_acp)?);
         y = y.set_grant_write_acp(try_into_aws(x.grant_write_acp)?);
+        y = y.set_if_match(try_into_aws(x.if_match)?);
+        y = y.set_if_none_match(try_into_aws(x.if_none_match)?);
         y = y.set_key(Some(try_into_aws(x.key)?));
         y = y.set_metadata(try_into_aws(x.metadata)?);
         y = y.set_metadata_directive(try_into_aws(x.metadata_directive)?);
@@ -2407,6 +2492,54 @@ impl AwsConversion for s3s::dto::DeleteMarkerReplicationStatus {
 
     fn try_into_aws(x: Self) -> S3Result<Self::Target> {
         Ok(aws_sdk_s3::types::DeleteMarkerReplicationStatus::from(x.as_str()))
+    }
+}
+
+impl AwsConversion for s3s::dto::DeleteObjectAnnotationInput {
+    type Target = aws_sdk_s3::operation::delete_object_annotation::DeleteObjectAnnotationInput;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            annotation_name: unwrap_from_aws(x.annotation_name, "annotation_name")?,
+            bucket: unwrap_from_aws(x.bucket, "bucket")?,
+            expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
+            key: unwrap_from_aws(x.key, "key")?,
+            object_if_match: try_from_aws(x.object_if_match)?,
+            request_payer: try_from_aws(x.request_payer)?,
+            version_id: try_from_aws(x.version_id)?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_annotation_name(Some(try_into_aws(x.annotation_name)?));
+        y = y.set_bucket(Some(try_into_aws(x.bucket)?));
+        y = y.set_expected_bucket_owner(try_into_aws(x.expected_bucket_owner)?);
+        y = y.set_key(Some(try_into_aws(x.key)?));
+        y = y.set_object_if_match(try_into_aws(x.object_if_match)?);
+        y = y.set_request_payer(try_into_aws(x.request_payer)?);
+        y = y.set_version_id(try_into_aws(x.version_id)?);
+        y.build().map_err(S3Error::internal_error)
+    }
+}
+
+impl AwsConversion for s3s::dto::DeleteObjectAnnotationOutput {
+    type Target = aws_sdk_s3::operation::delete_object_annotation::DeleteObjectAnnotationOutput;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            object_version_id: try_from_aws(x.object_version_id)?,
+            request_charged: try_from_aws(x.request_charged)?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_object_version_id(try_into_aws(x.object_version_id)?);
+        y = y.set_request_charged(try_into_aws(x.request_charged)?);
+        Ok(y.build())
     }
 }
 
@@ -3927,6 +4060,88 @@ impl AwsConversion for s3s::dto::GetObjectAclOutput {
     }
 }
 
+impl AwsConversion for s3s::dto::GetObjectAnnotationInput {
+    type Target = aws_sdk_s3::operation::get_object_annotation::GetObjectAnnotationInput;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            annotation_name: unwrap_from_aws(x.annotation_name, "annotation_name")?,
+            bucket: unwrap_from_aws(x.bucket, "bucket")?,
+            checksum_mode: try_from_aws(x.checksum_mode)?,
+            expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
+            key: unwrap_from_aws(x.key, "key")?,
+            request_payer: try_from_aws(x.request_payer)?,
+            version_id: try_from_aws(x.version_id)?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_annotation_name(Some(try_into_aws(x.annotation_name)?));
+        y = y.set_bucket(Some(try_into_aws(x.bucket)?));
+        y = y.set_checksum_mode(try_into_aws(x.checksum_mode)?);
+        y = y.set_expected_bucket_owner(try_into_aws(x.expected_bucket_owner)?);
+        y = y.set_key(Some(try_into_aws(x.key)?));
+        y = y.set_request_payer(try_into_aws(x.request_payer)?);
+        y = y.set_version_id(try_into_aws(x.version_id)?);
+        y.build().map_err(S3Error::internal_error)
+    }
+}
+
+impl AwsConversion for s3s::dto::GetObjectAnnotationOutput {
+    type Target = aws_sdk_s3::operation::get_object_annotation::GetObjectAnnotationOutput;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            annotation_payload: Some(try_from_aws(x.annotation_payload)?),
+            checksum_crc32: try_from_aws(x.checksum_crc32)?,
+            checksum_crc32c: try_from_aws(x.checksum_crc32_c)?,
+            checksum_crc64nvme: try_from_aws(x.checksum_crc64_nvme)?,
+            checksum_md5: try_from_aws(x.checksum_md5)?,
+            checksum_sha1: try_from_aws(x.checksum_sha1)?,
+            checksum_sha256: try_from_aws(x.checksum_sha256)?,
+            checksum_sha512: try_from_aws(x.checksum_sha512)?,
+            checksum_type: try_from_aws(x.checksum_type)?,
+            checksum_xxhash128: try_from_aws(x.checksum_xxhash128)?,
+            checksum_xxhash3: try_from_aws(x.checksum_xxhash3)?,
+            checksum_xxhash64: try_from_aws(x.checksum_xxhash64)?,
+            content_length: try_from_aws(x.content_length)?,
+            e_tag: try_from_aws(x.e_tag)?,
+            last_modified: try_from_aws(x.last_modified)?,
+            object_version_id: try_from_aws(x.object_version_id)?,
+            replication_status: try_from_aws(x.replication_status)?,
+            request_charged: try_from_aws(x.request_charged)?,
+            server_side_encryption: try_from_aws(x.server_side_encryption)?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_annotation_payload(try_into_aws(x.annotation_payload)?);
+        y = y.set_checksum_crc32(try_into_aws(x.checksum_crc32)?);
+        y = y.set_checksum_crc32_c(try_into_aws(x.checksum_crc32c)?);
+        y = y.set_checksum_crc64_nvme(try_into_aws(x.checksum_crc64nvme)?);
+        y = y.set_checksum_md5(try_into_aws(x.checksum_md5)?);
+        y = y.set_checksum_sha1(try_into_aws(x.checksum_sha1)?);
+        y = y.set_checksum_sha256(try_into_aws(x.checksum_sha256)?);
+        y = y.set_checksum_sha512(try_into_aws(x.checksum_sha512)?);
+        y = y.set_checksum_type(try_into_aws(x.checksum_type)?);
+        y = y.set_checksum_xxhash128(try_into_aws(x.checksum_xxhash128)?);
+        y = y.set_checksum_xxhash3(try_into_aws(x.checksum_xxhash3)?);
+        y = y.set_checksum_xxhash64(try_into_aws(x.checksum_xxhash64)?);
+        y = y.set_content_length(try_into_aws(x.content_length)?);
+        y = y.set_e_tag(try_into_aws(x.e_tag)?);
+        y = y.set_last_modified(try_into_aws(x.last_modified)?);
+        y = y.set_object_version_id(try_into_aws(x.object_version_id)?);
+        y = y.set_replication_status(try_into_aws(x.replication_status)?);
+        y = y.set_request_charged(try_into_aws(x.request_charged)?);
+        y = y.set_server_side_encryption(try_into_aws(x.server_side_encryption)?);
+        Ok(y.build())
+    }
+}
+
 impl AwsConversion for s3s::dto::GetObjectAttributesInput {
     type Target = aws_sdk_s3::operation::get_object_attributes::GetObjectAttributesInput;
     type Error = S3Error;
@@ -4859,6 +5074,22 @@ impl AwsConversion for s3s::dto::IntelligentTieringStatus {
     }
 }
 
+impl AwsConversion for s3s::dto::InvalidAnnotationName {
+    type Target = aws_sdk_s3::types::error::InvalidAnnotationName;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        let _ = x;
+        Ok(Self {})
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let _ = x;
+        let y = Self::Target::builder();
+        Ok(y.build())
+    }
+}
+
 impl AwsConversion for s3s::dto::InvalidObjectState {
     type Target = aws_sdk_s3::types::error::InvalidObjectState;
     type Error = S3Error;
@@ -4874,6 +5105,22 @@ impl AwsConversion for s3s::dto::InvalidObjectState {
         let mut y = Self::Target::builder();
         y = y.set_access_tier(try_into_aws(x.access_tier)?);
         y = y.set_storage_class(try_into_aws(x.storage_class)?);
+        Ok(y.build())
+    }
+}
+
+impl AwsConversion for s3s::dto::InvalidPrefix {
+    type Target = aws_sdk_s3::types::error::InvalidPrefix;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        let _ = x;
+        Ok(Self {})
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let _ = x;
+        let y = Self::Target::builder();
         Ok(y.build())
     }
 }
@@ -5824,6 +6071,72 @@ impl AwsConversion for s3s::dto::ListMultipartUploadsOutput {
     }
 }
 
+impl AwsConversion for s3s::dto::ListObjectAnnotationsInput {
+    type Target = aws_sdk_s3::operation::list_object_annotations::ListObjectAnnotationsInput;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            annotation_prefix: try_from_aws(x.annotation_prefix)?,
+            bucket: unwrap_from_aws(x.bucket, "bucket")?,
+            continuation_token: try_from_aws(x.continuation_token)?,
+            expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
+            key: unwrap_from_aws(x.key, "key")?,
+            max_annotation_results: try_from_aws(x.max_annotation_results)?,
+            request_payer: try_from_aws(x.request_payer)?,
+            version_id: try_from_aws(x.version_id)?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_annotation_prefix(try_into_aws(x.annotation_prefix)?);
+        y = y.set_bucket(Some(try_into_aws(x.bucket)?));
+        y = y.set_continuation_token(try_into_aws(x.continuation_token)?);
+        y = y.set_expected_bucket_owner(try_into_aws(x.expected_bucket_owner)?);
+        y = y.set_key(Some(try_into_aws(x.key)?));
+        y = y.set_max_annotation_results(try_into_aws(x.max_annotation_results)?);
+        y = y.set_request_payer(try_into_aws(x.request_payer)?);
+        y = y.set_version_id(try_into_aws(x.version_id)?);
+        y.build().map_err(S3Error::internal_error)
+    }
+}
+
+impl AwsConversion for s3s::dto::ListObjectAnnotationsOutput {
+    type Target = aws_sdk_s3::operation::list_object_annotations::ListObjectAnnotationsOutput;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            annotation_count: try_from_aws(x.annotation_count)?,
+            annotation_prefix: try_from_aws(x.annotation_prefix)?,
+            annotations: try_from_aws(x.annotations)?,
+            bucket: try_from_aws(x.bucket)?,
+            continuation_token: try_from_aws(x.continuation_token)?,
+            key: try_from_aws(x.key)?,
+            max_annotation_results: try_from_aws(x.max_annotation_results)?,
+            next_continuation_token: try_from_aws(x.next_continuation_token)?,
+            object_version_id: try_from_aws(x.object_version_id)?,
+            request_charged: try_from_aws(x.request_charged)?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_annotation_count(try_into_aws(x.annotation_count)?);
+        y = y.set_annotation_prefix(try_into_aws(x.annotation_prefix)?);
+        y = y.set_annotations(try_into_aws(x.annotations)?);
+        y = y.set_bucket(try_into_aws(x.bucket)?);
+        y = y.set_continuation_token(try_into_aws(x.continuation_token)?);
+        y = y.set_key(try_into_aws(x.key)?);
+        y = y.set_max_annotation_results(try_into_aws(x.max_annotation_results)?);
+        y = y.set_next_continuation_token(try_into_aws(x.next_continuation_token)?);
+        y = y.set_object_version_id(try_into_aws(x.object_version_id)?);
+        y = y.set_request_charged(try_into_aws(x.request_charged)?);
+        Ok(y.build())
+    }
+}
+
 impl AwsConversion for s3s::dto::ListObjectVersionsInput {
     type Target = aws_sdk_s3::operation::list_object_versions::ListObjectVersionsInput;
     type Error = S3Error;
@@ -6486,6 +6799,22 @@ impl AwsConversion for s3s::dto::MultipartUpload {
         y = y.set_owner(try_into_aws(x.owner)?);
         y = y.set_storage_class(try_into_aws(x.storage_class)?);
         y = y.set_upload_id(try_into_aws(x.upload_id)?);
+        Ok(y.build())
+    }
+}
+
+impl AwsConversion for s3s::dto::NoSuchAnnotation {
+    type Target = aws_sdk_s3::types::error::NoSuchAnnotation;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        let _ = x;
+        Ok(Self {})
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let _ = x;
+        let y = Self::Target::builder();
         Ok(y.build())
     }
 }
@@ -8258,6 +8587,110 @@ impl AwsConversion for s3s::dto::PutObjectAclOutput {
     fn try_into_aws(x: Self) -> S3Result<Self::Target> {
         let mut y = Self::Target::builder();
         y = y.set_request_charged(try_into_aws(x.request_charged)?);
+        Ok(y.build())
+    }
+}
+
+impl AwsConversion for s3s::dto::PutObjectAnnotationInput {
+    type Target = aws_sdk_s3::operation::put_object_annotation::PutObjectAnnotationInput;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            annotation_name: unwrap_from_aws(x.annotation_name, "annotation_name")?,
+            annotation_payload: Some(try_from_aws(x.annotation_payload)?),
+            bucket: unwrap_from_aws(x.bucket, "bucket")?,
+            checksum_algorithm: try_from_aws(x.checksum_algorithm)?,
+            checksum_crc32: try_from_aws(x.checksum_crc32)?,
+            checksum_crc32c: try_from_aws(x.checksum_crc32_c)?,
+            checksum_crc64nvme: try_from_aws(x.checksum_crc64_nvme)?,
+            checksum_md5: try_from_aws(x.checksum_md5)?,
+            checksum_sha1: try_from_aws(x.checksum_sha1)?,
+            checksum_sha256: try_from_aws(x.checksum_sha256)?,
+            checksum_sha512: try_from_aws(x.checksum_sha512)?,
+            checksum_xxhash128: try_from_aws(x.checksum_xxhash128)?,
+            checksum_xxhash3: try_from_aws(x.checksum_xxhash3)?,
+            checksum_xxhash64: try_from_aws(x.checksum_xxhash64)?,
+            content_md5: try_from_aws(x.content_md5)?,
+            expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
+            key: unwrap_from_aws(x.key, "key")?,
+            object_if_match: try_from_aws(x.object_if_match)?,
+            request_payer: try_from_aws(x.request_payer)?,
+            version_id: try_from_aws(x.version_id)?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_annotation_name(Some(try_into_aws(x.annotation_name)?));
+        y = y.set_annotation_payload(try_into_aws(x.annotation_payload)?);
+        y = y.set_bucket(Some(try_into_aws(x.bucket)?));
+        y = y.set_checksum_algorithm(try_into_aws(x.checksum_algorithm)?);
+        y = y.set_checksum_crc32(try_into_aws(x.checksum_crc32)?);
+        y = y.set_checksum_crc32_c(try_into_aws(x.checksum_crc32c)?);
+        y = y.set_checksum_crc64_nvme(try_into_aws(x.checksum_crc64nvme)?);
+        y = y.set_checksum_md5(try_into_aws(x.checksum_md5)?);
+        y = y.set_checksum_sha1(try_into_aws(x.checksum_sha1)?);
+        y = y.set_checksum_sha256(try_into_aws(x.checksum_sha256)?);
+        y = y.set_checksum_sha512(try_into_aws(x.checksum_sha512)?);
+        y = y.set_checksum_xxhash128(try_into_aws(x.checksum_xxhash128)?);
+        y = y.set_checksum_xxhash3(try_into_aws(x.checksum_xxhash3)?);
+        y = y.set_checksum_xxhash64(try_into_aws(x.checksum_xxhash64)?);
+        y = y.set_content_md5(try_into_aws(x.content_md5)?);
+        y = y.set_expected_bucket_owner(try_into_aws(x.expected_bucket_owner)?);
+        y = y.set_key(Some(try_into_aws(x.key)?));
+        y = y.set_object_if_match(try_into_aws(x.object_if_match)?);
+        y = y.set_request_payer(try_into_aws(x.request_payer)?);
+        y = y.set_version_id(try_into_aws(x.version_id)?);
+        y.build().map_err(S3Error::internal_error)
+    }
+}
+
+impl AwsConversion for s3s::dto::PutObjectAnnotationOutput {
+    type Target = aws_sdk_s3::operation::put_object_annotation::PutObjectAnnotationOutput;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            annotation_name: try_from_aws(x.annotation_name)?,
+            checksum_crc32: try_from_aws(x.checksum_crc32)?,
+            checksum_crc32c: try_from_aws(x.checksum_crc32_c)?,
+            checksum_crc64nvme: try_from_aws(x.checksum_crc64_nvme)?,
+            checksum_md5: try_from_aws(x.checksum_md5)?,
+            checksum_sha1: try_from_aws(x.checksum_sha1)?,
+            checksum_sha256: try_from_aws(x.checksum_sha256)?,
+            checksum_sha512: try_from_aws(x.checksum_sha512)?,
+            checksum_type: try_from_aws(x.checksum_type)?,
+            checksum_xxhash128: try_from_aws(x.checksum_xxhash128)?,
+            checksum_xxhash3: try_from_aws(x.checksum_xxhash3)?,
+            checksum_xxhash64: try_from_aws(x.checksum_xxhash64)?,
+            e_tag: try_from_aws(x.e_tag)?,
+            key: try_from_aws(x.key)?,
+            object_version_id: try_from_aws(x.object_version_id)?,
+            request_charged: try_from_aws(x.request_charged)?,
+            server_side_encryption: try_from_aws(x.server_side_encryption)?,
+        })
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let mut y = Self::Target::builder();
+        y = y.set_annotation_name(try_into_aws(x.annotation_name)?);
+        y = y.set_checksum_crc32(try_into_aws(x.checksum_crc32)?);
+        y = y.set_checksum_crc32_c(try_into_aws(x.checksum_crc32c)?);
+        y = y.set_checksum_crc64_nvme(try_into_aws(x.checksum_crc64nvme)?);
+        y = y.set_checksum_md5(try_into_aws(x.checksum_md5)?);
+        y = y.set_checksum_sha1(try_into_aws(x.checksum_sha1)?);
+        y = y.set_checksum_sha256(try_into_aws(x.checksum_sha256)?);
+        y = y.set_checksum_sha512(try_into_aws(x.checksum_sha512)?);
+        y = y.set_checksum_type(try_into_aws(x.checksum_type)?);
+        y = y.set_checksum_xxhash128(try_into_aws(x.checksum_xxhash128)?);
+        y = y.set_checksum_xxhash3(try_into_aws(x.checksum_xxhash3)?);
+        y = y.set_checksum_xxhash64(try_into_aws(x.checksum_xxhash64)?);
+        y = y.set_e_tag(try_into_aws(x.e_tag)?);
+        y = y.set_key(try_into_aws(x.key)?);
+        y = y.set_object_version_id(try_into_aws(x.object_version_id)?);
+        y = y.set_request_charged(try_into_aws(x.request_charged)?);
+        y = y.set_server_side_encryption(try_into_aws(x.server_side_encryption)?);
         Ok(y.build())
     }
 }
@@ -10130,6 +10563,22 @@ impl AwsConversion for s3s::dto::Type {
 
     fn try_into_aws(x: Self) -> S3Result<Self::Target> {
         Ok(aws_sdk_s3::types::Type::from(x.as_str()))
+    }
+}
+
+impl AwsConversion for s3s::dto::UnsupportedMediaType {
+    type Target = aws_sdk_s3::types::error::UnsupportedMediaType;
+    type Error = S3Error;
+
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        let _ = x;
+        Ok(Self {})
+    }
+
+    fn try_into_aws(x: Self) -> S3Result<Self::Target> {
+        let _ = x;
+        let y = Self::Target::builder();
+        Ok(y.build())
     }
 }
 

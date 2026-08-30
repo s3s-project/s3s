@@ -3711,5 +3711,181 @@
     "zz"
    ]
   ]
+ },
+ {
+  "expect": "PutObjectAnnotation",
+  "headers": {},
+  "method": "PUT",
+  "nfb": false,
+  "note": "if:qs.has(\"annotation\")",
+  "path": "Object",
+  "qs": [
+   [
+    "annotation",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "PutObjectAnnotation",
+  "headers": {},
+  "method": "PUT",
+  "nfb": false,
+  "note": "noise:qs.has(\"annotation\")",
+  "path": "Object",
+  "qs": [
+   [
+    "annotation",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "DeleteObjectAnnotation",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "if:qs.has(\"annotation\")",
+  "path": "Object",
+  "qs": [
+   [
+    "annotation",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "DeleteObjectAnnotation",
+  "headers": {},
+  "method": "DELETE",
+  "nfb": false,
+  "note": "noise:qs.has(\"annotation\")",
+  "path": "Object",
+  "qs": [
+   [
+    "annotation",
+    ""
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "GetObjectAnnotation",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"annotationName\")",
+  "path": "Object",
+  "qs": [
+   [
+    "annotation",
+    ""
+   ],
+   [
+    "annotationName",
+    "foo"
+   ]
+  ]
+ },
+ {
+  "expect": "GetObjectAnnotation",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"annotationName\")",
+  "path": "Object",
+  "qs": [
+   [
+    "annotation",
+    ""
+   ],
+   [
+    "annotationName",
+    "foo"
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "ListObjectAnnotations",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "if:qs.has(\"annotation\") && !qs.has(\"annotationName\")",
+  "path": "Object",
+  "qs": [
+   [
+    "annotation",
+    ""
+   ],
+   [
+    "annotation-prefix",
+    "foo"
+   ]
+  ]
+ },
+ {
+  "expect": "ListObjectAnnotations",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "noise:qs.has(\"annotation\")",
+  "path": "Object",
+  "qs": [
+   [
+    "annotation",
+    ""
+   ],
+   [
+    "annotation-prefix",
+    "foo"
+   ],
+   [
+    "prefix",
+    "zz"
+   ]
+  ]
+ },
+ {
+  "expect": "ListObjectAnnotations",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "bare-tag:no-annotationName",
+  "path": "Object",
+  "qs": [
+   [
+    "annotation",
+    ""
+   ]
+  ]
+ },
+ {
+  "expect": "ListObjectAnnotations",
+  "headers": {},
+  "method": "GET",
+  "nfb": false,
+  "note": "x-id-ignored:no-annotationName",
+  "path": "Object",
+  "qs": [
+   [
+    "annotation",
+    ""
+   ],
+   [
+    "x-id",
+    "GetObjectAttributes"
+   ]
+  ]
  }
 ]

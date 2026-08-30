@@ -1262,6 +1262,19 @@ fn codegen_router(ops: &Operations, rust_types: &RustTypes) {
                         }
                         let fallback_op_name = group.iter().find(|r| is_final_op(r)).map(|r| r.op.name.as_str());
 
+                        // Count how many routes share each query tag, so that
+                        // shared tags can be disambiguated by required query
+                        // members while single-op tags keep the plain check.
+                        let tag_counts: HashMap<&str, usize> = {
+                            let mut counts: HashMap<&str, usize> = default();
+                            for r in group {
+                                if let Some(tag) = r.query_tag.as_deref() {
+                                    *counts.entry(tag).or_insert(0) += 1;
+                                }
+                            }
+                            counts
+                        };
+
                         g!("if let Some(qs) = qs {{");
                         for route in group {
                             let has_query_tag = route.query_tag.is_some();
@@ -1291,29 +1304,17 @@ fn codegen_router(ops: &Operations, rust_types: &RustTypes) {
                                 (true, false) => {
                                     let tag = route.query_tag.as_deref().unwrap();
 
-                                    // Special handling for operations that share the same query tag
-                                    // but are differentiated by the presence of an 'id' parameter
-                                    let needs_id_check = matches!(
-                                        route.op.name.as_str(),
-                                        "GetBucketAnalyticsConfiguration"
-                                            | "GetBucketIntelligentTieringConfiguration"
-                                            | "GetBucketInventoryConfiguration"
-                                            | "GetBucketMetricsConfiguration"
-                                    );
-                                    let needs_no_id_check = matches!(
-                                        route.op.name.as_str(),
-                                        "ListBucketAnalyticsConfigurations"
-                                            | "ListBucketIntelligentTieringConfigurations"
-                                            | "ListBucketInventoryConfigurations"
-                                            | "ListBucketMetricsConfigurations"
-                                    );
-
-                                    if needs_id_check {
-                                        g!("if qs.has(\"{tag}\") && qs.has(\"id\") {{");
-                                        succ(route, true);
-                                        g!("}}");
-                                    } else if needs_no_id_check {
-                                        g!("if qs.has(\"{tag}\") && !qs.has(\"id\") {{");
+                                    // Operations sharing a query tag are disambiguated by the
+                                    // presence of a required query member (e.g. `id` for the
+                                    // analytics/metrics groups, `annotationName` for the object
+                                    // annotation operations). The route carrying the required
+                                    // member is sorted first and matches only when it is present;
+                                    // the remaining route matches on the bare tag. Single-op tags
+                                    // keep the plain tag check.
+                                    if tag_counts.get(tag).copied().unwrap_or(0) > 1
+                                        && let Some(required) = route.required_query_strings.first()
+                                    {
+                                        g!("if qs.has(\"{tag}\") && qs.has(\"{required}\") {{");
                                         succ(route, true);
                                         g!("}}");
                                     } else {
