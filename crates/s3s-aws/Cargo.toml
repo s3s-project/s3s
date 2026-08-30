@@ -14,7 +14,7 @@ rust-version.workspace = true
 workspace = true
 
 [features]
-minio = ["s3s/minio", "dep:minio"]
+minio = ["s3s/minio", "dep:minio", "dep:http-body"]
 
 [dependencies]
 async-trait.workspace = true
@@ -23,6 +23,7 @@ aws-smithy-runtime-api = { workspace = true, features = ["client", "http-1x"] }
 aws-smithy-types = { workspace = true, features = ["http-body-1-x"] }
 aws-smithy-types-convert = { workspace = true, features = ["convert-time"] }
 futures.workspace = true
+http-body = { workspace = true, optional = true }
 hyper.workspace = true
 minio = { workspace = true, optional = true }
 s3s = { version = "0.15.0", path = "../s3s", default-features = false }

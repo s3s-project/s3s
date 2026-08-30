@@ -61,7 +61,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
 
     // Setup S3 provider
     let sdk_conf = aws_config::from_env().endpoint_url(&opt.endpoint_url).load().await;
-    let client = aws_sdk_s3::Client::from_conf(aws_sdk_s3::config::Builder::from(&sdk_conf).force_path_style(true).build());
+    let client = {
+        let builder = aws_sdk_s3::config::Builder::from(&sdk_conf).force_path_style(true);
+        #[cfg(feature = "minio")]
+        let builder = builder.interceptor(s3s_aws::minio_compat::MinioBoolCompatInterceptor::new());
+        aws_sdk_s3::Client::from_conf(builder.build())
+    };
 
     #[cfg(feature = "minio")]
     let proxy = {
