@@ -2,6 +2,13 @@
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
 #![deny(missing_docs)]
+#![deny(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::unwrap_used
+)]
 use crate::error::StdError;
 use crate::stream::ByteStream;
 use crate::stream::DynByteStream;
@@ -367,6 +374,13 @@ impl Body {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::unwrap_used
+)]
 mod tests {
     use super::*;
 

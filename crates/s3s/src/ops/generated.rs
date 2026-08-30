@@ -118,6 +118,11 @@
 #![allow(clippy::too_many_lines)]
 #![allow(clippy::collapsible_if)]
 #![allow(clippy::unnecessary_wraps)]
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
+#![deny(clippy::indexing_slicing)]
+#![deny(clippy::panic)]
+#![deny(clippy::unreachable)]
 
 use crate::dto::*;
 use crate::error::*;
