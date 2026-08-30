@@ -7,8 +7,9 @@ use crate::dto::{List, Metadata, StreamingBlob, Timestamp, TimestampFormat};
 use crate::error::*;
 use crate::http::{HeaderName, HeaderValue};
 use crate::path::S3Path;
-use crate::utils::rfc2047;
 use crate::xml;
+
+use s3s_rfc2047::decode;
 
 use std::fmt;
 use std::str::FromStr;
@@ -390,7 +391,7 @@ pub fn parse_opt_metadata(req: &Request) -> S3Result<Option<Metadata>> {
         let None = iter.next() else { return Err(duplicate_header(name)) };
 
         let raw = std::str::from_utf8(val.as_bytes()).map_err(|err| invalid_header(err, name, val))?;
-        let val = rfc2047::decode(raw).map_err(|err| invalid_header(err, name, val))?;
+        let val = decode(raw).map_err(|err| invalid_header(err, name, val))?;
         metadata.insert(key.into(), val.into_owned());
     }
     if metadata.is_empty() {

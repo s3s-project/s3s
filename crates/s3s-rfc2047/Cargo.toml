@@ -18,3 +18,5 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
+base64-simd.workspace = true
+thiserror.workspace = true

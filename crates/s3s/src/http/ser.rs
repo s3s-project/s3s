@@ -18,8 +18,9 @@ use crate::error::{S3Error, S3ErrorCode, S3Result};
 use crate::http::KeepAliveBody;
 use crate::http::{HeaderName, HeaderValue};
 use crate::utils::format::fmt_timestamp;
-use crate::utils::rfc2047;
 use crate::xml;
+
+use s3s_rfc2047::encode;
 
 use std::convert::Infallible;
 
@@ -181,7 +182,7 @@ pub fn add_opt_metadata(res: &mut Response, metadata: Option<Metadata>) -> S3Res
             buf.push_str("x-amz-meta-");
             buf.push_str(&key);
             let name = HeaderName::from_bytes(buf.as_bytes()).map_err(S3Error::internal_error)?;
-            let value = rfc2047::encode(&val)
+            let value = encode(&val)
                 .map_err(S3Error::internal_error)
                 .and_then(|s| HeaderValue::try_from(s.as_ref()).map_err(S3Error::internal_error))?;
             res.headers.insert(name, value);

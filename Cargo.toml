@@ -46,6 +46,7 @@ hex-simd = "0.8.0"
 itoa = "1.0.18"
 nom = "8.0.0"
 regex = "1.13.1"
+s3s-rfc2047 = { path = "crates/s3s-rfc2047", version = "0.16.0-alpha.1" }
 
 # Date & time
 chrono = { version = "0.4.45", default-features = false }

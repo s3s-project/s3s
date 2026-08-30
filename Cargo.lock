@@ -3373,6 +3373,7 @@ dependencies = [
  "pin-project-lite",
  "quick-xml 0.42.0",
  "regex",
+ "s3s-rfc2047",
  "s3s-sigv2",
  "s3s-sigv4",
  "serde",
@@ -3536,6 +3537,10 @@ dependencies = [
 [[package]]
 name = "s3s-rfc2047"
 version = "0.16.0-alpha.1"
+dependencies = [
+ "base64-simd",
+ "thiserror",
+]
 
 [[package]]
 name = "s3s-sigv2"
