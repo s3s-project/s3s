@@ -3409,6 +3409,7 @@ dependencies = [
  "aws-smithy-types",
  "aws-smithy-types-convert",
  "futures",
+ "http-body 1.1.0",
  "hyper",
  "minio",
  "s3s",
