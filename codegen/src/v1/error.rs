@@ -416,7 +416,7 @@ pub fn codegen(model: &smithy::Model) {
                         assert!(status.starts_with("307"));
                         o("TEMPORARY_REDIRECT")
                     }
-                    "Requested Range NotSatisfiable" => {
+                    "Requested Range Not Satisfiable" => {
                         assert!(status.starts_with("416"));
                         o("RANGE_NOT_SATISFIABLE")
                     }
