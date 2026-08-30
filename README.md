@@ -17,6 +17,7 @@ S3 Service Adapter
 | [s3s-aws](./crates/s3s-aws/)       |    [![Crates.io](https://img.shields.io/crates/v/s3s-aws.svg)](https://crates.io/crates/s3s-aws)    |    [![Docs](https://docs.rs/s3s-aws/badge.svg)](https://docs.rs/s3s-aws/)    |
 | [s3s-sigv2](./crates/s3s-sigv2/)    |    [![Crates.io](https://img.shields.io/crates/v/s3s-sigv2.svg)](https://crates.io/crates/s3s-sigv2)    |    [![Docs](https://docs.rs/s3s-sigv2/badge.svg)](https://docs.rs/s3s-sigv2/)    |
 | [s3s-sigv4](./crates/s3s-sigv4/)    |    [![Crates.io](https://img.shields.io/crates/v/s3s-sigv4.svg)](https://crates.io/crates/s3s-sigv4)    |    [![Docs](https://docs.rs/s3s-sigv4/badge.svg)](https://docs.rs/s3s-sigv4/)    |
+| [s3s-rfc2047](./crates/s3s-rfc2047/) |    [![Crates.io](https://img.shields.io/crates/v/s3s-rfc2047.svg)](https://crates.io/crates/s3s-rfc2047)    |    [![Docs](https://docs.rs/s3s-rfc2047/badge.svg)](https://docs.rs/s3s-rfc2047/)    |
 | [s3s-fs](./crates/s3s-fs/) | [![Crates.io](https://img.shields.io/crates/v/s3s-fs.svg)](https://crates.io/crates/s3s-fs) | [![Docs](https://docs.rs/s3s-fs/badge.svg)](https://docs.rs/s3s-fs/) |
 
 📚 **[Development documentation](https://s3s-project.github.io/s3s/)** for the `main` branch is available on GitHub Pages.
@@ -26,6 +27,8 @@ This experimental project intends to offer an ergonomic adapter for building S3-
 `s3s` implements Amazon S3 REST API in the form of a generic [hyper](https://github.com/hyperium/hyper) service. S3-compatible services can focus on the S3 API itself and don't have to care about the HTTP layer.
 
 `s3s-aws` provides useful types and integration with [`aws-sdk-s3`](https://crates.io/crates/aws-sdk-s3).
+
+`s3s-rfc2047` provides RFC 2047 MIME encoded-word encoding and decoding for non-ASCII header values.
 
 `s3s-fs` implements the S3 API based on file system, as a sample implementation. It is designed for integration testing, which can be used to [mock an S3 client](https://github.com/Nugine/s3s/blob/main/crates/s3s-fs/tests/it_aws.rs). It also provides a binary for debugging. [Play it!](./CONTRIBUTING.md#play-the-test-server)
 

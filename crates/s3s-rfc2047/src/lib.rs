@@ -1,11 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
-//! RFC 2047 MIME encoded-word support for non-ASCII header values.
+//! RFC 2047 MIME encoded-word encoding and decoding for non-ASCII header values.
 //!
 //! See <https://datatracker.ietf.org/doc/html/rfc2047> for the specification.
 
-#![allow(dead_code)] // TODO: Functions will be used when integrating with http/de.rs and http/ser.rs
+#![deny(missing_docs)]
+#![deny(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::unwrap_used
+)]
 
 use std::borrow::Cow;
 
@@ -77,7 +84,7 @@ pub fn encode(s: &str) -> Result<Cow<'_, str>, EncodeError> {
         if end <= i {
             return Err(EncodeError::InvalidUtf8Boundary);
         }
-        let chunk = &s[i..end];
+        let chunk = s.get(i..end).ok_or(EncodeError::InvalidUtf8Boundary)?;
         let encoded = base64_simd::STANDARD.encode_to_string(chunk.as_bytes());
         if !result.is_empty() {
             result.push(' ');
@@ -158,7 +165,10 @@ fn decode_single_word(s: &str) -> Result<String, DecodeError> {
     }
 
     // Parse the encoded word: =?charset?encoding?encoded_text?=
-    let inner = &s[2..s.len() - 2];
+    let inner = s
+        .strip_prefix("=?")
+        .and_then(|s| s.strip_suffix("?="))
+        .ok_or(DecodeError::InvalidFormat)?;
     let mut parts = inner.splitn(3, '?');
 
     let _charset = parts.next().ok_or(DecodeError::InvalidFormat)?;
@@ -255,6 +265,13 @@ pub enum DecodeError {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::unwrap_used
+)]
 mod tests {
     use super::*;
 
@@ -343,6 +360,27 @@ mod tests {
             assert!(word.ends_with("?="));
             assert!(word.len() <= 75);
         }
+    }
+
+    #[test]
+    fn test_encode_split_respects_utf8_boundary() {
+        // 48 bytes total: forces multi-word encoding (ceil(48*4/3) + 12 > 75)
+        // with the 45-byte chunk boundary falling inside a 3-byte character:
+        // 43 ASCII bytes + 3-byte UTF-8 character + 2 ASCII bytes.
+        let input = format!("{}你{}", "a".repeat(43), "a".repeat(2));
+        assert_eq!(input.len(), 48);
+        let encoded = encode(&input).unwrap();
+
+        // Split into multiple words, all within the 75-character limit
+        let words: Vec<&str> = encoded.split(' ').collect();
+        assert!(words.len() > 1);
+        for word in words {
+            assert!(word.len() <= 75);
+        }
+
+        // The adjustment to the UTF-8 boundary must not lose data
+        let decoded = decode(&encoded).unwrap();
+        assert_eq!(decoded, input);
     }
 
     #[test]
@@ -465,6 +503,23 @@ mod tests {
         let input = "=?UTF-8?B?5L2g?=  \t  =?UTF-8?B?5aW9?=";
         let decoded = decode(input).unwrap();
         assert_eq!(decoded, "你好");
+    }
+
+    #[test]
+    fn test_decode_multiple_words_skips_plain_parts() {
+        // Plain (non-encoded) parts between encoded-words are skipped
+        let input = "=?UTF-8?B?5L2g?= plain text =?UTF-8?B?5aW9?=";
+        let decoded = decode(input).unwrap();
+        assert_eq!(decoded, "你好");
+    }
+
+    #[test]
+    fn test_decode_multiple_words_all_empty_parts_invalid() {
+        // Multiple encoded-words that all decode to empty strings yield no
+        // content at all, which is not a valid result
+        let input = "=?UTF-8?B??= =?UTF-8?Q??=";
+        let result = decode(input);
+        assert_eq!(result, Err(DecodeError::InvalidFormat));
     }
 
     #[test]
