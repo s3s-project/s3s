@@ -115,7 +115,7 @@ jobs:
       - uses: taiki-e/install-action@just
       - uses: taiki-e/install-action@cargo-llvm-cov
       - run: |
-          cargo llvm-cov -p s3s --all-features --codecov --output-path target/codecov.json
+          cargo llvm-cov -p s3s -p s3s-sigv2 -p s3s-sigv4 -p s3s-test --all-features --codecov --output-path target/codecov.json
       - uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
