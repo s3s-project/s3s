@@ -8,14 +8,7 @@
 //! enumerates every standard S3 error code. The [`s3_error!`] macro offers
 //! a convenient shorthand for constructing errors by code or code-with-message.
 
-cfg_if::cfg_if! {
-    if #[cfg(feature = "minio")] {
-        mod generated_minio;
-        use self::generated_minio as generated;
-    } else {
-        mod generated;
-    }
-}
+mod generated;
 
 pub use self::generated::*;
 

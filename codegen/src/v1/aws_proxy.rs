@@ -46,6 +46,7 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
             // forwards them through the official MinIO SDK, delegating to a
             // same-named helper in `listen.rs`.
             g!("#[tracing::instrument(skip(self, req))]");
+            g!("#[cfg(feature = \"minio\")]");
             g!("async fn {method_name}(&self, req: S3Request<{s3s_input}>) -> S3Result<S3Response<{s3s_output}>> {{");
             g!("super::listen::{method_name}(&self.minio, req).await");
             g!("}}");
