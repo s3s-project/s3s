@@ -4647,8 +4647,8 @@ pub trait S3: Send + Sync + 'static {
         Err(s3_error!(NotImplemented, "ListParts is not implemented yet"))
     }
 
-    #[cfg(feature = "minio")]
     /// `MinIO` extension: listen to bucket notification events as a long-polling SSE stream.
+    #[cfg(feature = "minio")]
     async fn listen_bucket_notification(
         &self,
         _req: S3Request<ListenBucketNotificationInput>,

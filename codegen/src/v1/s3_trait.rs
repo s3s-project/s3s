@@ -44,11 +44,11 @@ pub fn codegen(ops: &Operations) {
             continue;
         }
 
+        codegen_doc(op.doc.as_deref());
+
         if op.is_minio {
             g!("#[cfg(feature = \"minio\")]");
         }
-
-        codegen_doc(op.doc.as_deref());
         g!("async fn {method_name}(&self, _req: S3Request<{input}>) -> S3Result<S3Response<{output}>> {{");
         g!("Err(s3_error!(NotImplemented, \"{} is not implemented yet\"))", op.name);
         g!("}}");

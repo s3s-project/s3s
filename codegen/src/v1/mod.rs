@@ -73,8 +73,8 @@ fn inner_run(code_patch: Option<Patch>) {
     }
 
     {
-        let path = format!("crates/s3s/src/error/generated{suffix}.rs");
-        write_file(&path, || error::codegen(&model));
+        let path = "crates/s3s/src/error/generated.rs";
+        write_file(path, || error::codegen(&model));
     }
 
     {
@@ -93,8 +93,8 @@ fn inner_run(code_patch: Option<Patch>) {
     }
 
     {
-        let path = format!("crates/s3s/src/access/generated{suffix}.rs");
-        write_file(&path, || access::codegen(&ops));
+        let path = "crates/s3s/src/access/generated.rs";
+        write_file(path, || access::codegen(&ops));
     }
 
     {
@@ -103,7 +103,7 @@ fn inner_run(code_patch: Option<Patch>) {
     }
 
     {
-        let path = format!("crates/s3s-aws/src/proxy/generated{suffix}.rs");
-        write_file(&path, || aws_proxy::codegen(&ops, &rust_types));
+        let path = "crates/s3s-aws/src/proxy/generated.rs";
+        write_file(path, || aws_proxy::codegen(&ops, &rust_types));
     }
 }
