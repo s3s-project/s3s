@@ -1145,6 +1145,7 @@ impl CreateBucket {
 
     pub fn serialize_http(x: CreateBucketOutput) -> S3Result<http::Response> {
         let mut res = http::Response::with_status(http::StatusCode::OK);
+        http::add_opt_header(&mut res, X_AMZ_BUCKET_ARN, x.bucket_arn)?;
         http::add_opt_header(&mut res, LOCATION, x.location)?;
         Ok(res)
     }
@@ -5077,6 +5078,7 @@ impl HeadBucket {
     pub fn serialize_http(x: HeadBucketOutput) -> S3Result<http::Response> {
         let mut res = http::Response::with_status(http::StatusCode::OK);
         http::add_opt_header(&mut res, X_AMZ_ACCESS_POINT_ALIAS, x.access_point_alias)?;
+        http::add_opt_header(&mut res, X_AMZ_BUCKET_ARN, x.bucket_arn)?;
         http::add_opt_header(&mut res, X_AMZ_BUCKET_LOCATION_NAME, x.bucket_location_name)?;
         http::add_opt_header(&mut res, X_AMZ_BUCKET_LOCATION_TYPE, x.bucket_location_type)?;
         http::add_opt_header(&mut res, X_AMZ_BUCKET_REGION, x.bucket_region)?;
@@ -5243,6 +5245,7 @@ impl HeadObject {
         http::add_opt_header(&mut res, X_AMZ_SERVER_SIDE_ENCRYPTION_AWS_KMS_KEY_ID, x.ssekms_key_id)?;
         http::add_opt_header(&mut res, X_AMZ_SERVER_SIDE_ENCRYPTION, x.server_side_encryption)?;
         http::add_opt_header(&mut res, X_AMZ_STORAGE_CLASS, x.storage_class)?;
+        http::add_opt_header(&mut res, X_AMZ_TAGGING_COUNT, x.tag_count)?;
         http::add_opt_header(&mut res, X_AMZ_VERSION_ID, x.version_id)?;
         http::add_opt_header(&mut res, X_AMZ_WEBSITE_REDIRECT_LOCATION, x.website_redirect_location)?;
         Ok(res)

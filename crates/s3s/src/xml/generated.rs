@@ -801,6 +801,8 @@ use std::io::Write;
 // DeserializeContent: S3KeyFilter
 //   SerializeContent: S3Location
 // DeserializeContent: S3Location
+//   SerializeContent: S3RegionalOrS3ExpressBucketArnString
+// DeserializeContent: S3RegionalOrS3ExpressBucketArnString
 //   SerializeContent: S3TablesArn
 // DeserializeContent: S3TablesArn
 //   SerializeContent: S3TablesBucketArn
@@ -1823,6 +1825,9 @@ impl SerializeContent for CreateBucketConfiguration {
         if let Some(ref val) = self.location_constraint {
             s.content("LocationConstraint", val)?;
         }
+        if let Some(iter) = &self.tags {
+            s.list("Tags", "Tag", iter)?;
+        }
         Ok(())
     }
 }
@@ -1832,6 +1837,7 @@ impl<'xml> DeserializeContent<'xml> for CreateBucketConfiguration {
         let mut bucket: Option<BucketInfo> = None;
         let mut location: Option<LocationInfo> = None;
         let mut location_constraint: Option<BucketLocationConstraint> = None;
+        let mut tags: Option<TagSet> = None;
         d.for_each_element(|d, x| match x {
             b"Bucket" => {
                 if bucket.is_some() {
@@ -1854,6 +1860,13 @@ impl<'xml> DeserializeContent<'xml> for CreateBucketConfiguration {
                 location_constraint = Some(d.content()?);
                 Ok(())
             }
+            b"Tags" => {
+                if tags.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                tags = Some(d.list_content("Tag")?);
+                Ok(())
+            }
             _ => {
                 d.skip_element_content()?;
                 Ok(())
@@ -1863,6 +1876,7 @@ impl<'xml> DeserializeContent<'xml> for CreateBucketConfiguration {
             bucket,
             location,
             location_constraint,
+            tags,
         })
     }
 }
@@ -5352,6 +5366,9 @@ impl<'xml> DeserializeContent<'xml> for BlockedEncryptionTypes {
 
 impl SerializeContent for Bucket {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.bucket_arn {
+            s.content("BucketArn", val)?;
+        }
         if let Some(ref val) = self.bucket_region {
             s.content("BucketRegion", val)?;
         }
@@ -5367,10 +5384,18 @@ impl SerializeContent for Bucket {
 
 impl<'xml> DeserializeContent<'xml> for Bucket {
     fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut bucket_arn: Option<S3RegionalOrS3ExpressBucketArnString> = None;
         let mut bucket_region: Option<BucketRegion> = None;
         let mut creation_date: Option<CreationDate> = None;
         let mut name: Option<BucketName> = None;
         d.for_each_element(|d, x| match x {
+            b"BucketArn" => {
+                if bucket_arn.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                bucket_arn = Some(d.content()?);
+                Ok(())
+            }
             b"BucketRegion" => {
                 if bucket_region.is_some() {
                     return Err(DeError::DuplicateField);
@@ -5395,6 +5420,7 @@ impl<'xml> DeserializeContent<'xml> for Bucket {
             _ => Err(DeError::UnexpectedTagName),
         })?;
         Ok(Self {
+            bucket_arn,
             bucket_region,
             creation_date,
             name,
