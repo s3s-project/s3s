@@ -4,8 +4,6 @@
 //! RFC 2047 MIME encoded-word encoding and decoding for non-ASCII header values.
 //!
 //! See <https://datatracker.ietf.org/doc/html/rfc2047> for the specification.
-//!
-//! Extracted from the `s3s` crate (`utils::rfc2047` module).
 
 #![deny(missing_docs)]
 #![deny(
