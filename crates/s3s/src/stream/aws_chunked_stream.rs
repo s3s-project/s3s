@@ -32,7 +32,7 @@ use hyper::HeaderMap;
 use hyper::http::{HeaderName, HeaderValue};
 use std::fmt::{self, Debug};
 use std::pin::Pin;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::task::{Context, Poll};
 
 use futures::pin_mut;
@@ -325,7 +325,7 @@ impl AwsChunkedStream {
                                     map.append(hn, hv);
                                 }
                                 tracing::debug!(trailers=?map);
-                                *trailers_for_worker.lock().unwrap() = Some(map);
+                                *trailers_for_worker.lock().unwrap_or_else(PoisonError::into_inner) = Some(map);
                                 break;
                             }
                         }

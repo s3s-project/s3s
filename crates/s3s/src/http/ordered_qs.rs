@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
+#![deny(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::unwrap_used
+)]
 //! Ordered query strings
 
 use crate::utils::stable_sort_by_first;
@@ -54,14 +61,18 @@ impl OrderedQs {
         let lower_bound = qs.partition_point(|x| x.0.as_str() < name);
         let upper_bound = qs.partition_point(|x| x.0.as_str() <= name);
 
-        qs[lower_bound..upper_bound].iter().map(|x| x.1.as_str())
+        // `partition_point` returns `0..=len`, so the slice bounds are always
+        // valid; the empty fallback is unreachable.
+        qs.get(lower_bound..upper_bound).unwrap_or(&[]).iter().map(|x| x.1.as_str())
     }
 
     pub fn get_unique(&self, name: &str) -> Option<&str> {
         let qs = self.qs.as_slice();
         let lower_bound = qs.partition_point(|x| x.0.as_str() < name);
 
-        let mut iter = qs[lower_bound..].iter();
+        // `partition_point` returns `0..=len`, so the slice bound is always
+        // valid; the empty fallback is unreachable.
+        let mut iter = qs.get(lower_bound..).unwrap_or(&[]).iter();
         let pair = iter.next()?;
 
         if let Some(following) = iter.next()
@@ -81,6 +92,13 @@ impl AsRef<[(String, String)]> for OrderedQs {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::unwrap_used
+)]
 mod tests {
     use super::*;
 

@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
+#![deny(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::unwrap_used
+)]
 use crate::auth::S3Auth;
 use crate::auth::SecretKey;
 use crate::auth::signature::Signature;
@@ -617,10 +624,8 @@ impl<'a> SignatureContext<'a> {
     #[tracing::instrument(skip(self))]
     #[allow(clippy::too_many_lines)]
     pub async fn v4_check_header_auth(&mut self) -> S3Result<CredentialsExt> {
-        let authorization: AuthorizationV4<'_> = {
-            // assume: headers has "authorization"
-            extract_authorization_v4(self.hs)?.unwrap()
-        };
+        let authorization: AuthorizationV4<'_> =
+            extract_authorization_v4(self.hs)?.ok_or_else(|| s3_error!(MissingSecurityHeader))?;
         let region = authorization.credential.aws_region;
         let service = authorization.credential.aws_service;
         let config = self.config.snapshot();
@@ -932,6 +937,13 @@ impl<'a> SignatureContext<'a> {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::unwrap_used
+)]
 mod tests {
     use super::*;
 

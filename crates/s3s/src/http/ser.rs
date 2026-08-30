@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
+#![deny(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::unwrap_used
+)]
 use super::Body;
 use super::Response;
 
@@ -15,7 +22,6 @@ use crate::utils::rfc2047;
 use crate::xml;
 
 use std::convert::Infallible;
-use std::fmt::Write as _;
 
 use hyper::header::{IntoHeaderName, InvalidHeaderValue};
 
@@ -172,7 +178,8 @@ pub fn add_opt_metadata(res: &mut Response, metadata: Option<Metadata>) -> S3Res
     if let Some(map) = metadata {
         let mut buf = String::new();
         for (key, val) in map {
-            write!(&mut buf, "x-amz-meta-{key}").unwrap();
+            buf.push_str("x-amz-meta-");
+            buf.push_str(&key);
             let name = HeaderName::from_bytes(buf.as_bytes()).map_err(S3Error::internal_error)?;
             let value = rfc2047::encode(&val)
                 .map_err(S3Error::internal_error)
@@ -185,6 +192,13 @@ pub fn add_opt_metadata(res: &mut Response, metadata: Option<Metadata>) -> S3Res
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::unwrap_used
+)]
 mod tests {
     use super::*;
     use bytes::Bytes;

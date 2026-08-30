@@ -246,7 +246,9 @@ impl FromStr for S3ErrorCode {
     type Err = Infallible;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self::from_bytes(s.as_bytes()).unwrap())
+        // `from_bytes` only returns `None` for invalid UTF-8, which a `&str`
+        // cannot contain; the custom fallback mirrors `from_bytes` itself.
+        Ok(Self::from_bytes(s.as_bytes()).unwrap_or_else(|| Self::Custom(s.into())))
     }
 }
 

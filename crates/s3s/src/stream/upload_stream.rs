@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
+#![deny(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::unwrap_used
+)]
 //! `UploadStream`: a body wrapper that verifies a payload SHA-256 while
 //! forwarding bytes, used to enforce the signed body hash of single-chunk
 //! `SigV4` uploads.
@@ -117,11 +124,11 @@ impl<S> UploadStream<S> {
     }
 
     fn finalize_hash(&mut self) -> Result<(), UploadStreamError> {
-        if self.hasher.is_none() {
+        let Some(hasher) = self.hasher.take() else {
             return Ok(());
-        }
+        };
 
-        let digest = Sha256Sum::from_bytes(self.hasher.take().unwrap().finalize());
+        let digest = Sha256Sum::from_bytes(hasher.finalize());
         if digest == self.expected_sha256 {
             Ok(())
         } else {
@@ -231,6 +238,13 @@ where
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::unwrap_used
+)]
 mod tests {
     use super::*;
 

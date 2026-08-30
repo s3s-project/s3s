@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
-
 //! Byte-stream types for S3 request and response bodies.
 //!
 //! This module defines the [`ByteStream`] trait, the [`DynByteStream`] type
@@ -172,11 +171,7 @@ pub(crate) struct VecByteStream {
 
 impl VecByteStream {
     pub fn new(v: Vec<Bytes>) -> Self {
-        let total = v
-            .iter()
-            .map(Bytes::len)
-            .try_fold(0, usize::checked_add)
-            .expect("length overflow");
+        let total = v.iter().map(Bytes::len).fold(0, usize::saturating_add);
 
         Self {
             queue: v.into(),
