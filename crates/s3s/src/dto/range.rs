@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
+#![deny(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::unwrap_used
+)]
 //! HTTP Range header
 
 use crate::S3Error;
@@ -168,12 +175,19 @@ fn parse_u64_full(s: &[u8]) -> Option<u64> {
 
 fn parse_u64_once(s: &[u8]) -> Option<(u64, &[u8])> {
     match u64::from_radix_10_checked(s) {
-        (Some(x), pos) if pos > 0 => Some((x, &s[pos..])),
+        (Some(x), pos) if pos > 0 => Some((x, s.get(pos..)?)),
         _ => None,
     }
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::unwrap_used
+)]
 mod tests {
     use super::*;
 
