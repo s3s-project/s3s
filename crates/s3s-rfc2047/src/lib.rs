@@ -365,6 +365,27 @@ mod tests {
     }
 
     #[test]
+    fn test_encode_split_respects_utf8_boundary() {
+        // 48 bytes total: forces multi-word encoding (ceil(48*4/3) + 12 > 75)
+        // with the 45-byte chunk boundary falling inside a 3-byte character:
+        // 43 ASCII bytes + 3-byte UTF-8 character + 2 ASCII bytes.
+        let input = format!("{}你{}", "a".repeat(43), "a".repeat(2));
+        assert_eq!(input.len(), 48);
+        let encoded = encode(&input).unwrap();
+
+        // Split into multiple words, all within the 75-character limit
+        let words: Vec<&str> = encoded.split(' ').collect();
+        assert!(words.len() > 1);
+        for word in words {
+            assert!(word.len() <= 75);
+        }
+
+        // The adjustment to the UTF-8 boundary must not lose data
+        let decoded = decode(&encoded).unwrap();
+        assert_eq!(decoded, input);
+    }
+
+    #[test]
     fn test_roundtrip_long_string() {
         // Test that long strings can be encoded and decoded correctly
         let original = "这是一个非常长的中文字符串，用于测试RFC2047的75字符限制功能是否正常工作，包括多个编码字的拆分和合并";
@@ -484,6 +505,23 @@ mod tests {
         let input = "=?UTF-8?B?5L2g?=  \t  =?UTF-8?B?5aW9?=";
         let decoded = decode(input).unwrap();
         assert_eq!(decoded, "你好");
+    }
+
+    #[test]
+    fn test_decode_multiple_words_skips_plain_parts() {
+        // Plain (non-encoded) parts between encoded-words are skipped
+        let input = "=?UTF-8?B?5L2g?= plain text =?UTF-8?B?5aW9?=";
+        let decoded = decode(input).unwrap();
+        assert_eq!(decoded, "你好");
+    }
+
+    #[test]
+    fn test_decode_multiple_words_all_empty_parts_invalid() {
+        // Multiple encoded-words that all decode to empty strings yield no
+        // content at all, which is not a valid result
+        let input = "=?UTF-8?B??= =?UTF-8?Q??=";
+        let result = decode(input);
+        assert_eq!(result, Err(DecodeError::InvalidFormat));
     }
 
     #[test]
