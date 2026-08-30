@@ -852,7 +852,8 @@ fn error_custom_headers() {
         body,
         concat!(
             "<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
-            "<Error><Code>TemporaryRedirect</Code></Error>"
+            "<Error><Code>TemporaryRedirect</Code>",
+            "<Message>You are being redirected to the bucket while DNS updates.</Message></Error>"
         )
     );
 }
