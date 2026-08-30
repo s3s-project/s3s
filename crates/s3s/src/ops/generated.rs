@@ -793,7 +793,7 @@ impl CopyObject {
 
         let expected_source_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_SOURCE_EXPECTED_BUCKET_OWNER)?;
 
-        let expires: Option<Expires> = http::parse_opt_header_timestamp(req, &EXPIRES, TimestampFormat::HttpDate)?;
+        let expires: Option<Expires> = http::parse_opt_header(req, &EXPIRES)?;
 
         let grant_full_control: Option<GrantFullControl> = http::parse_opt_header(req, &X_AMZ_GRANT_FULL_CONTROL)?;
 
@@ -942,7 +942,7 @@ impl CopyObject {
 
         let expected_source_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_SOURCE_EXPECTED_BUCKET_OWNER)?;
 
-        let expires: Option<Expires> = http::parse_opt_header_timestamp(req, &EXPIRES, TimestampFormat::HttpDate)?;
+        let expires: Option<Expires> = http::parse_opt_header(req, &EXPIRES)?;
 
         let grant_full_control: Option<GrantFullControl> = http::parse_opt_header(req, &X_AMZ_GRANT_FULL_CONTROL)?;
 
@@ -1345,7 +1345,7 @@ impl CreateMultipartUpload {
 
         let expected_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_EXPECTED_BUCKET_OWNER)?;
 
-        let expires: Option<Expires> = http::parse_opt_header_timestamp(req, &EXPIRES, TimestampFormat::HttpDate)?;
+        let expires: Option<Expires> = http::parse_opt_header(req, &EXPIRES)?;
 
         let grant_full_control: Option<GrantFullControl> = http::parse_opt_header(req, &X_AMZ_GRANT_FULL_CONTROL)?;
 
@@ -1449,7 +1449,7 @@ impl CreateMultipartUpload {
 
         let expected_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_EXPECTED_BUCKET_OWNER)?;
 
-        let expires: Option<Expires> = http::parse_opt_header_timestamp(req, &EXPIRES, TimestampFormat::HttpDate)?;
+        let expires: Option<Expires> = http::parse_opt_header(req, &EXPIRES)?;
 
         let grant_full_control: Option<GrantFullControl> = http::parse_opt_header(req, &X_AMZ_GRANT_FULL_CONTROL)?;
 
@@ -4363,7 +4363,7 @@ impl GetObject {
         http::add_opt_header(&mut res, X_AMZ_DELETE_MARKER, x.delete_marker)?;
         http::add_opt_header(&mut res, ETAG, x.e_tag)?;
         http::add_opt_header(&mut res, X_AMZ_EXPIRATION, x.expiration)?;
-        http::add_opt_header_timestamp(&mut res, EXPIRES, x.expires, TimestampFormat::HttpDate)?;
+        http::add_opt_header(&mut res, EXPIRES, x.expires)?;
         http::add_opt_header_timestamp(&mut res, LAST_MODIFIED, x.last_modified, TimestampFormat::HttpDate)?;
         http::add_opt_metadata(&mut res, x.metadata)?;
         http::add_opt_header(&mut res, X_AMZ_MISSING_META, x.missing_meta)?;
@@ -5224,7 +5224,7 @@ impl HeadObject {
         http::add_opt_header(&mut res, X_AMZ_DELETE_MARKER, x.delete_marker)?;
         http::add_opt_header(&mut res, ETAG, x.e_tag)?;
         http::add_opt_header(&mut res, X_AMZ_EXPIRATION, x.expiration)?;
-        http::add_opt_header_timestamp(&mut res, EXPIRES, x.expires, TimestampFormat::HttpDate)?;
+        http::add_opt_header(&mut res, EXPIRES, x.expires)?;
         http::add_opt_header_timestamp(&mut res, LAST_MODIFIED, x.last_modified, TimestampFormat::HttpDate)?;
         http::add_opt_metadata(&mut res, x.metadata)?;
         http::add_opt_header(&mut res, X_AMZ_MISSING_META, x.missing_meta)?;
@@ -7550,7 +7550,7 @@ impl PutObject {
 
         let expected_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_EXPECTED_BUCKET_OWNER)?;
 
-        let expires: Option<Expires> = http::parse_opt_header_timestamp(req, &EXPIRES, TimestampFormat::HttpDate)?;
+        let expires: Option<Expires> = http::parse_opt_header(req, &EXPIRES)?;
 
         let grant_full_control: Option<GrantFullControl> = http::parse_opt_header(req, &X_AMZ_GRANT_FULL_CONTROL)?;
 
@@ -7703,7 +7703,7 @@ impl PutObject {
 
         let expected_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_EXPECTED_BUCKET_OWNER)?;
 
-        let expires: Option<Expires> = http::parse_opt_header_timestamp(req, &EXPIRES, TimestampFormat::HttpDate)?;
+        let expires: Option<Expires> = http::parse_opt_header(req, &EXPIRES)?;
 
         let grant_full_control: Option<GrantFullControl> = http::parse_opt_header(req, &X_AMZ_GRANT_FULL_CONTROL)?;
 
@@ -7868,7 +7868,7 @@ impl PutObject {
 
         let expected_bucket_owner: Option<AccountId> = http::parse_field_value(&m, "x-amz-expected-bucket-owner")?;
 
-        let expires: Option<Expires> = http::parse_field_value_timestamp(&m, "expires", TimestampFormat::HttpDate)?;
+        let expires: Option<Expires> = http::parse_field_value(&m, "expires")?;
 
         let grant_full_control: Option<GrantFullControl> = http::parse_field_value(&m, "x-amz-grant-full-control")?;
 
@@ -8041,7 +8041,7 @@ impl PutObject {
 
         let expected_bucket_owner: Option<AccountId> = http::parse_field_value(&m, "x-amz-expected-bucket-owner")?;
 
-        let expires: Option<Expires> = http::parse_field_value_timestamp(&m, "expires", TimestampFormat::HttpDate)?;
+        let expires: Option<Expires> = http::parse_field_value(&m, "expires")?;
 
         let grant_full_control: Option<GrantFullControl> = http::parse_field_value(&m, "x-amz-grant-full-control")?;
 
@@ -9668,8 +9668,7 @@ impl WriteGetObjectResponse {
 
         let expiration: Option<Expiration> = http::parse_opt_header(req, &X_AMZ_FWD_HEADER_X_AMZ_EXPIRATION)?;
 
-        let expires: Option<Expires> =
-            http::parse_opt_header_timestamp(req, &X_AMZ_FWD_HEADER_EXPIRES, TimestampFormat::HttpDate)?;
+        let expires: Option<Expires> = http::parse_opt_header(req, &X_AMZ_FWD_HEADER_EXPIRES)?;
 
         let last_modified: Option<LastModified> =
             http::parse_opt_header_timestamp(req, &X_AMZ_FWD_HEADER_LAST_MODIFIED, TimestampFormat::HttpDate)?;

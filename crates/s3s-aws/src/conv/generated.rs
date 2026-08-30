@@ -1223,7 +1223,7 @@ impl AwsConversion for s3s::dto::CopyObjectInput {
             copy_source_sse_customer_key_md5: try_from_aws(x.copy_source_sse_customer_key_md5)?,
             expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
             expected_source_bucket_owner: try_from_aws(x.expected_source_bucket_owner)?,
-            expires: try_from_aws(x.expires)?,
+            expires: expires_from_aws(x.expires)?,
             grant_full_control: try_from_aws(x.grant_full_control)?,
             grant_read: try_from_aws(x.grant_read)?,
             grant_read_acp: try_from_aws(x.grant_read_acp)?,
@@ -1273,7 +1273,7 @@ impl AwsConversion for s3s::dto::CopyObjectInput {
             copy_source_sse_customer_key_md5: try_from_aws(x.copy_source_sse_customer_key_md5)?,
             expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
             expected_source_bucket_owner: try_from_aws(x.expected_source_bucket_owner)?,
-            expires: try_from_aws(x.expires)?,
+            expires: expires_from_aws(x.expires)?,
             grant_full_control: try_from_aws(x.grant_full_control)?,
             grant_read: try_from_aws(x.grant_read)?,
             grant_read_acp: try_from_aws(x.grant_read_acp)?,
@@ -1323,7 +1323,7 @@ impl AwsConversion for s3s::dto::CopyObjectInput {
         y = y.set_copy_source_sse_customer_key_md5(try_into_aws(x.copy_source_sse_customer_key_md5)?);
         y = y.set_expected_bucket_owner(try_into_aws(x.expected_bucket_owner)?);
         y = y.set_expected_source_bucket_owner(try_into_aws(x.expected_source_bucket_owner)?);
-        y = y.set_expires(try_into_aws(x.expires)?);
+        y = y.set_expires(expires_into_aws(x.expires)?);
         y = y.set_grant_full_control(try_into_aws(x.grant_full_control)?);
         y = y.set_grant_read(try_into_aws(x.grant_read)?);
         y = y.set_grant_read_acp(try_into_aws(x.grant_read_acp)?);
@@ -1647,7 +1647,7 @@ impl AwsConversion for s3s::dto::CreateMultipartUploadInput {
             content_language: try_from_aws(x.content_language)?,
             content_type: try_from_aws(x.content_type)?,
             expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
-            expires: try_from_aws(x.expires)?,
+            expires: expires_from_aws(x.expires)?,
             grant_full_control: try_from_aws(x.grant_full_control)?,
             grant_read: try_from_aws(x.grant_read)?,
             grant_read_acp: try_from_aws(x.grant_read_acp)?,
@@ -1684,7 +1684,7 @@ impl AwsConversion for s3s::dto::CreateMultipartUploadInput {
             content_language: try_from_aws(x.content_language)?,
             content_type: try_from_aws(x.content_type)?,
             expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
-            expires: try_from_aws(x.expires)?,
+            expires: expires_from_aws(x.expires)?,
             grant_full_control: try_from_aws(x.grant_full_control)?,
             grant_read: try_from_aws(x.grant_read)?,
             grant_read_acp: try_from_aws(x.grant_read_acp)?,
@@ -1721,7 +1721,7 @@ impl AwsConversion for s3s::dto::CreateMultipartUploadInput {
         y = y.set_content_language(try_into_aws(x.content_language)?);
         y = y.set_content_type(try_into_aws(x.content_type)?);
         y = y.set_expected_bucket_owner(try_into_aws(x.expected_bucket_owner)?);
-        y = y.set_expires(try_into_aws(x.expires)?);
+        y = y.set_expires(expires_into_aws(x.expires)?);
         y = y.set_grant_full_control(try_into_aws(x.grant_full_control)?);
         y = y.set_grant_read(try_into_aws(x.grant_read)?);
         y = y.set_grant_read_acp(try_into_aws(x.grant_read_acp)?);
@@ -4411,7 +4411,7 @@ impl AwsConversion for s3s::dto::GetObjectOutput {
             delete_marker: try_from_aws(x.delete_marker)?,
             e_tag: try_from_aws(x.e_tag)?,
             expiration: try_from_aws(x.expiration)?,
-            expires: try_from_aws(x.expires)?,
+            expires: try_from_aws(x.expires_string)?,
             last_modified: try_from_aws(x.last_modified)?,
             metadata: try_from_aws(x.metadata)?,
             missing_meta: try_from_aws(x.missing_meta)?,
@@ -4460,7 +4460,7 @@ impl AwsConversion for s3s::dto::GetObjectOutput {
         y = y.set_delete_marker(try_into_aws(x.delete_marker)?);
         y = y.set_e_tag(try_into_aws(x.e_tag)?);
         y = y.set_expiration(try_into_aws(x.expiration)?);
-        y = y.set_expires(try_into_aws(x.expires)?);
+        y = y.set_expires_string(try_into_aws(x.expires)?);
         y = y.set_last_modified(try_into_aws(x.last_modified)?);
         y = y.set_metadata(try_into_aws(x.metadata)?);
         y = y.set_missing_meta(try_into_aws(x.missing_meta)?);
@@ -4840,7 +4840,7 @@ impl AwsConversion for s3s::dto::HeadObjectOutput {
             delete_marker: try_from_aws(x.delete_marker)?,
             e_tag: try_from_aws(x.e_tag)?,
             expiration: try_from_aws(x.expiration)?,
-            expires: try_from_aws(x.expires)?,
+            expires: try_from_aws(x.expires_string)?,
             last_modified: try_from_aws(x.last_modified)?,
             metadata: try_from_aws(x.metadata)?,
             missing_meta: try_from_aws(x.missing_meta)?,
@@ -4889,7 +4889,7 @@ impl AwsConversion for s3s::dto::HeadObjectOutput {
         y = y.set_delete_marker(try_into_aws(x.delete_marker)?);
         y = y.set_e_tag(try_into_aws(x.e_tag)?);
         y = y.set_expiration(try_into_aws(x.expiration)?);
-        y = y.set_expires(try_into_aws(x.expires)?);
+        y = y.set_expires_string(try_into_aws(x.expires)?);
         y = y.set_last_modified(try_into_aws(x.last_modified)?);
         y = y.set_metadata(try_into_aws(x.metadata)?);
         y = y.set_missing_meta(try_into_aws(x.missing_meta)?);
@@ -8735,7 +8735,7 @@ impl AwsConversion for s3s::dto::PutObjectInput {
             content_md5: try_from_aws(x.content_md5)?,
             content_type: try_from_aws(x.content_type)?,
             expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
-            expires: try_from_aws(x.expires)?,
+            expires: expires_from_aws(x.expires)?,
             grant_full_control: try_from_aws(x.grant_full_control)?,
             grant_read: try_from_aws(x.grant_read)?,
             grant_read_acp: try_from_aws(x.grant_read_acp)?,
@@ -8787,7 +8787,7 @@ impl AwsConversion for s3s::dto::PutObjectInput {
             content_md5: try_from_aws(x.content_md5)?,
             content_type: try_from_aws(x.content_type)?,
             expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
-            expires: try_from_aws(x.expires)?,
+            expires: expires_from_aws(x.expires)?,
             grant_full_control: try_from_aws(x.grant_full_control)?,
             grant_read: try_from_aws(x.grant_read)?,
             grant_read_acp: try_from_aws(x.grant_read_acp)?,
@@ -8839,7 +8839,7 @@ impl AwsConversion for s3s::dto::PutObjectInput {
         y = y.set_content_md5(try_into_aws(x.content_md5)?);
         y = y.set_content_type(try_into_aws(x.content_type)?);
         y = y.set_expected_bucket_owner(try_into_aws(x.expected_bucket_owner)?);
-        y = y.set_expires(try_into_aws(x.expires)?);
+        y = y.set_expires(expires_into_aws(x.expires)?);
         y = y.set_grant_full_control(try_into_aws(x.grant_full_control)?);
         y = y.set_grant_read(try_into_aws(x.grant_read)?);
         y = y.set_grant_read_acp(try_into_aws(x.grant_read_acp)?);
@@ -11041,7 +11041,7 @@ impl AwsConversion for s3s::dto::WriteGetObjectResponseInput {
             error_code: try_from_aws(x.error_code)?,
             error_message: try_from_aws(x.error_message)?,
             expiration: try_from_aws(x.expiration)?,
-            expires: try_from_aws(x.expires)?,
+            expires: expires_from_aws(x.expires)?,
             last_modified: try_from_aws(x.last_modified)?,
             metadata: try_from_aws(x.metadata)?,
             missing_meta: try_from_aws(x.missing_meta)?,
@@ -11092,7 +11092,7 @@ impl AwsConversion for s3s::dto::WriteGetObjectResponseInput {
         y = y.set_error_code(try_into_aws(x.error_code)?);
         y = y.set_error_message(try_into_aws(x.error_message)?);
         y = y.set_expiration(try_into_aws(x.expiration)?);
-        y = y.set_expires(try_into_aws(x.expires)?);
+        y = y.set_expires(expires_into_aws(x.expires)?);
         y = y.set_last_modified(try_into_aws(x.last_modified)?);
         y = y.set_metadata(try_into_aws(x.metadata)?);
         y = y.set_missing_meta(try_into_aws(x.missing_meta)?);
