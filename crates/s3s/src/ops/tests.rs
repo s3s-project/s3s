@@ -4566,7 +4566,7 @@ mod virtual_hosted_style_hint_tests {
 mod listen_bucket_notification {
     use super::*;
 
-    use crate::ops::generated_minio::resolve_route;
+    use crate::ops::generated::resolve_route;
     use crate::path::S3Path;
 
     fn make_get_request(uri: &str) -> crate::http::Request {
@@ -4611,7 +4611,7 @@ mod listen_bucket_notification {
         let pairs: Vec<(String, String)> = serde_urlencoded::from_str(query).unwrap();
         req.s3ext.qs = Some(crate::http::OrderedQs::from_vec_unchecked(pairs));
         req.s3ext.s3_path = Some(S3Path::Bucket { bucket: "bucket".into() });
-        let input = crate::ops::generated_minio::ListenBucketNotification::deserialize_http(&mut req).unwrap();
+        let input = crate::ops::generated::ListenBucketNotification::deserialize_http(&mut req).unwrap();
         assert_eq!(input.events.as_deref(), Some("s3:ObjectCreated:*,s3:ObjectRemoved:*,s3:ObjectAccessed:*"));
         assert_eq!(input.prefix.as_deref(), None);
     }
