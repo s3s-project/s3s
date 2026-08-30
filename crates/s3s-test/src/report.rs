@@ -104,3 +104,42 @@ impl FnResult {
         matches!(self, FnResult::Ok)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fn_result_is_ok() {
+        assert!(FnResult::Ok.is_ok());
+        assert!(!FnResult::Err(String::new()).is_ok());
+        assert!(!FnResult::Panicked.is_ok());
+    }
+
+    #[test]
+    fn count_summary_all_passed_ignores_ignored() {
+        let passed = CountSummary {
+            total: 3,
+            passed: 3,
+            failed: 0,
+            ignored: 0,
+        };
+        assert!(passed.all_passed());
+
+        let failed = CountSummary {
+            total: 3,
+            passed: 2,
+            failed: 1,
+            ignored: 0,
+        };
+        assert!(!failed.all_passed());
+
+        let ignored = CountSummary {
+            total: 3,
+            passed: 2,
+            failed: 0,
+            ignored: 1,
+        };
+        assert!(ignored.all_passed());
+    }
+}

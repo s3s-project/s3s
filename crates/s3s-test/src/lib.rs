@@ -87,6 +87,8 @@
 
 mod error;
 mod runner;
+#[cfg(test)]
+mod test_support;
 mod traits;
 
 pub mod build;

@@ -259,3 +259,134 @@ macro_rules! main {
         }
     };
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::*;
+
+    use std::sync::Arc;
+
+    async fn ok_case(_: Arc<MockFixture>) -> crate::Result {
+        Ok(())
+    }
+
+    async fn fail_case(_: Arc<MockFixture>) -> crate::Result {
+        Err(crate::Failed::from_string("fail"))
+    }
+
+    async fn panic_case(_: Arc<MockFixture>) -> crate::Result {
+        panic!("boom");
+    }
+
+    fn options(json: Option<PathBuf>, filter: Vec<String>, list: bool) -> Options {
+        Options {
+            json,
+            filter,
+            list,
+            run_ignored: false,
+            concurrent: false,
+        }
+    }
+
+    fn register_ok(tcx: &mut TestContext) {
+        let mut suite = tcx.suite::<MockSuite>("suite");
+        let mut fixture = suite.fixture::<MockFixture>("fixture");
+        fixture.case("ok", ok_case);
+    }
+
+    fn register_ok_and_fail(tcx: &mut TestContext) {
+        let mut suite = tcx.suite::<MockSuite>("suite");
+        let mut fixture = suite.fixture::<MockFixture>("fixture");
+        fixture.case("ok", ok_case);
+        fixture.case("fail", fail_case);
+    }
+
+    fn register_panic(tcx: &mut TestContext) {
+        let mut suite = tcx.suite::<MockSuite>("suite");
+        let mut fixture = suite.fixture::<MockFixture>("fixture");
+        fixture.case("panics", panic_case);
+    }
+
+    fn register_ignored_fail(tcx: &mut TestContext) {
+        use crate::tcx::CaseTag;
+
+        let mut suite = tcx.suite::<MockSuite>("suite");
+        let mut fixture = suite.fixture::<MockFixture>("fixture");
+        fixture.case("ignored", fail_case).tag(CaseTag::Ignored);
+    }
+
+    #[test]
+    fn run_success_returns_zero_and_writes_json() {
+        let json_path = std::env::temp_dir().join(format!("s3s-test-report-{}.json", std::process::id()));
+        let opt = options(Some(json_path.clone()), Vec::new(), false);
+
+        let code = async_main(register_ok, &opt);
+        assert_eq!(code, ExitCode::from(0));
+
+        let text = std::fs::read_to_string(&json_path).unwrap();
+        let report: crate::report::Report = serde_json::from_str(&text).unwrap();
+        assert!(report.suite_count.all_passed());
+        std::fs::remove_file(&json_path).ok();
+    }
+
+    #[test]
+    fn failing_case_returns_nonzero() {
+        let opt = options(None, Vec::new(), false);
+        let code = async_main(register_ok_and_fail, &opt);
+        assert_eq!(code, ExitCode::from(1));
+    }
+
+    #[test]
+    fn panicking_case_returns_nonzero() {
+        let opt = options(None, Vec::new(), false);
+        let code = async_main(register_panic, &opt);
+        assert_eq!(code, ExitCode::from(1));
+    }
+
+    #[test]
+    fn ignored_case_is_skipped_by_default() {
+        let opt = options(None, Vec::new(), false);
+        let code = async_main(register_ignored_fail, &opt);
+        assert_eq!(code, ExitCode::from(0));
+    }
+
+    #[test]
+    fn run_ignored_runs_ignored_cases() {
+        let opt = Options {
+            json: None,
+            filter: Vec::new(),
+            list: false,
+            run_ignored: true,
+            concurrent: false,
+        };
+        let code = async_main(register_ignored_fail, &opt);
+        assert_eq!(code, ExitCode::from(1));
+    }
+
+    #[test]
+    fn list_mode_returns_zero_without_running() {
+        let opt = options(None, Vec::new(), true);
+        let code = async_main(register_ok_and_fail, &opt);
+        assert_eq!(code, ExitCode::from(0));
+    }
+
+    #[test]
+    fn filter_runs_only_matching_cases() {
+        let opt = options(None, vec![String::from("ok")], false);
+        let code = async_main(register_ok_and_fail, &opt);
+        assert_eq!(code, ExitCode::from(0));
+    }
+
+    #[test]
+    fn invalid_filter_returns_error_code() {
+        let opt = options(None, vec![String::from("[")], false);
+        let code = async_main(register_ok, &opt);
+        assert_eq!(code, ExitCode::from(2));
+    }
+
+    #[test]
+    fn setup_initializes_tracing() {
+        setup();
+    }
+}

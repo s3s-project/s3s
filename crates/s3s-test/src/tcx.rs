@@ -254,3 +254,91 @@ impl Default for TestContext {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::*;
+
+    use std::future::Future;
+
+    struct OtherFixture;
+
+    impl TestFixture<MockSuite> for OtherFixture {
+        fn setup(_: Arc<MockSuite>) -> impl Future<Output = Result<Self>> + Send + 'static {
+            std::future::ready(Ok(Self))
+        }
+    }
+
+    async fn ok_case(_: Arc<MockFixture>) -> crate::Result {
+        Ok(())
+    }
+
+    #[test]
+    fn suite_registration_is_idempotent_for_same_type() {
+        let mut tcx = TestContext::new();
+        tcx.suite::<MockSuite>("suite");
+        tcx.suite::<MockSuite>("suite");
+    }
+
+    #[test]
+    fn default_creates_empty_context() {
+        let tcx = TestContext::default();
+        assert!(tcx.suites.is_empty());
+    }
+
+    #[test]
+    #[should_panic(expected = "already registered with type")]
+    fn suite_type_conflict_panics() {
+        let mut tcx = TestContext::new();
+        tcx.suite::<MockSuite>("suite");
+        tcx.suite::<FailSetupSuite>("suite");
+    }
+
+    #[test]
+    #[should_panic(expected = "already registered with type")]
+    fn fixture_type_conflict_panics() {
+        let mut tcx = TestContext::new();
+        let mut suite = tcx.suite::<MockSuite>("suite");
+        suite.fixture::<MockFixture>("fixture");
+        suite.fixture::<OtherFixture>("fixture");
+    }
+
+    #[test]
+    fn filter_keeps_only_matching_cases() {
+        let mut tcx = TestContext::new();
+        let mut suite = tcx.suite::<MockSuite>("suite");
+        let mut fixture = suite.fixture::<MockFixture>("fixture");
+        fixture.case("keep", ok_case);
+        fixture.case("drop", ok_case);
+
+        let filter_set = RegexSet::new(["keep"]).unwrap();
+        tcx.filter(&filter_set);
+
+        let suite_info = &tcx.suites["suite"];
+        let fixture_info = &suite_info.fixtures["fixture"];
+        assert!(fixture_info.cases.contains_key("keep"));
+        assert!(!fixture_info.cases.contains_key("drop"));
+    }
+
+    #[test]
+    fn filter_removes_empty_fixtures_and_suites() {
+        let mut tcx = TestContext::new();
+        let mut suite = tcx.suite::<MockSuite>("suite");
+        let mut fixture = suite.fixture::<MockFixture>("fixture");
+        fixture.case("drop", ok_case);
+
+        let filter_set = RegexSet::new(["no-match"]).unwrap();
+        tcx.filter(&filter_set);
+
+        assert!(tcx.suites.is_empty(), "suite with no matching cases must be removed");
+    }
+
+    #[test]
+    fn include_ignored_removes_ignored_tags() {
+        let mut tcx = register_case_with_tags("ignored", ok_case, &[CaseTag::Ignored]);
+        tcx.include_ignored();
+        let case = &tcx.suites["suite"].fixtures["fixture"].cases["ignored"];
+        assert!(!case.tags.contains(&CaseTag::Ignored));
+    }
+}
