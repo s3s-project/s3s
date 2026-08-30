@@ -27,6 +27,17 @@ pub struct ParseOrderedQsError {
     inner: serde_urlencoded::de::Error,
 }
 
+/// Result of a single-pass [`OrderedQs::lookup`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum QsLookup<'a> {
+    /// Key absent.
+    Absent,
+    /// Exactly one value.
+    Single(&'a str),
+    /// More than one value.
+    Duplicate,
+}
+
 impl OrderedQs {
     /// Constructs [`OrderedQs`] from vec
     ///
@@ -82,6 +93,27 @@ impl OrderedQs {
         }
 
         (pair.0.as_str() == name).then_some(pair.1.as_str())
+    }
+
+    /// Single-pass lookup: finds `name` and reports duplicates in one
+    /// traversal, equivalent to `get_all(name).count()` plus `get_unique(name)`
+    /// but without repeated binary searches.
+    ///
+    /// Query vectors are tiny (typically a handful of entries), where a linear
+    /// scan with predictable branches beats multiple `partition_point`
+    /// binary searches.
+    pub(crate) fn lookup(&self, name: &str) -> QsLookup<'_> {
+        let mut iter = self.qs.iter().filter(|(k, _)| k.as_str() == name);
+        match iter.next() {
+            None => QsLookup::Absent,
+            Some((_, v)) => {
+                if iter.next().is_some() {
+                    QsLookup::Duplicate
+                } else {
+                    QsLookup::Single(v)
+                }
+            }
+        }
     }
 }
 
