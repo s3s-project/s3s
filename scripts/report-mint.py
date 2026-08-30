@@ -3,6 +3,7 @@
 # SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
 import json
+import re
 import sys
 from dataclasses import dataclass
 from itertools import groupby
@@ -34,6 +35,130 @@ def from_json(x: Any) -> MintLog:
         message=x.get("message"),
         error=x.get("error"),
     )
+
+
+# Per-function gate: only the test functions listed here are allowed to fail,
+# and each entry caps how many times it may fail. Any failure outside the
+# list fails the gate, and every entry must actually run in this mint log
+# (a stale entry after a mint image upgrade is reported instead of being
+# silently ignored).
+#
+# Baselines recorded on 2026-08-30 against minio/mint:edge and
+# minio/minio:latest; each entry maps to a tracked known issue.
+EXPECTED_FAILURES: dict[str, dict[str, int]] = {
+    "aws-sdk-go-v2": {
+        # FIXME: https://github.com/minio/mint/blob/master/run/core/aws-sdk-go-v2/main.go#L294
+        "ConditionalDeleteWithIncorrectETag": 1,
+    },
+    "aws-sdk-ruby": {
+        "presignedPost(bucket_name,file_name,expires_in_sec,max_byte_size)": 1,
+    },
+    "healthcheck": {
+        "testLivenessEndpoint": 1,
+    },
+    "mc": {
+        "test_admin_users": 1,
+    },
+    "minio-java": {
+        "getObjectAcl()": 1,
+    },
+    "minio-js": {
+        "copyObject(bucketName, objectName, srcObject, conditions, cb)": 1,
+        "listObjects(bucketName, prefix, recursive)": 3,
+        "extensions.listObjectsV2WithMetadata(bucketName, prefix, recursive)": 1,
+        "Put an object with assume role credentials:  bucket:": 1,
+        '"after all" hook in "Force Deletion of objects with versions"': 1,
+        '"after all" hook in "Force Deletion of prefix with versions"': 1,
+        '"after all" hook in "Force Deletion of prefix"': 1,
+        '"after all" hook in "functional tests"': 1,
+    },
+}
+
+# The awscli runner uses the full command line as the test function name,
+# including a random bucket name; normalize it so the name is stable across
+# runs.
+_AWS_CLI_BUCKET_PATTERN = re.compile(r"awscli-mint-test-bucket-\d+")
+
+
+def normalize_function(name: str, function: str) -> str:
+    if name == "awscli":
+        return _AWS_CLI_BUCKET_PATTERN.sub("awscli-mint-test-bucket-N", function)
+    return function
+
+
+def check_counters(counts: dict[str, dict[str, int]]) -> list[str]:
+    """Evaluate the group-level counter assertions.
+
+    Returns a list of violations; an empty list means all counters are fine.
+    """
+    errors: list[str] = []
+
+    def check_pass_at_least(name: str, minimum: int) -> None:
+        pass_count = counts[name]["pass"]
+        if pass_count < minimum:
+            errors.append(
+                f'group counter: "{name}" passed {pass_count}, expected at least {minimum}'
+            )
+
+    def check_fail_zero(name: str) -> None:
+        fail_count = counts[name]["fail"]
+        if fail_count != 0:
+            errors.append(
+                f'group counter: "{name}" failed {fail_count} test(s), expected 0'
+            )
+
+    check_pass_at_least("aws-sdk-go-v2", 5)
+    check_fail_zero("aws-sdk-php")
+    check_pass_at_least("aws-sdk-ruby", 12)
+    check_fail_zero("awscli")
+    check_pass_at_least("mc", 16)
+    check_fail_zero("minio-go")
+    check_pass_at_least("minio-java", 43)
+    check_pass_at_least("minio-js", 190)
+    check_pass_at_least("minio-py", 16)
+    check_fail_zero("s3cmd")
+    check_fail_zero("s3select")
+    check_pass_at_least("versioning", 4)
+
+    return errors
+
+
+def check_gate(logs: list[MintLog]) -> list[str]:
+    """Evaluate the per-function gate.
+
+    Returns a list of gate violations; an empty list means the gate passed.
+    """
+    errors: list[str] = []
+
+    fail_counts: dict[tuple[str, str], int] = {}
+    appearances: set[tuple[str, str]] = set()
+    for x in logs:
+        key = (x.name, normalize_function(x.name, x.function or ""))
+        appearances.add(key)
+        if x.status == "FAIL":
+            fail_counts[key] = fail_counts.get(key, 0) + 1
+
+    for name, functions in EXPECTED_FAILURES.items():
+        for function, max_fail in functions.items():
+            key = (name, function)
+            if key not in appearances:
+                errors.append(
+                    f'expected failure entry is stale: "{name}" "{function}" did not run'
+                )
+                continue
+            fail_count = fail_counts.get(key, 0)
+            if fail_count > max_fail:
+                errors.append(
+                    f'"{name}" "{function}" failed {fail_count} time(s), expected at most {max_fail}'
+                )
+
+    for (name, function), fail_count in fail_counts.items():
+        if function not in EXPECTED_FAILURES.get(name, {}):
+            errors.append(
+                f'unexpected failure: "{name}" "{function}" failed {fail_count} time(s)'
+            )
+
+    return errors
 
 
 if __name__ == "__main__":
@@ -91,40 +216,13 @@ if __name__ == "__main__":
         f"na {total_na_count:>3}"
     )
 
-    # passed_groups = [
-    #     # FIXME: https://github.com/minio/mint/blob/master/run/core/aws-sdk-go-v2/main.go#L294
-    #     # "aws-sdk-go",  version outdated
-    #     "aws-sdk-ruby",
-    #     "awscli",
-    #     "minio-go",
-    #     "s3cmd",
-    # ]
-
-    # for group in passed_groups:
-    #     assert counts[group]["fail"] == 0, f'group "{group}" failed'
-
-    # # FIXME: E2E tests
-    # # https://github.com/Nugine/s3s/issues/4
-    # # https://github.com/Nugine/s3s/pull/141#issuecomment-2142662531
-
-    # assert "minio-dotnet" not in counts
-    # assert counts["minio-js"]["pass"] >= 190
-    # assert counts["versioning"]["pass"] >= 4
-    # assert counts["minio-java"]["pass"] >= 17
-
-    # assert counts["aws-sdk-php"]["pass"] >= 10
-    # assert counts["minio-py"]["pass"] >= 2
-    # assert counts["mc"]["pass"] >= 2
-
-    assert counts["aws-sdk-go-v2"]["pass"] >= 5
-    assert counts["aws-sdk-php"]["fail"] == 0
-    assert counts["aws-sdk-ruby"]["pass"] >= 12
-    assert counts["awscli"]["fail"] == 0
-    assert counts["mc"]["pass"] >= 16
-    assert counts["minio-go"]["fail"] == 0
-    assert counts["minio-java"]["pass"] >= 43
-    assert counts["minio-js"]["pass"] >= 190
-    assert counts["minio-py"]["pass"] >= 16
-    assert counts["s3cmd"]["fail"] == 0
-    assert counts["s3select"]["fail"] == 0
-    assert counts["versioning"]["pass"] >= 4
+    # Both gates run to completion so every violation is reported; the exit
+    # code is decided afterwards.
+    errors = check_counters(counts)
+    errors += check_gate(logs)
+    if errors:
+        print()
+        print("mint gate check failed:")
+        for error in errors:
+            print(f"  - {error}")
+        sys.exit(1)
