@@ -22,15 +22,22 @@ pub use clap;
 #[doc(hidden)]
 pub use const_str;
 
-#[doc(hidden)]
+/// The CLI options understood by [`main`] and the [`main!`](crate::main) macro.
 pub struct Options {
+    /// Path to write the JSON report to.
     pub json: Option<PathBuf>,
+    /// Regex patterns matching `suite/fixture/case` paths.
     pub filter: Vec<String>,
+    /// Print all registered cases without running them.
     pub list: bool,
+    /// Run cases tagged [`CaseTag::Ignored`](crate::tcx::CaseTag::Ignored).
     pub run_ignored: bool,
+    /// Run cases within a fixture concurrently.
     pub concurrent: bool,
 }
 
+/// Initializes the environment: loads `.env`, then sets up the tracing
+/// subscriber with an `EnvFilter` from `RUST_LOG`.
 #[doc(hidden)]
 pub fn setup() {
     use std::io::IsTerminal;
@@ -160,7 +167,10 @@ async fn async_main(reg: impl FnOnce(&mut TestContext), opt: &Options) -> ExitCo
     }
 }
 
-#[doc(hidden)]
+/// Runs the harness and returns the process exit code.
+///
+/// The exit code is nonzero when any suite fails. Use this function directly
+/// for a custom entry point, or [`main!`](crate::main) for the standard CLI.
 #[must_use]
 pub fn main(reg: impl FnOnce(&mut TestContext), opt: &Options) -> ExitCode {
     setup();
@@ -176,6 +186,19 @@ pub const fn unwrap<'a>(s: Option<&'a str>, default: &'a str) -> &'a str {
     }
 }
 
+/// Generates the binary entry point for a test harness.
+///
+/// The macro expands to a `main` function that parses the standard CLI
+/// (`--filter`, `--list`, `--json`, `--run-ignored`, `--concurrent`),
+/// registers the suites via the given function, and runs them.
+///
+/// ```no_run
+/// use s3s_test::tcx::TestContext;
+///
+/// fn register(_tcx: &mut TestContext) {}
+///
+/// s3s_test::main!(register);
+/// ```
 #[macro_export]
 macro_rules! main {
     ($register:expr) => {
@@ -233,4 +256,135 @@ macro_rules! main {
             )
         }
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::*;
+
+    use std::sync::Arc;
+
+    async fn ok_case(_: Arc<MockFixture>) -> crate::Result {
+        Ok(())
+    }
+
+    async fn fail_case(_: Arc<MockFixture>) -> crate::Result {
+        Err(crate::Failed::from_string("fail"))
+    }
+
+    async fn panic_case(_: Arc<MockFixture>) -> crate::Result {
+        panic!("boom");
+    }
+
+    fn options(json: Option<PathBuf>, filter: Vec<String>, list: bool) -> Options {
+        Options {
+            json,
+            filter,
+            list,
+            run_ignored: false,
+            concurrent: false,
+        }
+    }
+
+    fn register_ok(tcx: &mut TestContext) {
+        let mut suite = tcx.suite::<MockSuite>("suite");
+        let mut fixture = suite.fixture::<MockFixture>("fixture");
+        fixture.case("ok", ok_case);
+    }
+
+    fn register_ok_and_fail(tcx: &mut TestContext) {
+        let mut suite = tcx.suite::<MockSuite>("suite");
+        let mut fixture = suite.fixture::<MockFixture>("fixture");
+        fixture.case("ok", ok_case);
+        fixture.case("fail", fail_case);
+    }
+
+    fn register_panic(tcx: &mut TestContext) {
+        let mut suite = tcx.suite::<MockSuite>("suite");
+        let mut fixture = suite.fixture::<MockFixture>("fixture");
+        fixture.case("panics", panic_case);
+    }
+
+    fn register_ignored_fail(tcx: &mut TestContext) {
+        use crate::tcx::CaseTag;
+
+        let mut suite = tcx.suite::<MockSuite>("suite");
+        let mut fixture = suite.fixture::<MockFixture>("fixture");
+        fixture.case("ignored", fail_case).tag(CaseTag::Ignored);
+    }
+
+    #[test]
+    fn run_success_returns_zero_and_writes_json() {
+        let json_path = std::env::temp_dir().join(format!("s3s-test-report-{}.json", std::process::id()));
+        let opt = options(Some(json_path.clone()), Vec::new(), false);
+
+        let code = async_main(register_ok, &opt);
+        assert_eq!(code, ExitCode::from(0));
+
+        let text = std::fs::read_to_string(&json_path).unwrap();
+        let report: crate::report::Report = serde_json::from_str(&text).unwrap();
+        assert!(report.suite_count.all_passed());
+        std::fs::remove_file(&json_path).ok();
+    }
+
+    #[test]
+    fn failing_case_returns_nonzero() {
+        let opt = options(None, Vec::new(), false);
+        let code = async_main(register_ok_and_fail, &opt);
+        assert_eq!(code, ExitCode::from(1));
+    }
+
+    #[test]
+    fn panicking_case_returns_nonzero() {
+        let opt = options(None, Vec::new(), false);
+        let code = async_main(register_panic, &opt);
+        assert_eq!(code, ExitCode::from(1));
+    }
+
+    #[test]
+    fn ignored_case_is_skipped_by_default() {
+        let opt = options(None, Vec::new(), false);
+        let code = async_main(register_ignored_fail, &opt);
+        assert_eq!(code, ExitCode::from(0));
+    }
+
+    #[test]
+    fn run_ignored_runs_ignored_cases() {
+        let opt = Options {
+            json: None,
+            filter: Vec::new(),
+            list: false,
+            run_ignored: true,
+            concurrent: false,
+        };
+        let code = async_main(register_ignored_fail, &opt);
+        assert_eq!(code, ExitCode::from(1));
+    }
+
+    #[test]
+    fn list_mode_returns_zero_without_running() {
+        let opt = options(None, Vec::new(), true);
+        let code = async_main(register_ok_and_fail, &opt);
+        assert_eq!(code, ExitCode::from(0));
+    }
+
+    #[test]
+    fn filter_runs_only_matching_cases() {
+        let opt = options(None, vec![String::from("ok")], false);
+        let code = async_main(register_ok_and_fail, &opt);
+        assert_eq!(code, ExitCode::from(0));
+    }
+
+    #[test]
+    fn invalid_filter_returns_error_code() {
+        let opt = options(None, vec![String::from("[")], false);
+        let code = async_main(register_ok, &opt);
+        assert_eq!(code, ExitCode::from(2));
+    }
+
+    #[test]
+    fn setup_initializes_tracing() {
+        setup();
+    }
 }
