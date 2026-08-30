@@ -3534,6 +3534,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "s3s-rfc2047"
+version = "0.16.0-alpha.1"
+
+[[package]]
 name = "s3s-sigv2"
 version = "0.16.0-alpha.1"
 dependencies = [
