@@ -348,3 +348,6 @@ pub const X_AMZ_VERSION_ID: HeaderName = HeaderName::from_static("x-amz-version-
 pub const X_AMZ_WEBSITE_REDIRECT_LOCATION: HeaderName = HeaderName::from_static("x-amz-website-redirect-location");
 
 pub const X_AMZ_WRITE_OFFSET_BYTES: HeaderName = HeaderName::from_static("x-amz-write-offset-bytes");
+
+#[cfg(feature = "minio")]
+pub const X_MINIO_FORCE_DELETE: HeaderName = HeaderName::from_static("x-minio-force-delete");

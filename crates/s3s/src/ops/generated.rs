@@ -143,6 +143,14 @@ impl http::TryIntoHeaderValue for ArchiveStatus {
     }
 }
 
+impl http::TryFromHeaderValue for ArchiveStatus {
+    type Error = http::ParseHeaderError;
+    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
+        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
+        Ok(Self::from(val.to_owned()))
+    }
+}
+
 impl http::TryIntoHeaderValue for BucketCannedACL {
     type Error = http::InvalidHeaderValue;
     fn try_into_header_value(self) -> Result<http::HeaderValue, Self::Error> {
@@ -150,6 +158,14 @@ impl http::TryIntoHeaderValue for BucketCannedACL {
             Cow::Borrowed(s) => http::HeaderValue::try_from(s),
             Cow::Owned(s) => http::HeaderValue::try_from(s),
         }
+    }
+}
+
+impl http::TryFromHeaderValue for BucketCannedACL {
+    type Error = http::ParseHeaderError;
+    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
+        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
+        Ok(Self::from(val.to_owned()))
     }
 }
 
@@ -163,6 +179,14 @@ impl http::TryIntoHeaderValue for BucketNamespace {
     }
 }
 
+impl http::TryFromHeaderValue for BucketNamespace {
+    type Error = http::ParseHeaderError;
+    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
+        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
+        Ok(Self::from(val.to_owned()))
+    }
+}
+
 impl http::TryIntoHeaderValue for ChecksumAlgorithm {
     type Error = http::InvalidHeaderValue;
     fn try_into_header_value(self) -> Result<http::HeaderValue, Self::Error> {
@@ -170,6 +194,14 @@ impl http::TryIntoHeaderValue for ChecksumAlgorithm {
             Cow::Borrowed(s) => http::HeaderValue::try_from(s),
             Cow::Owned(s) => http::HeaderValue::try_from(s),
         }
+    }
+}
+
+impl http::TryFromHeaderValue for ChecksumAlgorithm {
+    type Error = http::ParseHeaderError;
+    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
+        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
+        Ok(Self::from(val.to_owned()))
     }
 }
 
@@ -183,6 +215,14 @@ impl http::TryIntoHeaderValue for ChecksumMode {
     }
 }
 
+impl http::TryFromHeaderValue for ChecksumMode {
+    type Error = http::ParseHeaderError;
+    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
+        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
+        Ok(Self::from(val.to_owned()))
+    }
+}
+
 impl http::TryIntoHeaderValue for ChecksumType {
     type Error = http::InvalidHeaderValue;
     fn try_into_header_value(self) -> Result<http::HeaderValue, Self::Error> {
@@ -190,6 +230,14 @@ impl http::TryIntoHeaderValue for ChecksumType {
             Cow::Borrowed(s) => http::HeaderValue::try_from(s),
             Cow::Owned(s) => http::HeaderValue::try_from(s),
         }
+    }
+}
+
+impl http::TryFromHeaderValue for ChecksumType {
+    type Error = http::ParseHeaderError;
+    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
+        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
+        Ok(Self::from(val.to_owned()))
     }
 }
 
@@ -203,6 +251,14 @@ impl http::TryIntoHeaderValue for LocationType {
     }
 }
 
+impl http::TryFromHeaderValue for LocationType {
+    type Error = http::ParseHeaderError;
+    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
+        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
+        Ok(Self::from(val.to_owned()))
+    }
+}
+
 impl http::TryIntoHeaderValue for MetadataDirective {
     type Error = http::InvalidHeaderValue;
     fn try_into_header_value(self) -> Result<http::HeaderValue, Self::Error> {
@@ -210,6 +266,14 @@ impl http::TryIntoHeaderValue for MetadataDirective {
             Cow::Borrowed(s) => http::HeaderValue::try_from(s),
             Cow::Owned(s) => http::HeaderValue::try_from(s),
         }
+    }
+}
+
+impl http::TryFromHeaderValue for MetadataDirective {
+    type Error = http::ParseHeaderError;
+    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
+        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
+        Ok(Self::from(val.to_owned()))
     }
 }
 
@@ -223,6 +287,14 @@ impl http::TryIntoHeaderValue for ObjectAttributes {
     }
 }
 
+impl http::TryFromHeaderValue for ObjectAttributes {
+    type Error = http::ParseHeaderError;
+    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
+        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
+        Ok(Self::from(val.to_owned()))
+    }
+}
+
 impl http::TryIntoHeaderValue for ObjectCannedACL {
     type Error = http::InvalidHeaderValue;
     fn try_into_header_value(self) -> Result<http::HeaderValue, Self::Error> {
@@ -230,6 +302,14 @@ impl http::TryIntoHeaderValue for ObjectCannedACL {
             Cow::Borrowed(s) => http::HeaderValue::try_from(s),
             Cow::Owned(s) => http::HeaderValue::try_from(s),
         }
+    }
+}
+
+impl http::TryFromHeaderValue for ObjectCannedACL {
+    type Error = http::ParseHeaderError;
+    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
+        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
+        Ok(Self::from(val.to_owned()))
     }
 }
 
@@ -243,6 +323,14 @@ impl http::TryIntoHeaderValue for ObjectLockLegalHoldStatus {
     }
 }
 
+impl http::TryFromHeaderValue for ObjectLockLegalHoldStatus {
+    type Error = http::ParseHeaderError;
+    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
+        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
+        Ok(Self::from(val.to_owned()))
+    }
+}
+
 impl http::TryIntoHeaderValue for ObjectLockMode {
     type Error = http::InvalidHeaderValue;
     fn try_into_header_value(self) -> Result<http::HeaderValue, Self::Error> {
@@ -250,6 +338,14 @@ impl http::TryIntoHeaderValue for ObjectLockMode {
             Cow::Borrowed(s) => http::HeaderValue::try_from(s),
             Cow::Owned(s) => http::HeaderValue::try_from(s),
         }
+    }
+}
+
+impl http::TryFromHeaderValue for ObjectLockMode {
+    type Error = http::ParseHeaderError;
+    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
+        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
+        Ok(Self::from(val.to_owned()))
     }
 }
 
@@ -263,6 +359,14 @@ impl http::TryIntoHeaderValue for ObjectOwnership {
     }
 }
 
+impl http::TryFromHeaderValue for ObjectOwnership {
+    type Error = http::ParseHeaderError;
+    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
+        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
+        Ok(Self::from(val.to_owned()))
+    }
+}
+
 impl http::TryIntoHeaderValue for OptionalObjectAttributes {
     type Error = http::InvalidHeaderValue;
     fn try_into_header_value(self) -> Result<http::HeaderValue, Self::Error> {
@@ -270,6 +374,14 @@ impl http::TryIntoHeaderValue for OptionalObjectAttributes {
             Cow::Borrowed(s) => http::HeaderValue::try_from(s),
             Cow::Owned(s) => http::HeaderValue::try_from(s),
         }
+    }
+}
+
+impl http::TryFromHeaderValue for OptionalObjectAttributes {
+    type Error = http::ParseHeaderError;
+    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
+        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
+        Ok(Self::from(val.to_owned()))
     }
 }
 
@@ -283,6 +395,14 @@ impl http::TryIntoHeaderValue for ReplicationStatus {
     }
 }
 
+impl http::TryFromHeaderValue for ReplicationStatus {
+    type Error = http::ParseHeaderError;
+    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
+        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
+        Ok(Self::from(val.to_owned()))
+    }
+}
+
 impl http::TryIntoHeaderValue for RequestCharged {
     type Error = http::InvalidHeaderValue;
     fn try_into_header_value(self) -> Result<http::HeaderValue, Self::Error> {
@@ -290,6 +410,14 @@ impl http::TryIntoHeaderValue for RequestCharged {
             Cow::Borrowed(s) => http::HeaderValue::try_from(s),
             Cow::Owned(s) => http::HeaderValue::try_from(s),
         }
+    }
+}
+
+impl http::TryFromHeaderValue for RequestCharged {
+    type Error = http::ParseHeaderError;
+    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
+        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
+        Ok(Self::from(val.to_owned()))
     }
 }
 
@@ -303,6 +431,14 @@ impl http::TryIntoHeaderValue for RequestPayer {
     }
 }
 
+impl http::TryFromHeaderValue for RequestPayer {
+    type Error = http::ParseHeaderError;
+    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
+        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
+        Ok(Self::from(val.to_owned()))
+    }
+}
+
 impl http::TryIntoHeaderValue for ServerSideEncryption {
     type Error = http::InvalidHeaderValue;
     fn try_into_header_value(self) -> Result<http::HeaderValue, Self::Error> {
@@ -310,6 +446,14 @@ impl http::TryIntoHeaderValue for ServerSideEncryption {
             Cow::Borrowed(s) => http::HeaderValue::try_from(s),
             Cow::Owned(s) => http::HeaderValue::try_from(s),
         }
+    }
+}
+
+impl http::TryFromHeaderValue for ServerSideEncryption {
+    type Error = http::ParseHeaderError;
+    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
+        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
+        Ok(Self::from(val.to_owned()))
     }
 }
 
@@ -323,6 +467,14 @@ impl http::TryIntoHeaderValue for SessionMode {
     }
 }
 
+impl http::TryFromHeaderValue for SessionMode {
+    type Error = http::ParseHeaderError;
+    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
+        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
+        Ok(Self::from(val.to_owned()))
+    }
+}
+
 impl http::TryIntoHeaderValue for StorageClass {
     type Error = http::InvalidHeaderValue;
     fn try_into_header_value(self) -> Result<http::HeaderValue, Self::Error> {
@@ -330,6 +482,14 @@ impl http::TryIntoHeaderValue for StorageClass {
             Cow::Borrowed(s) => http::HeaderValue::try_from(s),
             Cow::Owned(s) => http::HeaderValue::try_from(s),
         }
+    }
+}
+
+impl http::TryFromHeaderValue for StorageClass {
+    type Error = http::ParseHeaderError;
+    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
+        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
+        Ok(Self::from(val.to_owned()))
     }
 }
 
@@ -343,6 +503,14 @@ impl http::TryIntoHeaderValue for TaggingDirective {
     }
 }
 
+impl http::TryFromHeaderValue for TaggingDirective {
+    type Error = http::ParseHeaderError;
+    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
+        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
+        Ok(Self::from(val.to_owned()))
+    }
+}
+
 impl http::TryIntoHeaderValue for TransitionDefaultMinimumObjectSize {
     type Error = http::InvalidHeaderValue;
     fn try_into_header_value(self) -> Result<http::HeaderValue, Self::Error> {
@@ -350,174 +518,6 @@ impl http::TryIntoHeaderValue for TransitionDefaultMinimumObjectSize {
             Cow::Borrowed(s) => http::HeaderValue::try_from(s),
             Cow::Owned(s) => http::HeaderValue::try_from(s),
         }
-    }
-}
-
-impl http::TryFromHeaderValue for ArchiveStatus {
-    type Error = http::ParseHeaderError;
-    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
-        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
-        Ok(Self::from(val.to_owned()))
-    }
-}
-
-impl http::TryFromHeaderValue for BucketCannedACL {
-    type Error = http::ParseHeaderError;
-    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
-        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
-        Ok(Self::from(val.to_owned()))
-    }
-}
-
-impl http::TryFromHeaderValue for BucketNamespace {
-    type Error = http::ParseHeaderError;
-    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
-        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
-        Ok(Self::from(val.to_owned()))
-    }
-}
-
-impl http::TryFromHeaderValue for ChecksumAlgorithm {
-    type Error = http::ParseHeaderError;
-    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
-        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
-        Ok(Self::from(val.to_owned()))
-    }
-}
-
-impl http::TryFromHeaderValue for ChecksumMode {
-    type Error = http::ParseHeaderError;
-    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
-        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
-        Ok(Self::from(val.to_owned()))
-    }
-}
-
-impl http::TryFromHeaderValue for ChecksumType {
-    type Error = http::ParseHeaderError;
-    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
-        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
-        Ok(Self::from(val.to_owned()))
-    }
-}
-
-impl http::TryFromHeaderValue for LocationType {
-    type Error = http::ParseHeaderError;
-    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
-        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
-        Ok(Self::from(val.to_owned()))
-    }
-}
-
-impl http::TryFromHeaderValue for MetadataDirective {
-    type Error = http::ParseHeaderError;
-    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
-        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
-        Ok(Self::from(val.to_owned()))
-    }
-}
-
-impl http::TryFromHeaderValue for ObjectAttributes {
-    type Error = http::ParseHeaderError;
-    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
-        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
-        Ok(Self::from(val.to_owned()))
-    }
-}
-
-impl http::TryFromHeaderValue for ObjectCannedACL {
-    type Error = http::ParseHeaderError;
-    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
-        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
-        Ok(Self::from(val.to_owned()))
-    }
-}
-
-impl http::TryFromHeaderValue for ObjectLockLegalHoldStatus {
-    type Error = http::ParseHeaderError;
-    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
-        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
-        Ok(Self::from(val.to_owned()))
-    }
-}
-
-impl http::TryFromHeaderValue for ObjectLockMode {
-    type Error = http::ParseHeaderError;
-    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
-        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
-        Ok(Self::from(val.to_owned()))
-    }
-}
-
-impl http::TryFromHeaderValue for ObjectOwnership {
-    type Error = http::ParseHeaderError;
-    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
-        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
-        Ok(Self::from(val.to_owned()))
-    }
-}
-
-impl http::TryFromHeaderValue for OptionalObjectAttributes {
-    type Error = http::ParseHeaderError;
-    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
-        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
-        Ok(Self::from(val.to_owned()))
-    }
-}
-
-impl http::TryFromHeaderValue for ReplicationStatus {
-    type Error = http::ParseHeaderError;
-    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
-        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
-        Ok(Self::from(val.to_owned()))
-    }
-}
-
-impl http::TryFromHeaderValue for RequestCharged {
-    type Error = http::ParseHeaderError;
-    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
-        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
-        Ok(Self::from(val.to_owned()))
-    }
-}
-
-impl http::TryFromHeaderValue for RequestPayer {
-    type Error = http::ParseHeaderError;
-    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
-        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
-        Ok(Self::from(val.to_owned()))
-    }
-}
-
-impl http::TryFromHeaderValue for ServerSideEncryption {
-    type Error = http::ParseHeaderError;
-    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
-        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
-        Ok(Self::from(val.to_owned()))
-    }
-}
-
-impl http::TryFromHeaderValue for SessionMode {
-    type Error = http::ParseHeaderError;
-    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
-        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
-        Ok(Self::from(val.to_owned()))
-    }
-}
-
-impl http::TryFromHeaderValue for StorageClass {
-    type Error = http::ParseHeaderError;
-    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
-        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
-        Ok(Self::from(val.to_owned()))
-    }
-}
-
-impl http::TryFromHeaderValue for TaggingDirective {
-    type Error = http::ParseHeaderError;
-    fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {
-        let val = val.to_str().map_err(|_| http::ParseHeaderError::Enum)?;
-        Ok(Self::from(val.to_owned()))
     }
 }
 
@@ -720,8 +720,8 @@ impl super::Operation for CompleteMultipartUpload {
 }
 
 pub struct CopyObject;
-
 impl CopyObject {
+    #[cfg(not(feature = "minio"))]
     pub fn deserialize_http(req: &mut http::Request) -> S3Result<CopyObjectInput> {
         let (bucket, key) = http::unwrap_object(req);
 
@@ -857,6 +857,149 @@ impl CopyObject {
             storage_class,
             tagging,
             tagging_directive,
+            website_redirect_location,
+        })
+    }
+
+    #[cfg(feature = "minio")]
+    pub fn deserialize_http(req: &mut http::Request) -> S3Result<CopyObjectInput> {
+        let (bucket, key) = http::unwrap_object(req);
+
+        let acl: Option<ObjectCannedACL> = http::parse_opt_header(req, &X_AMZ_ACL)?;
+
+        let bucket_key_enabled: Option<BucketKeyEnabled> =
+            http::parse_opt_header(req, &X_AMZ_SERVER_SIDE_ENCRYPTION_BUCKET_KEY_ENABLED)?;
+
+        let cache_control: Option<CacheControl> = http::parse_opt_header(req, &CACHE_CONTROL)?;
+
+        let checksum_algorithm: Option<ChecksumAlgorithm> = http::parse_checksum_algorithm_header(req)?;
+
+        let content_disposition: Option<ContentDisposition> = http::parse_opt_header(req, &CONTENT_DISPOSITION)?;
+
+        let content_encoding: Option<ContentEncoding> = http::parse_opt_header(req, &CONTENT_ENCODING)?;
+
+        let content_language: Option<ContentLanguage> = http::parse_opt_header(req, &CONTENT_LANGUAGE)?;
+
+        let content_type: Option<ContentType> = http::parse_opt_header(req, &CONTENT_TYPE)?;
+
+        let copy_source: CopySource = http::parse_header(req, &X_AMZ_COPY_SOURCE)?;
+
+        let copy_source_if_match: Option<CopySourceIfMatch> = http::parse_opt_header(req, &X_AMZ_COPY_SOURCE_IF_MATCH)?;
+
+        let copy_source_if_modified_since: Option<CopySourceIfModifiedSince> =
+            http::parse_opt_header_timestamp(req, &X_AMZ_COPY_SOURCE_IF_MODIFIED_SINCE, TimestampFormat::HttpDate)?;
+
+        let copy_source_if_none_match: Option<CopySourceIfNoneMatch> =
+            http::parse_opt_header(req, &X_AMZ_COPY_SOURCE_IF_NONE_MATCH)?;
+
+        let copy_source_if_unmodified_since: Option<CopySourceIfUnmodifiedSince> =
+            http::parse_opt_header_timestamp(req, &X_AMZ_COPY_SOURCE_IF_UNMODIFIED_SINCE, TimestampFormat::HttpDate)?;
+
+        let copy_source_sse_customer_algorithm: Option<CopySourceSSECustomerAlgorithm> =
+            http::parse_opt_header(req, &X_AMZ_COPY_SOURCE_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM)?;
+
+        let copy_source_sse_customer_key: Option<CopySourceSSECustomerKey> =
+            http::parse_opt_header(req, &X_AMZ_COPY_SOURCE_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY)?;
+
+        let copy_source_sse_customer_key_md5: Option<CopySourceSSECustomerKeyMD5> =
+            http::parse_opt_header(req, &X_AMZ_COPY_SOURCE_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5)?;
+
+        let expected_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_EXPECTED_BUCKET_OWNER)?;
+
+        let expected_source_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_SOURCE_EXPECTED_BUCKET_OWNER)?;
+
+        let expires: Option<Expires> = http::parse_opt_header_timestamp(req, &EXPIRES, TimestampFormat::HttpDate)?;
+
+        let grant_full_control: Option<GrantFullControl> = http::parse_opt_header(req, &X_AMZ_GRANT_FULL_CONTROL)?;
+
+        let grant_read: Option<GrantRead> = http::parse_opt_header(req, &X_AMZ_GRANT_READ)?;
+
+        let grant_read_acp: Option<GrantReadACP> = http::parse_opt_header(req, &X_AMZ_GRANT_READ_ACP)?;
+
+        let grant_write_acp: Option<GrantWriteACP> = http::parse_opt_header(req, &X_AMZ_GRANT_WRITE_ACP)?;
+
+        let metadata: Option<Metadata> = http::parse_opt_metadata(req)?;
+
+        let metadata_directive: Option<MetadataDirective> = http::parse_opt_header(req, &X_AMZ_METADATA_DIRECTIVE)?;
+
+        let object_lock_legal_hold_status: Option<ObjectLockLegalHoldStatus> =
+            http::parse_opt_header(req, &X_AMZ_OBJECT_LOCK_LEGAL_HOLD)?;
+
+        let object_lock_mode: Option<ObjectLockMode> = http::parse_opt_header(req, &X_AMZ_OBJECT_LOCK_MODE)?;
+
+        let object_lock_retain_until_date: Option<ObjectLockRetainUntilDate> =
+            http::parse_opt_header_timestamp(req, &X_AMZ_OBJECT_LOCK_RETAIN_UNTIL_DATE, TimestampFormat::DateTime)?;
+
+        let request_payer: Option<RequestPayer> = http::parse_opt_header(req, &X_AMZ_REQUEST_PAYER)?;
+
+        let sse_customer_algorithm: Option<SSECustomerAlgorithm> =
+            http::parse_opt_header(req, &X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM)?;
+
+        let sse_customer_key: Option<SSECustomerKey> = http::parse_opt_header(req, &X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY)?;
+
+        let sse_customer_key_md5: Option<SSECustomerKeyMD5> =
+            http::parse_opt_header(req, &X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5)?;
+
+        let ssekms_encryption_context: Option<SSEKMSEncryptionContext> =
+            http::parse_opt_header(req, &X_AMZ_SERVER_SIDE_ENCRYPTION_CONTEXT)?;
+
+        let ssekms_key_id: Option<SSEKMSKeyId> = http::parse_opt_header(req, &X_AMZ_SERVER_SIDE_ENCRYPTION_AWS_KMS_KEY_ID)?;
+
+        let server_side_encryption: Option<ServerSideEncryption> = http::parse_opt_header(req, &X_AMZ_SERVER_SIDE_ENCRYPTION)?;
+
+        let storage_class: Option<StorageClass> = http::parse_opt_header(req, &X_AMZ_STORAGE_CLASS)?;
+
+        let tagging: Option<TaggingHeader> = http::parse_opt_header(req, &X_AMZ_TAGGING)?;
+
+        let tagging_directive: Option<TaggingDirective> = http::parse_opt_header(req, &X_AMZ_TAGGING_DIRECTIVE)?;
+
+        let version_id: Option<ObjectVersionId> = http::parse_opt_query(req, "versionId")?;
+
+        let website_redirect_location: Option<WebsiteRedirectLocation> =
+            http::parse_opt_header(req, &X_AMZ_WEBSITE_REDIRECT_LOCATION)?;
+
+        Ok(CopyObjectInput {
+            acl,
+            bucket,
+            bucket_key_enabled,
+            cache_control,
+            checksum_algorithm,
+            content_disposition,
+            content_encoding,
+            content_language,
+            content_type,
+            copy_source,
+            copy_source_if_match,
+            copy_source_if_modified_since,
+            copy_source_if_none_match,
+            copy_source_if_unmodified_since,
+            copy_source_sse_customer_algorithm,
+            copy_source_sse_customer_key,
+            copy_source_sse_customer_key_md5,
+            expected_bucket_owner,
+            expected_source_bucket_owner,
+            expires,
+            grant_full_control,
+            grant_read,
+            grant_read_acp,
+            grant_write_acp,
+            key,
+            metadata,
+            metadata_directive,
+            object_lock_legal_hold_status,
+            object_lock_mode,
+            object_lock_retain_until_date,
+            request_payer,
+            sse_customer_algorithm,
+            sse_customer_key,
+            sse_customer_key_md5,
+            ssekms_encryption_context,
+            ssekms_key_id,
+            server_side_encryption,
+            storage_class,
+            tagging,
+            tagging_directive,
+            version_id,
             website_redirect_location,
         })
     }
@@ -1134,8 +1277,8 @@ impl super::Operation for CreateBucketMetadataTableConfiguration {
 }
 
 pub struct CreateMultipartUpload;
-
 impl CreateMultipartUpload {
+    #[cfg(not(feature = "minio"))]
     pub fn deserialize_http(req: &mut http::Request) -> S3Result<CreateMultipartUploadInput> {
         let (bucket, key) = http::unwrap_object(req);
 
@@ -1235,6 +1378,113 @@ impl CreateMultipartUpload {
             server_side_encryption,
             storage_class,
             tagging,
+            website_redirect_location,
+        })
+    }
+
+    #[cfg(feature = "minio")]
+    pub fn deserialize_http(req: &mut http::Request) -> S3Result<CreateMultipartUploadInput> {
+        let (bucket, key) = http::unwrap_object(req);
+
+        let acl: Option<ObjectCannedACL> = http::parse_opt_header(req, &X_AMZ_ACL)?;
+
+        let bucket_key_enabled: Option<BucketKeyEnabled> =
+            http::parse_opt_header(req, &X_AMZ_SERVER_SIDE_ENCRYPTION_BUCKET_KEY_ENABLED)?;
+
+        let cache_control: Option<CacheControl> = http::parse_opt_header(req, &CACHE_CONTROL)?;
+
+        let checksum_algorithm: Option<ChecksumAlgorithm> = http::parse_checksum_algorithm_header(req)?;
+
+        let checksum_type: Option<ChecksumType> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_TYPE)?;
+
+        let content_disposition: Option<ContentDisposition> = http::parse_opt_header(req, &CONTENT_DISPOSITION)?;
+
+        let content_encoding: Option<ContentEncoding> = http::parse_opt_header(req, &CONTENT_ENCODING)?;
+
+        let content_language: Option<ContentLanguage> = http::parse_opt_header(req, &CONTENT_LANGUAGE)?;
+
+        let content_type: Option<ContentType> = http::parse_opt_header(req, &CONTENT_TYPE)?;
+
+        let expected_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_EXPECTED_BUCKET_OWNER)?;
+
+        let expires: Option<Expires> = http::parse_opt_header_timestamp(req, &EXPIRES, TimestampFormat::HttpDate)?;
+
+        let grant_full_control: Option<GrantFullControl> = http::parse_opt_header(req, &X_AMZ_GRANT_FULL_CONTROL)?;
+
+        let grant_read: Option<GrantRead> = http::parse_opt_header(req, &X_AMZ_GRANT_READ)?;
+
+        let grant_read_acp: Option<GrantReadACP> = http::parse_opt_header(req, &X_AMZ_GRANT_READ_ACP)?;
+
+        let grant_write_acp: Option<GrantWriteACP> = http::parse_opt_header(req, &X_AMZ_GRANT_WRITE_ACP)?;
+
+        let metadata: Option<Metadata> = http::parse_opt_metadata(req)?;
+
+        let object_lock_legal_hold_status: Option<ObjectLockLegalHoldStatus> =
+            http::parse_opt_header(req, &X_AMZ_OBJECT_LOCK_LEGAL_HOLD)?;
+
+        let object_lock_mode: Option<ObjectLockMode> = http::parse_opt_header(req, &X_AMZ_OBJECT_LOCK_MODE)?;
+
+        let object_lock_retain_until_date: Option<ObjectLockRetainUntilDate> =
+            http::parse_opt_header_timestamp(req, &X_AMZ_OBJECT_LOCK_RETAIN_UNTIL_DATE, TimestampFormat::DateTime)?;
+
+        let request_payer: Option<RequestPayer> = http::parse_opt_header(req, &X_AMZ_REQUEST_PAYER)?;
+
+        let sse_customer_algorithm: Option<SSECustomerAlgorithm> =
+            http::parse_opt_header(req, &X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM)?;
+
+        let sse_customer_key: Option<SSECustomerKey> = http::parse_opt_header(req, &X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY)?;
+
+        let sse_customer_key_md5: Option<SSECustomerKeyMD5> =
+            http::parse_opt_header(req, &X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5)?;
+
+        let ssekms_encryption_context: Option<SSEKMSEncryptionContext> =
+            http::parse_opt_header(req, &X_AMZ_SERVER_SIDE_ENCRYPTION_CONTEXT)?;
+
+        let ssekms_key_id: Option<SSEKMSKeyId> = http::parse_opt_header(req, &X_AMZ_SERVER_SIDE_ENCRYPTION_AWS_KMS_KEY_ID)?;
+
+        let server_side_encryption: Option<ServerSideEncryption> = http::parse_opt_header(req, &X_AMZ_SERVER_SIDE_ENCRYPTION)?;
+
+        let storage_class: Option<StorageClass> = http::parse_opt_header(req, &X_AMZ_STORAGE_CLASS)?;
+
+        let tagging: Option<TaggingHeader> = http::parse_opt_header(req, &X_AMZ_TAGGING)?;
+
+        let version_id: Option<ObjectVersionId> = http::parse_opt_query(req, "versionId")?;
+
+        let website_redirect_location: Option<WebsiteRedirectLocation> =
+            http::parse_opt_header(req, &X_AMZ_WEBSITE_REDIRECT_LOCATION)?;
+
+        Ok(CreateMultipartUploadInput {
+            acl,
+            bucket,
+            bucket_key_enabled,
+            cache_control,
+            checksum_algorithm,
+            checksum_type,
+            content_disposition,
+            content_encoding,
+            content_language,
+            content_type,
+            expected_bucket_owner,
+            expires,
+            grant_full_control,
+            grant_read,
+            grant_read_acp,
+            grant_write_acp,
+            key,
+            metadata,
+            object_lock_legal_hold_status,
+            object_lock_mode,
+            object_lock_retain_until_date,
+            request_payer,
+            sse_customer_algorithm,
+            sse_customer_key,
+            sse_customer_key_md5,
+            ssekms_encryption_context,
+            ssekms_key_id,
+            server_side_encryption,
+            storage_class,
+            tagging,
+            version_id,
             website_redirect_location,
         })
     }
@@ -1371,8 +1621,8 @@ impl super::Operation for CreateSession {
 }
 
 pub struct DeleteBucket;
-
 impl DeleteBucket {
+    #[cfg(not(feature = "minio"))]
     pub fn deserialize_http(req: &mut http::Request) -> S3Result<DeleteBucketInput> {
         let bucket = http::unwrap_bucket(req);
 
@@ -1381,6 +1631,21 @@ impl DeleteBucket {
         Ok(DeleteBucketInput {
             bucket,
             expected_bucket_owner,
+        })
+    }
+
+    #[cfg(feature = "minio")]
+    pub fn deserialize_http(req: &mut http::Request) -> S3Result<DeleteBucketInput> {
+        let bucket = http::unwrap_bucket(req);
+
+        let expected_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_EXPECTED_BUCKET_OWNER)?;
+
+        let force_delete: Option<ForceDelete> = http::parse_opt_header(req, &X_MINIO_FORCE_DELETE)?;
+
+        Ok(DeleteBucketInput {
+            bucket,
+            expected_bucket_owner,
+            force_delete,
         })
     }
 
@@ -5600,6 +5865,75 @@ impl super::Operation for ListParts {
     }
 }
 
+#[cfg(feature = "minio")]
+pub struct ListenBucketNotification;
+
+#[cfg(feature = "minio")]
+impl ListenBucketNotification {
+    pub fn deserialize_http(req: &mut http::Request) -> S3Result<ListenBucketNotificationInput> {
+        let bucket = http::unwrap_bucket(req);
+
+        let events: Option<NotificationEvents> = http::parse_opt_query_joined(req, "events", ",");
+
+        let prefix: Option<Prefix> = http::parse_opt_query(req, "prefix")?;
+
+        let suffix: Option<Suffix> = http::parse_opt_query(req, "suffix")?;
+
+        Ok(ListenBucketNotificationInput {
+            bucket,
+            events,
+            prefix,
+            suffix,
+        })
+    }
+
+    pub fn serialize_http(x: ListenBucketNotificationOutput) -> S3Result<http::Response> {
+        let mut res = http::Response::with_status(http::StatusCode::OK);
+        if let Some(val) = x.payload {
+            http::set_stream_body(&mut res, val);
+        }
+        Ok(res)
+    }
+}
+
+#[async_trait::async_trait]
+#[cfg(feature = "minio")]
+impl super::Operation for ListenBucketNotification {
+    fn name(&self) -> &'static str {
+        "ListenBucketNotification"
+    }
+
+    fn needs_full_body(&self) -> bool {
+        false
+    }
+
+    fn has_request_payload(&self) -> bool {
+        false
+    }
+
+    fn has_streaming_body(&self) -> bool {
+        false
+    }
+
+    async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {
+        let input = Self::deserialize_http(req)?;
+        let mut s3_req = super::build_s3_request(input, req);
+        let s3 = ccx.s3;
+        if let Some(access) = ccx.access {
+            access.listen_bucket_notification(&mut s3_req).await?;
+        }
+        let result = s3.listen_bucket_notification(s3_req).await;
+        let s3_resp = match result {
+            Ok(val) => val,
+            Err(err) => return super::serialize_error(err, false),
+        };
+        let mut resp = Self::serialize_http(s3_resp.output)?;
+        resp.headers.extend(s3_resp.headers);
+        resp.extensions.extend(s3_resp.extensions);
+        Ok(resp)
+    }
+}
+
 pub struct PutBucketAbac;
 
 impl PutBucketAbac {
@@ -6721,8 +7055,8 @@ impl super::Operation for PutBucketTagging {
 }
 
 pub struct PutBucketVersioning;
-
 impl PutBucketVersioning {
+    #[cfg(not(feature = "minio"))]
     pub fn deserialize_http(req: &mut http::Request) -> S3Result<PutBucketVersioningInput> {
         let bucket = http::unwrap_bucket(req);
 
@@ -6735,6 +7069,31 @@ impl PutBucketVersioning {
         let mfa: Option<MFA> = http::parse_opt_header(req, &X_AMZ_MFA)?;
 
         let versioning_configuration: VersioningConfiguration = http::take_xml_body(req)?;
+
+        Ok(PutBucketVersioningInput {
+            bucket,
+            checksum_algorithm,
+            content_md5,
+            expected_bucket_owner,
+            mfa,
+            versioning_configuration,
+        })
+    }
+
+    #[cfg(feature = "minio")]
+    pub fn deserialize_http(req: &mut http::Request) -> S3Result<PutBucketVersioningInput> {
+        let bucket = http::unwrap_bucket(req);
+
+        let checksum_algorithm: Option<ChecksumAlgorithm> = http::parse_checksum_algorithm_header(req)?;
+
+        let content_md5: Option<ContentMD5> = http::parse_opt_header(req, &CONTENT_MD5)?;
+
+        let expected_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_EXPECTED_BUCKET_OWNER)?;
+
+        let mfa: Option<MFA> = http::parse_opt_header(req, &X_AMZ_MFA)?;
+
+        let versioning_configuration: VersioningConfiguration =
+            http::take_body_literal::<VersioningConfiguration>(req, "Enabled")?;
 
         Ok(PutBucketVersioningInput {
             bucket,
@@ -6854,8 +7213,8 @@ impl super::Operation for PutBucketWebsite {
 }
 
 pub struct PutObject;
-
 impl PutObject {
+    #[cfg(not(feature = "minio"))]
     pub fn deserialize_http(req: &mut http::Request) -> S3Result<PutObjectInput> {
         if let Some(m) = req.s3ext.multipart.take() {
             return Self::deserialize_http_multipart(req, m);
@@ -7008,6 +7367,163 @@ impl PutObject {
         })
     }
 
+    #[cfg(feature = "minio")]
+    pub fn deserialize_http(req: &mut http::Request) -> S3Result<PutObjectInput> {
+        if let Some(m) = req.s3ext.multipart.take() {
+            return Self::deserialize_http_multipart(req, m);
+        }
+
+        let (bucket, key) = http::unwrap_object(req);
+
+        let acl: Option<ObjectCannedACL> = http::parse_opt_header(req, &X_AMZ_ACL)?;
+
+        let body: Option<StreamingBlob> = Some(http::take_stream_body(req));
+
+        let bucket_key_enabled: Option<BucketKeyEnabled> =
+            http::parse_opt_header(req, &X_AMZ_SERVER_SIDE_ENCRYPTION_BUCKET_KEY_ENABLED)?;
+
+        let cache_control: Option<CacheControl> = http::parse_opt_header(req, &CACHE_CONTROL)?;
+
+        let checksum_algorithm: Option<ChecksumAlgorithm> = http::parse_checksum_algorithm_header(req)?;
+
+        let checksum_crc32: Option<ChecksumCRC32> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_CRC32)?;
+
+        let checksum_crc32c: Option<ChecksumCRC32C> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_CRC32C)?;
+
+        let checksum_crc64nvme: Option<ChecksumCRC64NVME> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_CRC64NVME)?;
+
+        let checksum_md5: Option<ChecksumMD5> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_MD5)?;
+
+        let checksum_sha1: Option<ChecksumSHA1> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_SHA1)?;
+
+        let checksum_sha256: Option<ChecksumSHA256> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_SHA256)?;
+
+        let checksum_sha512: Option<ChecksumSHA512> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_SHA512)?;
+
+        let checksum_xxhash128: Option<ChecksumXXHASH128> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_XXHASH128)?;
+
+        let checksum_xxhash3: Option<ChecksumXXHASH3> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_XXHASH3)?;
+
+        let checksum_xxhash64: Option<ChecksumXXHASH64> = http::parse_opt_header(req, &X_AMZ_CHECKSUM_XXHASH64)?;
+
+        let content_disposition: Option<ContentDisposition> = http::parse_opt_header(req, &CONTENT_DISPOSITION)?;
+
+        let content_encoding: Option<ContentEncoding> = http::parse_opt_header(req, &CONTENT_ENCODING)?;
+
+        let content_language: Option<ContentLanguage> = http::parse_opt_header(req, &CONTENT_LANGUAGE)?;
+
+        let content_length: Option<ContentLength> = http::parse_opt_header(req, &CONTENT_LENGTH)?;
+
+        let content_md5: Option<ContentMD5> = http::parse_opt_header(req, &CONTENT_MD5)?;
+
+        let content_type: Option<ContentType> = http::parse_opt_header(req, &CONTENT_TYPE)?;
+
+        let expected_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_EXPECTED_BUCKET_OWNER)?;
+
+        let expires: Option<Expires> = http::parse_opt_header_timestamp(req, &EXPIRES, TimestampFormat::HttpDate)?;
+
+        let grant_full_control: Option<GrantFullControl> = http::parse_opt_header(req, &X_AMZ_GRANT_FULL_CONTROL)?;
+
+        let grant_read: Option<GrantRead> = http::parse_opt_header(req, &X_AMZ_GRANT_READ)?;
+
+        let grant_read_acp: Option<GrantReadACP> = http::parse_opt_header(req, &X_AMZ_GRANT_READ_ACP)?;
+
+        let grant_write_acp: Option<GrantWriteACP> = http::parse_opt_header(req, &X_AMZ_GRANT_WRITE_ACP)?;
+
+        let if_match: Option<IfMatch> = http::parse_opt_header(req, &IF_MATCH)?;
+
+        let if_none_match: Option<IfNoneMatch> = http::parse_opt_header(req, &IF_NONE_MATCH)?;
+
+        let metadata: Option<Metadata> = http::parse_opt_metadata(req)?;
+
+        let object_lock_legal_hold_status: Option<ObjectLockLegalHoldStatus> =
+            http::parse_opt_header(req, &X_AMZ_OBJECT_LOCK_LEGAL_HOLD)?;
+
+        let object_lock_mode: Option<ObjectLockMode> = http::parse_opt_header(req, &X_AMZ_OBJECT_LOCK_MODE)?;
+
+        let object_lock_retain_until_date: Option<ObjectLockRetainUntilDate> =
+            http::parse_opt_header_timestamp(req, &X_AMZ_OBJECT_LOCK_RETAIN_UNTIL_DATE, TimestampFormat::DateTime)?;
+
+        let request_payer: Option<RequestPayer> = http::parse_opt_header(req, &X_AMZ_REQUEST_PAYER)?;
+
+        let sse_customer_algorithm: Option<SSECustomerAlgorithm> =
+            http::parse_opt_header(req, &X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM)?;
+
+        let sse_customer_key: Option<SSECustomerKey> = http::parse_opt_header(req, &X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY)?;
+
+        let sse_customer_key_md5: Option<SSECustomerKeyMD5> =
+            http::parse_opt_header(req, &X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5)?;
+
+        let ssekms_encryption_context: Option<SSEKMSEncryptionContext> =
+            http::parse_opt_header(req, &X_AMZ_SERVER_SIDE_ENCRYPTION_CONTEXT)?;
+
+        let ssekms_key_id: Option<SSEKMSKeyId> = http::parse_opt_header(req, &X_AMZ_SERVER_SIDE_ENCRYPTION_AWS_KMS_KEY_ID)?;
+
+        let server_side_encryption: Option<ServerSideEncryption> = http::parse_opt_header(req, &X_AMZ_SERVER_SIDE_ENCRYPTION)?;
+
+        let storage_class: Option<StorageClass> = http::parse_opt_header(req, &X_AMZ_STORAGE_CLASS)?;
+
+        let tagging: Option<TaggingHeader> = http::parse_opt_header(req, &X_AMZ_TAGGING)?;
+
+        let version_id: Option<ObjectVersionId> = http::parse_opt_query(req, "versionId")?;
+
+        let website_redirect_location: Option<WebsiteRedirectLocation> =
+            http::parse_opt_header(req, &X_AMZ_WEBSITE_REDIRECT_LOCATION)?;
+
+        let write_offset_bytes: Option<WriteOffsetBytes> = http::parse_opt_header(req, &X_AMZ_WRITE_OFFSET_BYTES)?;
+
+        Ok(PutObjectInput {
+            acl,
+            body,
+            bucket,
+            bucket_key_enabled,
+            cache_control,
+            checksum_algorithm,
+            checksum_crc32,
+            checksum_crc32c,
+            checksum_crc64nvme,
+            checksum_md5,
+            checksum_sha1,
+            checksum_sha256,
+            checksum_sha512,
+            checksum_xxhash128,
+            checksum_xxhash3,
+            checksum_xxhash64,
+            content_disposition,
+            content_encoding,
+            content_language,
+            content_length,
+            content_md5,
+            content_type,
+            expected_bucket_owner,
+            expires,
+            grant_full_control,
+            grant_read,
+            grant_read_acp,
+            grant_write_acp,
+            if_match,
+            if_none_match,
+            key,
+            metadata,
+            object_lock_legal_hold_status,
+            object_lock_mode,
+            object_lock_retain_until_date,
+            request_payer,
+            sse_customer_algorithm,
+            sse_customer_key,
+            sse_customer_key_md5,
+            ssekms_encryption_context,
+            ssekms_key_id,
+            server_side_encryption,
+            storage_class,
+            tagging,
+            version_id,
+            website_redirect_location,
+            write_offset_bytes,
+        })
+    }
+
+    #[cfg(not(feature = "minio"))]
     pub fn deserialize_http_multipart(req: &mut http::Request, m: http::Multipart) -> S3Result<PutObjectInput> {
         let bucket = http::unwrap_bucket(req);
         let key = http::parse_field_value(&m, "key")?.ok_or_else(|| invalid_request!("missing key"))?;
@@ -7175,6 +7691,182 @@ impl PutObject {
             server_side_encryption,
             storage_class,
             tagging,
+            website_redirect_location,
+            write_offset_bytes,
+        })
+    }
+
+    #[cfg(feature = "minio")]
+    pub fn deserialize_http_multipart(req: &mut http::Request, m: http::Multipart) -> S3Result<PutObjectInput> {
+        let bucket = http::unwrap_bucket(req);
+        let key = http::parse_field_value(&m, "key")?.ok_or_else(|| invalid_request!("missing key"))?;
+
+        let body_stream = req
+            .s3ext
+            .post_object_stream
+            .take()
+            .ok_or_else(|| s3_error!(InternalError, "missing body stream"))?;
+
+        let content_length = body_stream
+            .remaining_length()
+            .exact()
+            .map(i64::try_from)
+            .transpose()
+            .map_err(|e| s3_error!(e, InvalidArgument, "content-length overflow"))?;
+        let content_length = content_length.filter(|&n| n != 0);
+
+        let body: Option<StreamingBlob> = Some(body_stream.into());
+
+        let acl: Option<ObjectCannedACL> = http::parse_field_value(&m, "x-amz-acl")?;
+
+        let bucket_key_enabled: Option<BucketKeyEnabled> =
+            http::parse_field_value(&m, "x-amz-server-side-encryption-bucket-key-enabled")?;
+
+        let cache_control: Option<CacheControl> = http::parse_field_value(&m, "cache-control")?;
+
+        let checksum_algorithm: Option<ChecksumAlgorithm> = http::parse_field_value(&m, "x-amz-sdk-checksum-algorithm")?;
+
+        let checksum_crc32: Option<ChecksumCRC32> = http::parse_field_value(&m, "x-amz-checksum-crc32")?;
+
+        let checksum_crc32c: Option<ChecksumCRC32C> = http::parse_field_value(&m, "x-amz-checksum-crc32c")?;
+
+        let checksum_crc64nvme: Option<ChecksumCRC64NVME> = http::parse_field_value(&m, "x-amz-checksum-crc64nvme")?;
+
+        let checksum_md5: Option<ChecksumMD5> = http::parse_field_value(&m, "x-amz-checksum-md5")?;
+
+        let checksum_sha1: Option<ChecksumSHA1> = http::parse_field_value(&m, "x-amz-checksum-sha1")?;
+
+        let checksum_sha256: Option<ChecksumSHA256> = http::parse_field_value(&m, "x-amz-checksum-sha256")?;
+
+        let checksum_sha512: Option<ChecksumSHA512> = http::parse_field_value(&m, "x-amz-checksum-sha512")?;
+
+        let checksum_xxhash128: Option<ChecksumXXHASH128> = http::parse_field_value(&m, "x-amz-checksum-xxhash128")?;
+
+        let checksum_xxhash3: Option<ChecksumXXHASH3> = http::parse_field_value(&m, "x-amz-checksum-xxhash3")?;
+
+        let checksum_xxhash64: Option<ChecksumXXHASH64> = http::parse_field_value(&m, "x-amz-checksum-xxhash64")?;
+
+        let content_disposition: Option<ContentDisposition> = http::parse_field_value(&m, "content-disposition")?;
+
+        let content_encoding: Option<ContentEncoding> = http::parse_field_value(&m, "content-encoding")?;
+
+        let content_language: Option<ContentLanguage> = http::parse_field_value(&m, "content-language")?;
+
+        let content_md5: Option<ContentMD5> = http::parse_field_value(&m, "content-md5")?;
+
+        let content_type: Option<ContentType> = http::parse_field_value(&m, "content-type")?;
+
+        let expected_bucket_owner: Option<AccountId> = http::parse_field_value(&m, "x-amz-expected-bucket-owner")?;
+
+        let expires: Option<Expires> = http::parse_field_value_timestamp(&m, "expires", TimestampFormat::HttpDate)?;
+
+        let grant_full_control: Option<GrantFullControl> = http::parse_field_value(&m, "x-amz-grant-full-control")?;
+
+        let grant_read: Option<GrantRead> = http::parse_field_value(&m, "x-amz-grant-read")?;
+
+        let grant_read_acp: Option<GrantReadACP> = http::parse_field_value(&m, "x-amz-grant-read-acp")?;
+
+        let grant_write_acp: Option<GrantWriteACP> = http::parse_field_value(&m, "x-amz-grant-write-acp")?;
+
+        let if_match: Option<IfMatch> = http::parse_field_value(&m, "if-match")?;
+
+        let if_none_match: Option<IfNoneMatch> = http::parse_field_value(&m, "if-none-match")?;
+
+        let metadata: Option<Metadata> = {
+            let mut metadata = Metadata::default();
+            for (name, value) in m.fields() {
+                if let Some(key) = name.strip_prefix("x-amz-meta-") {
+                    if key.is_empty() {
+                        continue;
+                    }
+                    metadata.insert(key.to_owned(), value.clone());
+                }
+            }
+            if metadata.is_empty() { None } else { Some(metadata) }
+        };
+
+        let object_lock_legal_hold_status: Option<ObjectLockLegalHoldStatus> =
+            http::parse_field_value(&m, "x-amz-object-lock-legal-hold")?;
+
+        let object_lock_mode: Option<ObjectLockMode> = http::parse_field_value(&m, "x-amz-object-lock-mode")?;
+
+        let object_lock_retain_until_date: Option<ObjectLockRetainUntilDate> =
+            http::parse_field_value_timestamp(&m, "x-amz-object-lock-retain-until-date", TimestampFormat::DateTime)?;
+
+        let request_payer: Option<RequestPayer> = http::parse_field_value(&m, "x-amz-request-payer")?;
+
+        let sse_customer_algorithm: Option<SSECustomerAlgorithm> =
+            http::parse_field_value(&m, "x-amz-server-side-encryption-customer-algorithm")?;
+
+        let sse_customer_key: Option<SSECustomerKey> = http::parse_field_value(&m, "x-amz-server-side-encryption-customer-key")?;
+
+        let sse_customer_key_md5: Option<SSECustomerKeyMD5> =
+            http::parse_field_value(&m, "x-amz-server-side-encryption-customer-key-md5")?;
+
+        let ssekms_encryption_context: Option<SSEKMSEncryptionContext> =
+            http::parse_field_value(&m, "x-amz-server-side-encryption-context")?;
+
+        let ssekms_key_id: Option<SSEKMSKeyId> = http::parse_field_value(&m, "x-amz-server-side-encryption-aws-kms-key-id")?;
+
+        let server_side_encryption: Option<ServerSideEncryption> = http::parse_field_value(&m, "x-amz-server-side-encryption")?;
+
+        let storage_class: Option<StorageClass> = http::parse_field_value(&m, "x-amz-storage-class")?;
+
+        let tagging: Option<TaggingHeader> = http::parse_field_value(&m, "x-amz-tagging")?;
+
+        let version_id: Option<ObjectVersionId> = http::parse_opt_query(req, "versionId")?;
+
+        let website_redirect_location: Option<WebsiteRedirectLocation> =
+            http::parse_field_value(&m, "x-amz-website-redirect-location")?;
+
+        let write_offset_bytes: Option<WriteOffsetBytes> = http::parse_field_value(&m, "x-amz-write-offset-bytes")?;
+
+        Ok(PutObjectInput {
+            acl,
+            body,
+            bucket,
+            bucket_key_enabled,
+            cache_control,
+            checksum_algorithm,
+            checksum_crc32,
+            checksum_crc32c,
+            checksum_crc64nvme,
+            checksum_md5,
+            checksum_sha1,
+            checksum_sha256,
+            checksum_sha512,
+            checksum_xxhash128,
+            checksum_xxhash3,
+            checksum_xxhash64,
+            content_disposition,
+            content_encoding,
+            content_language,
+            content_length,
+            content_md5,
+            content_type,
+            expected_bucket_owner,
+            expires,
+            grant_full_control,
+            grant_read,
+            grant_read_acp,
+            grant_write_acp,
+            if_match,
+            if_none_match,
+            key,
+            metadata,
+            object_lock_legal_hold_status,
+            object_lock_mode,
+            object_lock_retain_until_date,
+            request_payer,
+            sse_customer_algorithm,
+            sse_customer_key,
+            sse_customer_key_md5,
+            ssekms_encryption_context,
+            ssekms_key_id,
+            server_side_encryption,
+            storage_class,
+            tagging,
+            version_id,
             website_redirect_location,
             write_offset_bytes,
         })
@@ -7418,8 +8110,8 @@ impl super::Operation for PutObjectLegalHold {
 }
 
 pub struct PutObjectLockConfiguration;
-
 impl PutObjectLockConfiguration {
+    #[cfg(not(feature = "minio"))]
     pub fn deserialize_http(req: &mut http::Request) -> S3Result<PutObjectLockConfigurationInput> {
         let bucket = http::unwrap_bucket(req);
 
@@ -7430,6 +8122,34 @@ impl PutObjectLockConfiguration {
         let expected_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_EXPECTED_BUCKET_OWNER)?;
 
         let object_lock_configuration: Option<ObjectLockConfiguration> = http::take_opt_xml_body(req)?;
+
+        let request_payer: Option<RequestPayer> = http::parse_opt_header(req, &X_AMZ_REQUEST_PAYER)?;
+
+        let token: Option<ObjectLockToken> = http::parse_opt_header(req, &X_AMZ_BUCKET_OBJECT_LOCK_TOKEN)?;
+
+        Ok(PutObjectLockConfigurationInput {
+            bucket,
+            checksum_algorithm,
+            content_md5,
+            expected_bucket_owner,
+            object_lock_configuration,
+            request_payer,
+            token,
+        })
+    }
+
+    #[cfg(feature = "minio")]
+    pub fn deserialize_http(req: &mut http::Request) -> S3Result<PutObjectLockConfigurationInput> {
+        let bucket = http::unwrap_bucket(req);
+
+        let checksum_algorithm: Option<ChecksumAlgorithm> = http::parse_checksum_algorithm_header(req)?;
+
+        let content_md5: Option<ContentMD5> = http::parse_opt_header(req, &CONTENT_MD5)?;
+
+        let expected_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_EXPECTED_BUCKET_OWNER)?;
+
+        let object_lock_configuration: Option<ObjectLockConfiguration> =
+            http::take_opt_body_literal::<ObjectLockConfiguration>(req, "Enabled")?;
 
         let request_payer: Option<RequestPayer> = http::parse_opt_header(req, &X_AMZ_REQUEST_PAYER)?;
 
@@ -8754,6 +9474,7 @@ impl super::Operation for PostObject {
     }
 }
 
+#[cfg(not(feature = "minio"))]
 pub fn resolve_route(
     req: &http::Request,
     s3_path: &S3Path,
@@ -8871,6 +9592,388 @@ pub fn resolve_route(
                     }
                     if qs.has("versions") {
                         return Ok(&ListObjectVersions as &'static dyn super::Operation);
+                    }
+                    if super::check_query_pattern(qs, "list-type", "2") {
+                        return Ok(&ListObjectsV2 as &'static dyn super::Operation);
+                    }
+                }
+                Ok(&ListObjects as &'static dyn super::Operation)
+            }
+            S3Path::Object { .. } => {
+                if let Some(qs) = qs {
+                    if qs.has("attributes") {
+                        return Ok(&GetObjectAttributes as &'static dyn super::Operation);
+                    }
+                    if qs.has("acl") {
+                        return Ok(&GetObjectAcl as &'static dyn super::Operation);
+                    }
+                    if qs.has("legal-hold") {
+                        return Ok(&GetObjectLegalHold as &'static dyn super::Operation);
+                    }
+                    if qs.has("retention") {
+                        return Ok(&GetObjectRetention as &'static dyn super::Operation);
+                    }
+                    if qs.has("tagging") {
+                        return Ok(&GetObjectTagging as &'static dyn super::Operation);
+                    }
+                    if qs.has("torrent") {
+                        return Ok(&GetObjectTorrent as &'static dyn super::Operation);
+                    }
+                }
+                if let Some(qs) = qs
+                    && qs.has("uploadId")
+                {
+                    return Ok(&ListParts as &'static dyn super::Operation);
+                }
+                Ok(&GetObject as &'static dyn super::Operation)
+            }
+        },
+        hyper::Method::POST => match s3_path {
+            S3Path::Root => Err(super::unknown_operation()),
+            S3Path::Bucket { .. } => {
+                if let Some(qs) = qs {
+                    if qs.has("metadataConfiguration") {
+                        return Ok(&CreateBucketMetadataConfiguration as &'static dyn super::Operation);
+                    }
+                    if qs.has("metadataTable") {
+                        return Ok(&CreateBucketMetadataTableConfiguration as &'static dyn super::Operation);
+                    }
+                    if qs.has("delete") {
+                        return Ok(&DeleteObjects as &'static dyn super::Operation);
+                    }
+                }
+                if req.headers.contains_key("x-amz-request-route") && req.headers.contains_key("x-amz-request-token") {
+                    return Ok(&WriteGetObjectResponse as &'static dyn super::Operation);
+                }
+                Err(super::unknown_operation())
+            }
+            S3Path::Object { .. } => {
+                if let Some(qs) = qs {
+                    if qs.has("select") && super::check_query_pattern(qs, "select-type", "2") {
+                        return Ok(&SelectObjectContent as &'static dyn super::Operation);
+                    }
+                    if qs.has("uploads") {
+                        return Ok(&CreateMultipartUpload as &'static dyn super::Operation);
+                    }
+                    if qs.has("restore") {
+                        return Ok(&RestoreObject as &'static dyn super::Operation);
+                    }
+                }
+                if let Some(qs) = qs
+                    && qs.has("uploadId")
+                {
+                    return Ok(&CompleteMultipartUpload as &'static dyn super::Operation);
+                }
+                Err(super::unknown_operation())
+            }
+        },
+        hyper::Method::PUT => match s3_path {
+            S3Path::Root => Err(super::unknown_operation()),
+            S3Path::Bucket { .. } => {
+                if let Some(qs) = qs {
+                    if qs.has("analytics") {
+                        return Ok(&PutBucketAnalyticsConfiguration as &'static dyn super::Operation);
+                    }
+                    if qs.has("intelligent-tiering") {
+                        return Ok(&PutBucketIntelligentTieringConfiguration as &'static dyn super::Operation);
+                    }
+                    if qs.has("inventory") {
+                        return Ok(&PutBucketInventoryConfiguration as &'static dyn super::Operation);
+                    }
+                    if qs.has("metrics") {
+                        return Ok(&PutBucketMetricsConfiguration as &'static dyn super::Operation);
+                    }
+                    if qs.has("abac") {
+                        return Ok(&PutBucketAbac as &'static dyn super::Operation);
+                    }
+                    if qs.has("accelerate") {
+                        return Ok(&PutBucketAccelerateConfiguration as &'static dyn super::Operation);
+                    }
+                    if qs.has("acl") {
+                        return Ok(&PutBucketAcl as &'static dyn super::Operation);
+                    }
+                    if qs.has("cors") {
+                        return Ok(&PutBucketCors as &'static dyn super::Operation);
+                    }
+                    if qs.has("encryption") {
+                        return Ok(&PutBucketEncryption as &'static dyn super::Operation);
+                    }
+                    if qs.has("lifecycle") {
+                        return Ok(&PutBucketLifecycleConfiguration as &'static dyn super::Operation);
+                    }
+                    if qs.has("logging") {
+                        return Ok(&PutBucketLogging as &'static dyn super::Operation);
+                    }
+                    if qs.has("notification") {
+                        return Ok(&PutBucketNotificationConfiguration as &'static dyn super::Operation);
+                    }
+                    if qs.has("ownershipControls") {
+                        return Ok(&PutBucketOwnershipControls as &'static dyn super::Operation);
+                    }
+                    if qs.has("policy") {
+                        return Ok(&PutBucketPolicy as &'static dyn super::Operation);
+                    }
+                    if qs.has("replication") {
+                        return Ok(&PutBucketReplication as &'static dyn super::Operation);
+                    }
+                    if qs.has("requestPayment") {
+                        return Ok(&PutBucketRequestPayment as &'static dyn super::Operation);
+                    }
+                    if qs.has("tagging") {
+                        return Ok(&PutBucketTagging as &'static dyn super::Operation);
+                    }
+                    if qs.has("versioning") {
+                        return Ok(&PutBucketVersioning as &'static dyn super::Operation);
+                    }
+                    if qs.has("website") {
+                        return Ok(&PutBucketWebsite as &'static dyn super::Operation);
+                    }
+                    if qs.has("object-lock") {
+                        return Ok(&PutObjectLockConfiguration as &'static dyn super::Operation);
+                    }
+                    if qs.has("publicAccessBlock") {
+                        return Ok(&PutPublicAccessBlock as &'static dyn super::Operation);
+                    }
+                    if qs.has("metadataAnnotationTable") {
+                        return Ok(&UpdateBucketMetadataAnnotationTableConfiguration as &'static dyn super::Operation);
+                    }
+                    if qs.has("metadataInventoryTable") {
+                        return Ok(&UpdateBucketMetadataInventoryTableConfiguration as &'static dyn super::Operation);
+                    }
+                    if qs.has("metadataJournalTable") {
+                        return Ok(&UpdateBucketMetadataJournalTableConfiguration as &'static dyn super::Operation);
+                    }
+                }
+                Ok(&CreateBucket as &'static dyn super::Operation)
+            }
+            S3Path::Object { .. } => {
+                if let Some(qs) = qs {
+                    if qs.has("renameObject") {
+                        return Ok(&RenameObject as &'static dyn super::Operation);
+                    }
+                    if qs.has("acl") {
+                        return Ok(&PutObjectAcl as &'static dyn super::Operation);
+                    }
+                    if qs.has("legal-hold") {
+                        return Ok(&PutObjectLegalHold as &'static dyn super::Operation);
+                    }
+                    if qs.has("retention") {
+                        return Ok(&PutObjectRetention as &'static dyn super::Operation);
+                    }
+                    if qs.has("tagging") {
+                        return Ok(&PutObjectTagging as &'static dyn super::Operation);
+                    }
+                }
+                if let Some(qs) = qs
+                    && qs.has("partNumber")
+                    && qs.has("uploadId")
+                    && req.headers.contains_key("x-amz-copy-source")
+                {
+                    return Ok(&UploadPartCopy as &'static dyn super::Operation);
+                }
+                if let Some(qs) = qs
+                    && qs.has("partNumber")
+                    && qs.has("uploadId")
+                {
+                    return Ok(&UploadPart as &'static dyn super::Operation);
+                }
+                if req.headers.contains_key("x-amz-copy-source") {
+                    return Ok(&CopyObject as &'static dyn super::Operation);
+                }
+                Ok(&PutObject as &'static dyn super::Operation)
+            }
+        },
+        hyper::Method::DELETE => match s3_path {
+            S3Path::Root => Err(super::unknown_operation()),
+            S3Path::Bucket { .. } => {
+                if let Some(qs) = qs {
+                    if qs.has("analytics") {
+                        return Ok(&DeleteBucketAnalyticsConfiguration as &'static dyn super::Operation);
+                    }
+                    if qs.has("intelligent-tiering") {
+                        return Ok(&DeleteBucketIntelligentTieringConfiguration as &'static dyn super::Operation);
+                    }
+                    if qs.has("inventory") {
+                        return Ok(&DeleteBucketInventoryConfiguration as &'static dyn super::Operation);
+                    }
+                    if qs.has("metrics") {
+                        return Ok(&DeleteBucketMetricsConfiguration as &'static dyn super::Operation);
+                    }
+                    if qs.has("cors") {
+                        return Ok(&DeleteBucketCors as &'static dyn super::Operation);
+                    }
+                    if qs.has("encryption") {
+                        return Ok(&DeleteBucketEncryption as &'static dyn super::Operation);
+                    }
+                    if qs.has("lifecycle") {
+                        return Ok(&DeleteBucketLifecycle as &'static dyn super::Operation);
+                    }
+                    if qs.has("metadataConfiguration") {
+                        return Ok(&DeleteBucketMetadataConfiguration as &'static dyn super::Operation);
+                    }
+                    if qs.has("metadataTable") {
+                        return Ok(&DeleteBucketMetadataTableConfiguration as &'static dyn super::Operation);
+                    }
+                    if qs.has("ownershipControls") {
+                        return Ok(&DeleteBucketOwnershipControls as &'static dyn super::Operation);
+                    }
+                    if qs.has("policy") {
+                        return Ok(&DeleteBucketPolicy as &'static dyn super::Operation);
+                    }
+                    if qs.has("replication") {
+                        return Ok(&DeleteBucketReplication as &'static dyn super::Operation);
+                    }
+                    if qs.has("tagging") {
+                        return Ok(&DeleteBucketTagging as &'static dyn super::Operation);
+                    }
+                    if qs.has("website") {
+                        return Ok(&DeleteBucketWebsite as &'static dyn super::Operation);
+                    }
+                    if qs.has("publicAccessBlock") {
+                        return Ok(&DeletePublicAccessBlock as &'static dyn super::Operation);
+                    }
+                }
+                Ok(&DeleteBucket as &'static dyn super::Operation)
+            }
+            S3Path::Object { .. } => {
+                if let Some(qs) = qs {
+                    if qs.has("tagging") {
+                        return Ok(&DeleteObjectTagging as &'static dyn super::Operation);
+                    }
+                }
+                if let Some(qs) = qs
+                    && qs.has("uploadId")
+                {
+                    return Ok(&AbortMultipartUpload as &'static dyn super::Operation);
+                }
+                Ok(&DeleteObject as &'static dyn super::Operation)
+            }
+        },
+        _ => Err(super::unknown_operation()),
+    }
+}
+
+#[cfg(feature = "minio")]
+pub fn resolve_route(
+    req: &http::Request,
+    s3_path: &S3Path,
+    qs: Option<&http::OrderedQs>,
+) -> S3Result<&'static dyn super::Operation> {
+    match req.method {
+        hyper::Method::HEAD => match s3_path {
+            S3Path::Root => Err(super::unknown_operation()),
+            S3Path::Bucket { .. } => Ok(&HeadBucket as &'static dyn super::Operation),
+            S3Path::Object { .. } => Ok(&HeadObject as &'static dyn super::Operation),
+        },
+        hyper::Method::GET => match s3_path {
+            S3Path::Root => {
+                if let Some(qs) = qs {
+                    if super::check_query_pattern(qs, "x-id", "ListDirectoryBuckets") {
+                        return Ok(&ListDirectoryBuckets as &'static dyn super::Operation);
+                    }
+                }
+                Ok(&ListBuckets as &'static dyn super::Operation)
+            }
+            S3Path::Bucket { .. } => {
+                if let Some(qs) = qs {
+                    if qs.has("analytics") && qs.has("id") {
+                        return Ok(&GetBucketAnalyticsConfiguration as &'static dyn super::Operation);
+                    }
+                    if qs.has("intelligent-tiering") && qs.has("id") {
+                        return Ok(&GetBucketIntelligentTieringConfiguration as &'static dyn super::Operation);
+                    }
+                    if qs.has("inventory") && qs.has("id") {
+                        return Ok(&GetBucketInventoryConfiguration as &'static dyn super::Operation);
+                    }
+                    if qs.has("metrics") && qs.has("id") {
+                        return Ok(&GetBucketMetricsConfiguration as &'static dyn super::Operation);
+                    }
+                    if qs.has("session") {
+                        return Ok(&CreateSession as &'static dyn super::Operation);
+                    }
+                    if qs.has("abac") {
+                        return Ok(&GetBucketAbac as &'static dyn super::Operation);
+                    }
+                    if qs.has("accelerate") {
+                        return Ok(&GetBucketAccelerateConfiguration as &'static dyn super::Operation);
+                    }
+                    if qs.has("acl") {
+                        return Ok(&GetBucketAcl as &'static dyn super::Operation);
+                    }
+                    if qs.has("cors") {
+                        return Ok(&GetBucketCors as &'static dyn super::Operation);
+                    }
+                    if qs.has("encryption") {
+                        return Ok(&GetBucketEncryption as &'static dyn super::Operation);
+                    }
+                    if qs.has("lifecycle") {
+                        return Ok(&GetBucketLifecycleConfiguration as &'static dyn super::Operation);
+                    }
+                    if qs.has("location") {
+                        return Ok(&GetBucketLocation as &'static dyn super::Operation);
+                    }
+                    if qs.has("logging") {
+                        return Ok(&GetBucketLogging as &'static dyn super::Operation);
+                    }
+                    if qs.has("metadataConfiguration") {
+                        return Ok(&GetBucketMetadataConfiguration as &'static dyn super::Operation);
+                    }
+                    if qs.has("metadataTable") {
+                        return Ok(&GetBucketMetadataTableConfiguration as &'static dyn super::Operation);
+                    }
+                    if qs.has("notification") {
+                        return Ok(&GetBucketNotificationConfiguration as &'static dyn super::Operation);
+                    }
+                    if qs.has("ownershipControls") {
+                        return Ok(&GetBucketOwnershipControls as &'static dyn super::Operation);
+                    }
+                    if qs.has("policy") {
+                        return Ok(&GetBucketPolicy as &'static dyn super::Operation);
+                    }
+                    if qs.has("policyStatus") {
+                        return Ok(&GetBucketPolicyStatus as &'static dyn super::Operation);
+                    }
+                    if qs.has("replication") {
+                        return Ok(&GetBucketReplication as &'static dyn super::Operation);
+                    }
+                    if qs.has("requestPayment") {
+                        return Ok(&GetBucketRequestPayment as &'static dyn super::Operation);
+                    }
+                    if qs.has("tagging") {
+                        return Ok(&GetBucketTagging as &'static dyn super::Operation);
+                    }
+                    if qs.has("versioning") {
+                        return Ok(&GetBucketVersioning as &'static dyn super::Operation);
+                    }
+                    if qs.has("website") {
+                        return Ok(&GetBucketWebsite as &'static dyn super::Operation);
+                    }
+                    if qs.has("object-lock") {
+                        return Ok(&GetObjectLockConfiguration as &'static dyn super::Operation);
+                    }
+                    if qs.has("publicAccessBlock") {
+                        return Ok(&GetPublicAccessBlock as &'static dyn super::Operation);
+                    }
+                    if qs.has("analytics") && !qs.has("id") {
+                        return Ok(&ListBucketAnalyticsConfigurations as &'static dyn super::Operation);
+                    }
+                    if qs.has("intelligent-tiering") && !qs.has("id") {
+                        return Ok(&ListBucketIntelligentTieringConfigurations as &'static dyn super::Operation);
+                    }
+                    if qs.has("inventory") && !qs.has("id") {
+                        return Ok(&ListBucketInventoryConfigurations as &'static dyn super::Operation);
+                    }
+                    if qs.has("metrics") && !qs.has("id") {
+                        return Ok(&ListBucketMetricsConfigurations as &'static dyn super::Operation);
+                    }
+                    if qs.has("uploads") {
+                        return Ok(&ListMultipartUploads as &'static dyn super::Operation);
+                    }
+                    if qs.has("versions") {
+                        return Ok(&ListObjectVersions as &'static dyn super::Operation);
+                    }
+                    if qs.has("events") {
+                        return Ok(&ListenBucketNotification as &'static dyn super::Operation);
                     }
                     if super::check_query_pattern(qs, "list-type", "2") {
                         return Ok(&ListObjectsV2 as &'static dyn super::Operation);

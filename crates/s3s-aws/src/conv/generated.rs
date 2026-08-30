@@ -487,8 +487,17 @@ impl AwsConversion for s3s::dto::BucketLifecycleConfiguration {
     type Target = aws_sdk_s3::types::BucketLifecycleConfiguration;
     type Error = S3Error;
 
+    #[cfg(not(feature = "minio"))]
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
         Ok(Self {
+            rules: try_from_aws(x.rules)?,
+        })
+    }
+
+    #[cfg(feature = "minio")]
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            expiry_updated_at: None,
             rules: try_from_aws(x.rules)?,
         })
     }
@@ -1080,6 +1089,7 @@ impl AwsConversion for s3s::dto::CopyObjectInput {
     type Target = aws_sdk_s3::operation::copy_object::CopyObjectInput;
     type Error = S3Error;
 
+    #[cfg(not(feature = "minio"))]
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
         Ok(Self {
             acl: try_from_aws(x.acl)?,
@@ -1122,6 +1132,54 @@ impl AwsConversion for s3s::dto::CopyObjectInput {
             storage_class: try_from_aws(x.storage_class)?,
             tagging: try_from_aws(x.tagging)?,
             tagging_directive: try_from_aws(x.tagging_directive)?,
+            website_redirect_location: try_from_aws(x.website_redirect_location)?,
+        })
+    }
+
+    #[cfg(feature = "minio")]
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            acl: try_from_aws(x.acl)?,
+            bucket: unwrap_from_aws(x.bucket, "bucket")?,
+            bucket_key_enabled: try_from_aws(x.bucket_key_enabled)?,
+            cache_control: try_from_aws(x.cache_control)?,
+            checksum_algorithm: try_from_aws(x.checksum_algorithm)?,
+            content_disposition: try_from_aws(x.content_disposition)?,
+            content_encoding: try_from_aws(x.content_encoding)?,
+            content_language: try_from_aws(x.content_language)?,
+            content_type: try_from_aws(x.content_type)?,
+            copy_source: unwrap_from_aws(x.copy_source, "copy_source")?,
+            copy_source_if_match: try_from_aws(x.copy_source_if_match)?,
+            copy_source_if_modified_since: try_from_aws(x.copy_source_if_modified_since)?,
+            copy_source_if_none_match: try_from_aws(x.copy_source_if_none_match)?,
+            copy_source_if_unmodified_since: try_from_aws(x.copy_source_if_unmodified_since)?,
+            copy_source_sse_customer_algorithm: try_from_aws(x.copy_source_sse_customer_algorithm)?,
+            copy_source_sse_customer_key: try_from_aws(x.copy_source_sse_customer_key)?,
+            copy_source_sse_customer_key_md5: try_from_aws(x.copy_source_sse_customer_key_md5)?,
+            expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
+            expected_source_bucket_owner: try_from_aws(x.expected_source_bucket_owner)?,
+            expires: try_from_aws(x.expires)?,
+            grant_full_control: try_from_aws(x.grant_full_control)?,
+            grant_read: try_from_aws(x.grant_read)?,
+            grant_read_acp: try_from_aws(x.grant_read_acp)?,
+            grant_write_acp: try_from_aws(x.grant_write_acp)?,
+            key: unwrap_from_aws(x.key, "key")?,
+            metadata: try_from_aws(x.metadata)?,
+            metadata_directive: try_from_aws(x.metadata_directive)?,
+            object_lock_legal_hold_status: try_from_aws(x.object_lock_legal_hold_status)?,
+            object_lock_mode: try_from_aws(x.object_lock_mode)?,
+            object_lock_retain_until_date: try_from_aws(x.object_lock_retain_until_date)?,
+            request_payer: try_from_aws(x.request_payer)?,
+            sse_customer_algorithm: try_from_aws(x.sse_customer_algorithm)?,
+            sse_customer_key: try_from_aws(x.sse_customer_key)?,
+            sse_customer_key_md5: try_from_aws(x.sse_customer_key_md5)?,
+            ssekms_encryption_context: try_from_aws(x.ssekms_encryption_context)?,
+            ssekms_key_id: try_from_aws(x.ssekms_key_id)?,
+            server_side_encryption: try_from_aws(x.server_side_encryption)?,
+            storage_class: try_from_aws(x.storage_class)?,
+            tagging: try_from_aws(x.tagging)?,
+            tagging_directive: try_from_aws(x.tagging_directive)?,
+            version_id: None,
             website_redirect_location: try_from_aws(x.website_redirect_location)?,
         })
     }
@@ -1451,6 +1509,7 @@ impl AwsConversion for s3s::dto::CreateMultipartUploadInput {
     type Target = aws_sdk_s3::operation::create_multipart_upload::CreateMultipartUploadInput;
     type Error = S3Error;
 
+    #[cfg(not(feature = "minio"))]
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
         Ok(Self {
             acl: try_from_aws(x.acl)?,
@@ -1483,6 +1542,44 @@ impl AwsConversion for s3s::dto::CreateMultipartUploadInput {
             server_side_encryption: try_from_aws(x.server_side_encryption)?,
             storage_class: try_from_aws(x.storage_class)?,
             tagging: try_from_aws(x.tagging)?,
+            website_redirect_location: try_from_aws(x.website_redirect_location)?,
+        })
+    }
+
+    #[cfg(feature = "minio")]
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            acl: try_from_aws(x.acl)?,
+            bucket: unwrap_from_aws(x.bucket, "bucket")?,
+            bucket_key_enabled: try_from_aws(x.bucket_key_enabled)?,
+            cache_control: try_from_aws(x.cache_control)?,
+            checksum_algorithm: try_from_aws(x.checksum_algorithm)?,
+            checksum_type: try_from_aws(x.checksum_type)?,
+            content_disposition: try_from_aws(x.content_disposition)?,
+            content_encoding: try_from_aws(x.content_encoding)?,
+            content_language: try_from_aws(x.content_language)?,
+            content_type: try_from_aws(x.content_type)?,
+            expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
+            expires: try_from_aws(x.expires)?,
+            grant_full_control: try_from_aws(x.grant_full_control)?,
+            grant_read: try_from_aws(x.grant_read)?,
+            grant_read_acp: try_from_aws(x.grant_read_acp)?,
+            grant_write_acp: try_from_aws(x.grant_write_acp)?,
+            key: unwrap_from_aws(x.key, "key")?,
+            metadata: try_from_aws(x.metadata)?,
+            object_lock_legal_hold_status: try_from_aws(x.object_lock_legal_hold_status)?,
+            object_lock_mode: try_from_aws(x.object_lock_mode)?,
+            object_lock_retain_until_date: try_from_aws(x.object_lock_retain_until_date)?,
+            request_payer: try_from_aws(x.request_payer)?,
+            sse_customer_algorithm: try_from_aws(x.sse_customer_algorithm)?,
+            sse_customer_key: try_from_aws(x.sse_customer_key)?,
+            sse_customer_key_md5: try_from_aws(x.sse_customer_key_md5)?,
+            ssekms_encryption_context: try_from_aws(x.ssekms_encryption_context)?,
+            ssekms_key_id: try_from_aws(x.ssekms_key_id)?,
+            server_side_encryption: try_from_aws(x.server_side_encryption)?,
+            storage_class: try_from_aws(x.storage_class)?,
+            tagging: try_from_aws(x.tagging)?,
+            version_id: None,
             website_redirect_location: try_from_aws(x.website_redirect_location)?,
         })
     }
@@ -1787,10 +1884,20 @@ impl AwsConversion for s3s::dto::DeleteBucketInput {
     type Target = aws_sdk_s3::operation::delete_bucket::DeleteBucketInput;
     type Error = S3Error;
 
+    #[cfg(not(feature = "minio"))]
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
         Ok(Self {
             bucket: unwrap_from_aws(x.bucket, "bucket")?,
             expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
+        })
+    }
+
+    #[cfg(feature = "minio")]
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            bucket: unwrap_from_aws(x.bucket, "bucket")?,
+            expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
+            force_delete: None,
         })
     }
 
@@ -5189,10 +5296,21 @@ impl AwsConversion for s3s::dto::LifecycleExpiration {
     type Target = aws_sdk_s3::types::LifecycleExpiration;
     type Error = S3Error;
 
+    #[cfg(not(feature = "minio"))]
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
         Ok(Self {
             date: try_from_aws(x.date)?,
             days: try_from_aws(x.days)?,
+            expired_object_delete_marker: try_from_aws(x.expired_object_delete_marker)?,
+        })
+    }
+
+    #[cfg(feature = "minio")]
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            date: try_from_aws(x.date)?,
+            days: try_from_aws(x.days)?,
+            expired_object_all_versions: None,
             expired_object_delete_marker: try_from_aws(x.expired_object_delete_marker)?,
         })
     }
@@ -5211,9 +5329,27 @@ impl AwsConversion for s3s::dto::LifecycleRule {
     type Error = S3Error;
 
     #[allow(deprecated)]
+    #[cfg(not(feature = "minio"))]
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
         Ok(Self {
             abort_incomplete_multipart_upload: try_from_aws(x.abort_incomplete_multipart_upload)?,
+            expiration: try_from_aws(x.expiration)?,
+            filter: try_from_aws(x.filter)?,
+            id: try_from_aws(x.id)?,
+            noncurrent_version_expiration: try_from_aws(x.noncurrent_version_expiration)?,
+            noncurrent_version_transitions: try_from_aws(x.noncurrent_version_transitions)?,
+            prefix: try_from_aws(x.prefix)?,
+            status: try_from_aws(x.status)?,
+            transitions: try_from_aws(x.transitions)?,
+        })
+    }
+
+    #[allow(deprecated)]
+    #[cfg(feature = "minio")]
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            abort_incomplete_multipart_upload: try_from_aws(x.abort_incomplete_multipart_upload)?,
+            del_marker_expiration: None,
             expiration: try_from_aws(x.expiration)?,
             filter: try_from_aws(x.filter)?,
             id: try_from_aws(x.id)?,
@@ -5268,9 +5404,22 @@ impl AwsConversion for s3s::dto::LifecycleRuleFilter {
     type Target = aws_sdk_s3::types::LifecycleRuleFilter;
     type Error = S3Error;
 
+    #[cfg(not(feature = "minio"))]
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
         Ok(Self {
             and: try_from_aws(x.and)?,
+            object_size_greater_than: try_from_aws(x.object_size_greater_than)?,
+            object_size_less_than: try_from_aws(x.object_size_less_than)?,
+            prefix: try_from_aws(x.prefix)?,
+            tag: try_from_aws(x.tag)?,
+        })
+    }
+
+    #[cfg(feature = "minio")]
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            and: try_from_aws(x.and)?,
+            cached_tags: s3s::dto::CachedTags::default(),
             object_size_greater_than: try_from_aws(x.object_size_greater_than)?,
             object_size_less_than: try_from_aws(x.object_size_less_than)?,
             prefix: try_from_aws(x.prefix)?,
@@ -8048,6 +8197,7 @@ impl AwsConversion for s3s::dto::PutObjectInput {
     type Target = aws_sdk_s3::operation::put_object::PutObjectInput;
     type Error = S3Error;
 
+    #[cfg(not(feature = "minio"))]
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
         Ok(Self {
             acl: try_from_aws(x.acl)?,
@@ -8094,6 +8244,59 @@ impl AwsConversion for s3s::dto::PutObjectInput {
             server_side_encryption: try_from_aws(x.server_side_encryption)?,
             storage_class: try_from_aws(x.storage_class)?,
             tagging: try_from_aws(x.tagging)?,
+            website_redirect_location: try_from_aws(x.website_redirect_location)?,
+            write_offset_bytes: try_from_aws(x.write_offset_bytes)?,
+        })
+    }
+
+    #[cfg(feature = "minio")]
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            acl: try_from_aws(x.acl)?,
+            body: Some(try_from_aws(x.body)?),
+            bucket: unwrap_from_aws(x.bucket, "bucket")?,
+            bucket_key_enabled: try_from_aws(x.bucket_key_enabled)?,
+            cache_control: try_from_aws(x.cache_control)?,
+            checksum_algorithm: try_from_aws(x.checksum_algorithm)?,
+            checksum_crc32: try_from_aws(x.checksum_crc32)?,
+            checksum_crc32c: try_from_aws(x.checksum_crc32_c)?,
+            checksum_crc64nvme: try_from_aws(x.checksum_crc64_nvme)?,
+            checksum_md5: try_from_aws(x.checksum_md5)?,
+            checksum_sha1: try_from_aws(x.checksum_sha1)?,
+            checksum_sha256: try_from_aws(x.checksum_sha256)?,
+            checksum_sha512: try_from_aws(x.checksum_sha512)?,
+            checksum_xxhash128: try_from_aws(x.checksum_xxhash128)?,
+            checksum_xxhash3: try_from_aws(x.checksum_xxhash3)?,
+            checksum_xxhash64: try_from_aws(x.checksum_xxhash64)?,
+            content_disposition: try_from_aws(x.content_disposition)?,
+            content_encoding: try_from_aws(x.content_encoding)?,
+            content_language: try_from_aws(x.content_language)?,
+            content_length: try_from_aws(x.content_length)?,
+            content_md5: try_from_aws(x.content_md5)?,
+            content_type: try_from_aws(x.content_type)?,
+            expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
+            expires: try_from_aws(x.expires)?,
+            grant_full_control: try_from_aws(x.grant_full_control)?,
+            grant_read: try_from_aws(x.grant_read)?,
+            grant_read_acp: try_from_aws(x.grant_read_acp)?,
+            grant_write_acp: try_from_aws(x.grant_write_acp)?,
+            if_match: try_from_aws(x.if_match)?,
+            if_none_match: try_from_aws(x.if_none_match)?,
+            key: unwrap_from_aws(x.key, "key")?,
+            metadata: try_from_aws(x.metadata)?,
+            object_lock_legal_hold_status: try_from_aws(x.object_lock_legal_hold_status)?,
+            object_lock_mode: try_from_aws(x.object_lock_mode)?,
+            object_lock_retain_until_date: try_from_aws(x.object_lock_retain_until_date)?,
+            request_payer: try_from_aws(x.request_payer)?,
+            sse_customer_algorithm: try_from_aws(x.sse_customer_algorithm)?,
+            sse_customer_key: try_from_aws(x.sse_customer_key)?,
+            sse_customer_key_md5: try_from_aws(x.sse_customer_key_md5)?,
+            ssekms_encryption_context: try_from_aws(x.ssekms_encryption_context)?,
+            ssekms_key_id: try_from_aws(x.ssekms_key_id)?,
+            server_side_encryption: try_from_aws(x.server_side_encryption)?,
+            storage_class: try_from_aws(x.storage_class)?,
+            tagging: try_from_aws(x.tagging)?,
+            version_id: None,
             website_redirect_location: try_from_aws(x.website_redirect_location)?,
             write_offset_bytes: try_from_aws(x.write_offset_bytes)?,
         })
@@ -8679,9 +8882,27 @@ impl AwsConversion for s3s::dto::ReplicationRule {
     type Error = S3Error;
 
     #[allow(deprecated)]
+    #[cfg(not(feature = "minio"))]
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
         Ok(Self {
             delete_marker_replication: try_from_aws(x.delete_marker_replication)?,
+            destination: unwrap_from_aws(x.destination, "destination")?,
+            existing_object_replication: try_from_aws(x.existing_object_replication)?,
+            filter: try_from_aws(x.filter)?,
+            id: try_from_aws(x.id)?,
+            prefix: try_from_aws(x.prefix)?,
+            priority: try_from_aws(x.priority)?,
+            source_selection_criteria: try_from_aws(x.source_selection_criteria)?,
+            status: try_from_aws(x.status)?,
+        })
+    }
+
+    #[allow(deprecated)]
+    #[cfg(feature = "minio")]
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            delete_marker_replication: try_from_aws(x.delete_marker_replication)?,
+            delete_replication: None,
             destination: unwrap_from_aws(x.destination, "destination")?,
             existing_object_replication: try_from_aws(x.existing_object_replication)?,
             filter: try_from_aws(x.filter)?,
@@ -8732,9 +8953,20 @@ impl AwsConversion for s3s::dto::ReplicationRuleFilter {
     type Target = aws_sdk_s3::types::ReplicationRuleFilter;
     type Error = S3Error;
 
+    #[cfg(not(feature = "minio"))]
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
         Ok(Self {
             and: try_from_aws(x.and)?,
+            prefix: try_from_aws(x.prefix)?,
+            tag: try_from_aws(x.tag)?,
+        })
+    }
+
+    #[cfg(feature = "minio")]
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            and: try_from_aws(x.and)?,
+            cached_tags: s3s::dto::CachedTags::default(),
             prefix: try_from_aws(x.prefix)?,
             tag: try_from_aws(x.tag)?,
         })
@@ -10130,8 +10362,19 @@ impl AwsConversion for s3s::dto::VersioningConfiguration {
     type Target = aws_sdk_s3::types::VersioningConfiguration;
     type Error = S3Error;
 
+    #[cfg(not(feature = "minio"))]
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
         Ok(Self {
+            mfa_delete: try_from_aws(x.mfa_delete)?,
+            status: try_from_aws(x.status)?,
+        })
+    }
+
+    #[cfg(feature = "minio")]
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            exclude_folders: None,
+            excluded_prefixes: None,
             mfa_delete: try_from_aws(x.mfa_delete)?,
             status: try_from_aws(x.status)?,
         })

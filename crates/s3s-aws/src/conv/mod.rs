@@ -3,10 +3,6 @@
 
 mod builtin;
 
-#[cfg(feature = "minio")]
-mod generated_minio;
-
-#[cfg(not(feature = "minio"))]
 mod generated;
 
 use s3s::s3_error;

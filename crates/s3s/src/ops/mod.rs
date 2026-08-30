@@ -7,14 +7,7 @@
 //! invokes the user-provided [`S3`](crate::S3) implementation, and converts
 //! the resulting outputs or errors back into HTTP responses.
 
-cfg_if::cfg_if! {
-    if #[cfg(feature = "minio")] {
-        mod generated_minio;
-        use self::generated_minio as generated;
-    } else {
-        mod generated;
-    }
-}
+mod generated;
 
 pub use self::generated::*;
 
