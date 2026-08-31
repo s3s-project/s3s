@@ -191,10 +191,8 @@ pub fn codegen(ops: &Operations, rust_types_base: &RustTypes, rust_types_minio: 
     });
 
     codegen_post_object_fork_op(rust_types_minio);
-
-    codegen_post_object_fork_op(rust_types_minio);
     codegen_http(ops, rust_types_base, rust_types_minio);
-    codegen_router_twins(ops, rust_types_base, rust_types_minio);
+    codegen_router(ops, rust_types_minio);
 
     write_dir_file(OPS_GENERATED_DIR, "mod.rs", || {
         codegen_file_header();
@@ -1314,20 +1312,11 @@ fn has_streaming_body(op: &Operation, rust_types: &RustTypes) -> bool {
         .any(|field| field.position == "payload" && field.type_ == "StreamingBlob")
 }
 
-/// Emit the base and `MinIO` `resolve_route` twins under mutually exclusive
-/// gates, mirroring the pre-merge layout. The twins are folded into a single
-/// function with an inline gated branch in a later refactoring.
-fn codegen_router_twins(ops: &Operations, rust_types_base: &RustTypes, rust_types_minio: &RustTypes) {
-    let base_ops: Operations = ops
-        .iter()
-        .filter(|(_, op)| op.is_minio.not())
-        .map(|(name, op)| (name.clone(), op.clone()))
-        .collect();
-
+/// Emit the single `resolve_route` over the union route set. MinIO-only
+/// operations contribute inline `#[cfg(feature = "minio")]`-gated branches.
+fn codegen_router(ops: &Operations, rust_types: &RustTypes) {
     write_dir_file(OPS_GENERATED_DIR, "router.rs", || {
         codegen_file_header();
-        // The router references every operation struct; glob-import the
-        // module's re-exports instead of enumerating them.
         // The router uses fully-qualified `crate::ops::` paths for the
         // helpers; only the module re-exports (operation structs) are globbed.
         g([
@@ -1337,16 +1326,12 @@ fn codegen_router_twins(ops: &Operations, rust_types_base: &RustTypes, rust_type
             "use crate::path::S3Path;",
             "",
         ]);
-        g!("#[cfg(not(feature = \"minio\"))]");
-        codegen_router(&base_ops, rust_types_base);
-        g!();
-        g!("#[cfg(feature = \"minio\")]");
-        codegen_router(ops, rust_types_minio);
+        codegen_router_inner(ops, rust_types);
     });
 }
 
 #[allow(clippy::too_many_lines)]
-fn codegen_router(ops: &Operations, rust_types: &RustTypes) {
+fn codegen_router_inner(ops: &Operations, rust_types: &RustTypes) {
     let routes = collect_routes(ops, rust_types);
 
     let methods = ["HEAD", "GET", "POST", "PUT", "DELETE"];
@@ -1441,6 +1426,12 @@ fn codegen_router(ops: &Operations, rust_types: &RustTypes) {
                         for route in group {
                             let has_query_tag = route.query_tag.is_some();
                             let has_query_patterns = route.query_patterns.is_empty().not();
+
+                            // MinIO-only operations are compiled only with the feature; their
+                            // route branches are gated inline instead of duplicating the router.
+                            if route.op.is_minio {
+                                g!("#[cfg(feature = \"minio\")]");
+                            }
 
                             let qp = route.query_patterns.as_slice();
 
