@@ -6,7 +6,7 @@
 use crate::dto::*;
 use crate::error::*;
 use crate::http;
-use crate::ops::{CallContext, Operation, PutObject, build_s3_request, serialize_error};
+use crate::ops::{CallContext, PutObject};
 
 pub struct PostObject;
 

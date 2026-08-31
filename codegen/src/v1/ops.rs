@@ -192,6 +192,10 @@ pub fn codegen(ops: &Operations, rust_types_base: &RustTypes, rust_types_minio: 
 
     codegen_post_object_fork_op(rust_types_minio);
 
+    codegen_post_object_fork_op(rust_types_minio);
+    codegen_http(ops, rust_types_base, rust_types_minio);
+    codegen_router_twins(ops, rust_types_base, rust_types_minio);
+
     write_dir_file(OPS_GENERATED_DIR, "mod.rs", || {
         codegen_file_header();
 
@@ -215,22 +219,31 @@ pub fn codegen(ops: &Operations, rust_types_base: &RustTypes, rust_types_minio: 
             "#![deny(clippy::panic)]",
             "#![deny(clippy::unreachable)]",
             "",
-            "use crate::dto::*;",
-            "use crate::header::*;",
-            "use crate::http;",
-            "use crate::error::*;",
-            "use crate::path::S3Path;",
-            "use crate::ops::CallContext;",
-            "",
         ]);
+
+        for op in ops.values() {
+            if op.name == "PostObject" {
+                continue;
+            }
+            g!("mod {};", op.name.to_snake_case());
+        }
         g!("mod header_value;");
         g!("mod post_object;");
-        g!();
-        g!("pub use self::post_object::PostObject;");
+        g!("mod router;");
         g!();
 
-        codegen_http(ops, rust_types_base, rust_types_minio);
-        codegen_router_twins(ops, rust_types_base, rust_types_minio);
+        for op in ops.values() {
+            if op.name == "PostObject" {
+                continue;
+            }
+            if op.is_minio {
+                g!("#[cfg(feature = \"minio\")]");
+            }
+            g!("pub use self::{}::{};", op.name.to_snake_case(), op.name);
+        }
+        g!("pub use self::post_object::PostObject;");
+        g!("pub use self::router::resolve_route;");
+        g!();
     });
 }
 
@@ -245,11 +258,43 @@ fn op_input_differs(op: &Operation, rust_types_base: &RustTypes, rust_types_mini
     base.fields != minio.fields
 }
 
+/// Whether the operation's input or output struct carries header-position fields.
+/// Used to decide whether the per-operation file needs `use crate::header::*;`.
+fn op_has_header_fields(op: &Operation, rust_types: &RustTypes) -> bool {
+    let has_header = |name: &str| {
+        let rust::Type::Struct(ty) = &rust_types[name] else { return false };
+        ty.fields.iter().any(|field| field.position == "header")
+    };
+    has_header(op.input.as_str()) || has_header(op.output.as_str())
+}
+
 fn codegen_http(ops: &Operations, rust_types_base: &RustTypes, rust_types_minio: &RustTypes) {
     for op in ops.values() {
         if op.name == "PostObject" {
             continue;
         }
+        codegen_op_unit(op, rust_types_base, rust_types_minio);
+    }
+}
+
+#[allow(clippy::too_many_lines)]
+fn codegen_op_unit(op: &Operation, rust_types_base: &RustTypes, rust_types_minio: &RustTypes) {
+    let file = op.name.to_snake_case();
+    write_dir_file(OPS_GENERATED_DIR, &format!("{file}.rs"), || {
+        codegen_file_header();
+        g!("// {}", op.name);
+        g!();
+        // MinIO-only operations keep no items under `cfg(not(minio))`; their
+        // use statements must be gated as well to avoid unused-import warnings.
+        let gate = if op.is_minio { "#[cfg(feature = \"minio\")]\n" } else { "" };
+        if op_has_header_fields(op, rust_types_minio) {
+            g!("{gate}use crate::header::*;");
+        }
+        g!("{gate}use crate::dto::*;");
+        g!("{gate}use crate::error::*;");
+        g!("{gate}use crate::http;");
+        g!("{gate}use crate::ops::CallContext;");
+        g!();
 
         if op.is_minio {
             g!("#[cfg(feature = \"minio\")]");
@@ -289,7 +334,7 @@ fn codegen_http(ops: &Operations, rust_types_base: &RustTypes, rust_types_minio:
 
         codegen_op_http_call(op, rust_types_minio);
         g!();
-    }
+    });
 }
 
 fn status_code_name(code: u16) -> &'static str {
@@ -324,7 +369,7 @@ fn codegen_post_object_fork_op(rust_types: &RustTypes) {
             "use crate::dto::*;",
             "use crate::error::*;",
             "use crate::http;",
-            "use crate::ops::{build_s3_request, serialize_error, CallContext, Operation, PutObject};",
+            "use crate::ops::{CallContext, PutObject};",
             "",
         ]);
         g(["pub struct PostObject;", "", "impl PostObject {"]);
@@ -1030,7 +1075,7 @@ fn codegen_op_http_call(op: &Operation, rust_types: &RustTypes) {
     if op.is_minio {
         g!("#[cfg(feature = \"minio\")]");
     }
-    g!("impl super::Operation for {} {{", op.name);
+    g!("impl crate::ops::Operation for {} {{", op.name);
 
     g!("fn name(&self) -> &'static str {{");
     g!("\"{}\"", op.name);
@@ -1057,7 +1102,7 @@ fn codegen_op_http_call(op: &Operation, rust_types: &RustTypes) {
     let method = op.name.to_snake_case();
 
     g!("let input = Self::deserialize_http(req)?;");
-    g!("let mut s3_req = super::build_s3_request(input, req);");
+    g!("let mut s3_req = crate::ops::build_s3_request(input, req);");
     g!("let s3 = ccx.s3;");
 
     g!("if let Some(access) = ccx.access {{");
@@ -1065,7 +1110,7 @@ fn codegen_op_http_call(op: &Operation, rust_types: &RustTypes) {
     g!("}}");
 
     if op.name == "GetObject" {
-        g!("let overridden_headers = super::get_object::extract_overridden_response_headers(&s3_req)?;");
+        g!("let overridden_headers = crate::ops::get_object::extract_overridden_response_headers(&s3_req)?;");
     }
 
     g!("let result = s3.{method}(s3_req).await;");
@@ -1073,7 +1118,7 @@ fn codegen_op_http_call(op: &Operation, rust_types: &RustTypes) {
     g([
         "let s3_resp = match result {",
         "    Ok(val) => val,",
-        "    Err(err) => return super::serialize_error(err, false),",
+        "    Err(err) => return crate::ops::serialize_error(err, false),",
         "};",
     ]);
 
@@ -1081,7 +1126,7 @@ fn codegen_op_http_call(op: &Operation, rust_types: &RustTypes) {
 
     if op.name == "GetObject" {
         g!("resp.headers.extend(overridden_headers);");
-        g!("super::get_object::merge_custom_headers(&mut resp, s3_resp.headers);");
+        g!("crate::ops::get_object::merge_custom_headers(&mut resp, s3_resp.headers);");
     } else {
         g!("resp.headers.extend(s3_resp.headers);");
     }
@@ -1279,11 +1324,25 @@ fn codegen_router_twins(ops: &Operations, rust_types_base: &RustTypes, rust_type
         .map(|(name, op)| (name.clone(), op.clone()))
         .collect();
 
-    g!("#[cfg(not(feature = \"minio\"))]");
-    codegen_router(&base_ops, rust_types_base);
-    g!();
-    g!("#[cfg(feature = \"minio\")]");
-    codegen_router(ops, rust_types_minio);
+    write_dir_file(OPS_GENERATED_DIR, "router.rs", || {
+        codegen_file_header();
+        // The router references every operation struct; glob-import the
+        // module's re-exports instead of enumerating them.
+        // The router uses fully-qualified `crate::ops::` paths for the
+        // helpers; only the module re-exports (operation structs) are globbed.
+        g([
+            "use super::*;",
+            "use crate::error::*;",
+            "use crate::http;",
+            "use crate::path::S3Path;",
+            "",
+        ]);
+        g!("#[cfg(not(feature = \"minio\"))]");
+        codegen_router(&base_ops, rust_types_base);
+        g!();
+        g!("#[cfg(feature = \"minio\")]");
+        codegen_router(ops, rust_types_minio);
+    });
 }
 
 #[allow(clippy::too_many_lines)]
@@ -1300,13 +1359,13 @@ fn codegen_router(ops: &Operations, rust_types: &RustTypes) {
         req: &http::Request, \
         s3_path: &S3Path, \
         qs: Option<&http::OrderedQs>)\
-         -> S3Result<&'static dyn super::Operation> {{");
+         -> S3Result<&'static dyn crate::ops::Operation> {{");
 
     let succ = |route: &Route, return_: bool| {
         if return_ {
-            g!("return Ok(&{} as &'static dyn super::Operation);", route.op.name);
+            g!("return Ok(&{} as &'static dyn crate::ops::Operation);", route.op.name);
         } else {
-            g!("Ok(&{} as &'static dyn super::Operation)", route.op.name);
+            g!("Ok(&{} as &'static dyn crate::ops::Operation)", route.op.name);
         }
     };
 
@@ -1323,7 +1382,7 @@ fn codegen_router(ops: &Operations, rust_types: &RustTypes) {
 
             g!("{s3_path_pattern} => {{");
             match routes[method].get(&pattern) {
-                None => g!("Err(super::unknown_operation())"),
+                None => g!("Err(crate::ops::unknown_operation())"),
                 Some(group) => {
                     // NOTE: To debug the routing order, uncomment the lines below.
                     // {
@@ -1400,7 +1459,7 @@ fn codegen_router(ops: &Operations, rust_types: &RustTypes) {
                                     let tag = route.query_tag.as_deref().unwrap();
                                     let (n, v) = qp.first().unwrap();
 
-                                    g!("if qs.has(\"{tag}\") && super::check_query_pattern(qs, \"{n}\",\"{v}\") {{");
+                                    g!("if qs.has(\"{tag}\") && crate::ops::check_query_pattern(qs, \"{n}\",\"{v}\") {{");
                                     succ(route, true);
                                     g!("}}");
                                 }
@@ -1428,7 +1487,7 @@ fn codegen_router(ops: &Operations, rust_types: &RustTypes) {
                                 }
                                 (false, true) => {
                                     let (n, v) = qp.first().unwrap();
-                                    g!("if super::check_query_pattern(qs, \"{n}\",\"{v}\") {{");
+                                    g!("if crate::ops::check_query_pattern(qs, \"{n}\",\"{v}\") {{");
                                     succ(route, true);
                                     g!("}}");
                                 }
@@ -1436,7 +1495,7 @@ fn codegen_router(ops: &Operations, rust_types: &RustTypes) {
                                     // When multiple final ops exist, use x-id to disambiguate non-fallback routes
                                     if final_count > 1 && Some(route.op.name.as_str()) != fallback_op_name {
                                         let x_id = route.x_id.as_deref().unwrap();
-                                        g!("if super::check_query_pattern(qs, \"x-id\",\"{x_id}\") {{");
+                                        g!("if crate::ops::check_query_pattern(qs, \"x-id\",\"{x_id}\") {{");
                                         succ(route, true);
                                         g!("}}");
                                     }
@@ -1493,7 +1552,7 @@ fn codegen_router(ops: &Operations, rust_types: &RustTypes) {
                             let route = group.iter().find(|r| is_final_op(r)).unwrap();
                             succ(route, false);
                         } else {
-                            g!("Err(super::unknown_operation())");
+                            g!("Err(crate::ops::unknown_operation())");
                         }
                     }
                 }
@@ -1503,7 +1562,7 @@ fn codegen_router(ops: &Operations, rust_types: &RustTypes) {
 
         g!("}}");
     }
-    g!("_ => Err(super::unknown_operation())");
+    g!("_ => Err(crate::ops::unknown_operation())");
     g!("}}");
 
     g!("}}");
