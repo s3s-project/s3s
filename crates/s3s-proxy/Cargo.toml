@@ -21,6 +21,7 @@ aws-config = { workspace = true, features = ["behavior-version-latest"] }
 aws-credential-types.workspace = true
 aws-sdk-s3.workspace = true
 clap.workspace = true
+hyper.workspace = true
 hyper-util = { workspace = true, features = [
     "server-auto",
     "server-graceful",
@@ -29,6 +30,7 @@ hyper-util = { workspace = true, features = [
     "tokio",
 ] }
 minio = { workspace = true, optional = true }
+reqwest.workspace = true
 s3s = { version = "0.15.0", path = "../s3s" }
 s3s-aws = { version = "0.15.0", path = "../s3s-aws" }
 tokio = { workspace = true, features = ["full"] }
