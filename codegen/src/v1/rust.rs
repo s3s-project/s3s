@@ -7,7 +7,7 @@ use std::format as f;
 use scoped_writer::g;
 use serde_json::Value;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     Alias(Alias),
     Provided(Provided),
@@ -19,32 +19,32 @@ pub enum Type {
     Timestamp(Timestamp),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Alias {
     pub name: String,
     pub type_: String,
     pub doc: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Provided {
     pub name: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct List {
     pub name: String,
     pub member: ListMember,
     pub doc: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ListMember {
     pub type_: String,
     pub xml_name: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Map {
     pub name: String,
     pub key_type: String,
@@ -52,7 +52,7 @@ pub struct Map {
     pub doc: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct StrEnum {
     pub name: String,
     pub variants: Vec<StrEnumVariant>,
@@ -61,14 +61,14 @@ pub struct StrEnum {
     pub is_custom_extension: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct StrEnumVariant {
     pub name: String,
     pub value: String,
     pub doc: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Struct {
     pub name: String,
     pub fields: Vec<StructField>,
@@ -82,7 +82,7 @@ pub struct Struct {
 }
 
 #[allow(clippy::struct_excessive_bools)]
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct StructField {
     pub name: String,
     pub type_: String,
@@ -117,14 +117,14 @@ pub struct StructField {
     pub custom_in_derive_debug: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct StructEnum {
     pub name: String,
     pub variants: Vec<StructEnumVariant>,
     pub doc: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct StructEnumVariant {
     pub name: String,
     pub type_: String,
@@ -132,7 +132,7 @@ pub struct StructEnumVariant {
     pub xml_name: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Timestamp {
     pub name: String,
     pub format: Option<String>,
