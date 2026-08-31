@@ -53,10 +53,11 @@ EXPECTED_FAILURES: dict[str, dict[str, int]] = {
     "aws-sdk-ruby": {
         "presignedPost(bucket_name,file_name,expires_in_sec,max_byte_size)": 1,
     },
-    "healthcheck": {
-        "testLivenessEndpoint": 1,
-    },
     "mc": {
+        # s3s-proxy authenticates with a single static key and re-signs
+        # forwarded requests with it; the dynamically created user in
+        # test_admin_users cannot be signed in (`NotSignedUp`), so its S3
+        # operations never reach the backend.
         "test_admin_users": 1,
     },
     "minio-java": {
