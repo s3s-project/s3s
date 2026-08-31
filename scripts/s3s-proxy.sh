@@ -25,4 +25,5 @@ s3s-proxy \
     --port          8014                    \
     --domain        localhost:8014          \
     --endpoint-url  http://localhost:9000   \
+    --enable-minio-route                    \
     --enable-sig-v2
