@@ -129,6 +129,7 @@ pub struct StructEnumVariant {
     pub name: String,
     pub type_: String,
     pub doc: Option<String>,
+    pub xml_name: Option<String>,
 }
 
 #[derive(Debug, Clone)]

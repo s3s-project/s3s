@@ -10,9 +10,17 @@ repository.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [lints]
 workspace = true
 
 [dependencies]
+base64-simd.workspace = true
+hmac.workspace = true
 jiff.workspace = true
+sha1.workspace = true
+smallvec.workspace = true
 thiserror.workspace = true

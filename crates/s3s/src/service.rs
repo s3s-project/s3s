@@ -59,6 +59,36 @@
 //! - **Host**: None (assumes path-style requests)
 //! - **Route**: None (no custom routes)
 //! - **Validation**: None (uses AWS-compatible validation)
+//!
+//! # Authentication is required for production deployments
+//!
+//! Without [`set_auth`](S3ServiceBuilder::set_auth), the service accepts anonymous
+//! (unsigned) requests and **skips authorization entirely**: every S3 operation is
+//! open to any client that can reach the service, with no access checks performed.
+//! Signed requests fail with `NotImplemented` because no authentication provider is
+//! configured. A forgotten `set_auth` therefore turns the service into a publicly
+//! readable and writable endpoint. Call [`set_auth`](S3ServiceBuilder::set_auth) in
+//! any deployment that is not fully trusted, and prefer configuring an access
+//! provider via [`set_access`](S3ServiceBuilder::set_access) as well.
+//!
+//! # Deployment notes
+//!
+//! `S3Service` is an adapter and does not provide a complete security boundary
+//! by itself. For public deployments, configure authentication, authorization,
+//! request timeouts, rate limits, back pressure, and header/body limits in this
+//! service or in the surrounding HTTP stack.
+//!
+//! Streaming uploads (`PUT Object` and `UploadPart`) are passed to the
+//! [`S3`](crate::S3) implementation as streams. By default,
+//! [`S3Config::put_object_max_size`](crate::config::S3Config::put_object_max_size)
+//! is `Some(5 GiB)`, matching the AWS single-PUT object size limit, so `s3s`
+//! caps those streams; set it to `None` to disable the adapter-level limit
+//! and leave object-size enforcement to the
+//! [`S3`](crate::S3) implementation. aws-chunked requests are capped after
+//! signature verification has installed the decoded stream. `POST Object`
+//! keeps using
+//! [`S3Config::post_object_max_file_size`](crate::config::S3Config::post_object_max_file_size)
+//! as its file-size limit.
 
 use crate::access::S3Access;
 use crate::auth::S3Auth;
@@ -171,7 +201,11 @@ impl S3ServiceBuilder {
     /// Sets the configuration provider for the service.
     ///
     /// The configuration provider supplies runtime configuration values such as
-    /// maximum body sizes and other limits.
+    /// maximum body sizes and other limits. In particular,
+    /// [`S3Config::put_object_max_size`](crate::config::S3Config::put_object_max_size)
+    /// is an opt-in limit for streaming `PUT Object` and `UploadPart` bodies;
+    /// when it is unset, the [`S3`](crate::S3) implementation is responsible for
+    /// those object-size limits.
     ///
     /// If not set, defaults to [`StaticConfigProvider::default()`].
     ///
@@ -242,8 +276,11 @@ impl S3ServiceBuilder {
     /// The authentication provider verifies AWS Signature Version 4 or Version 2 signatures
     /// on incoming requests.
     ///
-    /// If not set, unsigned requests are allowed, but signed requests will fail with
-    /// `NotImplemented` ("This service has no authentication provider").
+    /// **Important**: authentication is required before exposing the service beyond a
+    /// trusted network. If not set, unsigned (anonymous) requests are accepted and
+    /// authorization is skipped entirely, so every S3 operation is open to any client;
+    /// signed requests fail with `NotImplemented` ("This service has no authentication
+    /// provider").
     ///
     /// # Example
     ///
@@ -814,6 +851,7 @@ mod tests {
         assert_eq!(config.xml_max_body_size, 20 * 1024 * 1024);
         assert_eq!(config.post_object_max_file_size, 5 * 1024 * 1024 * 1024);
         assert_eq!(config.custom_route_max_body_size, Some(1024 * 1024));
+        assert_eq!(config.put_object_max_size, Some(5 * 1024 * 1024 * 1024));
     }
 
     #[test]
@@ -824,6 +862,7 @@ mod tests {
             xml_max_body_size: 10 * 1024 * 1024,
             post_object_max_file_size: 2 * 1024 * 1024 * 1024,
             custom_route_max_body_size: Some(512 * 1024),
+            put_object_max_size: Some(1024 * 1024 * 1024),
             ..Default::default()
         })));
 
@@ -835,6 +874,7 @@ mod tests {
         assert_eq!(config.xml_max_body_size, 10 * 1024 * 1024);
         assert_eq!(config.post_object_max_file_size, 2 * 1024 * 1024 * 1024);
         assert_eq!(config.custom_route_max_body_size, Some(512 * 1024));
+        assert_eq!(config.put_object_max_size, Some(1024 * 1024 * 1024));
     }
 
     #[test]

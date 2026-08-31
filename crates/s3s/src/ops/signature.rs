@@ -1,19 +1,25 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
+#![deny(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::unwrap_used
+)]
 use crate::auth::S3Auth;
 use crate::auth::SecretKey;
 use crate::auth::signature::Signature;
 use crate::config::{S3Config, S3ConfigProvider};
 use crate::error::*;
 use crate::http::{self, OrderedQs};
-use crate::http::{AwsChunkedStream, Body, Multipart, MultipartLimits};
+use crate::http::{Body, Multipart, MultipartLimits};
 use crate::post_policy::PostPolicy;
 use crate::protocol::TrailingHeaders;
-use crate::sig_v2;
-use crate::sig_v4;
-use crate::sig_v4::UploadStream;
 use crate::stream::ByteStream as _;
+use crate::stream::aws_chunked_stream::AwsChunkedStream;
+use crate::stream::upload_stream::UploadStream;
 use crate::utils::crypto::Sha256Sum;
 use crate::utils::crypto::hex_bytes32;
 use crate::utils::crypto::hex_sha256;
@@ -25,7 +31,7 @@ use s3s_sigv4::AmzContentSha256;
 use s3s_sigv4::AmzDate;
 use s3s_sigv4::PostSignatureV4;
 use s3s_sigv4::PresignedUrlV4;
-use s3s_sigv4::{AuthorizationV4, CredentialV4};
+use s3s_sigv4::{AuthorizationV4, CredentialV4, ParseAuthorizationError};
 
 use std::mem;
 use std::ops::Not;
@@ -62,6 +68,12 @@ fn extract_authorization_v4(hs: &HeaderMap) -> S3Result<Option<AuthorizationV4<'
     };
     match AuthorizationV4::parse(val) {
         Ok(x) => Ok(Some(x)),
+        // A structurally valid header with a non-canonical signature is a
+        // signature problem, not a malformed header: keep the `SignatureDoesNotMatch`
+        // error that the signature-comparison step used to produce.
+        Err(ParseAuthorizationError::InvalidSignature) => {
+            Err(s3_error!(SignatureDoesNotMatch, "invalid header: authorization: invalid signature"))
+        }
         Err(e) => Err(invalid_request!(e, "invalid header: authorization")),
     }
 }
@@ -103,6 +115,29 @@ fn collect_signed_headers<'a>(
             };
             headers.push((name, value));
         }
+    }
+
+    Ok(headers)
+}
+
+/// Collects header pairs for `s3s_sigv2::create_string_to_sign`.
+///
+/// `&str` cannot represent non-UTF-8 values, so the rejection that used to
+/// happen inside `SigV2` canonicalization is handled here: a non-UTF-8
+/// `x-amz-*` header value fails the signature check with the same message;
+/// non-UTF-8 values of other headers are skipped, as they are not signed.
+fn sig_v2_headers(hs: &HeaderMap) -> S3Result<SignedHeaderPairs<'_>> {
+    let mut headers = SignedHeaderPairs::new();
+
+    for (name, value) in hs {
+        let name = name.as_str();
+        let Some(value) = http::header_value_to_str(value) else {
+            if name.starts_with("x-amz-") {
+                return Err(s3_error!(SignatureDoesNotMatch, "invalid header: {name}"));
+            }
+            continue;
+        };
+        headers.push((name, value));
     }
 
     Ok(headers)
@@ -167,9 +202,16 @@ struct SignatureVerificationContext<'a> {
 
 fn validate_sig_v4_clock_skew(amz_date: &AmzDate, now: jiff::Timestamp, config: &S3Config) -> S3Result<()> {
     let request_time = amz_date.to_time().ok_or_else(|| invalid_request!("invalid amz date"))?;
+    validate_clock_skew(request_time, now, config)
+}
+
+/// Rejects requests whose `date` / `x-amz-date` is farther from the server
+/// time than the configured skew allowance. Shared by `SigV4` and `SigV2`
+/// header authentication.
+fn validate_clock_skew(request_time: jiff::Timestamp, now: jiff::Timestamp, config: &S3Config) -> S3Result<()> {
     let duration = (now - request_time)
         .to_duration(jiff::SpanRelativeTo::days_are_24_hours())
-        .map_err(|_| invalid_request!("invalid amz date"))?;
+        .map_err(|_| invalid_request!("invalid request time"))?;
     let max_skew_time = jiff::SignedDuration::from_secs(i64::from(config.presigned_url_max_skew_time_secs));
 
     if duration.abs() > max_skew_time {
@@ -215,8 +257,14 @@ impl SignatureVerificationContext<'_> {
         canonical_request: &str,
         raw_canonical_request: impl FnOnce() -> String,
     ) -> S3Result<Signature> {
-        let string_to_sign = sig_v4::create_string_to_sign(canonical_request, self.amz_date, self.region, self.service);
-        let signature = sig_v4::calculate_signature(&string_to_sign, self.secret_key, self.amz_date, self.region, self.service);
+        let string_to_sign = s3s_sigv4::create_string_to_sign(canonical_request, self.amz_date, self.region, self.service);
+        let signature = Signature::from_computed(s3s_sigv4::calculate_signature(
+            &string_to_sign,
+            self.secret_key.expose(),
+            self.amz_date,
+            self.region,
+            self.service,
+        ));
 
         if Signature::compare(&signature, &self.expected_signature) {
             return Ok(signature);
@@ -228,9 +276,14 @@ impl SignatureVerificationContext<'_> {
         }
 
         let canonical_request = raw_canonical_request();
-        let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, self.amz_date, self.region, self.service);
-        let raw_signature =
-            sig_v4::calculate_signature(&string_to_sign, self.secret_key, self.amz_date, self.region, self.service);
+        let string_to_sign = s3s_sigv4::create_string_to_sign(&canonical_request, self.amz_date, self.region, self.service);
+        let raw_signature = Signature::from_computed(s3s_sigv4::calculate_signature(
+            &string_to_sign,
+            self.secret_key.expose(),
+            self.amz_date,
+            self.region,
+            self.service,
+        ));
 
         if !Signature::compare(&raw_signature, &self.expected_signature) {
             debug!(?signature, ?raw_signature, expected=?self.expected_signature, "signature mismatch");
@@ -420,7 +473,13 @@ impl<'a> SignatureContext<'a> {
         validate_sig_v4_service(service, &config)?;
 
         let string_to_sign = info.policy;
-        let signature = sig_v4::calculate_signature(string_to_sign, &secret_key, &amz_date, region, service);
+        let signature = Signature::from_computed(s3s_sigv4::calculate_signature(
+            string_to_sign,
+            secret_key.expose(),
+            &amz_date,
+            region,
+            service,
+        ));
 
         let expected_signature = Signature::from_hex(info.x_amz_signature).ok_or_else(|| s3_error!(SignatureDoesNotMatch))?;
         if !Signature::compare(&signature, &expected_signature) {
@@ -524,9 +583,14 @@ impl<'a> SignatureContext<'a> {
             service,
         };
         let canonical_request =
-            sig_v4::create_presigned_canonical_request(method, self.decoded_uri_path, self.query_pairs(), &headers);
+            s3s_sigv4::create_presigned_canonical_request(method.as_str(), self.decoded_uri_path, self.query_pairs(), &headers);
         verifier.verify_with_raw_path_fallback(&canonical_request, || {
-            sig_v4::create_presigned_canonical_request_with_raw_uri_path(method, self.raw_uri_path, self.query_pairs(), &headers)
+            s3s_sigv4::create_presigned_canonical_request_with_raw_uri_path(
+                method.as_str(),
+                self.raw_uri_path,
+                self.query_pairs(),
+                &headers,
+            )
         })?;
 
         // Verify body hash for presigned URL requests.
@@ -560,10 +624,8 @@ impl<'a> SignatureContext<'a> {
     #[tracing::instrument(skip(self))]
     #[allow(clippy::too_many_lines)]
     pub async fn v4_check_header_auth(&mut self) -> S3Result<CredentialsExt> {
-        let authorization: AuthorizationV4<'_> = {
-            // assume: headers has "authorization"
-            extract_authorization_v4(self.hs)?.unwrap()
-        };
+        let authorization: AuthorizationV4<'_> =
+            extract_authorization_v4(self.hs)?.ok_or_else(|| s3_error!(MissingSecurityHeader))?;
         let region = authorization.credential.aws_region;
         let service = authorization.credential.aws_service;
         let config = self.config.snapshot();
@@ -600,13 +662,13 @@ impl<'a> SignatureContext<'a> {
 
         let payload_hash;
         let payload = match amz_content_sha256 {
-            Some(AmzContentSha256::StreamingAws4HmacSha256Payload) => sig_v4::Payload::MultipleChunks,
-            Some(AmzContentSha256::StreamingAws4HmacSha256PayloadTrailer) => sig_v4::Payload::MultipleChunksWithTrailer,
-            Some(AmzContentSha256::UnsignedPayload) => sig_v4::Payload::Unsigned,
-            Some(AmzContentSha256::StreamingUnsignedPayloadTrailer) => sig_v4::Payload::UnsignedMultipleChunksWithTrailer,
+            Some(AmzContentSha256::StreamingAws4HmacSha256Payload) => s3s_sigv4::Payload::MultipleChunks,
+            Some(AmzContentSha256::StreamingAws4HmacSha256PayloadTrailer) => s3s_sigv4::Payload::MultipleChunksWithTrailer,
+            Some(AmzContentSha256::UnsignedPayload) => s3s_sigv4::Payload::Unsigned,
+            Some(AmzContentSha256::StreamingUnsignedPayloadTrailer) => s3s_sigv4::Payload::UnsignedMultipleChunksWithTrailer,
             Some(AmzContentSha256::SingleChunk(checksum)) => {
                 payload_hash = hex_bytes32(&checksum, str::to_owned);
-                sig_v4::Payload::SingleChunk(&payload_hash)
+                s3s_sigv4::Payload::SingleChunk(&payload_hash)
             }
             Some(
                 AmzContentSha256::StreamingAws4EcdsaP256Sha256Payload
@@ -627,7 +689,7 @@ impl<'a> SignatureContext<'a> {
                         .map_err(|e| invalid_request!("failed to read STS request body: {}", e))?;
 
                     payload_hash = hex_sha256(&body_bytes, str::to_owned);
-                    sig_v4::Payload::SingleChunk(&payload_hash)
+                    s3s_sigv4::Payload::SingleChunk(&payload_hash)
                 } else {
                     // According to AWS S3 protocol, x-amz-content-sha256 header is required for
                     // all S3 requests authenticated with Signature V4. Reject if missing.
@@ -646,9 +708,16 @@ impl<'a> SignatureContext<'a> {
             region,
             service,
         };
-        let canonical_request = sig_v4::create_canonical_request(method, self.decoded_uri_path, query_strings, &headers, payload);
+        let canonical_request =
+            s3s_sigv4::create_canonical_request(method.as_str(), self.decoded_uri_path, query_strings, &headers, payload);
         let signature = verifier.verify_with_raw_path_fallback(&canonical_request, || {
-            sig_v4::create_canonical_request_with_raw_uri_path(method, self.raw_uri_path, query_strings, &headers, payload)
+            s3s_sigv4::create_canonical_request_with_raw_uri_path(
+                method.as_str(),
+                self.raw_uri_path,
+                query_strings,
+                &headers,
+                payload,
+            )
         })?;
 
         if is_stream {
@@ -740,23 +809,42 @@ impl<'a> SignatureContext<'a> {
         let method = &self.req_method;
 
         let date = http::get_unique_header_str(self.hs, "date").or_else(|| http::get_unique_header_str(self.hs, "x-amz-date"));
-        if date.is_none() {
+        let Some(date) = date else {
             return Err(invalid_request!("missing date"));
-        }
+        };
+
+        // Reject stale requests before doing any signing work: a repeated
+        // `x-amz-date` carries the authoritative timestamp (when present, the
+        // `Date` header is not signed), otherwise the `Date` header must be a
+        // fresh RFC 1123 date. Without this check, captured `SigV2` requests
+        // could be replayed indefinitely.
+        let config = self.config.snapshot();
+        let request_time = if let Some(x) = http::get_unique_header_str(self.hs, "x-amz-date") {
+            AmzDate::parse(x)
+                .map_err(|_| invalid_request!("invalid x-amz-date"))?
+                .to_time()
+                .ok_or_else(|| invalid_request!("invalid x-amz-date"))?
+        } else {
+            let ts = crate::dto::Timestamp::parse(crate::dto::TimestampFormat::HttpDate, date)
+                .map_err(|_| invalid_request!("invalid date"))?;
+            let odt: time::OffsetDateTime = ts.into();
+            jiff::Timestamp::from_second(odt.unix_timestamp()).map_err(|_| invalid_request!("invalid date"))?
+        };
+        validate_clock_skew(request_time, jiff::Timestamp::now(), &config)?;
 
         let auth = require_auth(self.auth)?;
         let access_key = auth_v2.access_key;
         let secret_key = auth.get_secret_key(access_key).await?;
 
-        let string_to_sign = sig_v2::create_string_to_sign(
-            sig_v2::Mode::HeaderAuth,
-            method,
+        let string_to_sign = s3s_sigv2::create_string_to_sign(
+            s3s_sigv2::Mode::HeaderAuth,
+            method.as_str(),
             self.req_uri.path(),
-            self.qs,
-            self.hs,
+            self.qs.map(AsRef::as_ref),
+            &sig_v2_headers(self.hs)?,
             self.vh_bucket,
-        )?;
-        let signature = sig_v2::calculate_signature(&secret_key, &string_to_sign);
+        );
+        let signature = Signature::from_computed(s3s_sigv2::calculate_signature(secret_key.expose(), &string_to_sign));
 
         debug!(?string_to_sign, "sig_v2 header_auth");
 
@@ -791,7 +879,7 @@ impl<'a> SignatureContext<'a> {
 
         // For v2 POST signature, the string to sign is the base64-encoded policy
         let string_to_sign = info.policy;
-        let signature = sig_v2::calculate_signature(&secret_key, string_to_sign);
+        let signature = Signature::from_computed(s3s_sigv2::calculate_signature(secret_key.expose(), string_to_sign));
 
         let expected_signature = Signature::from_base64(info.signature).ok_or_else(|| s3_error!(SignatureDoesNotMatch))?;
         if !Signature::compare(&signature, &expected_signature) {
@@ -822,15 +910,15 @@ impl<'a> SignatureContext<'a> {
         let access_key = presigned_url.access_key;
         let secret_key = auth.get_secret_key(access_key).await?;
 
-        let string_to_sign = sig_v2::create_string_to_sign(
-            sig_v2::Mode::PresignedUrl,
-            self.req_method,
+        let string_to_sign = s3s_sigv2::create_string_to_sign(
+            s3s_sigv2::Mode::PresignedUrl,
+            self.req_method.as_str(),
             self.req_uri.path(),
-            self.qs,
-            self.hs,
+            self.qs.map(AsRef::as_ref),
+            &sig_v2_headers(self.hs)?,
             self.vh_bucket,
-        )?;
-        let signature = sig_v2::calculate_signature(&secret_key, &string_to_sign);
+        );
+        let signature = Signature::from_computed(s3s_sigv2::calculate_signature(secret_key.expose(), &string_to_sign));
 
         let expected_signature =
             Signature::from_base64(presigned_url.signature).ok_or_else(|| s3_error!(SignatureDoesNotMatch))?;
@@ -849,6 +937,13 @@ impl<'a> SignatureContext<'a> {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::unwrap_used
+)]
 mod tests {
     use super::*;
 
@@ -863,6 +958,65 @@ mod tests {
             );
         }
         headers
+    }
+
+    #[test]
+    fn sig_v2_headers_rejects_non_utf8_amz_header() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            HeaderName::from_static("x-amz-meta-name"),
+            HeaderValue::from_bytes(b"JULI\xC1N").expect("valid opaque header value"),
+        );
+
+        let err = sig_v2_headers(&headers).expect_err("non-UTF-8 x-amz headers must fail signature verification");
+
+        assert_eq!(err.code(), &S3ErrorCode::SignatureDoesNotMatch);
+        assert_eq!(err.message(), Some("invalid header: x-amz-meta-name"));
+    }
+
+    #[test]
+    fn extract_authorization_v4_rejects_invalid_signature_with_signature_error() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            HeaderName::from_static("authorization"),
+            HeaderValue::from_static(
+                "AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request, SignedHeaders=host, Signature=not-a-real-signature",
+            ),
+        );
+
+        let err = extract_authorization_v4(&headers).expect_err("non-canonical signature must be rejected");
+
+        // The error must stay a signature error, not a malformed-header error.
+        assert_eq!(err.code(), &S3ErrorCode::SignatureDoesNotMatch);
+    }
+
+    #[test]
+    fn extract_authorization_v4_rejects_malformed_header_with_invalid_request() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            HeaderName::from_static("authorization"),
+            HeaderValue::from_static("AWS4-HMAC-SHA256 garbage"),
+        );
+
+        let err = extract_authorization_v4(&headers).expect_err("malformed authorization header must be rejected");
+        assert_eq!(err.code(), &S3ErrorCode::InvalidRequest);
+    }
+
+    #[test]
+    fn sig_v2_headers_skips_non_utf8_non_amz_header() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            HeaderName::from_static("content-type"),
+            HeaderValue::from_bytes(b"\xC1").expect("valid opaque header value"),
+        );
+        headers.insert(
+            HeaderName::from_static("date"),
+            HeaderValue::from_static("Fri, 24 Jan 2030 12:00:00 +0000"),
+        );
+
+        let pairs = sig_v2_headers(&headers).expect("non-x-amz non-UTF-8 headers are skipped");
+        assert_eq!(pairs.len(), 1);
+        assert_eq!(pairs[0], ("date", "Fri, 24 Jan 2030 12:00:00 +0000"));
     }
 
     fn fmt_current_amz_date(dt: time::OffsetDateTime) -> String {
@@ -1024,12 +1178,12 @@ mod tests {
             ("x-amz-date", "20130524T000000Z"),
         ];
 
-        let canonical_request = sig_v4::create_canonical_request(
-            &method,
+        let canonical_request = s3s_sigv4::create_canonical_request(
+            method.as_str(),
             "/test-bucket/path",
             &[] as &[(&str, &str)],
             headers,
-            sig_v4::Payload::Unsigned,
+            s3s_sigv4::Payload::Unsigned,
         );
         let verifier = SignatureVerificationContext {
             expected_signature: Signature::from_hex("0000000000000000000000000000000000000000000000000000000000000000").unwrap(),
@@ -1044,12 +1198,12 @@ mod tests {
             .expect_err("signature mismatch without raw reserved characters should be rejected");
         assert_eq!(err.code(), &S3ErrorCode::SignatureDoesNotMatch);
 
-        let canonical_request = sig_v4::create_canonical_request(
-            &method,
+        let canonical_request = s3s_sigv4::create_canonical_request(
+            method.as_str(),
             "/test-bucket/path=",
             &[] as &[(&str, &str)],
             headers,
-            sig_v4::Payload::Unsigned,
+            s3s_sigv4::Payload::Unsigned,
         );
         let verifier = SignatureVerificationContext {
             expected_signature: Signature::from_hex("0000000000000000000000000000000000000000000000000000000000000000").unwrap(),
@@ -1061,12 +1215,12 @@ mod tests {
         };
         let err = verifier
             .verify_with_raw_path_fallback(&canonical_request, || {
-                sig_v4::create_canonical_request_with_raw_uri_path(
-                    &method,
+                s3s_sigv4::create_canonical_request_with_raw_uri_path(
+                    method.as_str(),
                     "/test-bucket/path=",
                     &[] as &[(&str, &str)],
                     headers,
-                    sig_v4::Payload::Unsigned,
+                    s3s_sigv4::Payload::Unsigned,
                 )
             })
             .expect_err("raw fallback signature mismatch should be rejected");
@@ -1301,6 +1455,7 @@ file content\r\n\
     #[allow(clippy::too_many_arguments)]
     fn sig_v2_test_context<'a>(
         config: &'a Arc<dyn S3ConfigProvider>,
+        auth: Option<&'a dyn crate::auth::S3Auth>,
         method: &'a Method,
         uri: &'a Uri,
         body: &'a mut Body,
@@ -1309,7 +1464,7 @@ file content\r\n\
         mime: Option<Mime>,
     ) -> SignatureContext<'a> {
         SignatureContext {
-            auth: None,
+            auth,
             config,
             req_version: ::http::Version::HTTP_11,
             req_method: method,
@@ -1336,7 +1491,7 @@ file content\r\n\
         let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
         let headers = headers_from_slice(&[("authorization", "AWS AKIAIOSFODNN7EXAMPLE:qgk2+6Sv9/oM7G3qLEjTH1a1l1g=")]);
         let mut body = Body::empty();
-        let mut cx = sig_v2_test_context(&config, &method, &uri, &mut body, None, &headers, None);
+        let mut cx = sig_v2_test_context(&config, None, &method, &uri, &mut body, None, &headers, None);
 
         let err = cx
             .v2_check()
@@ -1354,7 +1509,7 @@ file content\r\n\
         let qs = OrderedQs::parse("AWSAccessKeyId=AKIAIOSFODNN7EXAMPLE&Signature=abc&Expires=1175139620").unwrap();
         let headers = HeaderMap::new();
         let mut body = Body::empty();
-        let mut cx = sig_v2_test_context(&config, &method, &uri, &mut body, Some(&qs), &headers, None);
+        let mut cx = sig_v2_test_context(&config, None, &method, &uri, &mut body, Some(&qs), &headers, None);
 
         let err = cx
             .v2_check()
@@ -1387,7 +1542,7 @@ file content\r\n\
         let method = Method::POST;
         let uri = Uri::from_static("http://localhost/test-bucket");
         let headers = HeaderMap::new();
-        let mut cx = sig_v2_test_context(&config, &method, &uri, &mut body, None, &headers, Some(mime));
+        let mut cx = sig_v2_test_context(&config, None, &method, &uri, &mut body, None, &headers, Some(mime));
 
         let err = cx.check().await.expect_err("SigV2 POST must be rejected when disabled");
         assert_eq!(err.code(), &S3ErrorCode::AccessDenied);
@@ -1401,13 +1556,15 @@ file content\r\n\
 
         // When SigV2 is explicitly enabled, the gate passes and the request proceeds to
         // signature verification; without an auth provider it fails at the auth
-        // lookup with NotImplemented, not AccessDenied.
+        // lookup with NotImplemented, not AccessDenied. The date must be fresh
+        // to pass the freshness check first.
+        let date = fmt_rfc1123(time::OffsetDateTime::now_utc());
         let headers = headers_from_slice(&[
             ("authorization", "AWS AKIAIOSFODNN7EXAMPLE:qgk2+6Sv9/oM7G3qLEjTH1a1l1g="),
-            ("date", "Mon, 26 Nov 2024 00:00:00 GMT"),
+            ("date", &date),
         ]);
         let mut body = Body::empty();
-        let mut cx = sig_v2_test_context(&config, &method, &uri, &mut body, None, &headers, None);
+        let mut cx = sig_v2_test_context(&config, None, &method, &uri, &mut body, None, &headers, None);
 
         let err = cx
             .v2_check()
@@ -1418,8 +1575,167 @@ file content\r\n\
     }
 
     #[tokio::test]
+    async fn sig_v2_header_auth_accepts_fresh_date() {
+        use crate::auth::SimpleAuth;
+
+        let access_key = "AKIAIOSFODNN7EXAMPLE";
+        let secret_key: crate::auth::SecretKey = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".into();
+        let auth = SimpleAuth::from_single(access_key, secret_key.clone());
+
+        let date = fmt_rfc1123(time::OffsetDateTime::now_utc());
+        let signature = sig_v2_header_auth_signature(&secret_key, &date);
+        let headers = headers_from_slice(&[("authorization", &format!("AWS {access_key}:{signature}")), ("date", &date)]);
+
+        let config = sig_v2_test_config(true);
+        let method = Method::GET;
+        let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+        let mut body = Body::empty();
+        let mut cx = sig_v2_test_context(&config, Some(&auth), &method, &uri, &mut body, None, &headers, None);
+
+        let cred = cx
+            .v2_check()
+            .await
+            .expect("v2 header auth must be detected")
+            .expect("a fresh date with a valid signature must pass");
+        assert_eq!(cred.access_key, access_key);
+    }
+
+    #[tokio::test]
+    async fn sig_v2_header_auth_rejects_stale_date() {
+        use crate::auth::SimpleAuth;
+
+        let access_key = "AKIAIOSFODNN7EXAMPLE";
+        let secret_key: crate::auth::SecretKey = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".into();
+        let auth = SimpleAuth::from_single(access_key, secret_key.clone());
+
+        let stale = time::OffsetDateTime::now_utc() - time::Duration::hours(2);
+        let date = fmt_rfc1123(stale);
+        let signature = sig_v2_header_auth_signature(&secret_key, &date);
+        let headers = headers_from_slice(&[("authorization", &format!("AWS {access_key}:{signature}")), ("date", &date)]);
+
+        let config = sig_v2_test_config(true);
+        let method = Method::GET;
+        let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+        let mut body = Body::empty();
+        let mut cx = sig_v2_test_context(&config, Some(&auth), &method, &uri, &mut body, None, &headers, None);
+
+        let err = cx
+            .v2_check()
+            .await
+            .expect("v2 header auth must be detected")
+            .expect_err("a stale date must be rejected");
+        assert_eq!(err.code(), &S3ErrorCode::RequestTimeTooSkewed);
+    }
+
+    #[tokio::test]
+    async fn sig_v2_header_auth_rejects_future_date() {
+        use crate::auth::SimpleAuth;
+
+        let access_key = "AKIAIOSFODNN7EXAMPLE";
+        let secret_key: crate::auth::SecretKey = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".into();
+        let auth = SimpleAuth::from_single(access_key, secret_key.clone());
+
+        let future = time::OffsetDateTime::now_utc() + time::Duration::hours(2);
+        let date = fmt_rfc1123(future);
+        let signature = sig_v2_header_auth_signature(&secret_key, &date);
+        let headers = headers_from_slice(&[("authorization", &format!("AWS {access_key}:{signature}")), ("date", &date)]);
+
+        let config = sig_v2_test_config(true);
+        let method = Method::GET;
+        let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+        let mut body = Body::empty();
+        let mut cx = sig_v2_test_context(&config, Some(&auth), &method, &uri, &mut body, None, &headers, None);
+
+        let err = cx
+            .v2_check()
+            .await
+            .expect("v2 header auth must be detected")
+            .expect_err("a future date must be rejected");
+        assert_eq!(err.code(), &S3ErrorCode::RequestTimeTooSkewed);
+    }
+
+    #[tokio::test]
+    async fn sig_v2_header_auth_rejects_invalid_date_format() {
+        use crate::auth::SimpleAuth;
+
+        let access_key = "AKIAIOSFODNN7EXAMPLE";
+        let secret_key: crate::auth::SecretKey = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".into();
+        let auth = SimpleAuth::from_single(access_key, secret_key.clone());
+
+        let date = "not-a-date";
+        let headers = headers_from_slice(&[("authorization", &format!("AWS {access_key}:whatever")), ("date", date)]);
+
+        let config = sig_v2_test_config(true);
+        let method = Method::GET;
+        let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+        let mut body = Body::empty();
+        let mut cx = sig_v2_test_context(&config, Some(&auth), &method, &uri, &mut body, None, &headers, None);
+
+        let err = cx
+            .v2_check()
+            .await
+            .expect("v2 header auth must be detected")
+            .expect_err("an unparseable date must be rejected");
+        assert_eq!(err.code(), &S3ErrorCode::InvalidRequest);
+    }
+
+    #[tokio::test]
+    async fn sig_v2_header_auth_prefers_x_amz_date() {
+        use crate::auth::SimpleAuth;
+
+        let access_key = "AKIAIOSFODNN7EXAMPLE";
+        let secret_key: crate::auth::SecretKey = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".into();
+        let auth = SimpleAuth::from_single(access_key, secret_key.clone());
+
+        // x-amz-date is authoritative: a stale `Date` header must be ignored
+        // when x-amz-date is present and fresh.
+        let x_amz_date = fmt_current_amz_date(time::OffsetDateTime::now_utc());
+        let stale_date = fmt_rfc1123(time::OffsetDateTime::now_utc() - time::Duration::hours(2));
+        let string_to_sign = s3s_sigv2::create_string_to_sign(
+            s3s_sigv2::Mode::HeaderAuth,
+            "GET",
+            "/test.txt",
+            None,
+            &[("x-amz-date", &x_amz_date)],
+            None,
+        );
+        let signature = s3s_sigv2::calculate_signature(secret_key.expose(), &string_to_sign);
+        let headers = headers_from_slice(&[
+            ("authorization", &format!("AWS {access_key}:{signature}")),
+            ("date", &stale_date),
+            ("x-amz-date", &x_amz_date),
+        ]);
+
+        let config = sig_v2_test_config(true);
+        let method = Method::GET;
+        let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+        let mut body = Body::empty();
+        let mut cx = sig_v2_test_context(&config, Some(&auth), &method, &uri, &mut body, None, &headers, None);
+
+        let cred = cx
+            .v2_check()
+            .await
+            .expect("v2 header auth must be detected")
+            .expect("a fresh x-amz-date must win over a stale Date header");
+        assert_eq!(cred.access_key, access_key);
+    }
+
+    fn fmt_rfc1123(odt: time::OffsetDateTime) -> String {
+        use time::format_description::FormatItem;
+        use time::macros::format_description;
+        const RFC1123: &[FormatItem<'_>] =
+            format_description!("[weekday repr:short], [day] [month repr:short] [year] [hour]:[minute]:[second] GMT");
+        odt.format(RFC1123).expect("valid RFC 1123 date")
+    }
+
+    fn sig_v2_header_auth_signature(secret_key: &crate::auth::SecretKey, date: &str) -> String {
+        let string_to_sign =
+            s3s_sigv2::create_string_to_sign(s3s_sigv2::Mode::HeaderAuth, "GET", "/test.txt", None, &[("date", date)], None);
+        s3s_sigv2::calculate_signature(secret_key.expose(), &string_to_sign)
+    }
+
+    #[tokio::test]
     async fn test_sts_body_hash_computation() {
-        // Test that STS request body hash is computed correctly
         // Typical STS AssumeRole request body
         let body_content = b"Action=AssumeRole&RoleArn=arn:aws:iam::123456789012:role/test-role&RoleSessionName=test-session";
 
@@ -1612,14 +1928,14 @@ file content\r\n\
         let query_strings_for_signing = presigned_query_fields(&amz_date, "s3");
 
         let canonical_requests = [
-            sig_v4::create_presigned_canonical_request(
-                &method,
+            s3s_sigv4::create_presigned_canonical_request(
+                method.as_str(),
                 decoded_uri_path,
                 &query_strings_for_signing,
                 headers_for_signing,
             ),
-            sig_v4::create_presigned_canonical_request_with_raw_uri_path(
-                &method,
+            s3s_sigv4::create_presigned_canonical_request_with_raw_uri_path(
+                method.as_str(),
                 raw_uri_path,
                 &query_strings_for_signing,
                 headers_for_signing,
@@ -1628,8 +1944,8 @@ file content\r\n\
         assert_ne!(canonical_requests[0], canonical_requests[1]);
 
         for canonical_request in canonical_requests {
-            let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
-            let signature = sig_v4::calculate_signature(&string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
+            let string_to_sign = s3s_sigv4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
+            let signature = s3s_sigv4::calculate_signature(&string_to_sign, secret_key.expose(), &amz_date, "us-east-1", "s3");
             let mut signed_query_strings = query_strings_for_signing.clone();
             signed_query_strings.push(("X-Amz-Signature".to_owned(), signature.as_str().to_owned()));
             let qs = OrderedQs::from_vec_unchecked(signed_query_strings);
@@ -1684,14 +2000,14 @@ file content\r\n\
             .expect("current time should produce a valid x-amz-date");
         let headers_for_signing = [("host", "s3.amazonaws.com")];
         let query_strings_for_signing = presigned_query_fields(&amz_date, "s3");
-        let canonical_request = sig_v4::create_presigned_canonical_request(
-            &method,
+        let canonical_request = s3s_sigv4::create_presigned_canonical_request(
+            method.as_str(),
             decoded_uri_path,
             &query_strings_for_signing,
             headers_for_signing,
         );
-        let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
-        let signature = sig_v4::calculate_signature(&string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
+        let string_to_sign = s3s_sigv4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
+        let signature = s3s_sigv4::calculate_signature(&string_to_sign, secret_key.expose(), &amz_date, "us-east-1", "s3");
         let mut signed_query_strings = query_strings_for_signing;
         signed_query_strings.push(("X-Amz-Signature".to_owned(), signature.as_str().to_owned()));
         let qs = OrderedQs::from_vec_unchecked(signed_query_strings);
@@ -1726,6 +2042,240 @@ file content\r\n\
     }
 
     #[tokio::test]
+    async fn v4_presigned_url_with_port_in_signed_host() {
+        // Signature-invariant nail for the port-agnostic routing fix (#438):
+        // signature verification must keep using the raw Host value including
+        // any port, even though routing now matches without it.
+        use crate::auth::SecretKey;
+        use crate::auth::SimpleAuth;
+        use crate::config::{S3ConfigProvider, StaticConfigProvider};
+        use std::sync::Arc;
+
+        let access_key = "AKIAIOSFODNN7EXAMPLE";
+        let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+        let auth = SimpleAuth::from_single(access_key, secret_key.clone());
+        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+
+        let method = Method::GET;
+        let uri = Uri::from_static("https://user.fs.example.com:19000/test.txt");
+        let decoded_uri_path = "/test.txt";
+        let raw_uri_path = "/test.txt";
+        let amz_date = AmzDate::parse(&fmt_current_amz_date(time::OffsetDateTime::now_utc()))
+            .expect("current time should produce a valid x-amz-date");
+        let host = "user.fs.example.com:19000";
+        let headers_for_signing = [("host", host)];
+        let query_strings_for_signing = presigned_query_fields(&amz_date, "s3");
+        let canonical_request = s3s_sigv4::create_presigned_canonical_request(
+            method.as_str(),
+            decoded_uri_path,
+            &query_strings_for_signing,
+            headers_for_signing,
+        );
+        let string_to_sign = s3s_sigv4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
+        let signature = s3s_sigv4::calculate_signature(&string_to_sign, secret_key.expose(), &amz_date, "us-east-1", "s3");
+        let mut signed_query_strings = query_strings_for_signing;
+        signed_query_strings.push(("X-Amz-Signature".to_owned(), signature.as_str().to_owned()));
+        let qs = OrderedQs::from_vec_unchecked(signed_query_strings);
+
+        let headers = headers_from_slice(&[("host", host)]);
+        let mut body = Body::empty();
+        let mut cx = SignatureContext {
+            auth: Some(&auth),
+            config: &config,
+            req_version: ::http::Version::HTTP_11,
+            req_method: &method,
+            req_uri: &uri,
+            req_body: &mut body,
+            qs: Some(&qs),
+            hs: &headers,
+            decoded_uri_path,
+            raw_uri_path,
+            vh_bucket: Some("user"),
+            content_length: None,
+            mime: None,
+            decoded_content_length: None,
+            transformed_body: None,
+            multipart: None,
+            trailing_headers: None,
+        };
+
+        let cred = cx
+            .v4_check_presigned_url()
+            .await
+            .expect("the raw Host value with its port must be used for verification");
+        assert_eq!(cred.access_key, access_key);
+    }
+
+    #[tokio::test]
+    async fn v4_header_auth_with_port_in_signed_host() {
+        // Header-auth counterpart of the signature-invariant nail above.
+        use crate::auth::SecretKey;
+        use crate::auth::SimpleAuth;
+        use crate::config::{S3ConfigProvider, StaticConfigProvider};
+        use std::sync::Arc;
+
+        let access_key = "AKIAIOSFODNN7EXAMPLE";
+        let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+        let auth = SimpleAuth::from_single(access_key, secret_key.clone());
+        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+
+        let method = Method::GET;
+        let uri = Uri::from_static("https://user.fs.example.com:19000/test.txt");
+        let decoded_uri_path = "/test.txt";
+        let raw_uri_path = "/test.txt";
+        let amz_date = AmzDate::parse(&fmt_current_amz_date(time::OffsetDateTime::now_utc()))
+            .expect("current time should produce a valid x-amz-date");
+        let amz_date_str = amz_date.fmt_iso8601();
+        let host = "user.fs.example.com:19000";
+        let payload_hash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+        let signed_headers = [
+            ("host", host),
+            ("x-amz-content-sha256", payload_hash),
+            ("x-amz-date", amz_date_str.as_str()),
+        ];
+        let canonical_request = s3s_sigv4::create_canonical_request(
+            method.as_str(),
+            decoded_uri_path,
+            &[] as &[(&str, &str)],
+            signed_headers,
+            s3s_sigv4::Payload::SingleChunk(payload_hash),
+        );
+        let string_to_sign = s3s_sigv4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
+        let signature = s3s_sigv4::calculate_signature(&string_to_sign, secret_key.expose(), &amz_date, "us-east-1", "s3");
+        let authorization = format!(
+            "AWS4-HMAC-SHA256 Credential={access_key}/{}/us-east-1/s3/aws4_request, \
+             SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature={}",
+            amz_date.fmt_date(),
+            signature.as_str(),
+        );
+
+        let headers = headers_from_slice(&[
+            ("host", host),
+            ("x-amz-content-sha256", payload_hash),
+            ("x-amz-date", amz_date_str.as_str()),
+            ("authorization", authorization.as_str()),
+        ]);
+        let mut body = Body::empty();
+        let mut cx = SignatureContext {
+            auth: Some(&auth),
+            config: &config,
+            req_version: ::http::Version::HTTP_11,
+            req_method: &method,
+            req_uri: &uri,
+            req_body: &mut body,
+            qs: None,
+            hs: &headers,
+            decoded_uri_path,
+            raw_uri_path,
+            vh_bucket: Some("user"),
+            content_length: None,
+            mime: None,
+            decoded_content_length: None,
+            transformed_body: None,
+            multipart: None,
+            trailing_headers: None,
+        };
+
+        let cred = cx
+            .v4_check()
+            .await
+            .expect("header auth must be detected")
+            .expect("the raw Host value with its port must be used for verification");
+        assert_eq!(cred.access_key, access_key);
+    }
+
+    #[tokio::test]
+    async fn sig_v2_vhost_presigned_url_with_port_uses_wire_host() {
+        // SigV2 counterpart of the signature-invariant nail: the canonicalized
+        // resource must contain the routed bucket prefix (/user) derived from
+        // the port-carrying vhost host, while verification keeps the raw Host.
+        let host = "user.fs.example.com:19000";
+        let secret_key: crate::auth::SecretKey = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".into();
+
+        let method = Method::GET;
+        let uri = Uri::from_static("https://user.fs.example.com:19000/test.txt");
+        let headers = headers_from_slice(&[("host", host)]);
+        let qs_pairs = vec![
+            ("AWSAccessKeyId".to_owned(), "AKIAIOSFODNN7EXAMPLE".to_owned()),
+            ("Expires".to_owned(), "4294967295".to_owned()),
+        ];
+        let string_to_sign = s3s_sigv2::create_string_to_sign(
+            s3s_sigv2::Mode::PresignedUrl,
+            method.as_str(),
+            "/test.txt",
+            Some(&qs_pairs),
+            &[("host", host)],
+            Some("user"),
+        );
+        assert!(
+            string_to_sign.contains("/user/test.txt"),
+            "the routed bucket prefix must enter the canonicalized resource, got: {string_to_sign:?}"
+        );
+        let signature = s3s_sigv2::calculate_signature(secret_key.expose(), &string_to_sign);
+        let mut qs_pairs = qs_pairs;
+        qs_pairs.push(("Signature".to_owned(), signature.as_str().to_owned()));
+        let qs = OrderedQs::from_vec_unchecked(qs_pairs);
+
+        let mut body = Body::empty();
+        let enabled_config = sig_v2_test_config(true);
+        let auth = crate::auth::SimpleAuth::from_single("AKIAIOSFODNN7EXAMPLE", secret_key.clone());
+        let mut cx = SignatureContext {
+            auth: Some(&auth),
+            config: &enabled_config,
+            req_version: ::http::Version::HTTP_11,
+            req_method: &method,
+            req_uri: &uri,
+            req_body: &mut body,
+            qs: Some(&qs),
+            hs: &headers,
+            decoded_uri_path: "/test.txt",
+            raw_uri_path: "/test.txt",
+            vh_bucket: Some("user"),
+            content_length: None,
+            mime: None,
+            decoded_content_length: None,
+            transformed_body: None,
+            multipart: None,
+            trailing_headers: None,
+        };
+        let cred = cx
+            .v2_check()
+            .await
+            .expect("v2 presigned url must be detected")
+            .expect("vhost presigned SigV2 with a port-carrying host must verify");
+        assert_eq!(cred.access_key, "AKIAIOSFODNN7EXAMPLE");
+
+        // negative control: the SigV2 gate takes precedence over the fix
+        let mut body = Body::empty();
+        let disabled_config = sig_v2_test_config(false);
+        let mut cx = SignatureContext {
+            auth: Some(&auth),
+            config: &disabled_config,
+            req_version: ::http::Version::HTTP_11,
+            req_method: &method,
+            req_uri: &uri,
+            req_body: &mut body,
+            qs: Some(&qs),
+            hs: &headers,
+            decoded_uri_path: "/test.txt",
+            raw_uri_path: "/test.txt",
+            vh_bucket: Some("user"),
+            content_length: None,
+            mime: None,
+            decoded_content_length: None,
+            transformed_body: None,
+            multipart: None,
+            trailing_headers: None,
+        };
+        let err = cx
+            .v2_check()
+            .await
+            .expect("v2 presigned url must be detected")
+            .expect_err("SigV2 must be rejected when disabled");
+        assert_eq!(err.code(), &S3ErrorCode::AccessDenied);
+    }
+
+    #[tokio::test]
     async fn v4_presigned_url_put_with_valid_content_sha256() {
         use crate::auth::SecretKey;
         use crate::auth::SimpleAuth;
@@ -1751,14 +2301,14 @@ file content\r\n\
         let headers_for_signing = [("host", "s3.amazonaws.com")];
         let query_strings_for_signing = presigned_query_fields(&amz_date, "s3");
 
-        let canonical_request = sig_v4::create_presigned_canonical_request(
-            &method,
+        let canonical_request = s3s_sigv4::create_presigned_canonical_request(
+            method.as_str(),
             "/test-bucket/test-key",
             &query_strings_for_signing,
             headers_for_signing,
         );
-        let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
-        let signature = sig_v4::calculate_signature(&string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
+        let string_to_sign = s3s_sigv4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
+        let signature = s3s_sigv4::calculate_signature(&string_to_sign, secret_key.expose(), &amz_date, "us-east-1", "s3");
 
         let mut signed_query_strings = query_strings_for_signing;
         signed_query_strings.push(("X-Amz-Signature".to_owned(), signature.as_str().to_owned()));
@@ -1830,14 +2380,14 @@ file content\r\n\
         let headers_for_signing = [("host", "s3.amazonaws.com")];
         let query_strings_for_signing = presigned_query_fields(&amz_date, "s3");
 
-        let canonical_request = sig_v4::create_presigned_canonical_request(
-            &method,
+        let canonical_request = s3s_sigv4::create_presigned_canonical_request(
+            method.as_str(),
             "/test-bucket/test-key",
             &query_strings_for_signing,
             headers_for_signing,
         );
-        let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
-        let signature = sig_v4::calculate_signature(&string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
+        let string_to_sign = s3s_sigv4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
+        let signature = s3s_sigv4::calculate_signature(&string_to_sign, secret_key.expose(), &amz_date, "us-east-1", "s3");
 
         let mut signed_query_strings = query_strings_for_signing;
         signed_query_strings.push(("X-Amz-Signature".to_owned(), signature.as_str().to_owned()));
@@ -1957,15 +2507,15 @@ file content\r\n\
             ("x-amz-content-sha256", "UNSIGNED-PAYLOAD"),
             ("x-amz-date", "20130524T000000Z"),
         ];
-        let canonical_request = sig_v4::create_canonical_request(
-            &method,
+        let canonical_request = s3s_sigv4::create_canonical_request(
+            method.as_str(),
             decoded_uri_path,
             &[] as &[(&str, &str)],
             headers_for_signing,
-            sig_v4::Payload::Unsigned,
+            s3s_sigv4::Payload::Unsigned,
         );
-        let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3tables");
-        let signature = sig_v4::calculate_signature(&string_to_sign, &secret_key, &amz_date, "us-east-1", "s3tables");
+        let string_to_sign = s3s_sigv4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3tables");
+        let signature = s3s_sigv4::calculate_signature(&string_to_sign, secret_key.expose(), &amz_date, "us-east-1", "s3tables");
         let authorization = format!(
             "AWS4-HMAC-SHA256 Credential={access_key}/20130524/us-east-1/s3tables/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature={}",
             signature.as_str(),
@@ -2035,25 +2585,25 @@ file content\r\n\
         ];
 
         let canonical_requests = [
-            sig_v4::create_canonical_request(
-                &method,
+            s3s_sigv4::create_canonical_request(
+                method.as_str(),
                 decoded_uri_path,
                 &[] as &[(&str, &str)],
                 headers_for_signing,
-                sig_v4::Payload::Unsigned,
+                s3s_sigv4::Payload::Unsigned,
             ),
-            sig_v4::create_canonical_request_with_raw_uri_path(
-                &method,
+            s3s_sigv4::create_canonical_request_with_raw_uri_path(
+                method.as_str(),
                 raw_uri_path,
                 &[] as &[(&str, &str)],
                 headers_for_signing,
-                sig_v4::Payload::Unsigned,
+                s3s_sigv4::Payload::Unsigned,
             ),
         ];
 
         for canonical_request in canonical_requests {
-            let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
-            let signature = sig_v4::calculate_signature(&string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
+            let string_to_sign = s3s_sigv4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
+            let signature = s3s_sigv4::calculate_signature(&string_to_sign, secret_key.expose(), &amz_date, "us-east-1", "s3");
             let authorization = format!(
                 "AWS4-HMAC-SHA256 Credential={access_key}/20130524/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature={}",
                 signature.as_str(),
@@ -2123,15 +2673,15 @@ file content\r\n\
             ("x-amz-content-sha256", content_sha256),
             ("x-amz-date", "20130524T000000Z"),
         ];
-        let canonical_request = sig_v4::create_canonical_request(
-            &method,
+        let canonical_request = s3s_sigv4::create_canonical_request(
+            method.as_str(),
             path,
             &[] as &[(&str, &str)],
             headers_for_signing,
-            sig_v4::Payload::SingleChunk(payload_hash),
+            s3s_sigv4::Payload::SingleChunk(payload_hash),
         );
-        let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
-        let signature = sig_v4::calculate_signature(&string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
+        let string_to_sign = s3s_sigv4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
+        let signature = s3s_sigv4::calculate_signature(&string_to_sign, secret_key.expose(), &amz_date, "us-east-1", "s3");
         let authorization = format!(
             "AWS4-HMAC-SHA256 Credential={access_key}/20130524/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature={}",
             signature.as_str(),
@@ -2202,15 +2752,15 @@ file content\r\n\
             ("x-amz-content-sha256", "UNSIGNED-PAYLOAD"),
             ("x-amz-date", "20130524T000000Z"),
         ];
-        let canonical_request = sig_v4::create_canonical_request(
-            &method,
+        let canonical_request = s3s_sigv4::create_canonical_request(
+            method.as_str(),
             decoded_uri_path,
             &[] as &[(&str, &str)],
             headers_for_signing,
-            sig_v4::Payload::Unsigned,
+            s3s_sigv4::Payload::Unsigned,
         );
-        let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
-        let signature = sig_v4::calculate_signature(&string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
+        let string_to_sign = s3s_sigv4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
+        let signature = s3s_sigv4::calculate_signature(&string_to_sign, secret_key.expose(), &amz_date, "us-east-1", "s3");
         let authorization = format!(
             "AWS4-HMAC-SHA256 Credential={access_key}/20130524/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature={}",
             signature.as_str(),
@@ -2281,36 +2831,39 @@ file content\r\n\
             ("x-amz-decoded-content-length", "5"),
         ];
 
-        let standard_canonical_request = sig_v4::create_canonical_request(
-            &method,
+        let standard_canonical_request = s3s_sigv4::create_canonical_request(
+            method.as_str(),
             decoded_uri_path,
             &[] as &[(&str, &str)],
             headers_for_signing,
-            sig_v4::Payload::MultipleChunks,
+            s3s_sigv4::Payload::MultipleChunks,
         );
-        let raw_canonical_request = sig_v4::create_canonical_request_with_raw_uri_path(
-            &method,
+        let raw_canonical_request = s3s_sigv4::create_canonical_request_with_raw_uri_path(
+            method.as_str(),
             raw_uri_path,
             &[] as &[(&str, &str)],
             headers_for_signing,
-            sig_v4::Payload::MultipleChunks,
+            s3s_sigv4::Payload::MultipleChunks,
         );
         assert_ne!(standard_canonical_request, raw_canonical_request);
 
-        let seed_string_to_sign = sig_v4::create_string_to_sign(&raw_canonical_request, &amz_date, "us-east-1", "s3");
-        let seed_signature = sig_v4::calculate_signature(&seed_string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
+        let seed_string_to_sign = s3s_sigv4::create_string_to_sign(&raw_canonical_request, &amz_date, "us-east-1", "s3");
+        let seed_signature =
+            s3s_sigv4::calculate_signature(&seed_string_to_sign, secret_key.expose(), &amz_date, "us-east-1", "s3");
 
-        let chunk_string_to_sign = sig_v4::create_chunk_string_to_sign(
+        let chunk_string_to_sign = s3s_sigv4::create_chunk_string_to_sign(
             &amz_date,
             "us-east-1",
             "s3",
             seed_signature.as_str(),
             std::slice::from_ref(&chunk_data),
         );
-        let chunk_signature = sig_v4::calculate_signature(&chunk_string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
+        let chunk_signature =
+            s3s_sigv4::calculate_signature(&chunk_string_to_sign, secret_key.expose(), &amz_date, "us-east-1", "s3");
         let final_string_to_sign =
-            sig_v4::create_chunk_string_to_sign(&amz_date, "us-east-1", "s3", chunk_signature.as_str(), &[]);
-        let final_signature = sig_v4::calculate_signature(&final_string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
+            s3s_sigv4::create_chunk_string_to_sign(&amz_date, "us-east-1", "s3", chunk_signature.as_str(), &[] as &[Vec<u8>]);
+        let final_signature =
+            s3s_sigv4::calculate_signature(&final_string_to_sign, secret_key.expose(), &amz_date, "us-east-1", "s3");
 
         let mut streaming_body = Vec::new();
         streaming_body
@@ -2386,24 +2939,24 @@ file content\r\n\
         };
         let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(config)));
 
-        let date = "Fri, 24 Jan 2030 12:00:00 +0000";
-        let hs = headers_from_slice(&[("date", date), ("host", "s3.amazonaws.com")]);
+        let date = fmt_rfc1123(time::OffsetDateTime::now_utc());
+        let hs = headers_from_slice(&[("date", &date), ("host", "s3.amazonaws.com")]);
 
         let method = Method::GET;
         let uri = Uri::from_static("https://s3.amazonaws.com/test-bucket/test-key");
         let mut body = Body::empty();
 
         // Compute the expected signature using the same logic as the verification path.
-        let string_to_sign = crate::sig_v2::create_string_to_sign(
-            crate::sig_v2::Mode::HeaderAuth,
-            &method,
+        let headers = sig_v2_headers(&hs).expect("test headers are valid");
+        let string_to_sign = s3s_sigv2::create_string_to_sign(
+            s3s_sigv2::Mode::HeaderAuth,
+            method.as_str(),
             "/test-bucket/test-key",
             None,
-            &hs,
+            &headers,
             None,
-        )
-        .unwrap();
-        let signature = crate::sig_v2::calculate_signature(&secret_key, &string_to_sign);
+        );
+        let signature = Signature::from_computed(s3s_sigv2::calculate_signature(secret_key.expose(), &string_to_sign));
 
         let auth_v2 = AuthorizationV2 {
             access_key,
@@ -2463,15 +3016,15 @@ file content\r\n\
             ("x-amz-content-sha256", "UNSIGNED-PAYLOAD"),
             ("x-amz-date", amz_date_str.as_str()),
         ];
-        let canonical_request = sig_v4::create_canonical_request(
-            &method,
+        let canonical_request = s3s_sigv4::create_canonical_request(
+            method.as_str(),
             "/test.txt",
             &[] as &[(&str, &str)],
             headers_for_signing,
-            sig_v4::Payload::Unsigned,
+            s3s_sigv4::Payload::Unsigned,
         );
-        let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
-        let signature = sig_v4::calculate_signature(&string_to_sign, &secret_key, &amz_date, "us-east-1", "s3");
+        let string_to_sign = s3s_sigv4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
+        let signature = s3s_sigv4::calculate_signature(&string_to_sign, secret_key.expose(), &amz_date, "us-east-1", "s3");
         let authorization = format!(
             "AWS4-HMAC-SHA256 Credential={access_key}/{}/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature={}",
             amz_date.fmt_date(),
@@ -2539,7 +3092,7 @@ file content\r\n\
             date = amz_date.fmt_date(),
         );
         let policy_b64 = base64_simd::STANDARD.encode_to_string(&policy_json);
-        let signature = sig_v4::calculate_signature(&policy_b64, &secret_key, &amz_date, "us-east-1", "s3");
+        let signature = s3s_sigv4::calculate_signature(&policy_b64, secret_key.expose(), &amz_date, "us-east-1", "s3");
         let boundary = "boundary123";
         let body = format!(
             concat!(

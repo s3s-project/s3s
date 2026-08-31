@@ -12,6 +12,7 @@ mod headers;
 mod minio;
 mod ops;
 mod order;
+mod postprocess;
 mod s3_trait;
 mod sts;
 mod xml;
@@ -37,6 +38,7 @@ enum Patch {
 pub fn run() {
     inner_run(None);
     inner_run(Some(Patch::Minio));
+    postprocess();
 }
 
 fn inner_run(code_patch: Option<Patch>) {
@@ -68,13 +70,13 @@ fn inner_run(code_patch: Option<Patch>) {
     }
 
     {
-        let path = format!("crates/s3s/src/header/generated{suffix}.rs");
-        write_file(&path, || headers::codegen(&model));
+        let path = "crates/s3s/src/header/generated.rs";
+        write_file(path, || headers::codegen(&model));
     }
 
     {
-        let path = format!("crates/s3s/src/error/generated{suffix}.rs");
-        write_file(&path, || error::codegen(&model));
+        let path = "crates/s3s/src/error/generated.rs";
+        write_file(path, || error::codegen(&model));
     }
 
     {
@@ -93,8 +95,8 @@ fn inner_run(code_patch: Option<Patch>) {
     }
 
     {
-        let path = format!("crates/s3s/src/access/generated{suffix}.rs");
-        write_file(&path, || access::codegen(&ops));
+        let path = "crates/s3s/src/access/generated.rs";
+        write_file(path, || access::codegen(&ops));
     }
 
     {
@@ -103,7 +105,19 @@ fn inner_run(code_patch: Option<Patch>) {
     }
 
     {
-        let path = format!("crates/s3s-aws/src/proxy/generated{suffix}.rs");
-        write_file(&path, || aws_proxy::codegen(&ops, &rust_types));
+        let path = "crates/s3s-aws/src/proxy/generated.rs";
+        write_file(path, || aws_proxy::codegen(&ops, &rust_types));
     }
+}
+
+/// Merge each `generated.rs` / `generated_minio.rs` pair into a single file:
+/// identical logic groups are kept once, differing groups are gated with
+/// `#[cfg(feature = "minio")]`, and the `_minio` file is removed.
+pub fn postprocess() {
+    postprocess::run(&[
+        ("crates/s3s/src/dto/generated.rs", "crates/s3s/src/dto/generated_minio.rs"),
+        ("crates/s3s/src/xml/generated.rs", "crates/s3s/src/xml/generated_minio.rs"),
+        ("crates/s3s/src/ops/generated.rs", "crates/s3s/src/ops/generated_minio.rs"),
+        ("crates/s3s-aws/src/conv/generated.rs", "crates/s3s-aws/src/conv/generated_minio.rs"),
+    ]);
 }

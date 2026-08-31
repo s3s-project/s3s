@@ -1,0 +1,22 @@
+[package]
+name = "s3s-rfc2047"
+version = "0.16.0-alpha.1"
+description = "RFC 2047 MIME encoded-word encoding and decoding"
+readme = "../../README.md"
+keywords = ["rfc2047", "mime", "encoding", "header"]
+categories = ["encoding", "web-programming"]
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[dependencies]
+base64-simd.workspace = true
+thiserror.workspace = true

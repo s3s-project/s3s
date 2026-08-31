@@ -60,6 +60,10 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
         let s3s_path = f!("s3s::dto::{name}");
         let aws_path = aws_ty_path(name, ops, rust_types);
 
+        // `expires_string` (raw, unparsed) only exists on SDK output types;
+        // SDK input types expose `expires` as `DateTime` instead.
+        let is_expires_output = matches!(name.as_str(), "GetObjectOutput" | "HeadObjectOutput");
+
         g!("impl AwsConversion for {s3s_path} {{");
         g!("    type Target = {aws_path};");
         g!("type Error = S3Error;");
@@ -81,6 +85,7 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
                     let aws_field_name = match s3s_field_name {
                         "checksum_crc32c" => "checksum_crc32_c",
                         "checksum_crc64nvme" => "checksum_crc64_nvme",
+                        "expires" if is_expires_output => "expires_string",
                         "type_" => "r#type",
                         s => s,
                     };
@@ -106,6 +111,12 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
 
                     if field.type_ == "PartNumberMarker" || field.type_ == "NextPartNumberMarker" {
                         g!("{s3s_field_name}: x.{aws_field_name}.as_deref().map(integer_from_string).transpose()?,");
+                        continue;
+                    }
+
+                    if field.type_ == "Expires" && !is_expires_output {
+                        // SDK input types carry `expires` as `DateTime`; s3s keeps the raw string.
+                        g!("{s3s_field_name}: expires_from_aws(x.{aws_field_name})?,");
                         continue;
                     }
 
@@ -163,7 +174,8 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
             rust::Type::StructEnum(ty) => {
                 g!("Ok(match x {{");
                 for variant in &ty.variants {
-                    g!("{aws_path}::{0}(v) => Self::{0}(try_from_aws(v)?),", variant.name);
+                    let aws_variant_name = variant.name.to_upper_camel_case();
+                    g!("{aws_path}::{aws_variant_name}(v) => Self::{0}(try_from_aws(v)?),", variant.name);
                 }
                 g!("_ => unimplemented!(\"unknown variant of {aws_path}: {{x:?}}\"),");
                 g!("}})");
@@ -199,12 +211,19 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
                     let aws_field_name = match s3s_field_name {
                         "checksum_crc32c" => "checksum_crc32_c",
                         "checksum_crc64nvme" => "checksum_crc64_nvme",
+                        "expires" if is_expires_output => "expires_string",
                         "type_" => "type",
                         s => s,
                     };
 
                     if field.type_ == "PartNumberMarker" || field.type_ == "NextPartNumberMarker" {
                         g!("y = y.set_{aws_field_name}(x.{s3s_field_name}.map(string_from_integer));");
+                        continue;
+                    }
+
+                    if field.type_ == "Expires" && !is_expires_output {
+                        // SDK input types carry `expires` as `DateTime`; s3s keeps the raw string.
+                        g!("y = y.set_{aws_field_name}(expires_into_aws(x.{s3s_field_name})?);");
                         continue;
                     }
 
@@ -235,7 +254,8 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
             rust::Type::StructEnum(ty) => {
                 g!("Ok(match x {{");
                 for variant in &ty.variants {
-                    g!("Self::{0}(v) => {aws_path}::{0}(try_into_aws(v)?),", variant.name);
+                    let aws_variant_name = variant.name.to_upper_camel_case();
+                    g!("Self::{0}(v) => {aws_path}::{aws_variant_name}(try_into_aws(v)?),", variant.name);
                 }
                 g!("_ => unimplemented!(\"unknown variant of {}: {{x:?}}\"),", ty.name);
                 g!("}})");
@@ -265,6 +285,7 @@ fn aws_ty_name(name: &str) -> &str {
         "SSEKMS" => "Ssekms",
         "SSES3" => "Sses3",
         "SelectObjectContentEvent" => "SelectObjectContentEventStream",
+        "SSEKMSEncryption" => "SsekmsEncryption",
         _ => name,
     }
 }

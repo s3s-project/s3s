@@ -1,9 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
+#![deny(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::unwrap_used
+)]
+//! `UploadStream`: a body wrapper that verifies a payload SHA-256 while
+//! forwarding bytes, used to enforce the signed body hash of single-chunk
+//! `SigV4` uploads.
+
 use crate::crypto::Checksum as _;
 use crate::crypto::Sha256;
-use crate::error::StdError;
+use crate::error::{S3ErrorCode, StdError};
 use crate::stream::{ByteStream, DynByteStream, RemainingLength};
 use crate::utils::crypto::Sha256Sum;
 
@@ -58,6 +69,19 @@ pub enum UploadStreamError {
     Incomplete,
 }
 
+impl UploadStreamError {
+    /// Maps a stream-verification error to the `S3` error code a conforming
+    /// implementation should report.
+    #[must_use]
+    pub fn to_s3_error_code(&self) -> S3ErrorCode {
+        match self {
+            Self::Underlying(_) => S3ErrorCode::InternalError,
+            Self::Sha256Mismatch => S3ErrorCode::BadDigest,
+            Self::LengthMismatch | Self::Incomplete => S3ErrorCode::IncompleteBody,
+        }
+    }
+}
+
 impl<S> UploadStream<S> {
     /// Creates a new [`UploadStream`] with the provided expected checksum.
     pub fn new(inner: S, length: usize, expected_sha256: Sha256Sum) -> Self {
@@ -100,11 +124,11 @@ impl<S> UploadStream<S> {
     }
 
     fn finalize_hash(&mut self) -> Result<(), UploadStreamError> {
-        if self.hasher.is_none() {
+        let Some(hasher) = self.hasher.take() else {
             return Ok(());
-        }
+        };
 
-        let digest = Sha256Sum::from_bytes(self.hasher.take().unwrap().finalize());
+        let digest = Sha256Sum::from_bytes(hasher.finalize());
         if digest == self.expected_sha256 {
             Ok(())
         } else {
@@ -214,11 +238,34 @@ where
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::unwrap_used
+)]
 mod tests {
     use super::*;
 
     use futures::StreamExt as _;
     use std::io;
+
+    #[test]
+    fn to_s3_error_code_maps_all_variants() {
+        let cases = [
+            (UploadStreamError::Sha256Mismatch, S3ErrorCode::BadDigest),
+            (UploadStreamError::LengthMismatch, S3ErrorCode::IncompleteBody),
+            (UploadStreamError::Incomplete, S3ErrorCode::IncompleteBody),
+            (
+                UploadStreamError::Underlying(Box::new(io::Error::other("boom"))),
+                S3ErrorCode::InternalError,
+            ),
+        ];
+        for (err, expected) in cases {
+            assert_eq!(err.to_s3_error_code(), expected, "{err:?}");
+        }
+    }
 
     #[allow(clippy::unnecessary_wraps)]
     fn ok_bytes(data: &'static [u8]) -> Result<Bytes, StdError> {

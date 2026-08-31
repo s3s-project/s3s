@@ -57,6 +57,8 @@ pub const X_AMZ_ACL: HeaderName = HeaderName::from_static("x-amz-acl");
 
 pub const X_AMZ_ARCHIVE_STATUS: HeaderName = HeaderName::from_static("x-amz-archive-status");
 
+pub const X_AMZ_BUCKET_ARN: HeaderName = HeaderName::from_static("x-amz-bucket-arn");
+
 pub const X_AMZ_BUCKET_LOCATION_NAME: HeaderName = HeaderName::from_static("x-amz-bucket-location-name");
 
 pub const X_AMZ_BUCKET_LOCATION_TYPE: HeaderName = HeaderName::from_static("x-amz-bucket-location-type");
@@ -264,7 +266,11 @@ pub const X_AMZ_MP_OBJECT_SIZE: HeaderName = HeaderName::from_static("x-amz-mp-o
 
 pub const X_AMZ_MP_PARTS_COUNT: HeaderName = HeaderName::from_static("x-amz-mp-parts-count");
 
+pub const X_AMZ_OBJECT_ANNOTATION_DIRECTIVE: HeaderName = HeaderName::from_static("x-amz-object-annotation-directive");
+
 pub const X_AMZ_OBJECT_ATTRIBUTES: HeaderName = HeaderName::from_static("x-amz-object-attributes");
+
+pub const X_AMZ_OBJECT_IF_MATCH: HeaderName = HeaderName::from_static("x-amz-object-if-match");
 
 pub const X_AMZ_OBJECT_LOCK_LEGAL_HOLD: HeaderName = HeaderName::from_static("x-amz-object-lock-legal-hold");
 
@@ -275,6 +281,8 @@ pub const X_AMZ_OBJECT_LOCK_RETAIN_UNTIL_DATE: HeaderName = HeaderName::from_sta
 pub const X_AMZ_OBJECT_OWNERSHIP: HeaderName = HeaderName::from_static("x-amz-object-ownership");
 
 pub const X_AMZ_OBJECT_SIZE: HeaderName = HeaderName::from_static("x-amz-object-size");
+
+pub const X_AMZ_OBJECT_VERSION_ID: HeaderName = HeaderName::from_static("x-amz-object-version-id");
 
 pub const X_AMZ_OPTIONAL_OBJECT_ATTRIBUTES: HeaderName = HeaderName::from_static("x-amz-optional-object-attributes");
 
@@ -348,3 +356,6 @@ pub const X_AMZ_VERSION_ID: HeaderName = HeaderName::from_static("x-amz-version-
 pub const X_AMZ_WEBSITE_REDIRECT_LOCATION: HeaderName = HeaderName::from_static("x-amz-website-redirect-location");
 
 pub const X_AMZ_WRITE_OFFSET_BYTES: HeaderName = HeaderName::from_static("x-amz-write-offset-bytes");
+
+#[cfg(feature = "minio")]
+pub const X_MINIO_FORCE_DELETE: HeaderName = HeaderName::from_static("x-minio-force-delete");

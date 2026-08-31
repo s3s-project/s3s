@@ -8,14 +8,7 @@
 //! enumerates every standard S3 error code. The [`s3_error!`] macro offers
 //! a convenient shorthand for constructing errors by code or code-with-message.
 
-cfg_if::cfg_if! {
-    if #[cfg(feature = "minio")] {
-        mod generated_minio;
-        use self::generated_minio as generated;
-    } else {
-        mod generated;
-    }
-}
+mod generated;
 
 pub use self::generated::*;
 
@@ -52,9 +45,10 @@ struct Inner {
 impl S3Error {
     #[must_use]
     pub fn new(code: S3ErrorCode) -> Self {
+        let message = code.default_message();
         Self(Box::new(Inner {
             code,
-            message: None,
+            message: message.map(Cow::Borrowed),
             // resource: None,
             request_id: None,
             status_code: None,
@@ -245,7 +239,9 @@ impl FromStr for S3ErrorCode {
     type Err = Infallible;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self::from_bytes(s.as_bytes()).unwrap())
+        // `from_bytes` only returns `None` for invalid UTF-8, which a `&str`
+        // cannot contain; the custom fallback mirrors `from_bytes` itself.
+        Ok(Self::from_bytes(s.as_bytes()).unwrap_or_else(|| Self::Custom(s.into())))
     }
 }
 
@@ -263,6 +259,9 @@ impl S3ErrorCode {
 
 #[cfg(test)]
 mod from_bytes_tests;
+
+#[cfg(test)]
+mod default_message_tests;
 
 #[cfg(test)]
 mod tests {

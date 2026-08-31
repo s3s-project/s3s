@@ -4,8 +4,18 @@
 use std::env;
 use std::fmt;
 
+/// The result type used by suites, fixtures, and cases.
+///
+/// A case fails either by returning `Err(Failed)` (e.g. via `?`) or by
+/// panicking (e.g. via `assert!`). The two failures are reported distinctly
+/// in the report (`FnResult::Err` vs `FnResult::Panicked`).
 pub type Result<T = (), E = Failed> = std::result::Result<T, E>;
 
+/// The error type used by the harness.
+///
+/// Wraps any `std::error::Error` source. When `RUST_BACKTRACE` is set, the
+/// conversion from a source error prints the source chain and a backtrace
+/// filtered to s3s paths.
 #[derive(Debug)]
 pub struct Failed {
     source: Option<Box<dyn std::error::Error + Send + Sync + 'static>>,
@@ -47,9 +57,48 @@ impl fmt::Display for Failed {
 }
 
 impl Failed {
+    /// Creates a failure from an arbitrary string message.
+    #[must_use]
     pub fn from_string(s: impl Into<String>) -> Self {
         Self {
             source: Some(s.into().into()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Debug)]
+    struct TestError;
+
+    impl fmt::Display for TestError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "test error")
+        }
+    }
+
+    impl std::error::Error for TestError {}
+
+    #[test]
+    fn failed_from_error() {
+        let failed = Failed::from(TestError);
+        assert_eq!(failed.to_string(), "Failed: test error");
+    }
+
+    #[test]
+    fn failed_from_string() {
+        let failed = Failed::from_string("custom message");
+        assert_eq!(failed.to_string(), "Failed: custom message");
+    }
+
+    #[test]
+    fn result_propagates_via_question_mark() {
+        fn f() -> Result<u32> {
+            let x: u32 = "42".parse()?;
+            Ok(x)
+        }
+        assert_eq!(f().unwrap(), 42);
     }
 }

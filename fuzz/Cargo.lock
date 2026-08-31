@@ -796,6 +796,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
+name = "phf"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "010378780309880b08997fae13be7834dba947d36393bd372f2b1556deb2a2f6"
+dependencies = [
+ "phf_shared",
+ "serde",
+]
+
+[[package]]
+name = "phf_shared"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c6fd9027e2d9319be6349febd1db4e8d02aa544921200c9b777720ac34a3aa89"
+dependencies = [
+ "siphasher",
+]
+
+[[package]]
 name = "pin-project-lite"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -935,6 +954,7 @@ dependencies = [
  "mime",
  "nom",
  "numeric_cast",
+ "phf",
  "pin-project-lite",
  "quick-xml",
  "regex",
@@ -975,7 +995,11 @@ dependencies = [
 name = "s3s-sigv2"
 version = "0.16.0-alpha.1"
 dependencies = [
+ "base64-simd",
+ "hmac",
  "jiff",
+ "sha1",
+ "smallvec",
  "thiserror",
 ]
 
@@ -986,11 +1010,15 @@ dependencies = [
  "arrayvec",
  "base64-simd",
  "hex-simd",
+ "hmac",
  "jiff",
  "nom",
  "serde",
+ "sha2",
  "smallvec",
+ "std-next",
  "thiserror",
+ "zeroize",
 ]
 
 [[package]]
@@ -1081,6 +1109,12 @@ name = "simdutf8"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
+
+[[package]]
+name = "siphasher"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8ee5873ec9cce0195efcb7a4e9507a04cd49aec9c83d0389df45b1ef7ba2e649"
 
 [[package]]
 name = "slab"

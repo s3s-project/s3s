@@ -23,3 +23,6 @@ pub use self::connector::{Client, Connector};
 
 mod proxy;
 pub use self::proxy::Proxy;
+
+#[cfg(feature = "minio")]
+pub mod minio_compat;

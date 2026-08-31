@@ -81,7 +81,13 @@ pub fn collect_operations(model: &smithy::Model) -> Operations {
 
         let output = {
             if smithy_output != "Unit" && smithy_output != "NotificationConfiguration" {
-                assert_eq!(smithy_output.strip_suffix("Output").unwrap(), op_name);
+                // The upstream model mostly names op outputs `<Op>Output`, but a few
+                // use `<Op>Response`; both are normalized to the `<Op>Output` convention.
+                let op_base = smithy_output
+                    .strip_suffix("Output")
+                    .or_else(|| smithy_output.strip_suffix("Response"))
+                    .unwrap();
+                assert_eq!(op_base, op_name);
             }
             f!("{op_name}Output")
         };
@@ -177,6 +183,11 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
         "#![allow(clippy::too_many_lines)]",
         "#![allow(clippy::collapsible_if)]",
         "#![allow(clippy::unnecessary_wraps)]",
+        "#![deny(clippy::unwrap_used)]",
+        "#![deny(clippy::expect_used)]",
+        "#![deny(clippy::indexing_slicing)]",
+        "#![deny(clippy::panic)]",
+        "#![deny(clippy::unreachable)]",
         "",
         "use crate::dto::*;",
         "use crate::header::*;",
@@ -335,6 +346,15 @@ fn codegen_post_object_fork_op(rust_types: &RustTypes) {
     g(["    fn name(&self) -> &'static str {", "        \"PostObject\"", "    }", ""]);
     g(["    fn needs_full_body(&self) -> bool {", "        false", "    }", ""]);
     g(["    fn has_request_payload(&self) -> bool {", "        true", "    }", ""]);
+    g([
+        "    fn has_streaming_body(&self) -> bool {",
+        "        // POST Object's body is the multipart file stream governed by",
+        "        // `post_object_max_file_size`, not the request body wrapped by",
+        "        // `put_object_max_size`.",
+        "        false",
+        "    }",
+        "",
+    ]);
 
     g([
         "    async fn call(&self, ccx: &CallContext<'_>, req: &mut http::Request) -> S3Result<http::Response> {",
@@ -832,7 +852,7 @@ fn codegen_op_http_de_multipart(op: &Operation, rust_types: &RustTypes) {
         "let bucket = http::unwrap_bucket(req);",
         "let key = http::parse_field_value(&m, \"key\")?.ok_or_else(|| invalid_request!(\"missing key\"))?;",
         "",
-        "let body_stream = req.s3ext.post_object_stream.take().expect(\"missing body stream\");",
+        "let body_stream = req.s3ext.post_object_stream.take().ok_or_else(|| s3_error!(InternalError, \"missing body stream\"))?;",
         "",
         "let content_length = body_stream",
         "    .remaining_length()",
@@ -938,6 +958,11 @@ fn codegen_op_http_call(op: &Operation, rust_types: &RustTypes) {
 
     g!("fn has_request_payload(&self) -> bool {{");
     g!("{}", has_request_payload(op, rust_types));
+    g!("}}");
+    g!();
+
+    g!("fn has_streaming_body(&self) -> bool {{");
+    g!("{}", has_streaming_body(op, rust_types));
     g!("}}");
     g!();
 
@@ -1141,6 +1166,23 @@ fn has_request_payload(op: &Operation, rust_types: &RustTypes) -> bool {
     ty.fields.iter().any(|field| field.position == "payload")
 }
 
+/// Whether the operation streams a request body directly to the `S3`
+/// implementation without buffering: its input carries a `StreamingBlob`
+/// payload (`PutObject`, `UploadPart`, `WriteGetObjectResponse`).
+fn has_streaming_body(op: &Operation, rust_types: &RustTypes) -> bool {
+    if op.name == "PostObject" {
+        // Synthetic operation: the body is the multipart file stream governed
+        // by `post_object_max_file_size`, not the request body wrapped by
+        // `put_object_max_size`.
+        return false;
+    }
+
+    let rust::Type::Struct(ty) = &rust_types[op.input.as_str()] else { panic!() };
+    ty.fields
+        .iter()
+        .any(|field| field.position == "payload" && field.type_ == "StreamingBlob")
+}
+
 #[allow(clippy::too_many_lines)]
 fn codegen_router(ops: &Operations, rust_types: &RustTypes) {
     let routes = collect_routes(ops, rust_types);
@@ -1220,6 +1262,19 @@ fn codegen_router(ops: &Operations, rust_types: &RustTypes) {
                         }
                         let fallback_op_name = group.iter().find(|r| is_final_op(r)).map(|r| r.op.name.as_str());
 
+                        // Count how many routes share each query tag, so that
+                        // shared tags can be disambiguated by required query
+                        // members while single-op tags keep the plain check.
+                        let tag_counts: HashMap<&str, usize> = {
+                            let mut counts: HashMap<&str, usize> = default();
+                            for r in group {
+                                if let Some(tag) = r.query_tag.as_deref() {
+                                    *counts.entry(tag).or_insert(0) += 1;
+                                }
+                            }
+                            counts
+                        };
+
                         g!("if let Some(qs) = qs {{");
                         for route in group {
                             let has_query_tag = route.query_tag.is_some();
@@ -1249,29 +1304,17 @@ fn codegen_router(ops: &Operations, rust_types: &RustTypes) {
                                 (true, false) => {
                                     let tag = route.query_tag.as_deref().unwrap();
 
-                                    // Special handling for operations that share the same query tag
-                                    // but are differentiated by the presence of an 'id' parameter
-                                    let needs_id_check = matches!(
-                                        route.op.name.as_str(),
-                                        "GetBucketAnalyticsConfiguration"
-                                            | "GetBucketIntelligentTieringConfiguration"
-                                            | "GetBucketInventoryConfiguration"
-                                            | "GetBucketMetricsConfiguration"
-                                    );
-                                    let needs_no_id_check = matches!(
-                                        route.op.name.as_str(),
-                                        "ListBucketAnalyticsConfigurations"
-                                            | "ListBucketIntelligentTieringConfigurations"
-                                            | "ListBucketInventoryConfigurations"
-                                            | "ListBucketMetricsConfigurations"
-                                    );
-
-                                    if needs_id_check {
-                                        g!("if qs.has(\"{tag}\") && qs.has(\"id\") {{");
-                                        succ(route, true);
-                                        g!("}}");
-                                    } else if needs_no_id_check {
-                                        g!("if qs.has(\"{tag}\") && !qs.has(\"id\") {{");
+                                    // Operations sharing a query tag are disambiguated by the
+                                    // presence of a required query member (e.g. `id` for the
+                                    // analytics/metrics groups, `annotationName` for the object
+                                    // annotation operations). The route carrying the required
+                                    // member is sorted first and matches only when it is present;
+                                    // the remaining route matches on the bare tag. Single-op tags
+                                    // keep the plain tag check.
+                                    if tag_counts.get(tag).copied().unwrap_or(0) > 1
+                                        && let Some(required) = route.required_query_strings.first()
+                                    {
+                                        g!("if qs.has(\"{tag}\") && qs.has(\"{required}\") {{");
                                         succ(route, true);
                                         g!("}}");
                                     } else {

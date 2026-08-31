@@ -222,6 +222,13 @@ pub trait S3Access: Send + Sync + 'static {
         Ok(())
     }
 
+    /// Checks whether the DeleteObjectAnnotation request has accesses to the resources.
+    ///
+    /// This method returns `Ok(())` by default.
+    async fn delete_object_annotation(&self, _req: &mut S3Request<DeleteObjectAnnotationInput>) -> S3Result<()> {
+        Ok(())
+    }
+
     /// Checks whether the DeleteObjectTagging request has accesses to the resources.
     ///
     /// This method returns `Ok(())` by default.
@@ -439,6 +446,13 @@ pub trait S3Access: Send + Sync + 'static {
         Ok(())
     }
 
+    /// Checks whether the GetObjectAnnotation request has accesses to the resources.
+    ///
+    /// This method returns `Ok(())` by default.
+    async fn get_object_annotation(&self, _req: &mut S3Request<GetObjectAnnotationInput>) -> S3Result<()> {
+        Ok(())
+    }
+
     /// Checks whether the GetObjectAttributes request has accesses to the resources.
     ///
     /// This method returns `Ok(())` by default.
@@ -563,6 +577,13 @@ pub trait S3Access: Send + Sync + 'static {
         Ok(())
     }
 
+    /// Checks whether the ListObjectAnnotations request has accesses to the resources.
+    ///
+    /// This method returns `Ok(())` by default.
+    async fn list_object_annotations(&self, _req: &mut S3Request<ListObjectAnnotationsInput>) -> S3Result<()> {
+        Ok(())
+    }
+
     /// Checks whether the ListObjectVersions request has accesses to the resources.
     ///
     /// This method returns `Ok(())` by default.
@@ -588,6 +609,14 @@ pub trait S3Access: Send + Sync + 'static {
     ///
     /// This method returns `Ok(())` by default.
     async fn list_parts(&self, _req: &mut S3Request<ListPartsInput>) -> S3Result<()> {
+        Ok(())
+    }
+
+    /// Checks whether the ListenBucketNotification request has accesses to the resources.
+    ///
+    /// This method returns `Ok(())` by default.
+    #[cfg(feature = "minio")]
+    async fn listen_bucket_notification(&self, _req: &mut S3Request<ListenBucketNotificationInput>) -> S3Result<()> {
         Ok(())
     }
 
@@ -763,6 +792,13 @@ pub trait S3Access: Send + Sync + 'static {
         Ok(())
     }
 
+    /// Checks whether the PutObjectAnnotation request has accesses to the resources.
+    ///
+    /// This method returns `Ok(())` by default.
+    async fn put_object_annotation(&self, _req: &mut S3Request<PutObjectAnnotationInput>) -> S3Result<()> {
+        Ok(())
+    }
+
     /// Checks whether the PutObjectLegalHold request has accesses to the resources.
     ///
     /// This method returns `Ok(())` by default.
@@ -846,6 +882,13 @@ pub trait S3Access: Send + Sync + 'static {
         &self,
         _req: &mut S3Request<UpdateBucketMetadataJournalTableConfigurationInput>,
     ) -> S3Result<()> {
+        Ok(())
+    }
+
+    /// Checks whether the UpdateObjectEncryption request has accesses to the resources.
+    ///
+    /// This method returns `Ok(())` by default.
+    async fn update_object_encryption(&self, _req: &mut S3Request<UpdateObjectEncryptionInput>) -> S3Result<()> {
         Ok(())
     }
 

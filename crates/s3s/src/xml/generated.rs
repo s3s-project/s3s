@@ -89,6 +89,7 @@ use std::io::Write;
 //   Serialize: ListDirectoryBucketsOutput
 // Deserialize: ListDirectoryBucketsOutput
 //   Serialize: ListMultipartUploadsOutput
+//   Serialize: ListObjectAnnotationsOutput
 //   Serialize: ListObjectVersionsOutput
 //   Serialize: ListObjectsOutput
 //   Serialize: ListObjectsV2Output
@@ -101,6 +102,8 @@ use std::io::Write;
 // Deserialize: MetricsConfiguration
 //   Serialize: NotificationConfiguration
 // Deserialize: NotificationConfiguration
+//   Serialize: ObjectEncryption
+// Deserialize: ObjectEncryption
 //   Serialize: ObjectLockConfiguration
 // Deserialize: ObjectLockConfiguration
 //   Serialize: ObjectLockLegalHold "LegalHold"
@@ -115,6 +118,7 @@ use std::io::Write;
 // Deserialize: Progress
 //   Serialize: PublicAccessBlockConfiguration
 // Deserialize: PublicAccessBlockConfiguration
+//   Serialize: PutObjectAnnotationOutput
 //   Serialize: ReplicationConfiguration
 // Deserialize: ReplicationConfiguration
 //   Serialize: RequestPaymentConfiguration
@@ -178,6 +182,14 @@ use std::io::Write;
 // DeserializeContent: AnalyticsS3ExportFileFormat
 //   SerializeContent: AnnotationConfigurationState
 // DeserializeContent: AnnotationConfigurationState
+//   SerializeContent: AnnotationCount
+// DeserializeContent: AnnotationCount
+//   SerializeContent: AnnotationEntry
+// DeserializeContent: AnnotationEntry
+//   SerializeContent: AnnotationName
+// DeserializeContent: AnnotationName
+//   SerializeContent: AnnotationPrefix
+// DeserializeContent: AnnotationPrefix
 //   SerializeContent: AnnotationTableConfiguration
 // DeserializeContent: AnnotationTableConfiguration
 //   SerializeContent: AnnotationTableConfigurationResult
@@ -192,6 +204,8 @@ use std::io::Write;
 // DeserializeContent: AssumedRoleIdType
 //   SerializeContent: AssumedRoleUser
 // DeserializeContent: AssumedRoleUser
+//   SerializeContent: BlockedEncryptionTypes
+// DeserializeContent: BlockedEncryptionTypes
 //   SerializeContent: Bucket
 // DeserializeContent: Bucket
 //   SerializeContent: BucketAbacStatus
@@ -336,6 +350,8 @@ use std::io::Write;
 // DeserializeContent: Encryption
 //   SerializeContent: EncryptionConfiguration
 // DeserializeContent: EncryptionConfiguration
+//   SerializeContent: EncryptionType
+// DeserializeContent: EncryptionType
 //   SerializeContent: End
 // DeserializeContent: End
 //   SerializeContent: Error
@@ -533,6 +549,7 @@ use std::io::Write;
 //   SerializeContent: ListDirectoryBucketsOutput
 // DeserializeContent: ListDirectoryBucketsOutput
 //   SerializeContent: ListMultipartUploadsOutput
+//   SerializeContent: ListObjectAnnotationsOutput
 //   SerializeContent: ListObjectVersionsOutput
 //   SerializeContent: ListObjectsOutput
 //   SerializeContent: ListObjectsV2Output
@@ -557,6 +574,8 @@ use std::io::Write;
 // DeserializeContent: Marker
 //   SerializeContent: MaxAgeSeconds
 // DeserializeContent: MaxAgeSeconds
+//   SerializeContent: MaxAnnotationResults
+// DeserializeContent: MaxAnnotationResults
 //   SerializeContent: MaxKeys
 // DeserializeContent: MaxKeys
 //   SerializeContent: MaxParts
@@ -613,6 +632,8 @@ use std::io::Write;
 // DeserializeContent: NextUploadIdMarker
 //   SerializeContent: NextVersionIdMarker
 // DeserializeContent: NextVersionIdMarker
+//   SerializeContent: NonEmptyKmsKeyArnString
+// DeserializeContent: NonEmptyKmsKeyArnString
 //   SerializeContent: NonNegativeIntegerType
 // DeserializeContent: NonNegativeIntegerType
 //   SerializeContent: NoncurrentVersionExpiration
@@ -629,6 +650,8 @@ use std::io::Write;
 // DeserializeContent: Object
 //   SerializeContent: ObjectCannedACL
 // DeserializeContent: ObjectCannedACL
+//   SerializeContent: ObjectEncryption
+// DeserializeContent: ObjectEncryption
 //   SerializeContent: ObjectIdentifier
 // DeserializeContent: ObjectIdentifier
 //   SerializeContent: ObjectKey
@@ -707,6 +730,7 @@ use std::io::Write;
 // DeserializeContent: Protocol
 //   SerializeContent: PublicAccessBlockConfiguration
 // DeserializeContent: PublicAccessBlockConfiguration
+//   SerializeContent: PutObjectAnnotationOutput
 //   SerializeContent: QueueArn
 // DeserializeContent: QueueArn
 //   SerializeContent: QueueConfiguration
@@ -749,6 +773,8 @@ use std::io::Write;
 // DeserializeContent: ReplicationRuleFilter
 //   SerializeContent: ReplicationRuleStatus
 // DeserializeContent: ReplicationRuleStatus
+//   SerializeContent: ReplicationStatus
+// DeserializeContent: ReplicationStatus
 //   SerializeContent: ReplicationTime
 // DeserializeContent: ReplicationTime
 //   SerializeContent: ReplicationTimeStatus
@@ -775,6 +801,8 @@ use std::io::Write;
 // DeserializeContent: S3KeyFilter
 //   SerializeContent: S3Location
 // DeserializeContent: S3Location
+//   SerializeContent: S3RegionalOrS3ExpressBucketArnString
+// DeserializeContent: S3RegionalOrS3ExpressBucketArnString
 //   SerializeContent: S3TablesArn
 // DeserializeContent: S3TablesArn
 //   SerializeContent: S3TablesBucketArn
@@ -791,6 +819,8 @@ use std::io::Write;
 // DeserializeContent: S3TablesNamespace
 //   SerializeContent: SSEKMS
 // DeserializeContent: SSEKMS
+//   SerializeContent: SSEKMSEncryption
+// DeserializeContent: SSEKMSEncryption
 //   SerializeContent: SSEKMSKeyId
 // DeserializeContent: SSEKMSKeyId
 //   SerializeContent: SSES3
@@ -908,714 +938,6 @@ impl<'xml> Deserialize<'xml> for AbacStatus {
     }
 }
 
-impl Serialize for AccelerateConfiguration {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("AccelerateConfiguration", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for AccelerateConfiguration {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("AccelerateConfiguration", Deserializer::content)
-    }
-}
-
-impl Serialize for AccessControlPolicy {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("AccessControlPolicy", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for AccessControlPolicy {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("AccessControlPolicy", Deserializer::content)
-    }
-}
-
-impl Serialize for AnalyticsConfiguration {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("AnalyticsConfiguration", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for AnalyticsConfiguration {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("AnalyticsConfiguration", Deserializer::content)
-    }
-}
-
-impl Serialize for AnnotationTableConfigurationUpdates {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("AnnotationTableConfiguration", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for AnnotationTableConfigurationUpdates {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("AnnotationTableConfiguration", Deserializer::content)
-    }
-}
-
-impl Serialize for BucketLifecycleConfiguration {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("LifecycleConfiguration", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for BucketLifecycleConfiguration {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("LifecycleConfiguration", Deserializer::content)
-    }
-}
-
-impl Serialize for BucketLoggingStatus {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("BucketLoggingStatus", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for BucketLoggingStatus {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("BucketLoggingStatus", Deserializer::content)
-    }
-}
-
-impl Serialize for CORSConfiguration {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("CORSConfiguration", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for CORSConfiguration {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("CORSConfiguration", Deserializer::content)
-    }
-}
-
-impl Serialize for CompleteMultipartUploadOutput {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content_with_ns("CompleteMultipartUploadResult", XMLNS_S3, self)
-    }
-}
-
-impl Serialize for CompletedMultipartUpload {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("CompleteMultipartUpload", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for CompletedMultipartUpload {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("CompleteMultipartUpload", Deserializer::content)
-    }
-}
-
-impl Serialize for CopyObjectResult {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("CopyObjectResult", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for CopyObjectResult {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("CopyObjectResult", Deserializer::content)
-    }
-}
-
-impl Serialize for CopyPartResult {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("CopyPartResult", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for CopyPartResult {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("CopyPartResult", Deserializer::content)
-    }
-}
-
-impl Serialize for CreateBucketConfiguration {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("CreateBucketConfiguration", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for CreateBucketConfiguration {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("CreateBucketConfiguration", Deserializer::content)
-    }
-}
-
-impl Serialize for CreateMultipartUploadOutput {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content_with_ns("InitiateMultipartUploadResult", XMLNS_S3, self)
-    }
-}
-
-impl Serialize for CreateSessionOutput {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content_with_ns("CreateSessionResult", XMLNS_S3, self)
-    }
-}
-
-impl Serialize for Delete {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("Delete", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for Delete {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("Delete", Deserializer::content)
-    }
-}
-
-impl Serialize for DeleteObjectsOutput {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content_with_ns("DeleteResult", XMLNS_S3, self)
-    }
-}
-
-impl Serialize for GetBucketAccelerateConfigurationOutput {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content_with_ns("AccelerateConfiguration", XMLNS_S3, self)
-    }
-}
-
-impl Serialize for GetBucketAclOutput {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content_with_ns("AccessControlPolicy", XMLNS_S3, self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for GetBucketAclOutput {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("AccessControlPolicy", Deserializer::content)
-    }
-}
-
-impl Serialize for GetBucketCorsOutput {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content_with_ns("CORSConfiguration", XMLNS_S3, self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for GetBucketCorsOutput {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("CORSConfiguration", Deserializer::content)
-    }
-}
-
-impl Serialize for GetBucketLifecycleConfigurationOutput {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content_with_ns("LifecycleConfiguration", XMLNS_S3, self)
-    }
-}
-
-impl Serialize for GetBucketLoggingOutput {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content_with_ns("BucketLoggingStatus", XMLNS_S3, self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for GetBucketLoggingOutput {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("BucketLoggingStatus", Deserializer::content)
-    }
-}
-
-impl Serialize for GetBucketMetadataConfigurationResult {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("GetBucketMetadataConfigurationResult", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for GetBucketMetadataConfigurationResult {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("GetBucketMetadataConfigurationResult", Deserializer::content)
-    }
-}
-
-impl Serialize for GetBucketMetadataTableConfigurationResult {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("GetBucketMetadataTableConfigurationResult", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for GetBucketMetadataTableConfigurationResult {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("GetBucketMetadataTableConfigurationResult", Deserializer::content)
-    }
-}
-
-impl Serialize for GetBucketNotificationConfigurationOutput {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content_with_ns("NotificationConfiguration", XMLNS_S3, self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for GetBucketNotificationConfigurationOutput {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("NotificationConfiguration", Deserializer::content)
-    }
-}
-
-impl Serialize for GetBucketRequestPaymentOutput {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content_with_ns("RequestPaymentConfiguration", XMLNS_S3, self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for GetBucketRequestPaymentOutput {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("RequestPaymentConfiguration", Deserializer::content)
-    }
-}
-
-impl Serialize for GetBucketTaggingOutput {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content_with_ns("Tagging", XMLNS_S3, self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for GetBucketTaggingOutput {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("Tagging", Deserializer::content)
-    }
-}
-
-impl Serialize for GetBucketVersioningOutput {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content_with_ns("VersioningConfiguration", XMLNS_S3, self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for GetBucketVersioningOutput {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("VersioningConfiguration", Deserializer::content)
-    }
-}
-
-impl Serialize for GetBucketWebsiteOutput {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content_with_ns("WebsiteConfiguration", XMLNS_S3, self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for GetBucketWebsiteOutput {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("WebsiteConfiguration", Deserializer::content)
-    }
-}
-
-impl Serialize for GetObjectAclOutput {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content_with_ns("AccessControlPolicy", XMLNS_S3, self)
-    }
-}
-
-impl Serialize for GetObjectAttributesOutput {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content_with_ns("GetObjectAttributesResponse", XMLNS_S3, self)
-    }
-}
-
-impl Serialize for GetObjectTaggingOutput {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content_with_ns("Tagging", XMLNS_S3, self)
-    }
-}
-
-impl Serialize for IntelligentTieringConfiguration {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("IntelligentTieringConfiguration", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for IntelligentTieringConfiguration {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("IntelligentTieringConfiguration", Deserializer::content)
-    }
-}
-
-impl Serialize for InventoryConfiguration {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("InventoryConfiguration", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for InventoryConfiguration {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("InventoryConfiguration", Deserializer::content)
-    }
-}
-
-impl Serialize for InventoryTableConfigurationUpdates {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("InventoryTableConfiguration", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for InventoryTableConfigurationUpdates {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("InventoryTableConfiguration", Deserializer::content)
-    }
-}
-
-impl Serialize for JournalTableConfigurationUpdates {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("JournalTableConfiguration", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for JournalTableConfigurationUpdates {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("JournalTableConfiguration", Deserializer::content)
-    }
-}
-
-impl Serialize for ListBucketAnalyticsConfigurationsOutput {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content_with_ns("ListBucketAnalyticsConfigurationResult", XMLNS_S3, self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for ListBucketAnalyticsConfigurationsOutput {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("ListBucketAnalyticsConfigurationResult", Deserializer::content)
-    }
-}
-
-impl Serialize for ListBucketIntelligentTieringConfigurationsOutput {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content_with_ns("ListBucketIntelligentTieringConfigurationsOutput", XMLNS_S3, self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for ListBucketIntelligentTieringConfigurationsOutput {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("ListBucketIntelligentTieringConfigurationsOutput", Deserializer::content)
-    }
-}
-
-impl Serialize for ListBucketInventoryConfigurationsOutput {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content_with_ns("ListInventoryConfigurationsResult", XMLNS_S3, self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for ListBucketInventoryConfigurationsOutput {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("ListInventoryConfigurationsResult", Deserializer::content)
-    }
-}
-
-impl Serialize for ListBucketMetricsConfigurationsOutput {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content_with_ns("ListMetricsConfigurationsResult", XMLNS_S3, self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for ListBucketMetricsConfigurationsOutput {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("ListMetricsConfigurationsResult", Deserializer::content)
-    }
-}
-
-impl Serialize for ListBucketsOutput {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content_with_ns("ListAllMyBucketsResult", XMLNS_S3, self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for ListBucketsOutput {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("ListAllMyBucketsResult", Deserializer::content)
-    }
-}
-
-impl Serialize for ListDirectoryBucketsOutput {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content_with_ns("ListAllMyDirectoryBucketsResult", XMLNS_S3, self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for ListDirectoryBucketsOutput {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("ListAllMyDirectoryBucketsResult", Deserializer::content)
-    }
-}
-
-impl Serialize for ListMultipartUploadsOutput {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content_with_ns("ListMultipartUploadsResult", XMLNS_S3, self)
-    }
-}
-
-impl Serialize for ListObjectVersionsOutput {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content_with_ns("ListVersionsResult", XMLNS_S3, self)
-    }
-}
-
-impl Serialize for ListObjectsOutput {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content_with_ns("ListBucketResult", XMLNS_S3, self)
-    }
-}
-
-impl Serialize for ListObjectsV2Output {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content_with_ns("ListBucketResult", XMLNS_S3, self)
-    }
-}
-
-impl Serialize for ListPartsOutput {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content_with_ns("ListPartsResult", XMLNS_S3, self)
-    }
-}
-
-impl Serialize for MetadataConfiguration {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("MetadataConfiguration", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for MetadataConfiguration {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("MetadataConfiguration", Deserializer::content)
-    }
-}
-
-impl Serialize for MetadataTableConfiguration {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("MetadataTableConfiguration", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for MetadataTableConfiguration {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("MetadataTableConfiguration", Deserializer::content)
-    }
-}
-
-impl Serialize for MetricsConfiguration {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("MetricsConfiguration", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for MetricsConfiguration {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("MetricsConfiguration", Deserializer::content)
-    }
-}
-
-impl Serialize for NotificationConfiguration {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("NotificationConfiguration", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for NotificationConfiguration {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("NotificationConfiguration", Deserializer::content)
-    }
-}
-
-impl Serialize for ObjectLockConfiguration {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("ObjectLockConfiguration", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for ObjectLockConfiguration {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("ObjectLockConfiguration", Deserializer::content)
-    }
-}
-
-impl Serialize for ObjectLockLegalHold {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("LegalHold", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for ObjectLockLegalHold {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("LegalHold", Deserializer::content)
-    }
-}
-
-impl Serialize for ObjectLockRetention {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("Retention", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for ObjectLockRetention {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("Retention", Deserializer::content)
-    }
-}
-
-impl Serialize for OwnershipControls {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("OwnershipControls", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for OwnershipControls {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("OwnershipControls", Deserializer::content)
-    }
-}
-
-impl Serialize for PolicyStatus {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("PolicyStatus", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for PolicyStatus {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("PolicyStatus", Deserializer::content)
-    }
-}
-
-impl Serialize for Progress {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("Progress", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for Progress {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("Progress", Deserializer::content)
-    }
-}
-
-impl Serialize for PublicAccessBlockConfiguration {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("PublicAccessBlockConfiguration", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for PublicAccessBlockConfiguration {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("PublicAccessBlockConfiguration", Deserializer::content)
-    }
-}
-
-impl Serialize for ReplicationConfiguration {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("ReplicationConfiguration", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for ReplicationConfiguration {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("ReplicationConfiguration", Deserializer::content)
-    }
-}
-
-impl Serialize for RequestPaymentConfiguration {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("RequestPaymentConfiguration", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for RequestPaymentConfiguration {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("RequestPaymentConfiguration", Deserializer::content)
-    }
-}
-
-impl Serialize for RestoreRequest {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("RestoreRequest", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for RestoreRequest {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("RestoreRequest", Deserializer::content)
-    }
-}
-
-impl Serialize for SelectObjectContentRequest {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("SelectObjectContentRequest", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for SelectObjectContentRequest {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element_any(&["SelectObjectContentRequest", "SelectRequest"], Deserializer::content)
-    }
-}
-
-impl Serialize for ServerSideEncryptionConfiguration {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("ServerSideEncryptionConfiguration", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for ServerSideEncryptionConfiguration {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("ServerSideEncryptionConfiguration", Deserializer::content)
-    }
-}
-
-impl Serialize for Stats {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("Stats", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for Stats {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("Stats", Deserializer::content)
-    }
-}
-
-impl Serialize for Tagging {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("Tagging", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for Tagging {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("Tagging", Deserializer::content)
-    }
-}
-
-impl Serialize for VersioningConfiguration {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("VersioningConfiguration", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for VersioningConfiguration {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("VersioningConfiguration", Deserializer::content)
-    }
-}
-
-impl Serialize for WebsiteConfiguration {
-    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("WebsiteConfiguration", self)
-    }
-}
-
-impl<'xml> Deserialize<'xml> for WebsiteConfiguration {
-    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.named_element("WebsiteConfiguration", Deserializer::content)
-    }
-}
-
 impl SerializeContent for AbacStatus {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.status {
@@ -1644,29 +966,16 @@ impl<'xml> DeserializeContent<'xml> for AbacStatus {
         Ok(Self { status })
     }
 }
-impl SerializeContent for AbortIncompleteMultipartUpload {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.days_after_initiation {
-            s.content("DaysAfterInitiation", val)?;
-        }
-        Ok(())
+
+impl Serialize for AccelerateConfiguration {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("AccelerateConfiguration", self)
     }
 }
 
-impl<'xml> DeserializeContent<'xml> for AbortIncompleteMultipartUpload {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut days_after_initiation: Option<DaysAfterInitiation> = None;
-        d.for_each_element(|d, x| match x {
-            b"DaysAfterInitiation" => {
-                if days_after_initiation.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                days_after_initiation = Some(d.content()?);
-                Ok(())
-            }
-            _ => Err(DeError::UnexpectedTagName),
-        })?;
-        Ok(Self { days_after_initiation })
+impl<'xml> Deserialize<'xml> for AccelerateConfiguration {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("AccelerateConfiguration", Deserializer::content)
     }
 }
 impl SerializeContent for AccelerateConfiguration {
@@ -1695,6 +1004,18 @@ impl<'xml> DeserializeContent<'xml> for AccelerateConfiguration {
             }
         })?;
         Ok(Self { status })
+    }
+}
+
+impl Serialize for AccessControlPolicy {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("AccessControlPolicy", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for AccessControlPolicy {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("AccessControlPolicy", Deserializer::content)
     }
 }
 impl SerializeContent for AccessControlPolicy {
@@ -1736,63 +1057,16 @@ impl<'xml> DeserializeContent<'xml> for AccessControlPolicy {
         Ok(Self { grants, owner })
     }
 }
-impl SerializeContent for AccessControlTranslation {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("Owner", &self.owner)?;
-        Ok(())
+
+impl Serialize for AnalyticsConfiguration {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("AnalyticsConfiguration", self)
     }
 }
 
-impl<'xml> DeserializeContent<'xml> for AccessControlTranslation {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut owner: Option<OwnerOverride> = None;
-        d.for_each_element(|d, x| match x {
-            b"Owner" => {
-                if owner.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                owner = Some(d.content()?);
-                Ok(())
-            }
-            _ => Err(DeError::UnexpectedTagName),
-        })?;
-        Ok(Self {
-            owner: owner.ok_or(DeError::MissingField)?,
-        })
-    }
-}
-impl SerializeContent for AnalyticsAndOperator {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.prefix {
-            s.content("Prefix", val)?;
-        }
-        if let Some(iter) = &self.tags {
-            s.flattened_list("Tag", iter)?;
-        }
-        Ok(())
-    }
-}
-
-impl<'xml> DeserializeContent<'xml> for AnalyticsAndOperator {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut prefix: Option<Prefix> = None;
-        let mut tags: Option<TagSet> = None;
-        d.for_each_element(|d, x| match x {
-            b"Prefix" => {
-                if prefix.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                prefix = Some(d.content()?);
-                Ok(())
-            }
-            b"Tag" => {
-                let ans: Tag = d.content()?;
-                tags.get_or_insert_with(List::new).push(ans);
-                Ok(())
-            }
-            _ => Err(DeError::UnexpectedTagName),
-        })?;
-        Ok(Self { prefix, tags })
+impl<'xml> Deserialize<'xml> for AnalyticsConfiguration {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("AnalyticsConfiguration", Deserializer::content)
     }
 }
 impl SerializeContent for AnalyticsConfiguration {
@@ -1845,268 +1119,16 @@ impl<'xml> DeserializeContent<'xml> for AnalyticsConfiguration {
         })
     }
 }
-impl SerializeContent for AnalyticsExportDestination {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("S3BucketDestination", &self.s3_bucket_destination)?;
-        Ok(())
+
+impl Serialize for AnnotationTableConfigurationUpdates {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("AnnotationTableConfiguration", self)
     }
 }
 
-impl<'xml> DeserializeContent<'xml> for AnalyticsExportDestination {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut s3_bucket_destination: Option<AnalyticsS3BucketDestination> = None;
-        d.for_each_element(|d, x| match x {
-            b"S3BucketDestination" => {
-                if s3_bucket_destination.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                s3_bucket_destination = Some(d.content()?);
-                Ok(())
-            }
-            _ => Err(DeError::UnexpectedTagName),
-        })?;
-        Ok(Self {
-            s3_bucket_destination: s3_bucket_destination.ok_or(DeError::MissingField)?,
-        })
-    }
-}
-impl SerializeContent for AnalyticsFilter {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        match self {
-            Self::And(x) => s.content("And", x),
-            Self::Prefix(x) => s.content("Prefix", x),
-            Self::Tag(x) => s.content("Tag", x),
-        }
-    }
-}
-impl<'xml> DeserializeContent<'xml> for AnalyticsFilter {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.element(|d, x| match x {
-            b"And" => Ok(Self::And(d.content()?)),
-            b"Prefix" => Ok(Self::Prefix(d.content()?)),
-            b"Tag" => Ok(Self::Tag(d.content()?)),
-            _ => Err(DeError::UnexpectedTagName),
-        })
-    }
-}
-impl SerializeContent for AnalyticsS3BucketDestination {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("Bucket", &self.bucket)?;
-        if let Some(ref val) = self.bucket_account_id {
-            s.content("BucketAccountId", val)?;
-        }
-        s.content("Format", &self.format)?;
-        if let Some(ref val) = self.prefix {
-            s.content("Prefix", val)?;
-        }
-        Ok(())
-    }
-}
-
-impl<'xml> DeserializeContent<'xml> for AnalyticsS3BucketDestination {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut bucket: Option<BucketName> = None;
-        let mut bucket_account_id: Option<AccountId> = None;
-        let mut format: Option<AnalyticsS3ExportFileFormat> = None;
-        let mut prefix: Option<Prefix> = None;
-        d.for_each_element(|d, x| match x {
-            b"Bucket" => {
-                if bucket.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                bucket = Some(d.content()?);
-                Ok(())
-            }
-            b"BucketAccountId" => {
-                if bucket_account_id.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                bucket_account_id = Some(d.content()?);
-                Ok(())
-            }
-            b"Format" => {
-                if format.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                format = Some(d.content()?);
-                Ok(())
-            }
-            b"Prefix" => {
-                if prefix.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                prefix = Some(d.content()?);
-                Ok(())
-            }
-            _ => Err(DeError::UnexpectedTagName),
-        })?;
-        Ok(Self {
-            bucket: bucket.ok_or(DeError::MissingField)?,
-            bucket_account_id,
-            format: format.ok_or(DeError::MissingField)?,
-            prefix,
-        })
-    }
-}
-impl SerializeContent for AnalyticsS3ExportFileFormat {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        self.as_str().serialize_content(s)
-    }
-}
-impl<'xml> DeserializeContent<'xml> for AnalyticsS3ExportFileFormat {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.text(|s| match s {
-            "CSV" => Ok(Self::from_static(AnalyticsS3ExportFileFormat::CSV)),
-            _ => Ok(Self::from(s.to_owned())),
-        })
-    }
-}
-impl SerializeContent for AnnotationConfigurationState {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        self.as_str().serialize_content(s)
-    }
-}
-impl<'xml> DeserializeContent<'xml> for AnnotationConfigurationState {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.text(|s| match s {
-            "DISABLED" => Ok(Self::from_static(AnnotationConfigurationState::DISABLED)),
-            "ENABLED" => Ok(Self::from_static(AnnotationConfigurationState::ENABLED)),
-            _ => Ok(Self::from(s.to_owned())),
-        })
-    }
-}
-impl SerializeContent for AnnotationTableConfiguration {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("ConfigurationState", &self.configuration_state)?;
-        if let Some(ref val) = self.encryption_configuration {
-            s.content("EncryptionConfiguration", val)?;
-        }
-        if let Some(ref val) = self.role {
-            s.content("Role", val)?;
-        }
-        Ok(())
-    }
-}
-
-impl<'xml> DeserializeContent<'xml> for AnnotationTableConfiguration {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut configuration_state: Option<AnnotationConfigurationState> = None;
-        let mut encryption_configuration: Option<MetadataTableEncryptionConfiguration> = None;
-        let mut role: Option<Role> = None;
-        d.for_each_element(|d, x| match x {
-            b"ConfigurationState" => {
-                if configuration_state.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                configuration_state = Some(d.content()?);
-                Ok(())
-            }
-            b"EncryptionConfiguration" => {
-                if encryption_configuration.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                encryption_configuration = Some(d.content()?);
-                Ok(())
-            }
-            b"Role" => {
-                if role.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                role = Some(d.content()?);
-                Ok(())
-            }
-            _ => Err(DeError::UnexpectedTagName),
-        })?;
-        Ok(Self {
-            configuration_state: configuration_state.ok_or(DeError::MissingField)?,
-            encryption_configuration,
-            role,
-        })
-    }
-}
-impl SerializeContent for AnnotationTableConfigurationResult {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("ConfigurationState", &self.configuration_state)?;
-        if let Some(ref val) = self.error {
-            s.content("Error", val)?;
-        }
-        if let Some(ref val) = self.role {
-            s.content("Role", val)?;
-        }
-        if let Some(ref val) = self.table_arn {
-            s.content("TableArn", val)?;
-        }
-        if let Some(ref val) = self.table_name {
-            s.content("TableName", val)?;
-        }
-        if let Some(ref val) = self.table_status {
-            s.content("TableStatus", val)?;
-        }
-        Ok(())
-    }
-}
-
-impl<'xml> DeserializeContent<'xml> for AnnotationTableConfigurationResult {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut configuration_state: Option<AnnotationConfigurationState> = None;
-        let mut error: Option<ErrorDetails> = None;
-        let mut role: Option<Role> = None;
-        let mut table_arn: Option<S3TablesArn> = None;
-        let mut table_name: Option<S3TablesName> = None;
-        let mut table_status: Option<MetadataTableStatus> = None;
-        d.for_each_element(|d, x| match x {
-            b"ConfigurationState" => {
-                if configuration_state.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                configuration_state = Some(d.content()?);
-                Ok(())
-            }
-            b"Error" => {
-                if error.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                error = Some(d.content()?);
-                Ok(())
-            }
-            b"Role" => {
-                if role.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                role = Some(d.content()?);
-                Ok(())
-            }
-            b"TableArn" => {
-                if table_arn.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                table_arn = Some(d.content()?);
-                Ok(())
-            }
-            b"TableName" => {
-                if table_name.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                table_name = Some(d.content()?);
-                Ok(())
-            }
-            b"TableStatus" => {
-                if table_status.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                table_status = Some(d.content()?);
-                Ok(())
-            }
-            _ => Err(DeError::UnexpectedTagName),
-        })?;
-        Ok(Self {
-            configuration_state: configuration_state.ok_or(DeError::MissingField)?,
-            error,
-            role,
-            table_arn,
-            table_name,
-            table_status,
-        })
+impl<'xml> Deserialize<'xml> for AnnotationTableConfigurationUpdates {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("AnnotationTableConfiguration", Deserializer::content)
     }
 }
 impl SerializeContent for AnnotationTableConfigurationUpdates {
@@ -2161,221 +1183,39 @@ impl<'xml> DeserializeContent<'xml> for AnnotationTableConfigurationUpdates {
         })
     }
 }
-impl SerializeContent for AssumeRoleOutput {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.assumed_role_user {
-            s.content("AssumedRoleUser", val)?;
-        }
-        if let Some(ref val) = self.credentials {
-            s.content("Credentials", val)?;
-        }
-        if let Some(ref val) = self.packed_policy_size {
-            s.content("PackedPolicySize", val)?;
-        }
-        if let Some(ref val) = self.source_identity {
-            s.content("SourceIdentity", val)?;
-        }
-        Ok(())
+
+impl Serialize for BucketLifecycleConfiguration {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("LifecycleConfiguration", self)
+    }
+}
+impl<'xml> Deserialize<'xml> for BucketLifecycleConfiguration {
+    #[cfg(not(feature = "minio"))]
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("LifecycleConfiguration", Deserializer::content)
+    }
+
+    #[cfg(feature = "minio")]
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element_any(&["LifecycleConfiguration", "BucketLifecycleConfiguration"], Deserializer::content)
     }
 }
 
-impl<'xml> DeserializeContent<'xml> for AssumeRoleOutput {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut assumed_role_user: Option<AssumedRoleUser> = None;
-        let mut credentials: Option<Credentials> = None;
-        let mut packed_policy_size: Option<NonNegativeIntegerType> = None;
-        let mut source_identity: Option<SourceIdentityType> = None;
-        d.for_each_element(|d, x| match x {
-            b"AssumedRoleUser" => {
-                if assumed_role_user.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                assumed_role_user = Some(d.content()?);
-                Ok(())
-            }
-            b"Credentials" => {
-                if credentials.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                credentials = Some(d.content()?);
-                Ok(())
-            }
-            b"PackedPolicySize" => {
-                if packed_policy_size.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                packed_policy_size = Some(d.content()?);
-                Ok(())
-            }
-            b"SourceIdentity" => {
-                if source_identity.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                source_identity = Some(d.content()?);
-                Ok(())
-            }
-            _ => Err(DeError::UnexpectedTagName),
-        })?;
-        Ok(Self {
-            assumed_role_user,
-            credentials,
-            packed_policy_size,
-            source_identity,
-        })
-    }
-}
-impl SerializeContent for AssumedRoleUser {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("Arn", &self.arn)?;
-        s.content("AssumedRoleId", &self.assumed_role_id)?;
-        Ok(())
-    }
-}
-
-impl<'xml> DeserializeContent<'xml> for AssumedRoleUser {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut arn: Option<ArnType> = None;
-        let mut assumed_role_id: Option<AssumedRoleIdType> = None;
-        d.for_each_element(|d, x| match x {
-            b"Arn" => {
-                if arn.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                arn = Some(d.content()?);
-                Ok(())
-            }
-            b"AssumedRoleId" => {
-                if assumed_role_id.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                assumed_role_id = Some(d.content()?);
-                Ok(())
-            }
-            _ => Err(DeError::UnexpectedTagName),
-        })?;
-        Ok(Self {
-            arn: arn.ok_or(DeError::MissingField)?,
-            assumed_role_id: assumed_role_id.ok_or(DeError::MissingField)?,
-        })
-    }
-}
-impl SerializeContent for Bucket {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.bucket_region {
-            s.content("BucketRegion", val)?;
-        }
-        if let Some(ref val) = self.creation_date {
-            s.timestamp("CreationDate", val, TimestampFormat::DateTime)?;
-        }
-        if let Some(ref val) = self.name {
-            s.content("Name", val)?;
-        }
-        Ok(())
-    }
-}
-
-impl<'xml> DeserializeContent<'xml> for Bucket {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut bucket_region: Option<BucketRegion> = None;
-        let mut creation_date: Option<CreationDate> = None;
-        let mut name: Option<BucketName> = None;
-        d.for_each_element(|d, x| match x {
-            b"BucketRegion" => {
-                if bucket_region.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                bucket_region = Some(d.content()?);
-                Ok(())
-            }
-            b"CreationDate" => {
-                if creation_date.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                creation_date = Some(d.timestamp(TimestampFormat::DateTime)?);
-                Ok(())
-            }
-            b"Name" => {
-                if name.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                name = Some(d.content()?);
-                Ok(())
-            }
-            _ => Err(DeError::UnexpectedTagName),
-        })?;
-        Ok(Self {
-            bucket_region,
-            creation_date,
-            name,
-        })
-    }
-}
-impl SerializeContent for BucketAbacStatus {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        self.as_str().serialize_content(s)
-    }
-}
-impl<'xml> DeserializeContent<'xml> for BucketAbacStatus {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.text(|s| match s {
-            "Disabled" => Ok(Self::from_static(BucketAbacStatus::DISABLED)),
-            "Enabled" => Ok(Self::from_static(BucketAbacStatus::ENABLED)),
-            _ => Ok(Self::from(s.to_owned())),
-        })
-    }
-}
-impl SerializeContent for BucketAccelerateStatus {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        self.as_str().serialize_content(s)
-    }
-}
-impl<'xml> DeserializeContent<'xml> for BucketAccelerateStatus {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.text(|s| match s {
-            "Enabled" => Ok(Self::from_static(BucketAccelerateStatus::ENABLED)),
-            "Suspended" => Ok(Self::from_static(BucketAccelerateStatus::SUSPENDED)),
-            _ => Ok(Self::from(s.to_owned())),
-        })
-    }
-}
-impl SerializeContent for BucketInfo {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.data_redundancy {
-            s.content("DataRedundancy", val)?;
-        }
-        if let Some(ref val) = self.type_ {
-            s.content("Type", val)?;
-        }
-        Ok(())
-    }
-}
-
-impl<'xml> DeserializeContent<'xml> for BucketInfo {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut data_redundancy: Option<DataRedundancy> = None;
-        let mut type_: Option<BucketType> = None;
-        d.for_each_element(|d, x| match x {
-            b"DataRedundancy" => {
-                if data_redundancy.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                data_redundancy = Some(d.content()?);
-                Ok(())
-            }
-            b"Type" => {
-                if type_.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                type_ = Some(d.content()?);
-                Ok(())
-            }
-            _ => Err(DeError::UnexpectedTagName),
-        })?;
-        Ok(Self { data_redundancy, type_ })
-    }
-}
 impl SerializeContent for BucketLifecycleConfiguration {
+    #[cfg(not(feature = "minio"))]
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        {
+            let iter = &self.rules;
+            s.flattened_list("Rule", iter)?;
+        }
+        Ok(())
+    }
+
+    #[cfg(feature = "minio")]
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.expiry_updated_at {
+            s.timestamp("ExpiryUpdatedAt", val, TimestampFormat::DateTime)?;
+        }
         {
             let iter = &self.rules;
             s.flattened_list("Rule", iter)?;
@@ -2385,6 +1225,7 @@ impl SerializeContent for BucketLifecycleConfiguration {
 }
 
 impl<'xml> DeserializeContent<'xml> for BucketLifecycleConfiguration {
+    #[cfg(not(feature = "minio"))]
     fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
         let mut rules: Option<LifecycleRules> = None;
         d.for_each_element(|d, x| match x {
@@ -2402,55 +1243,45 @@ impl<'xml> DeserializeContent<'xml> for BucketLifecycleConfiguration {
             rules: rules.ok_or(DeError::MissingField)?,
         })
     }
-}
-impl SerializeContent for BucketLocationConstraint {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        self.as_str().serialize_content(s)
+
+    #[cfg(feature = "minio")]
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut expiry_updated_at: Option<Date> = None;
+        let mut rules: Option<LifecycleRules> = None;
+        d.for_each_element(|d, x| match x {
+            b"ExpiryUpdatedAt" => {
+                if expiry_updated_at.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                expiry_updated_at = Some(d.timestamp(TimestampFormat::DateTime)?);
+                Ok(())
+            }
+            b"Rule" => {
+                let ans: LifecycleRule = d.content()?;
+                rules.get_or_insert_with(List::new).push(ans);
+                Ok(())
+            }
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
+        })?;
+        Ok(Self {
+            expiry_updated_at,
+            rules: rules.ok_or(DeError::MissingField)?,
+        })
     }
 }
-impl<'xml> DeserializeContent<'xml> for BucketLocationConstraint {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.text(|s| match s {
-            "EU" => Ok(Self::from_static(BucketLocationConstraint::EU)),
-            "af-south-1" => Ok(Self::from_static(BucketLocationConstraint::AF_SOUTH_1)),
-            "ap-east-1" => Ok(Self::from_static(BucketLocationConstraint::AP_EAST_1)),
-            "ap-east-2" => Ok(Self::from_static(BucketLocationConstraint::AP_EAST_2)),
-            "ap-northeast-1" => Ok(Self::from_static(BucketLocationConstraint::AP_NORTHEAST_1)),
-            "ap-northeast-2" => Ok(Self::from_static(BucketLocationConstraint::AP_NORTHEAST_2)),
-            "ap-northeast-3" => Ok(Self::from_static(BucketLocationConstraint::AP_NORTHEAST_3)),
-            "ap-south-1" => Ok(Self::from_static(BucketLocationConstraint::AP_SOUTH_1)),
-            "ap-south-2" => Ok(Self::from_static(BucketLocationConstraint::AP_SOUTH_2)),
-            "ap-southeast-1" => Ok(Self::from_static(BucketLocationConstraint::AP_SOUTHEAST_1)),
-            "ap-southeast-2" => Ok(Self::from_static(BucketLocationConstraint::AP_SOUTHEAST_2)),
-            "ap-southeast-3" => Ok(Self::from_static(BucketLocationConstraint::AP_SOUTHEAST_3)),
-            "ap-southeast-4" => Ok(Self::from_static(BucketLocationConstraint::AP_SOUTHEAST_4)),
-            "ap-southeast-5" => Ok(Self::from_static(BucketLocationConstraint::AP_SOUTHEAST_5)),
-            "ap-southeast-6" => Ok(Self::from_static(BucketLocationConstraint::AP_SOUTHEAST_6)),
-            "ap-southeast-7" => Ok(Self::from_static(BucketLocationConstraint::AP_SOUTHEAST_7)),
-            "ca-central-1" => Ok(Self::from_static(BucketLocationConstraint::CA_CENTRAL_1)),
-            "ca-west-1" => Ok(Self::from_static(BucketLocationConstraint::CA_WEST_1)),
-            "cn-north-1" => Ok(Self::from_static(BucketLocationConstraint::CN_NORTH_1)),
-            "cn-northwest-1" => Ok(Self::from_static(BucketLocationConstraint::CN_NORTHWEST_1)),
-            "eu-central-1" => Ok(Self::from_static(BucketLocationConstraint::EU_CENTRAL_1)),
-            "eu-central-2" => Ok(Self::from_static(BucketLocationConstraint::EU_CENTRAL_2)),
-            "eu-north-1" => Ok(Self::from_static(BucketLocationConstraint::EU_NORTH_1)),
-            "eu-south-1" => Ok(Self::from_static(BucketLocationConstraint::EU_SOUTH_1)),
-            "eu-south-2" => Ok(Self::from_static(BucketLocationConstraint::EU_SOUTH_2)),
-            "eu-west-1" => Ok(Self::from_static(BucketLocationConstraint::EU_WEST_1)),
-            "eu-west-2" => Ok(Self::from_static(BucketLocationConstraint::EU_WEST_2)),
-            "eu-west-3" => Ok(Self::from_static(BucketLocationConstraint::EU_WEST_3)),
-            "il-central-1" => Ok(Self::from_static(BucketLocationConstraint::IL_CENTRAL_1)),
-            "me-central-1" => Ok(Self::from_static(BucketLocationConstraint::ME_CENTRAL_1)),
-            "me-south-1" => Ok(Self::from_static(BucketLocationConstraint::ME_SOUTH_1)),
-            "mx-central-1" => Ok(Self::from_static(BucketLocationConstraint::MX_CENTRAL_1)),
-            "sa-east-1" => Ok(Self::from_static(BucketLocationConstraint::SA_EAST_1)),
-            "us-east-2" => Ok(Self::from_static(BucketLocationConstraint::US_EAST_2)),
-            "us-gov-east-1" => Ok(Self::from_static(BucketLocationConstraint::US_GOV_EAST_1)),
-            "us-gov-west-1" => Ok(Self::from_static(BucketLocationConstraint::US_GOV_WEST_1)),
-            "us-west-1" => Ok(Self::from_static(BucketLocationConstraint::US_WEST_1)),
-            "us-west-2" => Ok(Self::from_static(BucketLocationConstraint::US_WEST_2)),
-            _ => Ok(Self::from(s.to_owned())),
-        })
+
+impl Serialize for BucketLoggingStatus {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("BucketLoggingStatus", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for BucketLoggingStatus {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("BucketLoggingStatus", Deserializer::content)
     }
 }
 impl SerializeContent for BucketLoggingStatus {
@@ -2481,46 +1312,16 @@ impl<'xml> DeserializeContent<'xml> for BucketLoggingStatus {
         Ok(Self { logging_enabled })
     }
 }
-impl SerializeContent for BucketLogsPermission {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        self.as_str().serialize_content(s)
+
+impl Serialize for CORSConfiguration {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("CORSConfiguration", self)
     }
 }
-impl<'xml> DeserializeContent<'xml> for BucketLogsPermission {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.text(|s| match s {
-            "FULL_CONTROL" => Ok(Self::from_static(BucketLogsPermission::FULL_CONTROL)),
-            "READ" => Ok(Self::from_static(BucketLogsPermission::READ)),
-            "WRITE" => Ok(Self::from_static(BucketLogsPermission::WRITE)),
-            _ => Ok(Self::from(s.to_owned())),
-        })
-    }
-}
-impl SerializeContent for BucketType {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        self.as_str().serialize_content(s)
-    }
-}
-impl<'xml> DeserializeContent<'xml> for BucketType {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.text(|s| match s {
-            "Directory" => Ok(Self::from_static(BucketType::DIRECTORY)),
-            _ => Ok(Self::from(s.to_owned())),
-        })
-    }
-}
-impl SerializeContent for BucketVersioningStatus {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        self.as_str().serialize_content(s)
-    }
-}
-impl<'xml> DeserializeContent<'xml> for BucketVersioningStatus {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.text(|s| match s {
-            "Enabled" => Ok(Self::from_static(BucketVersioningStatus::ENABLED)),
-            "Suspended" => Ok(Self::from_static(BucketVersioningStatus::SUSPENDED)),
-            _ => Ok(Self::from(s.to_owned())),
-        })
+
+impl<'xml> Deserialize<'xml> for CORSConfiguration {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("CORSConfiguration", Deserializer::content)
     }
 }
 impl SerializeContent for CORSConfiguration {
@@ -2552,467 +1353,10 @@ impl<'xml> DeserializeContent<'xml> for CORSConfiguration {
         })
     }
 }
-impl SerializeContent for CORSRule {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(iter) = &self.allowed_headers {
-            s.flattened_list("AllowedHeader", iter)?;
-        }
-        {
-            let iter = &self.allowed_methods;
-            s.flattened_list("AllowedMethod", iter)?;
-        }
-        {
-            let iter = &self.allowed_origins;
-            s.flattened_list("AllowedOrigin", iter)?;
-        }
-        if let Some(iter) = &self.expose_headers {
-            s.flattened_list("ExposeHeader", iter)?;
-        }
-        if let Some(ref val) = self.id {
-            s.content("ID", val)?;
-        }
-        if let Some(ref val) = self.max_age_seconds {
-            s.content("MaxAgeSeconds", val)?;
-        }
-        Ok(())
-    }
-}
 
-impl<'xml> DeserializeContent<'xml> for CORSRule {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut allowed_headers: Option<AllowedHeaders> = None;
-        let mut allowed_methods: Option<AllowedMethods> = None;
-        let mut allowed_origins: Option<AllowedOrigins> = None;
-        let mut expose_headers: Option<ExposeHeaders> = None;
-        let mut id: Option<ID> = None;
-        let mut max_age_seconds: Option<MaxAgeSeconds> = None;
-        d.for_each_element(|d, x| match x {
-            b"AllowedHeader" => {
-                let ans: AllowedHeader = d.content()?;
-                allowed_headers.get_or_insert_with(List::new).push(ans);
-                Ok(())
-            }
-            b"AllowedMethod" => {
-                let ans: AllowedMethod = d.content()?;
-                allowed_methods.get_or_insert_with(List::new).push(ans);
-                Ok(())
-            }
-            b"AllowedOrigin" => {
-                let ans: AllowedOrigin = d.content()?;
-                allowed_origins.get_or_insert_with(List::new).push(ans);
-                Ok(())
-            }
-            b"ExposeHeader" => {
-                let ans: ExposeHeader = d.content()?;
-                expose_headers.get_or_insert_with(List::new).push(ans);
-                Ok(())
-            }
-            b"ID" => {
-                if id.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                id = Some(d.content()?);
-                Ok(())
-            }
-            b"MaxAgeSeconds" => {
-                if max_age_seconds.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                max_age_seconds = Some(d.content()?);
-                Ok(())
-            }
-            _ => Err(DeError::UnexpectedTagName),
-        })?;
-        Ok(Self {
-            allowed_headers,
-            allowed_methods: allowed_methods.ok_or(DeError::MissingField)?,
-            allowed_origins: allowed_origins.ok_or(DeError::MissingField)?,
-            expose_headers,
-            id,
-            max_age_seconds,
-        })
-    }
-}
-impl SerializeContent for CSVInput {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.allow_quoted_record_delimiter {
-            s.content("AllowQuotedRecordDelimiter", val)?;
-        }
-        if let Some(ref val) = self.comments {
-            s.content("Comments", val)?;
-        }
-        if let Some(ref val) = self.field_delimiter {
-            s.content("FieldDelimiter", val)?;
-        }
-        if let Some(ref val) = self.file_header_info {
-            s.content("FileHeaderInfo", val)?;
-        }
-        if let Some(ref val) = self.quote_character {
-            s.content("QuoteCharacter", val)?;
-        }
-        if let Some(ref val) = self.quote_escape_character {
-            s.content("QuoteEscapeCharacter", val)?;
-        }
-        if let Some(ref val) = self.record_delimiter {
-            s.content("RecordDelimiter", val)?;
-        }
-        Ok(())
-    }
-}
-
-impl<'xml> DeserializeContent<'xml> for CSVInput {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut allow_quoted_record_delimiter: Option<AllowQuotedRecordDelimiter> = None;
-        let mut comments: Option<Comments> = None;
-        let mut field_delimiter: Option<FieldDelimiter> = None;
-        let mut file_header_info: Option<FileHeaderInfo> = None;
-        let mut quote_character: Option<QuoteCharacter> = None;
-        let mut quote_escape_character: Option<QuoteEscapeCharacter> = None;
-        let mut record_delimiter: Option<RecordDelimiter> = None;
-        d.for_each_element(|d, x| match x {
-            b"AllowQuotedRecordDelimiter" => {
-                if allow_quoted_record_delimiter.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                allow_quoted_record_delimiter = Some(d.content()?);
-                Ok(())
-            }
-            b"Comments" => {
-                if comments.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                comments = Some(d.content()?);
-                Ok(())
-            }
-            b"FieldDelimiter" => {
-                if field_delimiter.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                field_delimiter = Some(d.content()?);
-                Ok(())
-            }
-            b"FileHeaderInfo" => {
-                if file_header_info.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                file_header_info = Some(d.content()?);
-                Ok(())
-            }
-            b"QuoteCharacter" => {
-                if quote_character.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                quote_character = Some(d.content()?);
-                Ok(())
-            }
-            b"QuoteEscapeCharacter" => {
-                if quote_escape_character.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                quote_escape_character = Some(d.content()?);
-                Ok(())
-            }
-            b"RecordDelimiter" => {
-                if record_delimiter.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                record_delimiter = Some(d.content()?);
-                Ok(())
-            }
-            _ => Err(DeError::UnexpectedTagName),
-        })?;
-        Ok(Self {
-            allow_quoted_record_delimiter,
-            comments,
-            field_delimiter,
-            file_header_info,
-            quote_character,
-            quote_escape_character,
-            record_delimiter,
-        })
-    }
-}
-impl SerializeContent for CSVOutput {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.field_delimiter {
-            s.content("FieldDelimiter", val)?;
-        }
-        if let Some(ref val) = self.quote_character {
-            s.content("QuoteCharacter", val)?;
-        }
-        if let Some(ref val) = self.quote_escape_character {
-            s.content("QuoteEscapeCharacter", val)?;
-        }
-        if let Some(ref val) = self.quote_fields {
-            s.content("QuoteFields", val)?;
-        }
-        if let Some(ref val) = self.record_delimiter {
-            s.content("RecordDelimiter", val)?;
-        }
-        Ok(())
-    }
-}
-
-impl<'xml> DeserializeContent<'xml> for CSVOutput {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut field_delimiter: Option<FieldDelimiter> = None;
-        let mut quote_character: Option<QuoteCharacter> = None;
-        let mut quote_escape_character: Option<QuoteEscapeCharacter> = None;
-        let mut quote_fields: Option<QuoteFields> = None;
-        let mut record_delimiter: Option<RecordDelimiter> = None;
-        d.for_each_element(|d, x| match x {
-            b"FieldDelimiter" => {
-                if field_delimiter.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                field_delimiter = Some(d.content()?);
-                Ok(())
-            }
-            b"QuoteCharacter" => {
-                if quote_character.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                quote_character = Some(d.content()?);
-                Ok(())
-            }
-            b"QuoteEscapeCharacter" => {
-                if quote_escape_character.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                quote_escape_character = Some(d.content()?);
-                Ok(())
-            }
-            b"QuoteFields" => {
-                if quote_fields.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                quote_fields = Some(d.content()?);
-                Ok(())
-            }
-            b"RecordDelimiter" => {
-                if record_delimiter.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                record_delimiter = Some(d.content()?);
-                Ok(())
-            }
-            _ => Err(DeError::UnexpectedTagName),
-        })?;
-        Ok(Self {
-            field_delimiter,
-            quote_character,
-            quote_escape_character,
-            quote_fields,
-            record_delimiter,
-        })
-    }
-}
-impl SerializeContent for Checksum {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.checksum_crc32 {
-            s.content("ChecksumCRC32", val)?;
-        }
-        if let Some(ref val) = self.checksum_crc32c {
-            s.content("ChecksumCRC32C", val)?;
-        }
-        if let Some(ref val) = self.checksum_crc64nvme {
-            s.content("ChecksumCRC64NVME", val)?;
-        }
-        if let Some(ref val) = self.checksum_md5 {
-            s.content("ChecksumMD5", val)?;
-        }
-        if let Some(ref val) = self.checksum_sha1 {
-            s.content("ChecksumSHA1", val)?;
-        }
-        if let Some(ref val) = self.checksum_sha256 {
-            s.content("ChecksumSHA256", val)?;
-        }
-        if let Some(ref val) = self.checksum_sha512 {
-            s.content("ChecksumSHA512", val)?;
-        }
-        if let Some(ref val) = self.checksum_type {
-            s.content("ChecksumType", val)?;
-        }
-        if let Some(ref val) = self.checksum_xxhash128 {
-            s.content("ChecksumXXHASH128", val)?;
-        }
-        if let Some(ref val) = self.checksum_xxhash3 {
-            s.content("ChecksumXXHASH3", val)?;
-        }
-        if let Some(ref val) = self.checksum_xxhash64 {
-            s.content("ChecksumXXHASH64", val)?;
-        }
-        Ok(())
-    }
-}
-
-impl<'xml> DeserializeContent<'xml> for Checksum {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut checksum_crc32: Option<ChecksumCRC32> = None;
-        let mut checksum_crc32c: Option<ChecksumCRC32C> = None;
-        let mut checksum_crc64nvme: Option<ChecksumCRC64NVME> = None;
-        let mut checksum_md5: Option<ChecksumMD5> = None;
-        let mut checksum_sha1: Option<ChecksumSHA1> = None;
-        let mut checksum_sha256: Option<ChecksumSHA256> = None;
-        let mut checksum_sha512: Option<ChecksumSHA512> = None;
-        let mut checksum_type: Option<ChecksumType> = None;
-        let mut checksum_xxhash128: Option<ChecksumXXHASH128> = None;
-        let mut checksum_xxhash3: Option<ChecksumXXHASH3> = None;
-        let mut checksum_xxhash64: Option<ChecksumXXHASH64> = None;
-        d.for_each_element(|d, x| match x {
-            b"ChecksumCRC32" => {
-                if checksum_crc32.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                checksum_crc32 = Some(d.content()?);
-                Ok(())
-            }
-            b"ChecksumCRC32C" => {
-                if checksum_crc32c.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                checksum_crc32c = Some(d.content()?);
-                Ok(())
-            }
-            b"ChecksumCRC64NVME" => {
-                if checksum_crc64nvme.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                checksum_crc64nvme = Some(d.content()?);
-                Ok(())
-            }
-            b"ChecksumMD5" => {
-                if checksum_md5.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                checksum_md5 = Some(d.content()?);
-                Ok(())
-            }
-            b"ChecksumSHA1" => {
-                if checksum_sha1.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                checksum_sha1 = Some(d.content()?);
-                Ok(())
-            }
-            b"ChecksumSHA256" => {
-                if checksum_sha256.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                checksum_sha256 = Some(d.content()?);
-                Ok(())
-            }
-            b"ChecksumSHA512" => {
-                if checksum_sha512.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                checksum_sha512 = Some(d.content()?);
-                Ok(())
-            }
-            b"ChecksumType" => {
-                if checksum_type.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                checksum_type = Some(d.content()?);
-                Ok(())
-            }
-            b"ChecksumXXHASH128" => {
-                if checksum_xxhash128.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                checksum_xxhash128 = Some(d.content()?);
-                Ok(())
-            }
-            b"ChecksumXXHASH3" => {
-                if checksum_xxhash3.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                checksum_xxhash3 = Some(d.content()?);
-                Ok(())
-            }
-            b"ChecksumXXHASH64" => {
-                if checksum_xxhash64.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                checksum_xxhash64 = Some(d.content()?);
-                Ok(())
-            }
-            _ => Err(DeError::UnexpectedTagName),
-        })?;
-        Ok(Self {
-            checksum_crc32,
-            checksum_crc32c,
-            checksum_crc64nvme,
-            checksum_md5,
-            checksum_sha1,
-            checksum_sha256,
-            checksum_sha512,
-            checksum_type,
-            checksum_xxhash128,
-            checksum_xxhash3,
-            checksum_xxhash64,
-        })
-    }
-}
-impl SerializeContent for ChecksumAlgorithm {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        self.as_str().serialize_content(s)
-    }
-}
-impl<'xml> DeserializeContent<'xml> for ChecksumAlgorithm {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.text(|s| match s {
-            "CRC32" => Ok(Self::from_static(ChecksumAlgorithm::CRC32)),
-            "CRC32C" => Ok(Self::from_static(ChecksumAlgorithm::CRC32C)),
-            "CRC64NVME" => Ok(Self::from_static(ChecksumAlgorithm::CRC64NVME)),
-            "MD5" => Ok(Self::from_static(ChecksumAlgorithm::MD5)),
-            "SHA1" => Ok(Self::from_static(ChecksumAlgorithm::SHA1)),
-            "SHA256" => Ok(Self::from_static(ChecksumAlgorithm::SHA256)),
-            "SHA512" => Ok(Self::from_static(ChecksumAlgorithm::SHA512)),
-            "XXHASH128" => Ok(Self::from_static(ChecksumAlgorithm::XXHASH128)),
-            "XXHASH3" => Ok(Self::from_static(ChecksumAlgorithm::XXHASH3)),
-            "XXHASH64" => Ok(Self::from_static(ChecksumAlgorithm::XXHASH64)),
-            _ => Ok(Self::from(s.to_owned())),
-        })
-    }
-}
-impl SerializeContent for ChecksumType {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        self.as_str().serialize_content(s)
-    }
-}
-impl<'xml> DeserializeContent<'xml> for ChecksumType {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.text(|s| match s {
-            "COMPOSITE" => Ok(Self::from_static(ChecksumType::COMPOSITE)),
-            "FULL_OBJECT" => Ok(Self::from_static(ChecksumType::FULL_OBJECT)),
-            _ => Ok(Self::from(s.to_owned())),
-        })
-    }
-}
-impl SerializeContent for CommonPrefix {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.prefix {
-            s.content("Prefix", val)?;
-        }
-        Ok(())
-    }
-}
-
-impl<'xml> DeserializeContent<'xml> for CommonPrefix {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut prefix: Option<Prefix> = None;
-        d.for_each_element(|d, x| match x {
-            b"Prefix" => {
-                if prefix.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                prefix = Some(d.content()?);
-                Ok(())
-            }
-            _ => Err(DeError::UnexpectedTagName),
-        })?;
-        Ok(Self { prefix })
+impl Serialize for CompleteMultipartUploadOutput {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content_with_ns("CompleteMultipartUploadResult", XMLNS_S3, self)
     }
 }
 impl SerializeContent for CompleteMultipartUploadOutput {
@@ -3066,6 +1410,18 @@ impl SerializeContent for CompleteMultipartUploadOutput {
     }
 }
 
+impl Serialize for CompletedMultipartUpload {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("CompleteMultipartUpload", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for CompletedMultipartUpload {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("CompleteMultipartUpload", Deserializer::content)
+    }
+}
+
 impl SerializeContent for CompletedMultipartUpload {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(iter) = &self.parts {
@@ -3092,217 +1448,16 @@ impl<'xml> DeserializeContent<'xml> for CompletedMultipartUpload {
         Ok(Self { parts })
     }
 }
-impl SerializeContent for CompletedPart {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.checksum_crc32 {
-            s.content("ChecksumCRC32", val)?;
-        }
-        if let Some(ref val) = self.checksum_crc32c {
-            s.content("ChecksumCRC32C", val)?;
-        }
-        if let Some(ref val) = self.checksum_crc64nvme {
-            s.content("ChecksumCRC64NVME", val)?;
-        }
-        if let Some(ref val) = self.checksum_md5 {
-            s.content("ChecksumMD5", val)?;
-        }
-        if let Some(ref val) = self.checksum_sha1 {
-            s.content("ChecksumSHA1", val)?;
-        }
-        if let Some(ref val) = self.checksum_sha256 {
-            s.content("ChecksumSHA256", val)?;
-        }
-        if let Some(ref val) = self.checksum_sha512 {
-            s.content("ChecksumSHA512", val)?;
-        }
-        if let Some(ref val) = self.checksum_xxhash128 {
-            s.content("ChecksumXXHASH128", val)?;
-        }
-        if let Some(ref val) = self.checksum_xxhash3 {
-            s.content("ChecksumXXHASH3", val)?;
-        }
-        if let Some(ref val) = self.checksum_xxhash64 {
-            s.content("ChecksumXXHASH64", val)?;
-        }
-        if let Some(ref val) = self.e_tag {
-            s.content("ETag", val)?;
-        }
-        if let Some(ref val) = self.part_number {
-            s.content("PartNumber", val)?;
-        }
-        Ok(())
+
+impl Serialize for CopyObjectResult {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("CopyObjectResult", self)
     }
 }
 
-impl<'xml> DeserializeContent<'xml> for CompletedPart {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut checksum_crc32: Option<ChecksumCRC32> = None;
-        let mut checksum_crc32c: Option<ChecksumCRC32C> = None;
-        let mut checksum_crc64nvme: Option<ChecksumCRC64NVME> = None;
-        let mut checksum_md5: Option<ChecksumMD5> = None;
-        let mut checksum_sha1: Option<ChecksumSHA1> = None;
-        let mut checksum_sha256: Option<ChecksumSHA256> = None;
-        let mut checksum_sha512: Option<ChecksumSHA512> = None;
-        let mut checksum_xxhash128: Option<ChecksumXXHASH128> = None;
-        let mut checksum_xxhash3: Option<ChecksumXXHASH3> = None;
-        let mut checksum_xxhash64: Option<ChecksumXXHASH64> = None;
-        let mut e_tag: Option<ETag> = None;
-        let mut part_number: Option<PartNumber> = None;
-        d.for_each_element(|d, x| match x {
-            b"ChecksumCRC32" => {
-                if checksum_crc32.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                checksum_crc32 = Some(d.content()?);
-                Ok(())
-            }
-            b"ChecksumCRC32C" => {
-                if checksum_crc32c.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                checksum_crc32c = Some(d.content()?);
-                Ok(())
-            }
-            b"ChecksumCRC64NVME" => {
-                if checksum_crc64nvme.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                checksum_crc64nvme = Some(d.content()?);
-                Ok(())
-            }
-            b"ChecksumMD5" => {
-                if checksum_md5.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                checksum_md5 = Some(d.content()?);
-                Ok(())
-            }
-            b"ChecksumSHA1" => {
-                if checksum_sha1.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                checksum_sha1 = Some(d.content()?);
-                Ok(())
-            }
-            b"ChecksumSHA256" => {
-                if checksum_sha256.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                checksum_sha256 = Some(d.content()?);
-                Ok(())
-            }
-            b"ChecksumSHA512" => {
-                if checksum_sha512.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                checksum_sha512 = Some(d.content()?);
-                Ok(())
-            }
-            b"ChecksumXXHASH128" => {
-                if checksum_xxhash128.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                checksum_xxhash128 = Some(d.content()?);
-                Ok(())
-            }
-            b"ChecksumXXHASH3" => {
-                if checksum_xxhash3.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                checksum_xxhash3 = Some(d.content()?);
-                Ok(())
-            }
-            b"ChecksumXXHASH64" => {
-                if checksum_xxhash64.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                checksum_xxhash64 = Some(d.content()?);
-                Ok(())
-            }
-            b"ETag" => {
-                if e_tag.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                e_tag = Some(d.content()?);
-                Ok(())
-            }
-            b"PartNumber" => {
-                if part_number.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                part_number = Some(d.content()?);
-                Ok(())
-            }
-            _ => Err(DeError::UnexpectedTagName),
-        })?;
-        Ok(Self {
-            checksum_crc32,
-            checksum_crc32c,
-            checksum_crc64nvme,
-            checksum_md5,
-            checksum_sha1,
-            checksum_sha256,
-            checksum_sha512,
-            checksum_xxhash128,
-            checksum_xxhash3,
-            checksum_xxhash64,
-            e_tag,
-            part_number,
-        })
-    }
-}
-impl SerializeContent for CompressionType {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        self.as_str().serialize_content(s)
-    }
-}
-impl<'xml> DeserializeContent<'xml> for CompressionType {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        d.text(|s| match s {
-            "BZIP2" => Ok(Self::from_static(CompressionType::BZIP2)),
-            "GZIP" => Ok(Self::from_static(CompressionType::GZIP)),
-            "NONE" => Ok(Self::from_static(CompressionType::NONE)),
-            _ => Ok(Self::from(s.to_owned())),
-        })
-    }
-}
-impl SerializeContent for Condition {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.http_error_code_returned_equals {
-            s.content("HttpErrorCodeReturnedEquals", val)?;
-        }
-        if let Some(ref val) = self.key_prefix_equals {
-            s.content("KeyPrefixEquals", val)?;
-        }
-        Ok(())
-    }
-}
-
-impl<'xml> DeserializeContent<'xml> for Condition {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut http_error_code_returned_equals: Option<HttpErrorCodeReturnedEquals> = None;
-        let mut key_prefix_equals: Option<KeyPrefixEquals> = None;
-        d.for_each_element(|d, x| match x {
-            b"HttpErrorCodeReturnedEquals" => {
-                if http_error_code_returned_equals.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                http_error_code_returned_equals = Some(d.content()?);
-                Ok(())
-            }
-            b"KeyPrefixEquals" => {
-                if key_prefix_equals.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                key_prefix_equals = Some(d.content()?);
-                Ok(())
-            }
-            _ => Err(DeError::UnexpectedTagName),
-        })?;
-        Ok(Self {
-            http_error_code_returned_equals,
-            key_prefix_equals,
-        })
+impl<'xml> Deserialize<'xml> for CopyObjectResult {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("CopyObjectResult", Deserializer::content)
     }
 }
 impl SerializeContent for CopyObjectResult {
@@ -3476,6 +1631,18 @@ impl<'xml> DeserializeContent<'xml> for CopyObjectResult {
         })
     }
 }
+
+impl Serialize for CopyPartResult {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("CopyPartResult", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for CopyPartResult {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("CopyPartResult", Deserializer::content)
+    }
+}
 impl SerializeContent for CopyPartResult {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.checksum_crc32 {
@@ -3635,6 +1802,18 @@ impl<'xml> DeserializeContent<'xml> for CopyPartResult {
         })
     }
 }
+
+impl Serialize for CreateBucketConfiguration {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("CreateBucketConfiguration", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for CreateBucketConfiguration {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("CreateBucketConfiguration", Deserializer::content)
+    }
+}
 impl SerializeContent for CreateBucketConfiguration {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.bucket {
@@ -3646,6 +1825,9 @@ impl SerializeContent for CreateBucketConfiguration {
         if let Some(ref val) = self.location_constraint {
             s.content("LocationConstraint", val)?;
         }
+        if let Some(iter) = &self.tags {
+            s.list("Tags", "Tag", iter)?;
+        }
         Ok(())
     }
 }
@@ -3655,6 +1837,7 @@ impl<'xml> DeserializeContent<'xml> for CreateBucketConfiguration {
         let mut bucket: Option<BucketInfo> = None;
         let mut location: Option<LocationInfo> = None;
         let mut location_constraint: Option<BucketLocationConstraint> = None;
+        let mut tags: Option<TagSet> = None;
         d.for_each_element(|d, x| match x {
             b"Bucket" => {
                 if bucket.is_some() {
@@ -3677,6 +1860,13 @@ impl<'xml> DeserializeContent<'xml> for CreateBucketConfiguration {
                 location_constraint = Some(d.content()?);
                 Ok(())
             }
+            b"Tags" => {
+                if tags.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                tags = Some(d.list_content("Tag")?);
+                Ok(())
+            }
             _ => {
                 d.skip_element_content()?;
                 Ok(())
@@ -3686,7 +1876,14 @@ impl<'xml> DeserializeContent<'xml> for CreateBucketConfiguration {
             bucket,
             location,
             location_constraint,
+            tags,
         })
+    }
+}
+
+impl Serialize for CreateMultipartUploadOutput {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content_with_ns("InitiateMultipartUploadResult", XMLNS_S3, self)
     }
 }
 impl SerializeContent for CreateMultipartUploadOutput {
@@ -3704,10 +1901,4379 @@ impl SerializeContent for CreateMultipartUploadOutput {
     }
 }
 
+impl Serialize for CreateSessionOutput {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content_with_ns("CreateSessionResult", XMLNS_S3, self)
+    }
+}
+
 impl SerializeContent for CreateSessionOutput {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         s.content("Credentials", &self.credentials)?;
         Ok(())
+    }
+}
+
+impl Serialize for Delete {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("Delete", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for Delete {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("Delete", Deserializer::content)
+    }
+}
+impl SerializeContent for Delete {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        {
+            let iter = &self.objects;
+            s.flattened_list("Object", iter)?;
+        }
+        if let Some(ref val) = self.quiet {
+            s.content("Quiet", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for Delete {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut objects: Option<ObjectIdentifierList> = None;
+        let mut quiet: Option<Quiet> = None;
+        d.for_each_element(|d, x| match x {
+            b"Object" => {
+                let ans: ObjectIdentifier = d.content()?;
+                objects.get_or_insert_with(List::new).push(ans);
+                Ok(())
+            }
+            b"Quiet" => {
+                if quiet.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                quiet = Some(d.content()?);
+                Ok(())
+            }
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
+        })?;
+        Ok(Self {
+            objects: objects.ok_or(DeError::MissingField)?,
+            quiet,
+        })
+    }
+}
+
+impl Serialize for DeleteObjectsOutput {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content_with_ns("DeleteResult", XMLNS_S3, self)
+    }
+}
+impl SerializeContent for DeleteObjectsOutput {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(iter) = &self.deleted {
+            s.flattened_list("Deleted", iter)?;
+        }
+        if let Some(iter) = &self.errors {
+            s.flattened_list("Error", iter)?;
+        }
+        Ok(())
+    }
+}
+
+impl Serialize for GetBucketAccelerateConfigurationOutput {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content_with_ns("AccelerateConfiguration", XMLNS_S3, self)
+    }
+}
+impl SerializeContent for GetBucketAccelerateConfigurationOutput {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.status {
+            s.content("Status", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl Serialize for GetBucketAclOutput {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content_with_ns("AccessControlPolicy", XMLNS_S3, self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for GetBucketAclOutput {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("AccessControlPolicy", Deserializer::content)
+    }
+}
+
+impl SerializeContent for GetBucketAclOutput {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(iter) = &self.grants {
+            s.list("AccessControlList", "Grant", iter)?;
+        }
+        if let Some(ref val) = self.owner {
+            s.content("Owner", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for GetBucketAclOutput {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut grants: Option<Grants> = None;
+        let mut owner: Option<Owner> = None;
+        d.for_each_element(|d, x| match x {
+            b"AccessControlList" => {
+                if grants.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                grants = Some(d.list_content("Grant")?);
+                Ok(())
+            }
+            b"Owner" => {
+                if owner.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                owner = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self { grants, owner })
+    }
+}
+
+impl Serialize for GetBucketCorsOutput {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content_with_ns("CORSConfiguration", XMLNS_S3, self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for GetBucketCorsOutput {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("CORSConfiguration", Deserializer::content)
+    }
+}
+impl SerializeContent for GetBucketCorsOutput {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(iter) = &self.cors_rules {
+            s.flattened_list("CORSRule", iter)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for GetBucketCorsOutput {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut cors_rules: Option<CORSRules> = None;
+        d.for_each_element(|d, x| match x {
+            b"CORSRule" => {
+                let ans: CORSRule = d.content()?;
+                cors_rules.get_or_insert_with(List::new).push(ans);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self { cors_rules })
+    }
+}
+
+impl Serialize for GetBucketLifecycleConfigurationOutput {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content_with_ns("LifecycleConfiguration", XMLNS_S3, self)
+    }
+}
+impl SerializeContent for GetBucketLifecycleConfigurationOutput {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(iter) = &self.rules {
+            s.flattened_list("Rule", iter)?;
+        }
+        Ok(())
+    }
+}
+
+impl Serialize for GetBucketLoggingOutput {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content_with_ns("BucketLoggingStatus", XMLNS_S3, self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for GetBucketLoggingOutput {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("BucketLoggingStatus", Deserializer::content)
+    }
+}
+impl SerializeContent for GetBucketLoggingOutput {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.logging_enabled {
+            s.content("LoggingEnabled", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for GetBucketLoggingOutput {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut logging_enabled: Option<LoggingEnabled> = None;
+        d.for_each_element(|d, x| match x {
+            b"LoggingEnabled" => {
+                if logging_enabled.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                logging_enabled = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self { logging_enabled })
+    }
+}
+
+impl Serialize for GetBucketMetadataConfigurationResult {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("GetBucketMetadataConfigurationResult", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for GetBucketMetadataConfigurationResult {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("GetBucketMetadataConfigurationResult", Deserializer::content)
+    }
+}
+impl SerializeContent for GetBucketMetadataConfigurationResult {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("MetadataConfigurationResult", &self.metadata_configuration_result)?;
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for GetBucketMetadataConfigurationResult {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut metadata_configuration_result: Option<MetadataConfigurationResult> = None;
+        d.for_each_element(|d, x| match x {
+            b"MetadataConfigurationResult" => {
+                if metadata_configuration_result.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                metadata_configuration_result = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            metadata_configuration_result: metadata_configuration_result.ok_or(DeError::MissingField)?,
+        })
+    }
+}
+
+impl Serialize for GetBucketMetadataTableConfigurationResult {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("GetBucketMetadataTableConfigurationResult", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for GetBucketMetadataTableConfigurationResult {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("GetBucketMetadataTableConfigurationResult", Deserializer::content)
+    }
+}
+impl SerializeContent for GetBucketMetadataTableConfigurationResult {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.error {
+            s.content("Error", val)?;
+        }
+        s.content("MetadataTableConfigurationResult", &self.metadata_table_configuration_result)?;
+        s.content("Status", &self.status)?;
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for GetBucketMetadataTableConfigurationResult {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut error: Option<ErrorDetails> = None;
+        let mut metadata_table_configuration_result: Option<MetadataTableConfigurationResult> = None;
+        let mut status: Option<MetadataTableStatus> = None;
+        d.for_each_element(|d, x| match x {
+            b"Error" => {
+                if error.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                error = Some(d.content()?);
+                Ok(())
+            }
+            b"MetadataTableConfigurationResult" => {
+                if metadata_table_configuration_result.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                metadata_table_configuration_result = Some(d.content()?);
+                Ok(())
+            }
+            b"Status" => {
+                if status.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                status = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            error,
+            metadata_table_configuration_result: metadata_table_configuration_result.ok_or(DeError::MissingField)?,
+            status: status.ok_or(DeError::MissingField)?,
+        })
+    }
+}
+
+impl Serialize for GetBucketNotificationConfigurationOutput {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content_with_ns("NotificationConfiguration", XMLNS_S3, self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for GetBucketNotificationConfigurationOutput {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("NotificationConfiguration", Deserializer::content)
+    }
+}
+impl SerializeContent for GetBucketNotificationConfigurationOutput {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.event_bridge_configuration {
+            s.content("EventBridgeConfiguration", val)?;
+        }
+        if let Some(iter) = &self.lambda_function_configurations {
+            s.flattened_list("CloudFunctionConfiguration", iter)?;
+        }
+        if let Some(iter) = &self.queue_configurations {
+            s.flattened_list("QueueConfiguration", iter)?;
+        }
+        if let Some(iter) = &self.topic_configurations {
+            s.flattened_list("TopicConfiguration", iter)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for GetBucketNotificationConfigurationOutput {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut event_bridge_configuration: Option<EventBridgeConfiguration> = None;
+        let mut lambda_function_configurations: Option<LambdaFunctionConfigurationList> = None;
+        let mut queue_configurations: Option<QueueConfigurationList> = None;
+        let mut topic_configurations: Option<TopicConfigurationList> = None;
+        d.for_each_element(|d, x| match x {
+            b"EventBridgeConfiguration" => {
+                if event_bridge_configuration.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                event_bridge_configuration = Some(d.content()?);
+                Ok(())
+            }
+            b"CloudFunctionConfiguration" => {
+                let ans: LambdaFunctionConfiguration = d.content()?;
+                lambda_function_configurations.get_or_insert_with(List::new).push(ans);
+                Ok(())
+            }
+            b"QueueConfiguration" => {
+                let ans: QueueConfiguration = d.content()?;
+                queue_configurations.get_or_insert_with(List::new).push(ans);
+                Ok(())
+            }
+            b"TopicConfiguration" => {
+                let ans: TopicConfiguration = d.content()?;
+                topic_configurations.get_or_insert_with(List::new).push(ans);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            event_bridge_configuration,
+            lambda_function_configurations,
+            queue_configurations,
+            topic_configurations,
+        })
+    }
+}
+
+impl Serialize for GetBucketRequestPaymentOutput {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content_with_ns("RequestPaymentConfiguration", XMLNS_S3, self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for GetBucketRequestPaymentOutput {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("RequestPaymentConfiguration", Deserializer::content)
+    }
+}
+impl SerializeContent for GetBucketRequestPaymentOutput {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.payer {
+            s.content("Payer", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for GetBucketRequestPaymentOutput {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut payer: Option<Payer> = None;
+        d.for_each_element(|d, x| match x {
+            b"Payer" => {
+                if payer.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                payer = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self { payer })
+    }
+}
+
+impl Serialize for GetBucketTaggingOutput {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content_with_ns("Tagging", XMLNS_S3, self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for GetBucketTaggingOutput {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("Tagging", Deserializer::content)
+    }
+}
+impl SerializeContent for GetBucketTaggingOutput {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        {
+            let iter = &self.tag_set;
+            s.list("TagSet", "Tag", iter)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for GetBucketTaggingOutput {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut tag_set: Option<TagSet> = None;
+        d.for_each_element(|d, x| match x {
+            b"TagSet" => {
+                if tag_set.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                tag_set = Some(d.list_content("Tag")?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            tag_set: tag_set.ok_or(DeError::MissingField)?,
+        })
+    }
+}
+
+impl Serialize for GetBucketVersioningOutput {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content_with_ns("VersioningConfiguration", XMLNS_S3, self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for GetBucketVersioningOutput {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("VersioningConfiguration", Deserializer::content)
+    }
+}
+impl SerializeContent for GetBucketVersioningOutput {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.mfa_delete {
+            s.content("MfaDelete", val)?;
+        }
+        if let Some(ref val) = self.status {
+            s.content("Status", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for GetBucketVersioningOutput {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut mfa_delete: Option<MFADeleteStatus> = None;
+        let mut status: Option<BucketVersioningStatus> = None;
+        d.for_each_element(|d, x| match x {
+            b"MfaDelete" => {
+                if mfa_delete.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                mfa_delete = Some(d.content()?);
+                Ok(())
+            }
+            b"Status" => {
+                if status.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                status = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self { mfa_delete, status })
+    }
+}
+
+impl Serialize for GetBucketWebsiteOutput {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content_with_ns("WebsiteConfiguration", XMLNS_S3, self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for GetBucketWebsiteOutput {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("WebsiteConfiguration", Deserializer::content)
+    }
+}
+impl SerializeContent for GetBucketWebsiteOutput {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.error_document {
+            s.content("ErrorDocument", val)?;
+        }
+        if let Some(ref val) = self.index_document {
+            s.content("IndexDocument", val)?;
+        }
+        if let Some(ref val) = self.redirect_all_requests_to {
+            s.content("RedirectAllRequestsTo", val)?;
+        }
+        if let Some(iter) = &self.routing_rules {
+            s.list("RoutingRules", "RoutingRule", iter)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for GetBucketWebsiteOutput {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut error_document: Option<ErrorDocument> = None;
+        let mut index_document: Option<IndexDocument> = None;
+        let mut redirect_all_requests_to: Option<RedirectAllRequestsTo> = None;
+        let mut routing_rules: Option<RoutingRules> = None;
+        d.for_each_element(|d, x| match x {
+            b"ErrorDocument" => {
+                if error_document.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                error_document = Some(d.content()?);
+                Ok(())
+            }
+            b"IndexDocument" => {
+                if index_document.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                index_document = Some(d.content()?);
+                Ok(())
+            }
+            b"RedirectAllRequestsTo" => {
+                if redirect_all_requests_to.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                redirect_all_requests_to = Some(d.content()?);
+                Ok(())
+            }
+            b"RoutingRules" => {
+                if routing_rules.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                routing_rules = Some(d.list_content("RoutingRule")?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            error_document,
+            index_document,
+            redirect_all_requests_to,
+            routing_rules,
+        })
+    }
+}
+
+impl Serialize for GetObjectAclOutput {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content_with_ns("AccessControlPolicy", XMLNS_S3, self)
+    }
+}
+impl SerializeContent for GetObjectAclOutput {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(iter) = &self.grants {
+            s.list("AccessControlList", "Grant", iter)?;
+        }
+        if let Some(ref val) = self.owner {
+            s.content("Owner", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl Serialize for GetObjectAttributesOutput {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content_with_ns("GetObjectAttributesResponse", XMLNS_S3, self)
+    }
+}
+
+impl SerializeContent for GetObjectAttributesOutput {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.checksum {
+            s.content("Checksum", val)?;
+        }
+        if let Some(ref val) = self.e_tag {
+            s.content("ETag", val.value())?;
+        }
+        if let Some(ref val) = self.object_parts {
+            s.content("ObjectParts", val)?;
+        }
+        if let Some(ref val) = self.object_size {
+            s.content("ObjectSize", val)?;
+        }
+        if let Some(ref val) = self.storage_class {
+            s.content("StorageClass", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl Serialize for GetObjectTaggingOutput {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content_with_ns("Tagging", XMLNS_S3, self)
+    }
+}
+impl SerializeContent for GetObjectTaggingOutput {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        {
+            let iter = &self.tag_set;
+            s.list("TagSet", "Tag", iter)?;
+        }
+        Ok(())
+    }
+}
+
+impl Serialize for IntelligentTieringConfiguration {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("IntelligentTieringConfiguration", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for IntelligentTieringConfiguration {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("IntelligentTieringConfiguration", Deserializer::content)
+    }
+}
+impl SerializeContent for IntelligentTieringConfiguration {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.filter {
+            s.content("Filter", val)?;
+        }
+        s.content("Id", &self.id)?;
+        s.content("Status", &self.status)?;
+        {
+            let iter = &self.tierings;
+            s.flattened_list("Tiering", iter)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for IntelligentTieringConfiguration {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut filter: Option<IntelligentTieringFilter> = None;
+        let mut id: Option<IntelligentTieringId> = None;
+        let mut status: Option<IntelligentTieringStatus> = None;
+        let mut tierings: Option<TieringList> = None;
+        d.for_each_element(|d, x| match x {
+            b"Filter" => {
+                if filter.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                filter = Some(d.content()?);
+                Ok(())
+            }
+            b"Id" => {
+                if id.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                id = Some(d.content()?);
+                Ok(())
+            }
+            b"Status" => {
+                if status.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                status = Some(d.content()?);
+                Ok(())
+            }
+            b"Tiering" => {
+                let ans: Tiering = d.content()?;
+                tierings.get_or_insert_with(List::new).push(ans);
+                Ok(())
+            }
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
+        })?;
+        Ok(Self {
+            filter,
+            id: id.ok_or(DeError::MissingField)?,
+            status: status.ok_or(DeError::MissingField)?,
+            tierings: tierings.ok_or(DeError::MissingField)?,
+        })
+    }
+}
+
+impl Serialize for InventoryConfiguration {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("InventoryConfiguration", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for InventoryConfiguration {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("InventoryConfiguration", Deserializer::content)
+    }
+}
+impl SerializeContent for InventoryConfiguration {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("Destination", &self.destination)?;
+        if let Some(ref val) = self.filter {
+            s.content("Filter", val)?;
+        }
+        s.content("Id", &self.id)?;
+        s.content("IncludedObjectVersions", &self.included_object_versions)?;
+        s.content("IsEnabled", &self.is_enabled)?;
+        if let Some(iter) = &self.optional_fields {
+            s.list("OptionalFields", "Field", iter)?;
+        }
+        s.content("Schedule", &self.schedule)?;
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for InventoryConfiguration {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut destination: Option<InventoryDestination> = None;
+        let mut filter: Option<InventoryFilter> = None;
+        let mut id: Option<InventoryId> = None;
+        let mut included_object_versions: Option<InventoryIncludedObjectVersions> = None;
+        let mut is_enabled: Option<IsEnabled> = None;
+        let mut optional_fields: Option<InventoryOptionalFields> = None;
+        let mut schedule: Option<InventorySchedule> = None;
+        d.for_each_element(|d, x| match x {
+            b"Destination" => {
+                if destination.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                destination = Some(d.content()?);
+                Ok(())
+            }
+            b"Filter" => {
+                if filter.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                filter = Some(d.content()?);
+                Ok(())
+            }
+            b"Id" => {
+                if id.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                id = Some(d.content()?);
+                Ok(())
+            }
+            b"IncludedObjectVersions" => {
+                if included_object_versions.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                included_object_versions = Some(d.content()?);
+                Ok(())
+            }
+            b"IsEnabled" => {
+                if is_enabled.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                is_enabled = Some(d.content()?);
+                Ok(())
+            }
+            b"OptionalFields" => {
+                if optional_fields.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                optional_fields = Some(d.list_content("Field")?);
+                Ok(())
+            }
+            b"Schedule" => {
+                if schedule.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                schedule = Some(d.content()?);
+                Ok(())
+            }
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
+        })?;
+        Ok(Self {
+            destination: destination.ok_or(DeError::MissingField)?,
+            filter,
+            id: id.ok_or(DeError::MissingField)?,
+            included_object_versions: included_object_versions.ok_or(DeError::MissingField)?,
+            is_enabled: is_enabled.ok_or(DeError::MissingField)?,
+            optional_fields,
+            schedule: schedule.ok_or(DeError::MissingField)?,
+        })
+    }
+}
+
+impl Serialize for InventoryTableConfigurationUpdates {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("InventoryTableConfiguration", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for InventoryTableConfigurationUpdates {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("InventoryTableConfiguration", Deserializer::content)
+    }
+}
+impl SerializeContent for InventoryTableConfigurationUpdates {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("ConfigurationState", &self.configuration_state)?;
+        if let Some(ref val) = self.encryption_configuration {
+            s.content("EncryptionConfiguration", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for InventoryTableConfigurationUpdates {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut configuration_state: Option<InventoryConfigurationState> = None;
+        let mut encryption_configuration: Option<MetadataTableEncryptionConfiguration> = None;
+        d.for_each_element(|d, x| match x {
+            b"ConfigurationState" => {
+                if configuration_state.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                configuration_state = Some(d.content()?);
+                Ok(())
+            }
+            b"EncryptionConfiguration" => {
+                if encryption_configuration.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                encryption_configuration = Some(d.content()?);
+                Ok(())
+            }
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
+        })?;
+        Ok(Self {
+            configuration_state: configuration_state.ok_or(DeError::MissingField)?,
+            encryption_configuration,
+        })
+    }
+}
+
+impl Serialize for JournalTableConfigurationUpdates {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("JournalTableConfiguration", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for JournalTableConfigurationUpdates {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("JournalTableConfiguration", Deserializer::content)
+    }
+}
+impl SerializeContent for JournalTableConfigurationUpdates {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("RecordExpiration", &self.record_expiration)?;
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for JournalTableConfigurationUpdates {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut record_expiration: Option<RecordExpiration> = None;
+        d.for_each_element(|d, x| match x {
+            b"RecordExpiration" => {
+                if record_expiration.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                record_expiration = Some(d.content()?);
+                Ok(())
+            }
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
+        })?;
+        Ok(Self {
+            record_expiration: record_expiration.ok_or(DeError::MissingField)?,
+        })
+    }
+}
+
+impl Serialize for ListBucketAnalyticsConfigurationsOutput {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content_with_ns("ListBucketAnalyticsConfigurationResult", XMLNS_S3, self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for ListBucketAnalyticsConfigurationsOutput {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("ListBucketAnalyticsConfigurationResult", Deserializer::content)
+    }
+}
+impl SerializeContent for ListBucketAnalyticsConfigurationsOutput {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(iter) = &self.analytics_configuration_list {
+            s.flattened_list("AnalyticsConfiguration", iter)?;
+        }
+        if let Some(ref val) = self.continuation_token {
+            s.content("ContinuationToken", val)?;
+        }
+        if let Some(ref val) = self.is_truncated {
+            s.content("IsTruncated", val)?;
+        }
+        if let Some(ref val) = self.next_continuation_token {
+            s.content("NextContinuationToken", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for ListBucketAnalyticsConfigurationsOutput {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut analytics_configuration_list: Option<AnalyticsConfigurationList> = None;
+        let mut continuation_token: Option<Token> = None;
+        let mut is_truncated: Option<IsTruncated> = None;
+        let mut next_continuation_token: Option<NextToken> = None;
+        d.for_each_element(|d, x| match x {
+            b"AnalyticsConfiguration" => {
+                let ans: AnalyticsConfiguration = d.content()?;
+                analytics_configuration_list.get_or_insert_with(List::new).push(ans);
+                Ok(())
+            }
+            b"ContinuationToken" => {
+                if continuation_token.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                continuation_token = Some(d.content()?);
+                Ok(())
+            }
+            b"IsTruncated" => {
+                if is_truncated.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                is_truncated = Some(d.content()?);
+                Ok(())
+            }
+            b"NextContinuationToken" => {
+                if next_continuation_token.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                next_continuation_token = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            analytics_configuration_list,
+            continuation_token,
+            is_truncated,
+            next_continuation_token,
+        })
+    }
+}
+
+impl Serialize for ListBucketIntelligentTieringConfigurationsOutput {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content_with_ns("ListBucketIntelligentTieringConfigurationsOutput", XMLNS_S3, self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for ListBucketIntelligentTieringConfigurationsOutput {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("ListBucketIntelligentTieringConfigurationsOutput", Deserializer::content)
+    }
+}
+impl SerializeContent for ListBucketIntelligentTieringConfigurationsOutput {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.continuation_token {
+            s.content("ContinuationToken", val)?;
+        }
+        if let Some(iter) = &self.intelligent_tiering_configuration_list {
+            s.flattened_list("IntelligentTieringConfiguration", iter)?;
+        }
+        if let Some(ref val) = self.is_truncated {
+            s.content("IsTruncated", val)?;
+        }
+        if let Some(ref val) = self.next_continuation_token {
+            s.content("NextContinuationToken", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for ListBucketIntelligentTieringConfigurationsOutput {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut continuation_token: Option<Token> = None;
+        let mut intelligent_tiering_configuration_list: Option<IntelligentTieringConfigurationList> = None;
+        let mut is_truncated: Option<IsTruncated> = None;
+        let mut next_continuation_token: Option<NextToken> = None;
+        d.for_each_element(|d, x| match x {
+            b"ContinuationToken" => {
+                if continuation_token.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                continuation_token = Some(d.content()?);
+                Ok(())
+            }
+            b"IntelligentTieringConfiguration" => {
+                let ans: IntelligentTieringConfiguration = d.content()?;
+                intelligent_tiering_configuration_list.get_or_insert_with(List::new).push(ans);
+                Ok(())
+            }
+            b"IsTruncated" => {
+                if is_truncated.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                is_truncated = Some(d.content()?);
+                Ok(())
+            }
+            b"NextContinuationToken" => {
+                if next_continuation_token.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                next_continuation_token = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            continuation_token,
+            intelligent_tiering_configuration_list,
+            is_truncated,
+            next_continuation_token,
+        })
+    }
+}
+
+impl Serialize for ListBucketInventoryConfigurationsOutput {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content_with_ns("ListInventoryConfigurationsResult", XMLNS_S3, self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for ListBucketInventoryConfigurationsOutput {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("ListInventoryConfigurationsResult", Deserializer::content)
+    }
+}
+impl SerializeContent for ListBucketInventoryConfigurationsOutput {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.continuation_token {
+            s.content("ContinuationToken", val)?;
+        }
+        if let Some(iter) = &self.inventory_configuration_list {
+            s.flattened_list("InventoryConfiguration", iter)?;
+        }
+        if let Some(ref val) = self.is_truncated {
+            s.content("IsTruncated", val)?;
+        }
+        if let Some(ref val) = self.next_continuation_token {
+            s.content("NextContinuationToken", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for ListBucketInventoryConfigurationsOutput {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut continuation_token: Option<Token> = None;
+        let mut inventory_configuration_list: Option<InventoryConfigurationList> = None;
+        let mut is_truncated: Option<IsTruncated> = None;
+        let mut next_continuation_token: Option<NextToken> = None;
+        d.for_each_element(|d, x| match x {
+            b"ContinuationToken" => {
+                if continuation_token.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                continuation_token = Some(d.content()?);
+                Ok(())
+            }
+            b"InventoryConfiguration" => {
+                let ans: InventoryConfiguration = d.content()?;
+                inventory_configuration_list.get_or_insert_with(List::new).push(ans);
+                Ok(())
+            }
+            b"IsTruncated" => {
+                if is_truncated.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                is_truncated = Some(d.content()?);
+                Ok(())
+            }
+            b"NextContinuationToken" => {
+                if next_continuation_token.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                next_continuation_token = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            continuation_token,
+            inventory_configuration_list,
+            is_truncated,
+            next_continuation_token,
+        })
+    }
+}
+
+impl Serialize for ListBucketMetricsConfigurationsOutput {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content_with_ns("ListMetricsConfigurationsResult", XMLNS_S3, self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for ListBucketMetricsConfigurationsOutput {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("ListMetricsConfigurationsResult", Deserializer::content)
+    }
+}
+impl SerializeContent for ListBucketMetricsConfigurationsOutput {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.continuation_token {
+            s.content("ContinuationToken", val)?;
+        }
+        if let Some(ref val) = self.is_truncated {
+            s.content("IsTruncated", val)?;
+        }
+        if let Some(iter) = &self.metrics_configuration_list {
+            s.flattened_list("MetricsConfiguration", iter)?;
+        }
+        if let Some(ref val) = self.next_continuation_token {
+            s.content("NextContinuationToken", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for ListBucketMetricsConfigurationsOutput {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut continuation_token: Option<Token> = None;
+        let mut is_truncated: Option<IsTruncated> = None;
+        let mut metrics_configuration_list: Option<MetricsConfigurationList> = None;
+        let mut next_continuation_token: Option<NextToken> = None;
+        d.for_each_element(|d, x| match x {
+            b"ContinuationToken" => {
+                if continuation_token.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                continuation_token = Some(d.content()?);
+                Ok(())
+            }
+            b"IsTruncated" => {
+                if is_truncated.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                is_truncated = Some(d.content()?);
+                Ok(())
+            }
+            b"MetricsConfiguration" => {
+                let ans: MetricsConfiguration = d.content()?;
+                metrics_configuration_list.get_or_insert_with(List::new).push(ans);
+                Ok(())
+            }
+            b"NextContinuationToken" => {
+                if next_continuation_token.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                next_continuation_token = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            continuation_token,
+            is_truncated,
+            metrics_configuration_list,
+            next_continuation_token,
+        })
+    }
+}
+
+impl Serialize for ListBucketsOutput {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content_with_ns("ListAllMyBucketsResult", XMLNS_S3, self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for ListBucketsOutput {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("ListAllMyBucketsResult", Deserializer::content)
+    }
+}
+impl SerializeContent for ListBucketsOutput {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(iter) = &self.buckets {
+            s.list("Buckets", "Bucket", iter)?;
+        }
+        if let Some(ref val) = self.continuation_token {
+            s.content("ContinuationToken", val)?;
+        }
+        if let Some(ref val) = self.owner {
+            s.content("Owner", val)?;
+        }
+        if let Some(ref val) = self.prefix {
+            s.content("Prefix", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for ListBucketsOutput {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut buckets: Option<Buckets> = None;
+        let mut continuation_token: Option<NextToken> = None;
+        let mut owner: Option<Owner> = None;
+        let mut prefix: Option<Prefix> = None;
+        d.for_each_element(|d, x| match x {
+            b"Buckets" => {
+                if buckets.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                buckets = Some(d.list_content("Bucket")?);
+                Ok(())
+            }
+            b"ContinuationToken" => {
+                if continuation_token.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                continuation_token = Some(d.content()?);
+                Ok(())
+            }
+            b"Owner" => {
+                if owner.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                owner = Some(d.content()?);
+                Ok(())
+            }
+            b"Prefix" => {
+                if prefix.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                prefix = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            buckets,
+            continuation_token,
+            owner,
+            prefix,
+        })
+    }
+}
+
+impl Serialize for ListDirectoryBucketsOutput {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content_with_ns("ListAllMyDirectoryBucketsResult", XMLNS_S3, self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for ListDirectoryBucketsOutput {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("ListAllMyDirectoryBucketsResult", Deserializer::content)
+    }
+}
+impl SerializeContent for ListDirectoryBucketsOutput {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(iter) = &self.buckets {
+            s.list("Buckets", "Bucket", iter)?;
+        }
+        if let Some(ref val) = self.continuation_token {
+            s.content("ContinuationToken", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for ListDirectoryBucketsOutput {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut buckets: Option<Buckets> = None;
+        let mut continuation_token: Option<DirectoryBucketToken> = None;
+        d.for_each_element(|d, x| match x {
+            b"Buckets" => {
+                if buckets.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                buckets = Some(d.list_content("Bucket")?);
+                Ok(())
+            }
+            b"ContinuationToken" => {
+                if continuation_token.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                continuation_token = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            buckets,
+            continuation_token,
+        })
+    }
+}
+
+impl Serialize for ListMultipartUploadsOutput {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content_with_ns("ListMultipartUploadsResult", XMLNS_S3, self)
+    }
+}
+impl SerializeContent for ListMultipartUploadsOutput {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.bucket {
+            s.content("Bucket", val)?;
+        }
+        if let Some(iter) = &self.common_prefixes {
+            s.flattened_list("CommonPrefixes", iter)?;
+        }
+        if let Some(ref val) = self.delimiter {
+            s.content("Delimiter", val)?;
+        }
+        if let Some(ref val) = self.encoding_type {
+            s.content("EncodingType", val)?;
+        }
+        if let Some(ref val) = self.is_truncated {
+            s.content("IsTruncated", val)?;
+        }
+        if let Some(ref val) = self.key_marker {
+            s.content("KeyMarker", val)?;
+        }
+        if let Some(ref val) = self.max_uploads {
+            s.content("MaxUploads", val)?;
+        }
+        if let Some(ref val) = self.next_key_marker {
+            s.content("NextKeyMarker", val)?;
+        }
+        if let Some(ref val) = self.next_upload_id_marker {
+            s.content("NextUploadIdMarker", val)?;
+        }
+        if let Some(ref val) = self.prefix {
+            s.content("Prefix", val)?;
+        }
+        if let Some(ref val) = self.upload_id_marker {
+            s.content("UploadIdMarker", val)?;
+        }
+        if let Some(iter) = &self.uploads {
+            s.flattened_list("Upload", iter)?;
+        }
+        Ok(())
+    }
+}
+
+impl Serialize for ListObjectAnnotationsOutput {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content_with_ns("ListObjectAnnotationsOutput", XMLNS_S3, self)
+    }
+}
+
+impl SerializeContent for ListObjectAnnotationsOutput {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.annotation_count {
+            s.content("AnnotationCount", val)?;
+        }
+        if let Some(ref val) = self.annotation_prefix {
+            s.content("AnnotationPrefix", val)?;
+        }
+        if let Some(iter) = &self.annotations {
+            s.list("Annotations", "AnnotationEntry", iter)?;
+        }
+        if let Some(ref val) = self.bucket {
+            s.content("Bucket", val)?;
+        }
+        if let Some(ref val) = self.continuation_token {
+            s.content("ContinuationToken", val)?;
+        }
+        if let Some(ref val) = self.key {
+            s.content("Key", val)?;
+        }
+        if let Some(ref val) = self.max_annotation_results {
+            s.content("MaxAnnotationResults", val)?;
+        }
+        if let Some(ref val) = self.next_continuation_token {
+            s.content("NextContinuationToken", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl Serialize for ListObjectVersionsOutput {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content_with_ns("ListVersionsResult", XMLNS_S3, self)
+    }
+}
+
+impl SerializeContent for ListObjectVersionsOutput {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(iter) = &self.common_prefixes {
+            s.flattened_list("CommonPrefixes", iter)?;
+        }
+        if let Some(iter) = &self.delete_markers {
+            s.flattened_list("DeleteMarker", iter)?;
+        }
+        if let Some(ref val) = self.delimiter {
+            s.content("Delimiter", val)?;
+        }
+        if let Some(ref val) = self.encoding_type {
+            s.content("EncodingType", val)?;
+        }
+        if let Some(ref val) = self.is_truncated {
+            s.content("IsTruncated", val)?;
+        }
+        if let Some(ref val) = self.key_marker {
+            s.content("KeyMarker", val)?;
+        }
+        if let Some(ref val) = self.max_keys {
+            s.content("MaxKeys", val)?;
+        }
+        if let Some(ref val) = self.name {
+            s.content("Name", val)?;
+        }
+        if let Some(ref val) = self.next_key_marker {
+            s.content("NextKeyMarker", val)?;
+        }
+        if let Some(ref val) = self.next_version_id_marker {
+            s.content("NextVersionIdMarker", val)?;
+        }
+        if let Some(ref val) = self.prefix {
+            s.content("Prefix", val)?;
+        }
+        if let Some(ref val) = self.version_id_marker {
+            s.content("VersionIdMarker", val)?;
+        }
+        if let Some(iter) = &self.versions {
+            s.flattened_list("Version", iter)?;
+        }
+        Ok(())
+    }
+}
+
+impl Serialize for ListObjectsOutput {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content_with_ns("ListBucketResult", XMLNS_S3, self)
+    }
+}
+
+impl SerializeContent for ListObjectsOutput {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.name {
+            s.content("Name", val)?;
+        }
+        if let Some(ref val) = self.prefix {
+            s.content("Prefix", val)?;
+        }
+        if let Some(ref val) = self.marker {
+            s.content("Marker", val)?;
+        }
+        if let Some(ref val) = self.max_keys {
+            s.content("MaxKeys", val)?;
+        }
+        if let Some(ref val) = self.is_truncated {
+            s.content("IsTruncated", val)?;
+        }
+        if let Some(iter) = &self.contents {
+            s.flattened_list("Contents", iter)?;
+        }
+        if let Some(iter) = &self.common_prefixes {
+            s.flattened_list("CommonPrefixes", iter)?;
+        }
+        if let Some(ref val) = self.delimiter {
+            s.content("Delimiter", val)?;
+        }
+        if let Some(ref val) = self.next_marker {
+            s.content("NextMarker", val)?;
+        }
+        if let Some(ref val) = self.encoding_type {
+            s.content("EncodingType", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl Serialize for ListObjectsV2Output {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content_with_ns("ListBucketResult", XMLNS_S3, self)
+    }
+}
+
+impl SerializeContent for ListObjectsV2Output {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.name {
+            s.content("Name", val)?;
+        }
+        if let Some(ref val) = self.prefix {
+            s.content("Prefix", val)?;
+        }
+        if let Some(ref val) = self.max_keys {
+            s.content("MaxKeys", val)?;
+        }
+        if let Some(ref val) = self.key_count {
+            s.content("KeyCount", val)?;
+        }
+        if let Some(ref val) = self.continuation_token {
+            s.content("ContinuationToken", val)?;
+        }
+        if let Some(ref val) = self.is_truncated {
+            s.content("IsTruncated", val)?;
+        }
+        if let Some(ref val) = self.next_continuation_token {
+            s.content("NextContinuationToken", val)?;
+        }
+        if let Some(iter) = &self.contents {
+            s.flattened_list("Contents", iter)?;
+        }
+        if let Some(iter) = &self.common_prefixes {
+            s.flattened_list("CommonPrefixes", iter)?;
+        }
+        if let Some(ref val) = self.delimiter {
+            s.content("Delimiter", val)?;
+        }
+        if let Some(ref val) = self.encoding_type {
+            s.content("EncodingType", val)?;
+        }
+        if let Some(ref val) = self.start_after {
+            s.content("StartAfter", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl Serialize for ListPartsOutput {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content_with_ns("ListPartsResult", XMLNS_S3, self)
+    }
+}
+
+impl SerializeContent for ListPartsOutput {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.bucket {
+            s.content("Bucket", val)?;
+        }
+        if let Some(ref val) = self.checksum_algorithm {
+            s.content("ChecksumAlgorithm", val)?;
+        }
+        if let Some(ref val) = self.checksum_type {
+            s.content("ChecksumType", val)?;
+        }
+        if let Some(ref val) = self.initiator {
+            s.content("Initiator", val)?;
+        }
+        if let Some(ref val) = self.is_truncated {
+            s.content("IsTruncated", val)?;
+        }
+        if let Some(ref val) = self.key {
+            s.content("Key", val)?;
+        }
+        if let Some(ref val) = self.max_parts {
+            s.content("MaxParts", val)?;
+        }
+        if let Some(ref val) = self.next_part_number_marker {
+            s.content("NextPartNumberMarker", val)?;
+        }
+        if let Some(ref val) = self.owner {
+            s.content("Owner", val)?;
+        }
+        if let Some(ref val) = self.part_number_marker {
+            s.content("PartNumberMarker", val)?;
+        }
+        if let Some(iter) = &self.parts {
+            s.flattened_list("Part", iter)?;
+        }
+        if let Some(ref val) = self.storage_class {
+            s.content("StorageClass", val)?;
+        }
+        if let Some(ref val) = self.upload_id {
+            s.content("UploadId", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl Serialize for MetadataConfiguration {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("MetadataConfiguration", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for MetadataConfiguration {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("MetadataConfiguration", Deserializer::content)
+    }
+}
+impl SerializeContent for MetadataConfiguration {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.annotation_table_configuration {
+            s.content("AnnotationTableConfiguration", val)?;
+        }
+        if let Some(ref val) = self.inventory_table_configuration {
+            s.content("InventoryTableConfiguration", val)?;
+        }
+        s.content("JournalTableConfiguration", &self.journal_table_configuration)?;
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for MetadataConfiguration {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut annotation_table_configuration: Option<AnnotationTableConfiguration> = None;
+        let mut inventory_table_configuration: Option<InventoryTableConfiguration> = None;
+        let mut journal_table_configuration: Option<JournalTableConfiguration> = None;
+        d.for_each_element(|d, x| match x {
+            b"AnnotationTableConfiguration" => {
+                if annotation_table_configuration.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                annotation_table_configuration = Some(d.content()?);
+                Ok(())
+            }
+            b"InventoryTableConfiguration" => {
+                if inventory_table_configuration.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                inventory_table_configuration = Some(d.content()?);
+                Ok(())
+            }
+            b"JournalTableConfiguration" => {
+                if journal_table_configuration.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                journal_table_configuration = Some(d.content()?);
+                Ok(())
+            }
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
+        })?;
+        Ok(Self {
+            annotation_table_configuration,
+            inventory_table_configuration,
+            journal_table_configuration: journal_table_configuration.ok_or(DeError::MissingField)?,
+        })
+    }
+}
+
+impl Serialize for MetadataTableConfiguration {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("MetadataTableConfiguration", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for MetadataTableConfiguration {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("MetadataTableConfiguration", Deserializer::content)
+    }
+}
+impl SerializeContent for MetadataTableConfiguration {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("S3TablesDestination", &self.s3_tables_destination)?;
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for MetadataTableConfiguration {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut s3_tables_destination: Option<S3TablesDestination> = None;
+        d.for_each_element(|d, x| match x {
+            b"S3TablesDestination" => {
+                if s3_tables_destination.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                s3_tables_destination = Some(d.content()?);
+                Ok(())
+            }
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
+        })?;
+        Ok(Self {
+            s3_tables_destination: s3_tables_destination.ok_or(DeError::MissingField)?,
+        })
+    }
+}
+
+impl Serialize for MetricsConfiguration {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("MetricsConfiguration", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for MetricsConfiguration {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("MetricsConfiguration", Deserializer::content)
+    }
+}
+impl SerializeContent for MetricsConfiguration {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.filter {
+            s.content("Filter", val)?;
+        }
+        s.content("Id", &self.id)?;
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for MetricsConfiguration {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut filter: Option<MetricsFilter> = None;
+        let mut id: Option<MetricsId> = None;
+        d.for_each_element(|d, x| match x {
+            b"Filter" => {
+                if filter.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                filter = Some(d.content()?);
+                Ok(())
+            }
+            b"Id" => {
+                if id.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                id = Some(d.content()?);
+                Ok(())
+            }
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
+        })?;
+        Ok(Self {
+            filter,
+            id: id.ok_or(DeError::MissingField)?,
+        })
+    }
+}
+
+impl Serialize for NotificationConfiguration {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("NotificationConfiguration", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for NotificationConfiguration {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("NotificationConfiguration", Deserializer::content)
+    }
+}
+impl SerializeContent for NotificationConfiguration {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.event_bridge_configuration {
+            s.content("EventBridgeConfiguration", val)?;
+        }
+        if let Some(iter) = &self.lambda_function_configurations {
+            s.flattened_list("CloudFunctionConfiguration", iter)?;
+        }
+        if let Some(iter) = &self.queue_configurations {
+            s.flattened_list("QueueConfiguration", iter)?;
+        }
+        if let Some(iter) = &self.topic_configurations {
+            s.flattened_list("TopicConfiguration", iter)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for NotificationConfiguration {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut event_bridge_configuration: Option<EventBridgeConfiguration> = None;
+        let mut lambda_function_configurations: Option<LambdaFunctionConfigurationList> = None;
+        let mut queue_configurations: Option<QueueConfigurationList> = None;
+        let mut topic_configurations: Option<TopicConfigurationList> = None;
+        d.for_each_element(|d, x| match x {
+            b"EventBridgeConfiguration" => {
+                if event_bridge_configuration.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                event_bridge_configuration = Some(d.content()?);
+                Ok(())
+            }
+            b"CloudFunctionConfiguration" => {
+                let ans: LambdaFunctionConfiguration = d.content()?;
+                lambda_function_configurations.get_or_insert_with(List::new).push(ans);
+                Ok(())
+            }
+            b"QueueConfiguration" => {
+                let ans: QueueConfiguration = d.content()?;
+                queue_configurations.get_or_insert_with(List::new).push(ans);
+                Ok(())
+            }
+            b"TopicConfiguration" => {
+                let ans: TopicConfiguration = d.content()?;
+                topic_configurations.get_or_insert_with(List::new).push(ans);
+                Ok(())
+            }
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
+        })?;
+        Ok(Self {
+            event_bridge_configuration,
+            lambda_function_configurations,
+            queue_configurations,
+            topic_configurations,
+        })
+    }
+}
+
+impl Serialize for ObjectEncryption {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.element("ObjectEncryption", |s| match self {
+            Self::SSEKMS(x) => s.content("SSE-KMS", x),
+        })
+    }
+}
+
+impl<'xml> Deserialize<'xml> for ObjectEncryption {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("ObjectEncryption", |d| {
+            d.element(|d, x| match x {
+                b"SSE-KMS" => Ok(Self::SSEKMS(d.content()?)),
+                _ => Err(DeError::UnexpectedTagName),
+            })
+        })
+    }
+}
+impl SerializeContent for ObjectEncryption {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        match self {
+            Self::SSEKMS(x) => s.content("SSE-KMS", x),
+        }
+    }
+}
+impl<'xml> DeserializeContent<'xml> for ObjectEncryption {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.element(|d, x| match x {
+            b"SSE-KMS" => Ok(Self::SSEKMS(d.content()?)),
+            _ => Err(DeError::UnexpectedTagName),
+        })
+    }
+}
+
+impl Serialize for ObjectLockConfiguration {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("ObjectLockConfiguration", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for ObjectLockConfiguration {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("ObjectLockConfiguration", Deserializer::content)
+    }
+}
+impl SerializeContent for ObjectLockConfiguration {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.object_lock_enabled {
+            s.content("ObjectLockEnabled", val)?;
+        }
+        if let Some(ref val) = self.rule {
+            s.content("Rule", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for ObjectLockConfiguration {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut object_lock_enabled: Option<ObjectLockEnabled> = None;
+        let mut rule: Option<ObjectLockRule> = None;
+        d.for_each_element(|d, x| match x {
+            b"ObjectLockEnabled" => {
+                if object_lock_enabled.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                object_lock_enabled = Some(d.content()?);
+                Ok(())
+            }
+            b"Rule" => {
+                if rule.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                rule = Some(d.content()?);
+                Ok(())
+            }
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
+        })?;
+        Ok(Self {
+            object_lock_enabled,
+            rule,
+        })
+    }
+}
+
+impl Serialize for ObjectLockLegalHold {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("LegalHold", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for ObjectLockLegalHold {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("LegalHold", Deserializer::content)
+    }
+}
+impl SerializeContent for ObjectLockLegalHold {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.status {
+            s.content("Status", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for ObjectLockLegalHold {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut status: Option<ObjectLockLegalHoldStatus> = None;
+        d.for_each_element(|d, x| match x {
+            b"Status" => {
+                if status.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                status = Some(d.content()?);
+                Ok(())
+            }
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
+        })?;
+        Ok(Self { status })
+    }
+}
+
+impl Serialize for ObjectLockRetention {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("Retention", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for ObjectLockRetention {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("Retention", Deserializer::content)
+    }
+}
+impl SerializeContent for ObjectLockRetention {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.mode {
+            s.content("Mode", val)?;
+        }
+        if let Some(ref val) = self.retain_until_date {
+            s.timestamp("RetainUntilDate", val, TimestampFormat::DateTime)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for ObjectLockRetention {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut mode: Option<ObjectLockRetentionMode> = None;
+        let mut retain_until_date: Option<Date> = None;
+        d.for_each_element(|d, x| match x {
+            b"Mode" => {
+                if mode.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                mode = Some(d.content()?);
+                Ok(())
+            }
+            b"RetainUntilDate" => {
+                if retain_until_date.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                retain_until_date = Some(d.timestamp(TimestampFormat::DateTime)?);
+                Ok(())
+            }
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
+        })?;
+        Ok(Self { mode, retain_until_date })
+    }
+}
+
+impl Serialize for OwnershipControls {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("OwnershipControls", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for OwnershipControls {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("OwnershipControls", Deserializer::content)
+    }
+}
+impl SerializeContent for OwnershipControls {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        {
+            let iter = &self.rules;
+            s.flattened_list("Rule", iter)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for OwnershipControls {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut rules: Option<OwnershipControlsRules> = None;
+        d.for_each_element(|d, x| match x {
+            b"Rule" => {
+                let ans: OwnershipControlsRule = d.content()?;
+                rules.get_or_insert_with(List::new).push(ans);
+                Ok(())
+            }
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
+        })?;
+        Ok(Self {
+            rules: rules.ok_or(DeError::MissingField)?,
+        })
+    }
+}
+
+impl Serialize for PolicyStatus {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("PolicyStatus", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for PolicyStatus {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("PolicyStatus", Deserializer::content)
+    }
+}
+impl SerializeContent for PolicyStatus {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.is_public {
+            s.content("IsPublic", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for PolicyStatus {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut is_public: Option<IsPublic> = None;
+        d.for_each_element(|d, x| match x {
+            b"IsPublic" => {
+                if is_public.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                is_public = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self { is_public })
+    }
+}
+
+impl Serialize for Progress {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("Progress", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for Progress {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("Progress", Deserializer::content)
+    }
+}
+impl SerializeContent for Progress {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.bytes_processed {
+            s.content("BytesProcessed", val)?;
+        }
+        if let Some(ref val) = self.bytes_returned {
+            s.content("BytesReturned", val)?;
+        }
+        if let Some(ref val) = self.bytes_scanned {
+            s.content("BytesScanned", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for Progress {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut bytes_processed: Option<BytesProcessed> = None;
+        let mut bytes_returned: Option<BytesReturned> = None;
+        let mut bytes_scanned: Option<BytesScanned> = None;
+        d.for_each_element(|d, x| match x {
+            b"BytesProcessed" => {
+                if bytes_processed.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                bytes_processed = Some(d.content()?);
+                Ok(())
+            }
+            b"BytesReturned" => {
+                if bytes_returned.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                bytes_returned = Some(d.content()?);
+                Ok(())
+            }
+            b"BytesScanned" => {
+                if bytes_scanned.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                bytes_scanned = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            bytes_processed,
+            bytes_returned,
+            bytes_scanned,
+        })
+    }
+}
+
+impl Serialize for PublicAccessBlockConfiguration {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("PublicAccessBlockConfiguration", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for PublicAccessBlockConfiguration {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("PublicAccessBlockConfiguration", Deserializer::content)
+    }
+}
+impl SerializeContent for PublicAccessBlockConfiguration {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.block_public_acls {
+            s.content("BlockPublicAcls", val)?;
+        }
+        if let Some(ref val) = self.block_public_policy {
+            s.content("BlockPublicPolicy", val)?;
+        }
+        if let Some(ref val) = self.ignore_public_acls {
+            s.content("IgnorePublicAcls", val)?;
+        }
+        if let Some(ref val) = self.restrict_public_buckets {
+            s.content("RestrictPublicBuckets", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for PublicAccessBlockConfiguration {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut block_public_acls: Option<Setting> = None;
+        let mut block_public_policy: Option<Setting> = None;
+        let mut ignore_public_acls: Option<Setting> = None;
+        let mut restrict_public_buckets: Option<Setting> = None;
+        d.for_each_element(|d, x| match x {
+            b"BlockPublicAcls" => {
+                if block_public_acls.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                block_public_acls = Some(d.content()?);
+                Ok(())
+            }
+            b"BlockPublicPolicy" => {
+                if block_public_policy.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                block_public_policy = Some(d.content()?);
+                Ok(())
+            }
+            b"IgnorePublicAcls" => {
+                if ignore_public_acls.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                ignore_public_acls = Some(d.content()?);
+                Ok(())
+            }
+            b"RestrictPublicBuckets" => {
+                if restrict_public_buckets.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                restrict_public_buckets = Some(d.content()?);
+                Ok(())
+            }
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
+        })?;
+        Ok(Self {
+            block_public_acls,
+            block_public_policy,
+            ignore_public_acls,
+            restrict_public_buckets,
+        })
+    }
+}
+
+impl Serialize for PutObjectAnnotationOutput {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content_with_ns("PutObjectAnnotationOutput", XMLNS_S3, self)
+    }
+}
+impl SerializeContent for PutObjectAnnotationOutput {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.annotation_name {
+            s.content("AnnotationName", val)?;
+        }
+        if let Some(ref val) = self.key {
+            s.content("Key", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl Serialize for ReplicationConfiguration {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("ReplicationConfiguration", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for ReplicationConfiguration {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("ReplicationConfiguration", Deserializer::content)
+    }
+}
+impl SerializeContent for ReplicationConfiguration {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("Role", &self.role)?;
+        {
+            let iter = &self.rules;
+            s.flattened_list("Rule", iter)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for ReplicationConfiguration {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut role: Option<Role> = None;
+        let mut rules: Option<ReplicationRules> = None;
+        d.for_each_element(|d, x| match x {
+            b"Role" => {
+                if role.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                role = Some(d.content()?);
+                Ok(())
+            }
+            b"Rule" => {
+                let ans: ReplicationRule = d.content()?;
+                rules.get_or_insert_with(List::new).push(ans);
+                Ok(())
+            }
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
+        })?;
+        Ok(Self {
+            role: role.ok_or(DeError::MissingField)?,
+            rules: rules.ok_or(DeError::MissingField)?,
+        })
+    }
+}
+
+impl Serialize for RequestPaymentConfiguration {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("RequestPaymentConfiguration", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for RequestPaymentConfiguration {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("RequestPaymentConfiguration", Deserializer::content)
+    }
+}
+impl SerializeContent for RequestPaymentConfiguration {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("Payer", &self.payer)?;
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for RequestPaymentConfiguration {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut payer: Option<Payer> = None;
+        d.for_each_element(|d, x| match x {
+            b"Payer" => {
+                if payer.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                payer = Some(d.content()?);
+                Ok(())
+            }
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
+        })?;
+        Ok(Self {
+            payer: payer.ok_or(DeError::MissingField)?,
+        })
+    }
+}
+
+impl Serialize for RestoreRequest {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("RestoreRequest", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for RestoreRequest {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("RestoreRequest", Deserializer::content)
+    }
+}
+impl SerializeContent for RestoreRequest {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.days {
+            s.content("Days", val)?;
+        }
+        if let Some(ref val) = self.description {
+            s.content("Description", val)?;
+        }
+        if let Some(ref val) = self.glacier_job_parameters {
+            s.content("GlacierJobParameters", val)?;
+        }
+        if let Some(ref val) = self.output_location {
+            s.content("OutputLocation", val)?;
+        }
+        if let Some(ref val) = self.select_parameters {
+            s.content("SelectParameters", val)?;
+        }
+        if let Some(ref val) = self.tier {
+            s.content("Tier", val)?;
+        }
+        if let Some(ref val) = self.type_ {
+            s.content("Type", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for RestoreRequest {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut days: Option<Days> = None;
+        let mut description: Option<Description> = None;
+        let mut glacier_job_parameters: Option<GlacierJobParameters> = None;
+        let mut output_location: Option<OutputLocation> = None;
+        let mut select_parameters: Option<SelectParameters> = None;
+        let mut tier: Option<Tier> = None;
+        let mut type_: Option<RestoreRequestType> = None;
+        d.for_each_element(|d, x| match x {
+            b"Days" => {
+                if days.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                days = Some(d.content()?);
+                Ok(())
+            }
+            b"Description" => {
+                if description.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                description = Some(d.content()?);
+                Ok(())
+            }
+            b"GlacierJobParameters" => {
+                if glacier_job_parameters.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                glacier_job_parameters = Some(d.content()?);
+                Ok(())
+            }
+            b"OutputLocation" => {
+                if output_location.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                output_location = Some(d.content()?);
+                Ok(())
+            }
+            b"SelectParameters" => {
+                if select_parameters.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                select_parameters = Some(d.content()?);
+                Ok(())
+            }
+            b"Tier" => {
+                if tier.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                tier = Some(d.content()?);
+                Ok(())
+            }
+            b"Type" => {
+                if type_.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                type_ = Some(d.content()?);
+                Ok(())
+            }
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
+        })?;
+        Ok(Self {
+            days,
+            description,
+            glacier_job_parameters,
+            output_location,
+            select_parameters,
+            tier,
+            type_,
+        })
+    }
+}
+
+impl Serialize for SelectObjectContentRequest {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("SelectObjectContentRequest", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for SelectObjectContentRequest {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element_any(&["SelectObjectContentRequest", "SelectRequest"], Deserializer::content)
+    }
+}
+impl SerializeContent for SelectObjectContentRequest {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("Expression", &self.expression)?;
+        s.content("ExpressionType", &self.expression_type)?;
+        s.content("InputSerialization", &self.input_serialization)?;
+        s.content("OutputSerialization", &self.output_serialization)?;
+        if let Some(ref val) = self.request_progress {
+            s.content("RequestProgress", val)?;
+        }
+        if let Some(ref val) = self.scan_range {
+            s.content("ScanRange", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for SelectObjectContentRequest {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut expression: Option<Expression> = None;
+        let mut expression_type: Option<ExpressionType> = None;
+        let mut input_serialization: Option<InputSerialization> = None;
+        let mut output_serialization: Option<OutputSerialization> = None;
+        let mut request_progress: Option<RequestProgress> = None;
+        let mut scan_range: Option<ScanRange> = None;
+        d.for_each_element(|d, x| match x {
+            b"Expression" => {
+                if expression.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                expression = Some(d.content()?);
+                Ok(())
+            }
+            b"ExpressionType" => {
+                if expression_type.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                expression_type = Some(d.content()?);
+                Ok(())
+            }
+            b"InputSerialization" => {
+                if input_serialization.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                input_serialization = Some(d.content()?);
+                Ok(())
+            }
+            b"OutputSerialization" => {
+                if output_serialization.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                output_serialization = Some(d.content()?);
+                Ok(())
+            }
+            b"RequestProgress" => {
+                if request_progress.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                request_progress = Some(d.content()?);
+                Ok(())
+            }
+            b"ScanRange" => {
+                if scan_range.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                scan_range = Some(d.content()?);
+                Ok(())
+            }
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
+        })?;
+        Ok(Self {
+            expression: expression.ok_or(DeError::MissingField)?,
+            expression_type: expression_type.ok_or(DeError::MissingField)?,
+            input_serialization: input_serialization.ok_or(DeError::MissingField)?,
+            output_serialization: output_serialization.ok_or(DeError::MissingField)?,
+            request_progress,
+            scan_range,
+        })
+    }
+}
+
+impl Serialize for ServerSideEncryptionConfiguration {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("ServerSideEncryptionConfiguration", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for ServerSideEncryptionConfiguration {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("ServerSideEncryptionConfiguration", Deserializer::content)
+    }
+}
+impl SerializeContent for ServerSideEncryptionConfiguration {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        {
+            let iter = &self.rules;
+            s.flattened_list("Rule", iter)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for ServerSideEncryptionConfiguration {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut rules: Option<ServerSideEncryptionRules> = None;
+        d.for_each_element(|d, x| match x {
+            b"Rule" => {
+                let ans: ServerSideEncryptionRule = d.content()?;
+                rules.get_or_insert_with(List::new).push(ans);
+                Ok(())
+            }
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
+        })?;
+        Ok(Self {
+            rules: rules.ok_or(DeError::MissingField)?,
+        })
+    }
+}
+
+impl Serialize for Stats {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("Stats", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for Stats {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("Stats", Deserializer::content)
+    }
+}
+impl SerializeContent for Stats {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.bytes_processed {
+            s.content("BytesProcessed", val)?;
+        }
+        if let Some(ref val) = self.bytes_returned {
+            s.content("BytesReturned", val)?;
+        }
+        if let Some(ref val) = self.bytes_scanned {
+            s.content("BytesScanned", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for Stats {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut bytes_processed: Option<BytesProcessed> = None;
+        let mut bytes_returned: Option<BytesReturned> = None;
+        let mut bytes_scanned: Option<BytesScanned> = None;
+        d.for_each_element(|d, x| match x {
+            b"BytesProcessed" => {
+                if bytes_processed.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                bytes_processed = Some(d.content()?);
+                Ok(())
+            }
+            b"BytesReturned" => {
+                if bytes_returned.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                bytes_returned = Some(d.content()?);
+                Ok(())
+            }
+            b"BytesScanned" => {
+                if bytes_scanned.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                bytes_scanned = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            bytes_processed,
+            bytes_returned,
+            bytes_scanned,
+        })
+    }
+}
+
+impl Serialize for Tagging {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("Tagging", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for Tagging {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("Tagging", Deserializer::content)
+    }
+}
+impl SerializeContent for Tagging {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        {
+            let iter = &self.tag_set;
+            s.list("TagSet", "Tag", iter)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for Tagging {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut tag_set: Option<TagSet> = None;
+        d.for_each_element(|d, x| match x {
+            b"TagSet" => {
+                if tag_set.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                tag_set = Some(d.list_content("Tag")?);
+                Ok(())
+            }
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
+        })?;
+        Ok(Self {
+            tag_set: tag_set.ok_or(DeError::MissingField)?,
+        })
+    }
+}
+
+impl Serialize for VersioningConfiguration {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("VersioningConfiguration", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for VersioningConfiguration {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("VersioningConfiguration", Deserializer::content)
+    }
+}
+impl SerializeContent for VersioningConfiguration {
+    #[cfg(not(feature = "minio"))]
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.mfa_delete {
+            s.content("MfaDelete", val)?;
+        }
+        if let Some(ref val) = self.status {
+            s.content("Status", val)?;
+        }
+        Ok(())
+    }
+
+    #[cfg(feature = "minio")]
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.exclude_folders {
+            s.content("ExcludeFolders", val)?;
+        }
+        if let Some(iter) = &self.excluded_prefixes {
+            s.flattened_list("ExcludedPrefixes", iter)?;
+        }
+        if let Some(ref val) = self.mfa_delete {
+            s.content("MfaDelete", val)?;
+        }
+        if let Some(ref val) = self.status {
+            s.content("Status", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for VersioningConfiguration {
+    #[cfg(not(feature = "minio"))]
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut mfa_delete: Option<MFADelete> = None;
+        let mut status: Option<BucketVersioningStatus> = None;
+        d.for_each_element(|d, x| match x {
+            b"MfaDelete" => {
+                if mfa_delete.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                mfa_delete = Some(d.content()?);
+                Ok(())
+            }
+            b"Status" => {
+                if status.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                status = Some(d.content()?);
+                Ok(())
+            }
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
+        })?;
+        Ok(Self { mfa_delete, status })
+    }
+
+    #[cfg(feature = "minio")]
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut exclude_folders: Option<ExcludeFolders> = None;
+        let mut excluded_prefixes: Option<ExcludedPrefixes> = None;
+        let mut mfa_delete: Option<MFADelete> = None;
+        let mut status: Option<BucketVersioningStatus> = None;
+        d.for_each_element(|d, x| match x {
+            b"ExcludeFolders" => {
+                if exclude_folders.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                exclude_folders = Some(d.content()?);
+                Ok(())
+            }
+            b"ExcludedPrefixes" => {
+                let ans: ExcludedPrefix = d.content()?;
+                excluded_prefixes.get_or_insert_with(List::new).push(ans);
+                Ok(())
+            }
+            b"MfaDelete" => {
+                if mfa_delete.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                mfa_delete = Some(d.content()?);
+                Ok(())
+            }
+            b"Status" => {
+                if status.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                status = Some(d.content()?);
+                Ok(())
+            }
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
+        })?;
+        Ok(Self {
+            exclude_folders,
+            excluded_prefixes,
+            mfa_delete,
+            status,
+        })
+    }
+}
+
+impl Serialize for WebsiteConfiguration {
+    fn serialize<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("WebsiteConfiguration", self)
+    }
+}
+
+impl<'xml> Deserialize<'xml> for WebsiteConfiguration {
+    fn deserialize(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.named_element("WebsiteConfiguration", Deserializer::content)
+    }
+}
+impl SerializeContent for WebsiteConfiguration {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.error_document {
+            s.content("ErrorDocument", val)?;
+        }
+        if let Some(ref val) = self.index_document {
+            s.content("IndexDocument", val)?;
+        }
+        if let Some(ref val) = self.redirect_all_requests_to {
+            s.content("RedirectAllRequestsTo", val)?;
+        }
+        if let Some(iter) = &self.routing_rules {
+            s.list("RoutingRules", "RoutingRule", iter)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for WebsiteConfiguration {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut error_document: Option<ErrorDocument> = None;
+        let mut index_document: Option<IndexDocument> = None;
+        let mut redirect_all_requests_to: Option<RedirectAllRequestsTo> = None;
+        let mut routing_rules: Option<RoutingRules> = None;
+        d.for_each_element(|d, x| match x {
+            b"ErrorDocument" => {
+                if error_document.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                error_document = Some(d.content()?);
+                Ok(())
+            }
+            b"IndexDocument" => {
+                if index_document.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                index_document = Some(d.content()?);
+                Ok(())
+            }
+            b"RedirectAllRequestsTo" => {
+                if redirect_all_requests_to.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                redirect_all_requests_to = Some(d.content()?);
+                Ok(())
+            }
+            b"RoutingRules" => {
+                if routing_rules.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                routing_rules = Some(d.list_content("RoutingRule")?);
+                Ok(())
+            }
+            _ => {
+                d.skip_element_content()?;
+                Ok(())
+            }
+        })?;
+        Ok(Self {
+            error_document,
+            index_document,
+            redirect_all_requests_to,
+            routing_rules,
+        })
+    }
+}
+
+impl SerializeContent for AbortIncompleteMultipartUpload {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.days_after_initiation {
+            s.content("DaysAfterInitiation", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for AbortIncompleteMultipartUpload {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut days_after_initiation: Option<DaysAfterInitiation> = None;
+        d.for_each_element(|d, x| match x {
+            b"DaysAfterInitiation" => {
+                if days_after_initiation.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                days_after_initiation = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self { days_after_initiation })
+    }
+}
+
+impl SerializeContent for AccessControlTranslation {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("Owner", &self.owner)?;
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for AccessControlTranslation {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut owner: Option<OwnerOverride> = None;
+        d.for_each_element(|d, x| match x {
+            b"Owner" => {
+                if owner.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                owner = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            owner: owner.ok_or(DeError::MissingField)?,
+        })
+    }
+}
+
+impl SerializeContent for AnalyticsAndOperator {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.prefix {
+            s.content("Prefix", val)?;
+        }
+        if let Some(iter) = &self.tags {
+            s.flattened_list("Tag", iter)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for AnalyticsAndOperator {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut prefix: Option<Prefix> = None;
+        let mut tags: Option<TagSet> = None;
+        d.for_each_element(|d, x| match x {
+            b"Prefix" => {
+                if prefix.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                prefix = Some(d.content()?);
+                Ok(())
+            }
+            b"Tag" => {
+                let ans: Tag = d.content()?;
+                tags.get_or_insert_with(List::new).push(ans);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self { prefix, tags })
+    }
+}
+
+impl SerializeContent for AnalyticsExportDestination {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("S3BucketDestination", &self.s3_bucket_destination)?;
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for AnalyticsExportDestination {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut s3_bucket_destination: Option<AnalyticsS3BucketDestination> = None;
+        d.for_each_element(|d, x| match x {
+            b"S3BucketDestination" => {
+                if s3_bucket_destination.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                s3_bucket_destination = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            s3_bucket_destination: s3_bucket_destination.ok_or(DeError::MissingField)?,
+        })
+    }
+}
+
+impl SerializeContent for AnalyticsFilter {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        match self {
+            Self::And(x) => s.content("And", x),
+            Self::Prefix(x) => s.content("Prefix", x),
+            Self::Tag(x) => s.content("Tag", x),
+        }
+    }
+}
+impl<'xml> DeserializeContent<'xml> for AnalyticsFilter {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.element(|d, x| match x {
+            b"And" => Ok(Self::And(d.content()?)),
+            b"Prefix" => Ok(Self::Prefix(d.content()?)),
+            b"Tag" => Ok(Self::Tag(d.content()?)),
+            _ => Err(DeError::UnexpectedTagName),
+        })
+    }
+}
+
+impl SerializeContent for AnalyticsS3BucketDestination {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("Bucket", &self.bucket)?;
+        if let Some(ref val) = self.bucket_account_id {
+            s.content("BucketAccountId", val)?;
+        }
+        s.content("Format", &self.format)?;
+        if let Some(ref val) = self.prefix {
+            s.content("Prefix", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for AnalyticsS3BucketDestination {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut bucket: Option<BucketName> = None;
+        let mut bucket_account_id: Option<AccountId> = None;
+        let mut format: Option<AnalyticsS3ExportFileFormat> = None;
+        let mut prefix: Option<Prefix> = None;
+        d.for_each_element(|d, x| match x {
+            b"Bucket" => {
+                if bucket.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                bucket = Some(d.content()?);
+                Ok(())
+            }
+            b"BucketAccountId" => {
+                if bucket_account_id.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                bucket_account_id = Some(d.content()?);
+                Ok(())
+            }
+            b"Format" => {
+                if format.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                format = Some(d.content()?);
+                Ok(())
+            }
+            b"Prefix" => {
+                if prefix.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                prefix = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            bucket: bucket.ok_or(DeError::MissingField)?,
+            bucket_account_id,
+            format: format.ok_or(DeError::MissingField)?,
+            prefix,
+        })
+    }
+}
+
+impl SerializeContent for AnalyticsS3ExportFileFormat {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        self.as_str().serialize_content(s)
+    }
+}
+impl<'xml> DeserializeContent<'xml> for AnalyticsS3ExportFileFormat {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.text(|s| match s {
+            "CSV" => Ok(Self::from_static(AnalyticsS3ExportFileFormat::CSV)),
+            _ => Ok(Self::from(s.to_owned())),
+        })
+    }
+}
+
+impl SerializeContent for AnnotationConfigurationState {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        self.as_str().serialize_content(s)
+    }
+}
+impl<'xml> DeserializeContent<'xml> for AnnotationConfigurationState {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.text(|s| match s {
+            "DISABLED" => Ok(Self::from_static(AnnotationConfigurationState::DISABLED)),
+            "ENABLED" => Ok(Self::from_static(AnnotationConfigurationState::ENABLED)),
+            _ => Ok(Self::from(s.to_owned())),
+        })
+    }
+}
+
+impl SerializeContent for AnnotationEntry {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("AnnotationName", &self.annotation_name)?;
+        if let Some(iter) = &self.checksum_algorithm {
+            s.flattened_list("ChecksumAlgorithm", iter)?;
+        }
+        if let Some(ref val) = self.e_tag {
+            s.content("ETag", val)?;
+        }
+        s.timestamp("LastModified", &self.last_modified, TimestampFormat::DateTime)?;
+        if let Some(ref val) = self.replication_status {
+            s.content("ReplicationStatus", val)?;
+        }
+        s.content("Size", &self.size)?;
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for AnnotationEntry {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut annotation_name: Option<AnnotationName> = None;
+        let mut checksum_algorithm: Option<ChecksumAlgorithmList> = None;
+        let mut e_tag: Option<ETag> = None;
+        let mut last_modified: Option<LastModified> = None;
+        let mut replication_status: Option<ReplicationStatus> = None;
+        let mut size: Option<Size> = None;
+        d.for_each_element(|d, x| match x {
+            b"AnnotationName" => {
+                if annotation_name.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                annotation_name = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumAlgorithm" => {
+                let ans: ChecksumAlgorithm = d.content()?;
+                checksum_algorithm.get_or_insert_with(List::new).push(ans);
+                Ok(())
+            }
+            b"ETag" => {
+                if e_tag.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                e_tag = Some(d.content()?);
+                Ok(())
+            }
+            b"LastModified" => {
+                if last_modified.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                last_modified = Some(d.timestamp(TimestampFormat::DateTime)?);
+                Ok(())
+            }
+            b"ReplicationStatus" => {
+                if replication_status.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                replication_status = Some(d.content()?);
+                Ok(())
+            }
+            b"Size" => {
+                if size.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                size = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            annotation_name: annotation_name.ok_or(DeError::MissingField)?,
+            checksum_algorithm,
+            e_tag,
+            last_modified: last_modified.ok_or(DeError::MissingField)?,
+            replication_status,
+            size: size.ok_or(DeError::MissingField)?,
+        })
+    }
+}
+
+impl SerializeContent for AnnotationTableConfiguration {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("ConfigurationState", &self.configuration_state)?;
+        if let Some(ref val) = self.encryption_configuration {
+            s.content("EncryptionConfiguration", val)?;
+        }
+        if let Some(ref val) = self.role {
+            s.content("Role", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for AnnotationTableConfiguration {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut configuration_state: Option<AnnotationConfigurationState> = None;
+        let mut encryption_configuration: Option<MetadataTableEncryptionConfiguration> = None;
+        let mut role: Option<Role> = None;
+        d.for_each_element(|d, x| match x {
+            b"ConfigurationState" => {
+                if configuration_state.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                configuration_state = Some(d.content()?);
+                Ok(())
+            }
+            b"EncryptionConfiguration" => {
+                if encryption_configuration.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                encryption_configuration = Some(d.content()?);
+                Ok(())
+            }
+            b"Role" => {
+                if role.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                role = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            configuration_state: configuration_state.ok_or(DeError::MissingField)?,
+            encryption_configuration,
+            role,
+        })
+    }
+}
+
+impl SerializeContent for AnnotationTableConfigurationResult {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("ConfigurationState", &self.configuration_state)?;
+        if let Some(ref val) = self.error {
+            s.content("Error", val)?;
+        }
+        if let Some(ref val) = self.role {
+            s.content("Role", val)?;
+        }
+        if let Some(ref val) = self.table_arn {
+            s.content("TableArn", val)?;
+        }
+        if let Some(ref val) = self.table_name {
+            s.content("TableName", val)?;
+        }
+        if let Some(ref val) = self.table_status {
+            s.content("TableStatus", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for AnnotationTableConfigurationResult {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut configuration_state: Option<AnnotationConfigurationState> = None;
+        let mut error: Option<ErrorDetails> = None;
+        let mut role: Option<Role> = None;
+        let mut table_arn: Option<S3TablesArn> = None;
+        let mut table_name: Option<S3TablesName> = None;
+        let mut table_status: Option<MetadataTableStatus> = None;
+        d.for_each_element(|d, x| match x {
+            b"ConfigurationState" => {
+                if configuration_state.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                configuration_state = Some(d.content()?);
+                Ok(())
+            }
+            b"Error" => {
+                if error.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                error = Some(d.content()?);
+                Ok(())
+            }
+            b"Role" => {
+                if role.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                role = Some(d.content()?);
+                Ok(())
+            }
+            b"TableArn" => {
+                if table_arn.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                table_arn = Some(d.content()?);
+                Ok(())
+            }
+            b"TableName" => {
+                if table_name.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                table_name = Some(d.content()?);
+                Ok(())
+            }
+            b"TableStatus" => {
+                if table_status.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                table_status = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            configuration_state: configuration_state.ok_or(DeError::MissingField)?,
+            error,
+            role,
+            table_arn,
+            table_name,
+            table_status,
+        })
+    }
+}
+
+impl SerializeContent for AssumeRoleOutput {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.assumed_role_user {
+            s.content("AssumedRoleUser", val)?;
+        }
+        if let Some(ref val) = self.credentials {
+            s.content("Credentials", val)?;
+        }
+        if let Some(ref val) = self.packed_policy_size {
+            s.content("PackedPolicySize", val)?;
+        }
+        if let Some(ref val) = self.source_identity {
+            s.content("SourceIdentity", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for AssumeRoleOutput {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut assumed_role_user: Option<AssumedRoleUser> = None;
+        let mut credentials: Option<Credentials> = None;
+        let mut packed_policy_size: Option<NonNegativeIntegerType> = None;
+        let mut source_identity: Option<SourceIdentityType> = None;
+        d.for_each_element(|d, x| match x {
+            b"AssumedRoleUser" => {
+                if assumed_role_user.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                assumed_role_user = Some(d.content()?);
+                Ok(())
+            }
+            b"Credentials" => {
+                if credentials.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                credentials = Some(d.content()?);
+                Ok(())
+            }
+            b"PackedPolicySize" => {
+                if packed_policy_size.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                packed_policy_size = Some(d.content()?);
+                Ok(())
+            }
+            b"SourceIdentity" => {
+                if source_identity.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                source_identity = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            assumed_role_user,
+            credentials,
+            packed_policy_size,
+            source_identity,
+        })
+    }
+}
+
+impl SerializeContent for AssumedRoleUser {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        s.content("Arn", &self.arn)?;
+        s.content("AssumedRoleId", &self.assumed_role_id)?;
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for AssumedRoleUser {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut arn: Option<ArnType> = None;
+        let mut assumed_role_id: Option<AssumedRoleIdType> = None;
+        d.for_each_element(|d, x| match x {
+            b"Arn" => {
+                if arn.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                arn = Some(d.content()?);
+                Ok(())
+            }
+            b"AssumedRoleId" => {
+                if assumed_role_id.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                assumed_role_id = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            arn: arn.ok_or(DeError::MissingField)?,
+            assumed_role_id: assumed_role_id.ok_or(DeError::MissingField)?,
+        })
+    }
+}
+
+impl SerializeContent for BlockedEncryptionTypes {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(iter) = &self.encryption_type {
+            s.flattened_list("EncryptionType", iter)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for BlockedEncryptionTypes {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut encryption_type: Option<EncryptionTypeList> = None;
+        d.for_each_element(|d, x| match x {
+            b"EncryptionType" => {
+                let ans: EncryptionType = d.content()?;
+                encryption_type.get_or_insert_with(List::new).push(ans);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self { encryption_type })
+    }
+}
+
+impl SerializeContent for Bucket {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.bucket_arn {
+            s.content("BucketArn", val)?;
+        }
+        if let Some(ref val) = self.bucket_region {
+            s.content("BucketRegion", val)?;
+        }
+        if let Some(ref val) = self.creation_date {
+            s.timestamp("CreationDate", val, TimestampFormat::DateTime)?;
+        }
+        if let Some(ref val) = self.name {
+            s.content("Name", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for Bucket {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut bucket_arn: Option<S3RegionalOrS3ExpressBucketArnString> = None;
+        let mut bucket_region: Option<BucketRegion> = None;
+        let mut creation_date: Option<CreationDate> = None;
+        let mut name: Option<BucketName> = None;
+        d.for_each_element(|d, x| match x {
+            b"BucketArn" => {
+                if bucket_arn.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                bucket_arn = Some(d.content()?);
+                Ok(())
+            }
+            b"BucketRegion" => {
+                if bucket_region.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                bucket_region = Some(d.content()?);
+                Ok(())
+            }
+            b"CreationDate" => {
+                if creation_date.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                creation_date = Some(d.timestamp(TimestampFormat::DateTime)?);
+                Ok(())
+            }
+            b"Name" => {
+                if name.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                name = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            bucket_arn,
+            bucket_region,
+            creation_date,
+            name,
+        })
+    }
+}
+
+impl SerializeContent for BucketAbacStatus {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        self.as_str().serialize_content(s)
+    }
+}
+impl<'xml> DeserializeContent<'xml> for BucketAbacStatus {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.text(|s| match s {
+            "Disabled" => Ok(Self::from_static(BucketAbacStatus::DISABLED)),
+            "Enabled" => Ok(Self::from_static(BucketAbacStatus::ENABLED)),
+            _ => Ok(Self::from(s.to_owned())),
+        })
+    }
+}
+
+impl SerializeContent for BucketAccelerateStatus {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        self.as_str().serialize_content(s)
+    }
+}
+impl<'xml> DeserializeContent<'xml> for BucketAccelerateStatus {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.text(|s| match s {
+            "Enabled" => Ok(Self::from_static(BucketAccelerateStatus::ENABLED)),
+            "Suspended" => Ok(Self::from_static(BucketAccelerateStatus::SUSPENDED)),
+            _ => Ok(Self::from(s.to_owned())),
+        })
+    }
+}
+
+impl SerializeContent for BucketInfo {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.data_redundancy {
+            s.content("DataRedundancy", val)?;
+        }
+        if let Some(ref val) = self.type_ {
+            s.content("Type", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for BucketInfo {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut data_redundancy: Option<DataRedundancy> = None;
+        let mut type_: Option<BucketType> = None;
+        d.for_each_element(|d, x| match x {
+            b"DataRedundancy" => {
+                if data_redundancy.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                data_redundancy = Some(d.content()?);
+                Ok(())
+            }
+            b"Type" => {
+                if type_.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                type_ = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self { data_redundancy, type_ })
+    }
+}
+
+impl SerializeContent for BucketLocationConstraint {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        self.as_str().serialize_content(s)
+    }
+}
+impl<'xml> DeserializeContent<'xml> for BucketLocationConstraint {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.text(|s| match s {
+            "EU" => Ok(Self::from_static(BucketLocationConstraint::EU)),
+            "af-south-1" => Ok(Self::from_static(BucketLocationConstraint::AF_SOUTH_1)),
+            "ap-east-1" => Ok(Self::from_static(BucketLocationConstraint::AP_EAST_1)),
+            "ap-east-2" => Ok(Self::from_static(BucketLocationConstraint::AP_EAST_2)),
+            "ap-northeast-1" => Ok(Self::from_static(BucketLocationConstraint::AP_NORTHEAST_1)),
+            "ap-northeast-2" => Ok(Self::from_static(BucketLocationConstraint::AP_NORTHEAST_2)),
+            "ap-northeast-3" => Ok(Self::from_static(BucketLocationConstraint::AP_NORTHEAST_3)),
+            "ap-south-1" => Ok(Self::from_static(BucketLocationConstraint::AP_SOUTH_1)),
+            "ap-south-2" => Ok(Self::from_static(BucketLocationConstraint::AP_SOUTH_2)),
+            "ap-southeast-1" => Ok(Self::from_static(BucketLocationConstraint::AP_SOUTHEAST_1)),
+            "ap-southeast-2" => Ok(Self::from_static(BucketLocationConstraint::AP_SOUTHEAST_2)),
+            "ap-southeast-3" => Ok(Self::from_static(BucketLocationConstraint::AP_SOUTHEAST_3)),
+            "ap-southeast-4" => Ok(Self::from_static(BucketLocationConstraint::AP_SOUTHEAST_4)),
+            "ap-southeast-5" => Ok(Self::from_static(BucketLocationConstraint::AP_SOUTHEAST_5)),
+            "ap-southeast-6" => Ok(Self::from_static(BucketLocationConstraint::AP_SOUTHEAST_6)),
+            "ap-southeast-7" => Ok(Self::from_static(BucketLocationConstraint::AP_SOUTHEAST_7)),
+            "ca-central-1" => Ok(Self::from_static(BucketLocationConstraint::CA_CENTRAL_1)),
+            "ca-west-1" => Ok(Self::from_static(BucketLocationConstraint::CA_WEST_1)),
+            "cn-north-1" => Ok(Self::from_static(BucketLocationConstraint::CN_NORTH_1)),
+            "cn-northwest-1" => Ok(Self::from_static(BucketLocationConstraint::CN_NORTHWEST_1)),
+            "eu-central-1" => Ok(Self::from_static(BucketLocationConstraint::EU_CENTRAL_1)),
+            "eu-central-2" => Ok(Self::from_static(BucketLocationConstraint::EU_CENTRAL_2)),
+            "eu-north-1" => Ok(Self::from_static(BucketLocationConstraint::EU_NORTH_1)),
+            "eu-south-1" => Ok(Self::from_static(BucketLocationConstraint::EU_SOUTH_1)),
+            "eu-south-2" => Ok(Self::from_static(BucketLocationConstraint::EU_SOUTH_2)),
+            "eu-west-1" => Ok(Self::from_static(BucketLocationConstraint::EU_WEST_1)),
+            "eu-west-2" => Ok(Self::from_static(BucketLocationConstraint::EU_WEST_2)),
+            "eu-west-3" => Ok(Self::from_static(BucketLocationConstraint::EU_WEST_3)),
+            "il-central-1" => Ok(Self::from_static(BucketLocationConstraint::IL_CENTRAL_1)),
+            "me-central-1" => Ok(Self::from_static(BucketLocationConstraint::ME_CENTRAL_1)),
+            "me-south-1" => Ok(Self::from_static(BucketLocationConstraint::ME_SOUTH_1)),
+            "mx-central-1" => Ok(Self::from_static(BucketLocationConstraint::MX_CENTRAL_1)),
+            "sa-east-1" => Ok(Self::from_static(BucketLocationConstraint::SA_EAST_1)),
+            "us-east-2" => Ok(Self::from_static(BucketLocationConstraint::US_EAST_2)),
+            "us-gov-east-1" => Ok(Self::from_static(BucketLocationConstraint::US_GOV_EAST_1)),
+            "us-gov-west-1" => Ok(Self::from_static(BucketLocationConstraint::US_GOV_WEST_1)),
+            "us-west-1" => Ok(Self::from_static(BucketLocationConstraint::US_WEST_1)),
+            "us-west-2" => Ok(Self::from_static(BucketLocationConstraint::US_WEST_2)),
+            _ => Ok(Self::from(s.to_owned())),
+        })
+    }
+}
+
+impl SerializeContent for BucketLogsPermission {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        self.as_str().serialize_content(s)
+    }
+}
+impl<'xml> DeserializeContent<'xml> for BucketLogsPermission {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.text(|s| match s {
+            "FULL_CONTROL" => Ok(Self::from_static(BucketLogsPermission::FULL_CONTROL)),
+            "READ" => Ok(Self::from_static(BucketLogsPermission::READ)),
+            "WRITE" => Ok(Self::from_static(BucketLogsPermission::WRITE)),
+            _ => Ok(Self::from(s.to_owned())),
+        })
+    }
+}
+
+impl SerializeContent for BucketType {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        self.as_str().serialize_content(s)
+    }
+}
+impl<'xml> DeserializeContent<'xml> for BucketType {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.text(|s| match s {
+            "Directory" => Ok(Self::from_static(BucketType::DIRECTORY)),
+            _ => Ok(Self::from(s.to_owned())),
+        })
+    }
+}
+
+impl SerializeContent for BucketVersioningStatus {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        self.as_str().serialize_content(s)
+    }
+}
+impl<'xml> DeserializeContent<'xml> for BucketVersioningStatus {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.text(|s| match s {
+            "Enabled" => Ok(Self::from_static(BucketVersioningStatus::ENABLED)),
+            "Suspended" => Ok(Self::from_static(BucketVersioningStatus::SUSPENDED)),
+            _ => Ok(Self::from(s.to_owned())),
+        })
+    }
+}
+
+impl SerializeContent for CORSRule {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(iter) = &self.allowed_headers {
+            s.flattened_list("AllowedHeader", iter)?;
+        }
+        {
+            let iter = &self.allowed_methods;
+            s.flattened_list("AllowedMethod", iter)?;
+        }
+        {
+            let iter = &self.allowed_origins;
+            s.flattened_list("AllowedOrigin", iter)?;
+        }
+        if let Some(iter) = &self.expose_headers {
+            s.flattened_list("ExposeHeader", iter)?;
+        }
+        if let Some(ref val) = self.id {
+            s.content("ID", val)?;
+        }
+        if let Some(ref val) = self.max_age_seconds {
+            s.content("MaxAgeSeconds", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for CORSRule {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut allowed_headers: Option<AllowedHeaders> = None;
+        let mut allowed_methods: Option<AllowedMethods> = None;
+        let mut allowed_origins: Option<AllowedOrigins> = None;
+        let mut expose_headers: Option<ExposeHeaders> = None;
+        let mut id: Option<ID> = None;
+        let mut max_age_seconds: Option<MaxAgeSeconds> = None;
+        d.for_each_element(|d, x| match x {
+            b"AllowedHeader" => {
+                let ans: AllowedHeader = d.content()?;
+                allowed_headers.get_or_insert_with(List::new).push(ans);
+                Ok(())
+            }
+            b"AllowedMethod" => {
+                let ans: AllowedMethod = d.content()?;
+                allowed_methods.get_or_insert_with(List::new).push(ans);
+                Ok(())
+            }
+            b"AllowedOrigin" => {
+                let ans: AllowedOrigin = d.content()?;
+                allowed_origins.get_or_insert_with(List::new).push(ans);
+                Ok(())
+            }
+            b"ExposeHeader" => {
+                let ans: ExposeHeader = d.content()?;
+                expose_headers.get_or_insert_with(List::new).push(ans);
+                Ok(())
+            }
+            b"ID" => {
+                if id.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                id = Some(d.content()?);
+                Ok(())
+            }
+            b"MaxAgeSeconds" => {
+                if max_age_seconds.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                max_age_seconds = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            allowed_headers,
+            allowed_methods: allowed_methods.ok_or(DeError::MissingField)?,
+            allowed_origins: allowed_origins.ok_or(DeError::MissingField)?,
+            expose_headers,
+            id,
+            max_age_seconds,
+        })
+    }
+}
+
+impl SerializeContent for CSVInput {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.allow_quoted_record_delimiter {
+            s.content("AllowQuotedRecordDelimiter", val)?;
+        }
+        if let Some(ref val) = self.comments {
+            s.content("Comments", val)?;
+        }
+        if let Some(ref val) = self.field_delimiter {
+            s.content("FieldDelimiter", val)?;
+        }
+        if let Some(ref val) = self.file_header_info {
+            s.content("FileHeaderInfo", val)?;
+        }
+        if let Some(ref val) = self.quote_character {
+            s.content("QuoteCharacter", val)?;
+        }
+        if let Some(ref val) = self.quote_escape_character {
+            s.content("QuoteEscapeCharacter", val)?;
+        }
+        if let Some(ref val) = self.record_delimiter {
+            s.content("RecordDelimiter", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for CSVInput {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut allow_quoted_record_delimiter: Option<AllowQuotedRecordDelimiter> = None;
+        let mut comments: Option<Comments> = None;
+        let mut field_delimiter: Option<FieldDelimiter> = None;
+        let mut file_header_info: Option<FileHeaderInfo> = None;
+        let mut quote_character: Option<QuoteCharacter> = None;
+        let mut quote_escape_character: Option<QuoteEscapeCharacter> = None;
+        let mut record_delimiter: Option<RecordDelimiter> = None;
+        d.for_each_element(|d, x| match x {
+            b"AllowQuotedRecordDelimiter" => {
+                if allow_quoted_record_delimiter.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                allow_quoted_record_delimiter = Some(d.content()?);
+                Ok(())
+            }
+            b"Comments" => {
+                if comments.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                comments = Some(d.content()?);
+                Ok(())
+            }
+            b"FieldDelimiter" => {
+                if field_delimiter.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                field_delimiter = Some(d.content()?);
+                Ok(())
+            }
+            b"FileHeaderInfo" => {
+                if file_header_info.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                file_header_info = Some(d.content()?);
+                Ok(())
+            }
+            b"QuoteCharacter" => {
+                if quote_character.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                quote_character = Some(d.content()?);
+                Ok(())
+            }
+            b"QuoteEscapeCharacter" => {
+                if quote_escape_character.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                quote_escape_character = Some(d.content()?);
+                Ok(())
+            }
+            b"RecordDelimiter" => {
+                if record_delimiter.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                record_delimiter = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            allow_quoted_record_delimiter,
+            comments,
+            field_delimiter,
+            file_header_info,
+            quote_character,
+            quote_escape_character,
+            record_delimiter,
+        })
+    }
+}
+
+impl SerializeContent for CSVOutput {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.field_delimiter {
+            s.content("FieldDelimiter", val)?;
+        }
+        if let Some(ref val) = self.quote_character {
+            s.content("QuoteCharacter", val)?;
+        }
+        if let Some(ref val) = self.quote_escape_character {
+            s.content("QuoteEscapeCharacter", val)?;
+        }
+        if let Some(ref val) = self.quote_fields {
+            s.content("QuoteFields", val)?;
+        }
+        if let Some(ref val) = self.record_delimiter {
+            s.content("RecordDelimiter", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for CSVOutput {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut field_delimiter: Option<FieldDelimiter> = None;
+        let mut quote_character: Option<QuoteCharacter> = None;
+        let mut quote_escape_character: Option<QuoteEscapeCharacter> = None;
+        let mut quote_fields: Option<QuoteFields> = None;
+        let mut record_delimiter: Option<RecordDelimiter> = None;
+        d.for_each_element(|d, x| match x {
+            b"FieldDelimiter" => {
+                if field_delimiter.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                field_delimiter = Some(d.content()?);
+                Ok(())
+            }
+            b"QuoteCharacter" => {
+                if quote_character.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                quote_character = Some(d.content()?);
+                Ok(())
+            }
+            b"QuoteEscapeCharacter" => {
+                if quote_escape_character.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                quote_escape_character = Some(d.content()?);
+                Ok(())
+            }
+            b"QuoteFields" => {
+                if quote_fields.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                quote_fields = Some(d.content()?);
+                Ok(())
+            }
+            b"RecordDelimiter" => {
+                if record_delimiter.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                record_delimiter = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            field_delimiter,
+            quote_character,
+            quote_escape_character,
+            quote_fields,
+            record_delimiter,
+        })
+    }
+}
+
+impl SerializeContent for Checksum {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.checksum_crc32 {
+            s.content("ChecksumCRC32", val)?;
+        }
+        if let Some(ref val) = self.checksum_crc32c {
+            s.content("ChecksumCRC32C", val)?;
+        }
+        if let Some(ref val) = self.checksum_crc64nvme {
+            s.content("ChecksumCRC64NVME", val)?;
+        }
+        if let Some(ref val) = self.checksum_md5 {
+            s.content("ChecksumMD5", val)?;
+        }
+        if let Some(ref val) = self.checksum_sha1 {
+            s.content("ChecksumSHA1", val)?;
+        }
+        if let Some(ref val) = self.checksum_sha256 {
+            s.content("ChecksumSHA256", val)?;
+        }
+        if let Some(ref val) = self.checksum_sha512 {
+            s.content("ChecksumSHA512", val)?;
+        }
+        if let Some(ref val) = self.checksum_type {
+            s.content("ChecksumType", val)?;
+        }
+        if let Some(ref val) = self.checksum_xxhash128 {
+            s.content("ChecksumXXHASH128", val)?;
+        }
+        if let Some(ref val) = self.checksum_xxhash3 {
+            s.content("ChecksumXXHASH3", val)?;
+        }
+        if let Some(ref val) = self.checksum_xxhash64 {
+            s.content("ChecksumXXHASH64", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for Checksum {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut checksum_crc32: Option<ChecksumCRC32> = None;
+        let mut checksum_crc32c: Option<ChecksumCRC32C> = None;
+        let mut checksum_crc64nvme: Option<ChecksumCRC64NVME> = None;
+        let mut checksum_md5: Option<ChecksumMD5> = None;
+        let mut checksum_sha1: Option<ChecksumSHA1> = None;
+        let mut checksum_sha256: Option<ChecksumSHA256> = None;
+        let mut checksum_sha512: Option<ChecksumSHA512> = None;
+        let mut checksum_type: Option<ChecksumType> = None;
+        let mut checksum_xxhash128: Option<ChecksumXXHASH128> = None;
+        let mut checksum_xxhash3: Option<ChecksumXXHASH3> = None;
+        let mut checksum_xxhash64: Option<ChecksumXXHASH64> = None;
+        d.for_each_element(|d, x| match x {
+            b"ChecksumCRC32" => {
+                if checksum_crc32.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_crc32 = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumCRC32C" => {
+                if checksum_crc32c.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_crc32c = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumCRC64NVME" => {
+                if checksum_crc64nvme.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_crc64nvme = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumMD5" => {
+                if checksum_md5.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_md5 = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumSHA1" => {
+                if checksum_sha1.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_sha1 = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumSHA256" => {
+                if checksum_sha256.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_sha256 = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumSHA512" => {
+                if checksum_sha512.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_sha512 = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumType" => {
+                if checksum_type.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_type = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumXXHASH128" => {
+                if checksum_xxhash128.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_xxhash128 = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumXXHASH3" => {
+                if checksum_xxhash3.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_xxhash3 = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumXXHASH64" => {
+                if checksum_xxhash64.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_xxhash64 = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            checksum_crc32,
+            checksum_crc32c,
+            checksum_crc64nvme,
+            checksum_md5,
+            checksum_sha1,
+            checksum_sha256,
+            checksum_sha512,
+            checksum_type,
+            checksum_xxhash128,
+            checksum_xxhash3,
+            checksum_xxhash64,
+        })
+    }
+}
+
+impl SerializeContent for ChecksumAlgorithm {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        self.as_str().serialize_content(s)
+    }
+}
+impl<'xml> DeserializeContent<'xml> for ChecksumAlgorithm {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.text(|s| match s {
+            "CRC32" => Ok(Self::from_static(ChecksumAlgorithm::CRC32)),
+            "CRC32C" => Ok(Self::from_static(ChecksumAlgorithm::CRC32C)),
+            "CRC64NVME" => Ok(Self::from_static(ChecksumAlgorithm::CRC64NVME)),
+            "MD5" => Ok(Self::from_static(ChecksumAlgorithm::MD5)),
+            "SHA1" => Ok(Self::from_static(ChecksumAlgorithm::SHA1)),
+            "SHA256" => Ok(Self::from_static(ChecksumAlgorithm::SHA256)),
+            "SHA512" => Ok(Self::from_static(ChecksumAlgorithm::SHA512)),
+            "XXHASH128" => Ok(Self::from_static(ChecksumAlgorithm::XXHASH128)),
+            "XXHASH3" => Ok(Self::from_static(ChecksumAlgorithm::XXHASH3)),
+            "XXHASH64" => Ok(Self::from_static(ChecksumAlgorithm::XXHASH64)),
+            _ => Ok(Self::from(s.to_owned())),
+        })
+    }
+}
+
+impl SerializeContent for ChecksumType {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        self.as_str().serialize_content(s)
+    }
+}
+impl<'xml> DeserializeContent<'xml> for ChecksumType {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.text(|s| match s {
+            "COMPOSITE" => Ok(Self::from_static(ChecksumType::COMPOSITE)),
+            "FULL_OBJECT" => Ok(Self::from_static(ChecksumType::FULL_OBJECT)),
+            _ => Ok(Self::from(s.to_owned())),
+        })
+    }
+}
+
+impl SerializeContent for CommonPrefix {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.prefix {
+            s.content("Prefix", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for CommonPrefix {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut prefix: Option<Prefix> = None;
+        d.for_each_element(|d, x| match x {
+            b"Prefix" => {
+                if prefix.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                prefix = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self { prefix })
+    }
+}
+
+impl SerializeContent for CompletedPart {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.checksum_crc32 {
+            s.content("ChecksumCRC32", val)?;
+        }
+        if let Some(ref val) = self.checksum_crc32c {
+            s.content("ChecksumCRC32C", val)?;
+        }
+        if let Some(ref val) = self.checksum_crc64nvme {
+            s.content("ChecksumCRC64NVME", val)?;
+        }
+        if let Some(ref val) = self.checksum_md5 {
+            s.content("ChecksumMD5", val)?;
+        }
+        if let Some(ref val) = self.checksum_sha1 {
+            s.content("ChecksumSHA1", val)?;
+        }
+        if let Some(ref val) = self.checksum_sha256 {
+            s.content("ChecksumSHA256", val)?;
+        }
+        if let Some(ref val) = self.checksum_sha512 {
+            s.content("ChecksumSHA512", val)?;
+        }
+        if let Some(ref val) = self.checksum_xxhash128 {
+            s.content("ChecksumXXHASH128", val)?;
+        }
+        if let Some(ref val) = self.checksum_xxhash3 {
+            s.content("ChecksumXXHASH3", val)?;
+        }
+        if let Some(ref val) = self.checksum_xxhash64 {
+            s.content("ChecksumXXHASH64", val)?;
+        }
+        if let Some(ref val) = self.e_tag {
+            s.content("ETag", val)?;
+        }
+        if let Some(ref val) = self.part_number {
+            s.content("PartNumber", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for CompletedPart {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut checksum_crc32: Option<ChecksumCRC32> = None;
+        let mut checksum_crc32c: Option<ChecksumCRC32C> = None;
+        let mut checksum_crc64nvme: Option<ChecksumCRC64NVME> = None;
+        let mut checksum_md5: Option<ChecksumMD5> = None;
+        let mut checksum_sha1: Option<ChecksumSHA1> = None;
+        let mut checksum_sha256: Option<ChecksumSHA256> = None;
+        let mut checksum_sha512: Option<ChecksumSHA512> = None;
+        let mut checksum_xxhash128: Option<ChecksumXXHASH128> = None;
+        let mut checksum_xxhash3: Option<ChecksumXXHASH3> = None;
+        let mut checksum_xxhash64: Option<ChecksumXXHASH64> = None;
+        let mut e_tag: Option<ETag> = None;
+        let mut part_number: Option<PartNumber> = None;
+        d.for_each_element(|d, x| match x {
+            b"ChecksumCRC32" => {
+                if checksum_crc32.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_crc32 = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumCRC32C" => {
+                if checksum_crc32c.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_crc32c = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumCRC64NVME" => {
+                if checksum_crc64nvme.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_crc64nvme = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumMD5" => {
+                if checksum_md5.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_md5 = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumSHA1" => {
+                if checksum_sha1.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_sha1 = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumSHA256" => {
+                if checksum_sha256.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_sha256 = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumSHA512" => {
+                if checksum_sha512.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_sha512 = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumXXHASH128" => {
+                if checksum_xxhash128.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_xxhash128 = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumXXHASH3" => {
+                if checksum_xxhash3.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_xxhash3 = Some(d.content()?);
+                Ok(())
+            }
+            b"ChecksumXXHASH64" => {
+                if checksum_xxhash64.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_xxhash64 = Some(d.content()?);
+                Ok(())
+            }
+            b"ETag" => {
+                if e_tag.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                e_tag = Some(d.content()?);
+                Ok(())
+            }
+            b"PartNumber" => {
+                if part_number.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                part_number = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            checksum_crc32,
+            checksum_crc32c,
+            checksum_crc64nvme,
+            checksum_md5,
+            checksum_sha1,
+            checksum_sha256,
+            checksum_sha512,
+            checksum_xxhash128,
+            checksum_xxhash3,
+            checksum_xxhash64,
+            e_tag,
+            part_number,
+        })
+    }
+}
+
+impl SerializeContent for CompressionType {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        self.as_str().serialize_content(s)
+    }
+}
+impl<'xml> DeserializeContent<'xml> for CompressionType {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.text(|s| match s {
+            "BZIP2" => Ok(Self::from_static(CompressionType::BZIP2)),
+            "GZIP" => Ok(Self::from_static(CompressionType::GZIP)),
+            "NONE" => Ok(Self::from_static(CompressionType::NONE)),
+            _ => Ok(Self::from(s.to_owned())),
+        })
+    }
+}
+
+impl SerializeContent for Condition {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.http_error_code_returned_equals {
+            s.content("HttpErrorCodeReturnedEquals", val)?;
+        }
+        if let Some(ref val) = self.key_prefix_equals {
+            s.content("KeyPrefixEquals", val)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for Condition {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut http_error_code_returned_equals: Option<HttpErrorCodeReturnedEquals> = None;
+        let mut key_prefix_equals: Option<KeyPrefixEquals> = None;
+        d.for_each_element(|d, x| match x {
+            b"HttpErrorCodeReturnedEquals" => {
+                if http_error_code_returned_equals.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                http_error_code_returned_equals = Some(d.content()?);
+                Ok(())
+            }
+            b"KeyPrefixEquals" => {
+                if key_prefix_equals.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                key_prefix_equals = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            http_error_code_returned_equals,
+            key_prefix_equals,
+        })
     }
 }
 
@@ -3766,6 +6332,7 @@ impl<'xml> DeserializeContent<'xml> for Credentials {
         })
     }
 }
+
 impl SerializeContent for DataRedundancy {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -3780,6 +6347,7 @@ impl<'xml> DeserializeContent<'xml> for DataRedundancy {
         })
     }
 }
+
 impl SerializeContent for DefaultRetention {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.days {
@@ -3827,47 +6395,35 @@ impl<'xml> DeserializeContent<'xml> for DefaultRetention {
         Ok(Self { days, mode, years })
     }
 }
-impl SerializeContent for Delete {
+
+#[cfg(feature = "minio")]
+impl SerializeContent for DelMarkerExpiration {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        {
-            let iter = &self.objects;
-            s.flattened_list("Object", iter)?;
-        }
-        if let Some(ref val) = self.quiet {
-            s.content("Quiet", val)?;
+        if let Some(ref val) = self.days {
+            s.content("Days", val)?;
         }
         Ok(())
     }
 }
 
-impl<'xml> DeserializeContent<'xml> for Delete {
+#[cfg(feature = "minio")]
+impl<'xml> DeserializeContent<'xml> for DelMarkerExpiration {
     fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut objects: Option<ObjectIdentifierList> = None;
-        let mut quiet: Option<Quiet> = None;
+        let mut days: Option<Days> = None;
         d.for_each_element(|d, x| match x {
-            b"Object" => {
-                let ans: ObjectIdentifier = d.content()?;
-                objects.get_or_insert_with(List::new).push(ans);
-                Ok(())
-            }
-            b"Quiet" => {
-                if quiet.is_some() {
+            b"Days" => {
+                if days.is_some() {
                     return Err(DeError::DuplicateField);
                 }
-                quiet = Some(d.content()?);
+                days = Some(d.content()?);
                 Ok(())
             }
-            _ => {
-                d.skip_element_content()?;
-                Ok(())
-            }
+            _ => Err(DeError::UnexpectedTagName),
         })?;
-        Ok(Self {
-            objects: objects.ok_or(DeError::MissingField)?,
-            quiet,
-        })
+        Ok(Self { days })
     }
 }
+
 impl SerializeContent for DeleteMarkerEntry {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.is_latest {
@@ -3943,6 +6499,7 @@ impl<'xml> DeserializeContent<'xml> for DeleteMarkerEntry {
         })
     }
 }
+
 impl SerializeContent for DeleteMarkerReplication {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.status {
@@ -3968,6 +6525,7 @@ impl<'xml> DeserializeContent<'xml> for DeleteMarkerReplication {
         Ok(Self { status })
     }
 }
+
 impl SerializeContent for DeleteMarkerReplicationStatus {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -3982,15 +6540,49 @@ impl<'xml> DeserializeContent<'xml> for DeleteMarkerReplicationStatus {
         })
     }
 }
-impl SerializeContent for DeleteObjectsOutput {
+
+#[cfg(feature = "minio")]
+impl SerializeContent for DeleteReplication {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(iter) = &self.deleted {
-            s.flattened_list("Deleted", iter)?;
-        }
-        if let Some(iter) = &self.errors {
-            s.flattened_list("Error", iter)?;
-        }
+        s.content("Status", &self.status)?;
         Ok(())
+    }
+}
+
+#[cfg(feature = "minio")]
+impl<'xml> DeserializeContent<'xml> for DeleteReplication {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut status: Option<DeleteReplicationStatus> = None;
+        d.for_each_element(|d, x| match x {
+            b"Status" => {
+                if status.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                status = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            status: status.ok_or(DeError::MissingField)?,
+        })
+    }
+}
+
+#[cfg(feature = "minio")]
+impl SerializeContent for DeleteReplicationStatus {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        self.as_str().serialize_content(s)
+    }
+}
+#[cfg(feature = "minio")]
+impl<'xml> DeserializeContent<'xml> for DeleteReplicationStatus {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.text(|s| match s {
+            "Disabled" => Ok(Self::from_static(DeleteReplicationStatus::DISABLED)),
+            "Enabled" => Ok(Self::from_static(DeleteReplicationStatus::ENABLED)),
+            _ => Ok(Self::from(s.to_owned())),
+        })
     }
 }
 
@@ -4057,6 +6649,7 @@ impl<'xml> DeserializeContent<'xml> for DeletedObject {
         })
     }
 }
+
 impl SerializeContent for Destination {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.access_control_translation {
@@ -4154,6 +6747,7 @@ impl<'xml> DeserializeContent<'xml> for Destination {
         })
     }
 }
+
 impl SerializeContent for DestinationResult {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.table_bucket_arn {
@@ -4205,6 +6799,7 @@ impl<'xml> DeserializeContent<'xml> for DestinationResult {
         })
     }
 }
+
 impl SerializeContent for EncodingType {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -4218,6 +6813,7 @@ impl<'xml> DeserializeContent<'xml> for EncodingType {
         })
     }
 }
+
 impl SerializeContent for Encryption {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         s.content("EncryptionType", &self.encryption_type)?;
@@ -4267,6 +6863,7 @@ impl<'xml> DeserializeContent<'xml> for Encryption {
         })
     }
 }
+
 impl SerializeContent for EncryptionConfiguration {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.replica_kms_key_id {
@@ -4292,6 +6889,22 @@ impl<'xml> DeserializeContent<'xml> for EncryptionConfiguration {
         Ok(Self { replica_kms_key_id })
     }
 }
+
+impl SerializeContent for EncryptionType {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        self.as_str().serialize_content(s)
+    }
+}
+impl<'xml> DeserializeContent<'xml> for EncryptionType {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.text(|s| match s {
+            "NONE" => Ok(Self::from_static(EncryptionType::NONE)),
+            "SSE-C" => Ok(Self::from_static(EncryptionType::SSE_C)),
+            _ => Ok(Self::from(s.to_owned())),
+        })
+    }
+}
+
 impl SerializeContent for Error {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.code {
@@ -4355,6 +6968,7 @@ impl<'xml> DeserializeContent<'xml> for Error {
         })
     }
 }
+
 impl SerializeContent for ErrorDetails {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.error_code {
@@ -4394,6 +7008,7 @@ impl<'xml> DeserializeContent<'xml> for ErrorDetails {
         })
     }
 }
+
 impl SerializeContent for ErrorDocument {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         s.content("Key", &self.key)?;
@@ -4419,6 +7034,7 @@ impl<'xml> DeserializeContent<'xml> for ErrorDocument {
         })
     }
 }
+
 impl SerializeContent for EventBridgeConfiguration {
     fn serialize_content<W: Write>(&self, _: &mut Serializer<W>) -> SerResult {
         Ok(())
@@ -4430,6 +7046,35 @@ impl<'xml> DeserializeContent<'xml> for EventBridgeConfiguration {
         Ok(Self {})
     }
 }
+
+#[cfg(feature = "minio")]
+impl SerializeContent for ExcludedPrefix {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.prefix {
+            s.content("Prefix", val)?;
+        }
+        Ok(())
+    }
+}
+
+#[cfg(feature = "minio")]
+impl<'xml> DeserializeContent<'xml> for ExcludedPrefix {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut prefix: Option<Prefix> = None;
+        d.for_each_element(|d, x| match x {
+            b"Prefix" => {
+                if prefix.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                prefix = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self { prefix })
+    }
+}
+
 impl SerializeContent for ExistingObjectReplication {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         s.content("Status", &self.status)?;
@@ -4455,6 +7100,7 @@ impl<'xml> DeserializeContent<'xml> for ExistingObjectReplication {
         })
     }
 }
+
 impl SerializeContent for ExistingObjectReplicationStatus {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -4469,6 +7115,7 @@ impl<'xml> DeserializeContent<'xml> for ExistingObjectReplicationStatus {
         })
     }
 }
+
 impl SerializeContent for ExpirationState {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -4483,6 +7130,7 @@ impl<'xml> DeserializeContent<'xml> for ExpirationState {
         })
     }
 }
+
 impl SerializeContent for ExpirationStatus {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -4497,6 +7145,7 @@ impl<'xml> DeserializeContent<'xml> for ExpirationStatus {
         })
     }
 }
+
 impl SerializeContent for ExpressionType {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -4510,6 +7159,7 @@ impl<'xml> DeserializeContent<'xml> for ExpressionType {
         })
     }
 }
+
 impl SerializeContent for FileHeaderInfo {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -4525,6 +7175,7 @@ impl<'xml> DeserializeContent<'xml> for FileHeaderInfo {
         })
     }
 }
+
 impl SerializeContent for FilterRule {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.name {
@@ -4561,6 +7212,7 @@ impl<'xml> DeserializeContent<'xml> for FilterRule {
         Ok(Self { name, value })
     }
 }
+
 impl SerializeContent for FilterRuleName {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -4573,82 +7225,6 @@ impl<'xml> DeserializeContent<'xml> for FilterRuleName {
             "suffix" => Ok(Self::from_static(FilterRuleName::SUFFIX)),
             _ => Ok(Self::from(s.to_owned())),
         })
-    }
-}
-impl SerializeContent for GetBucketAccelerateConfigurationOutput {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.status {
-            s.content("Status", val)?;
-        }
-        Ok(())
-    }
-}
-
-impl SerializeContent for GetBucketAclOutput {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(iter) = &self.grants {
-            s.list("AccessControlList", "Grant", iter)?;
-        }
-        if let Some(ref val) = self.owner {
-            s.content("Owner", val)?;
-        }
-        Ok(())
-    }
-}
-
-impl<'xml> DeserializeContent<'xml> for GetBucketAclOutput {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut grants: Option<Grants> = None;
-        let mut owner: Option<Owner> = None;
-        d.for_each_element(|d, x| match x {
-            b"AccessControlList" => {
-                if grants.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                grants = Some(d.list_content("Grant")?);
-                Ok(())
-            }
-            b"Owner" => {
-                if owner.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                owner = Some(d.content()?);
-                Ok(())
-            }
-            _ => Err(DeError::UnexpectedTagName),
-        })?;
-        Ok(Self { grants, owner })
-    }
-}
-impl SerializeContent for GetBucketCorsOutput {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(iter) = &self.cors_rules {
-            s.flattened_list("CORSRule", iter)?;
-        }
-        Ok(())
-    }
-}
-
-impl<'xml> DeserializeContent<'xml> for GetBucketCorsOutput {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut cors_rules: Option<CORSRules> = None;
-        d.for_each_element(|d, x| match x {
-            b"CORSRule" => {
-                let ans: CORSRule = d.content()?;
-                cors_rules.get_or_insert_with(List::new).push(ans);
-                Ok(())
-            }
-            _ => Err(DeError::UnexpectedTagName),
-        })?;
-        Ok(Self { cors_rules })
-    }
-}
-impl SerializeContent for GetBucketLifecycleConfigurationOutput {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(iter) = &self.rules {
-            s.flattened_list("Rule", iter)?;
-        }
-        Ok(())
     }
 }
 
@@ -4675,344 +7251,6 @@ impl<'xml> DeserializeContent<'xml> for GetBucketLocationOutput {
             _ => Err(DeError::UnexpectedTagName),
         })?;
         Ok(Self { location_constraint })
-    }
-}
-impl SerializeContent for GetBucketLoggingOutput {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.logging_enabled {
-            s.content("LoggingEnabled", val)?;
-        }
-        Ok(())
-    }
-}
-
-impl<'xml> DeserializeContent<'xml> for GetBucketLoggingOutput {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut logging_enabled: Option<LoggingEnabled> = None;
-        d.for_each_element(|d, x| match x {
-            b"LoggingEnabled" => {
-                if logging_enabled.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                logging_enabled = Some(d.content()?);
-                Ok(())
-            }
-            _ => Err(DeError::UnexpectedTagName),
-        })?;
-        Ok(Self { logging_enabled })
-    }
-}
-impl SerializeContent for GetBucketMetadataConfigurationResult {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("MetadataConfigurationResult", &self.metadata_configuration_result)?;
-        Ok(())
-    }
-}
-
-impl<'xml> DeserializeContent<'xml> for GetBucketMetadataConfigurationResult {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut metadata_configuration_result: Option<MetadataConfigurationResult> = None;
-        d.for_each_element(|d, x| match x {
-            b"MetadataConfigurationResult" => {
-                if metadata_configuration_result.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                metadata_configuration_result = Some(d.content()?);
-                Ok(())
-            }
-            _ => Err(DeError::UnexpectedTagName),
-        })?;
-        Ok(Self {
-            metadata_configuration_result: metadata_configuration_result.ok_or(DeError::MissingField)?,
-        })
-    }
-}
-impl SerializeContent for GetBucketMetadataTableConfigurationResult {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.error {
-            s.content("Error", val)?;
-        }
-        s.content("MetadataTableConfigurationResult", &self.metadata_table_configuration_result)?;
-        s.content("Status", &self.status)?;
-        Ok(())
-    }
-}
-
-impl<'xml> DeserializeContent<'xml> for GetBucketMetadataTableConfigurationResult {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut error: Option<ErrorDetails> = None;
-        let mut metadata_table_configuration_result: Option<MetadataTableConfigurationResult> = None;
-        let mut status: Option<MetadataTableStatus> = None;
-        d.for_each_element(|d, x| match x {
-            b"Error" => {
-                if error.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                error = Some(d.content()?);
-                Ok(())
-            }
-            b"MetadataTableConfigurationResult" => {
-                if metadata_table_configuration_result.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                metadata_table_configuration_result = Some(d.content()?);
-                Ok(())
-            }
-            b"Status" => {
-                if status.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                status = Some(d.content()?);
-                Ok(())
-            }
-            _ => Err(DeError::UnexpectedTagName),
-        })?;
-        Ok(Self {
-            error,
-            metadata_table_configuration_result: metadata_table_configuration_result.ok_or(DeError::MissingField)?,
-            status: status.ok_or(DeError::MissingField)?,
-        })
-    }
-}
-impl SerializeContent for GetBucketNotificationConfigurationOutput {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.event_bridge_configuration {
-            s.content("EventBridgeConfiguration", val)?;
-        }
-        if let Some(iter) = &self.lambda_function_configurations {
-            s.flattened_list("CloudFunctionConfiguration", iter)?;
-        }
-        if let Some(iter) = &self.queue_configurations {
-            s.flattened_list("QueueConfiguration", iter)?;
-        }
-        if let Some(iter) = &self.topic_configurations {
-            s.flattened_list("TopicConfiguration", iter)?;
-        }
-        Ok(())
-    }
-}
-
-impl<'xml> DeserializeContent<'xml> for GetBucketNotificationConfigurationOutput {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut event_bridge_configuration: Option<EventBridgeConfiguration> = None;
-        let mut lambda_function_configurations: Option<LambdaFunctionConfigurationList> = None;
-        let mut queue_configurations: Option<QueueConfigurationList> = None;
-        let mut topic_configurations: Option<TopicConfigurationList> = None;
-        d.for_each_element(|d, x| match x {
-            b"EventBridgeConfiguration" => {
-                if event_bridge_configuration.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                event_bridge_configuration = Some(d.content()?);
-                Ok(())
-            }
-            b"CloudFunctionConfiguration" => {
-                let ans: LambdaFunctionConfiguration = d.content()?;
-                lambda_function_configurations.get_or_insert_with(List::new).push(ans);
-                Ok(())
-            }
-            b"QueueConfiguration" => {
-                let ans: QueueConfiguration = d.content()?;
-                queue_configurations.get_or_insert_with(List::new).push(ans);
-                Ok(())
-            }
-            b"TopicConfiguration" => {
-                let ans: TopicConfiguration = d.content()?;
-                topic_configurations.get_or_insert_with(List::new).push(ans);
-                Ok(())
-            }
-            _ => Err(DeError::UnexpectedTagName),
-        })?;
-        Ok(Self {
-            event_bridge_configuration,
-            lambda_function_configurations,
-            queue_configurations,
-            topic_configurations,
-        })
-    }
-}
-impl SerializeContent for GetBucketRequestPaymentOutput {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.payer {
-            s.content("Payer", val)?;
-        }
-        Ok(())
-    }
-}
-
-impl<'xml> DeserializeContent<'xml> for GetBucketRequestPaymentOutput {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut payer: Option<Payer> = None;
-        d.for_each_element(|d, x| match x {
-            b"Payer" => {
-                if payer.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                payer = Some(d.content()?);
-                Ok(())
-            }
-            _ => Err(DeError::UnexpectedTagName),
-        })?;
-        Ok(Self { payer })
-    }
-}
-impl SerializeContent for GetBucketTaggingOutput {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        {
-            let iter = &self.tag_set;
-            s.list("TagSet", "Tag", iter)?;
-        }
-        Ok(())
-    }
-}
-
-impl<'xml> DeserializeContent<'xml> for GetBucketTaggingOutput {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut tag_set: Option<TagSet> = None;
-        d.for_each_element(|d, x| match x {
-            b"TagSet" => {
-                if tag_set.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                tag_set = Some(d.list_content("Tag")?);
-                Ok(())
-            }
-            _ => Err(DeError::UnexpectedTagName),
-        })?;
-        Ok(Self {
-            tag_set: tag_set.ok_or(DeError::MissingField)?,
-        })
-    }
-}
-impl SerializeContent for GetBucketVersioningOutput {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.mfa_delete {
-            s.content("MfaDelete", val)?;
-        }
-        if let Some(ref val) = self.status {
-            s.content("Status", val)?;
-        }
-        Ok(())
-    }
-}
-
-impl<'xml> DeserializeContent<'xml> for GetBucketVersioningOutput {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut mfa_delete: Option<MFADeleteStatus> = None;
-        let mut status: Option<BucketVersioningStatus> = None;
-        d.for_each_element(|d, x| match x {
-            b"MfaDelete" => {
-                if mfa_delete.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                mfa_delete = Some(d.content()?);
-                Ok(())
-            }
-            b"Status" => {
-                if status.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                status = Some(d.content()?);
-                Ok(())
-            }
-            _ => Err(DeError::UnexpectedTagName),
-        })?;
-        Ok(Self { mfa_delete, status })
-    }
-}
-impl SerializeContent for GetBucketWebsiteOutput {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.error_document {
-            s.content("ErrorDocument", val)?;
-        }
-        if let Some(ref val) = self.index_document {
-            s.content("IndexDocument", val)?;
-        }
-        if let Some(ref val) = self.redirect_all_requests_to {
-            s.content("RedirectAllRequestsTo", val)?;
-        }
-        if let Some(iter) = &self.routing_rules {
-            s.list("RoutingRules", "RoutingRule", iter)?;
-        }
-        Ok(())
-    }
-}
-
-impl<'xml> DeserializeContent<'xml> for GetBucketWebsiteOutput {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut error_document: Option<ErrorDocument> = None;
-        let mut index_document: Option<IndexDocument> = None;
-        let mut redirect_all_requests_to: Option<RedirectAllRequestsTo> = None;
-        let mut routing_rules: Option<RoutingRules> = None;
-        d.for_each_element(|d, x| match x {
-            b"ErrorDocument" => {
-                if error_document.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                error_document = Some(d.content()?);
-                Ok(())
-            }
-            b"IndexDocument" => {
-                if index_document.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                index_document = Some(d.content()?);
-                Ok(())
-            }
-            b"RedirectAllRequestsTo" => {
-                if redirect_all_requests_to.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                redirect_all_requests_to = Some(d.content()?);
-                Ok(())
-            }
-            b"RoutingRules" => {
-                if routing_rules.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                routing_rules = Some(d.list_content("RoutingRule")?);
-                Ok(())
-            }
-            _ => Err(DeError::UnexpectedTagName),
-        })?;
-        Ok(Self {
-            error_document,
-            index_document,
-            redirect_all_requests_to,
-            routing_rules,
-        })
-    }
-}
-impl SerializeContent for GetObjectAclOutput {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(iter) = &self.grants {
-            s.list("AccessControlList", "Grant", iter)?;
-        }
-        if let Some(ref val) = self.owner {
-            s.content("Owner", val)?;
-        }
-        Ok(())
-    }
-}
-
-impl SerializeContent for GetObjectAttributesOutput {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.checksum {
-            s.content("Checksum", val)?;
-        }
-        if let Some(ref val) = self.e_tag {
-            s.content("ETag", val.value())?;
-        }
-        if let Some(ref val) = self.object_parts {
-            s.content("ObjectParts", val)?;
-        }
-        if let Some(ref val) = self.object_size {
-            s.content("ObjectSize", val)?;
-        }
-        if let Some(ref val) = self.storage_class {
-            s.content("StorageClass", val)?;
-        }
-        Ok(())
     }
 }
 
@@ -5101,15 +7339,6 @@ impl<'xml> DeserializeContent<'xml> for GetObjectAttributesParts {
         })
     }
 }
-impl SerializeContent for GetObjectTaggingOutput {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        {
-            let iter = &self.tag_set;
-            s.list("TagSet", "Tag", iter)?;
-        }
-        Ok(())
-    }
-}
 
 impl SerializeContent for GlacierJobParameters {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
@@ -5136,6 +7365,7 @@ impl<'xml> DeserializeContent<'xml> for GlacierJobParameters {
         })
     }
 }
+
 impl SerializeContent for Grant {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.grantee {
@@ -5229,6 +7459,7 @@ impl<'xml> DeserializeContent<'xml> for Grant {
         Ok(Self { grantee, permission })
     }
 }
+
 impl SerializeContent for Grantee {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.display_name {
@@ -5272,6 +7503,7 @@ impl<'xml> DeserializeContent<'xml> for IndexDocument {
         })
     }
 }
+
 impl SerializeContent for Initiator {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.display_name {
@@ -5308,6 +7540,7 @@ impl<'xml> DeserializeContent<'xml> for Initiator {
         Ok(Self { display_name, id })
     }
 }
+
 impl SerializeContent for InputSerialization {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.csv {
@@ -5371,6 +7604,7 @@ impl<'xml> DeserializeContent<'xml> for InputSerialization {
         })
     }
 }
+
 impl SerializeContent for IntelligentTieringAccessTier {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -5385,6 +7619,7 @@ impl<'xml> DeserializeContent<'xml> for IntelligentTieringAccessTier {
         })
     }
 }
+
 impl SerializeContent for IntelligentTieringAndOperator {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.prefix {
@@ -5419,67 +7654,7 @@ impl<'xml> DeserializeContent<'xml> for IntelligentTieringAndOperator {
         Ok(Self { prefix, tags })
     }
 }
-impl SerializeContent for IntelligentTieringConfiguration {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.filter {
-            s.content("Filter", val)?;
-        }
-        s.content("Id", &self.id)?;
-        s.content("Status", &self.status)?;
-        {
-            let iter = &self.tierings;
-            s.flattened_list("Tiering", iter)?;
-        }
-        Ok(())
-    }
-}
 
-impl<'xml> DeserializeContent<'xml> for IntelligentTieringConfiguration {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut filter: Option<IntelligentTieringFilter> = None;
-        let mut id: Option<IntelligentTieringId> = None;
-        let mut status: Option<IntelligentTieringStatus> = None;
-        let mut tierings: Option<TieringList> = None;
-        d.for_each_element(|d, x| match x {
-            b"Filter" => {
-                if filter.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                filter = Some(d.content()?);
-                Ok(())
-            }
-            b"Id" => {
-                if id.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                id = Some(d.content()?);
-                Ok(())
-            }
-            b"Status" => {
-                if status.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                status = Some(d.content()?);
-                Ok(())
-            }
-            b"Tiering" => {
-                let ans: Tiering = d.content()?;
-                tierings.get_or_insert_with(List::new).push(ans);
-                Ok(())
-            }
-            _ => {
-                d.skip_element_content()?;
-                Ok(())
-            }
-        })?;
-        Ok(Self {
-            filter,
-            id: id.ok_or(DeError::MissingField)?,
-            status: status.ok_or(DeError::MissingField)?,
-            tierings: tierings.ok_or(DeError::MissingField)?,
-        })
-    }
-}
 impl SerializeContent for IntelligentTieringFilter {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.and {
@@ -5527,6 +7702,7 @@ impl<'xml> DeserializeContent<'xml> for IntelligentTieringFilter {
         Ok(Self { and, prefix, tag })
     }
 }
+
 impl SerializeContent for IntelligentTieringStatus {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -5541,98 +7717,7 @@ impl<'xml> DeserializeContent<'xml> for IntelligentTieringStatus {
         })
     }
 }
-impl SerializeContent for InventoryConfiguration {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("Destination", &self.destination)?;
-        if let Some(ref val) = self.filter {
-            s.content("Filter", val)?;
-        }
-        s.content("Id", &self.id)?;
-        s.content("IncludedObjectVersions", &self.included_object_versions)?;
-        s.content("IsEnabled", &self.is_enabled)?;
-        if let Some(iter) = &self.optional_fields {
-            s.list("OptionalFields", "Field", iter)?;
-        }
-        s.content("Schedule", &self.schedule)?;
-        Ok(())
-    }
-}
 
-impl<'xml> DeserializeContent<'xml> for InventoryConfiguration {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut destination: Option<InventoryDestination> = None;
-        let mut filter: Option<InventoryFilter> = None;
-        let mut id: Option<InventoryId> = None;
-        let mut included_object_versions: Option<InventoryIncludedObjectVersions> = None;
-        let mut is_enabled: Option<IsEnabled> = None;
-        let mut optional_fields: Option<InventoryOptionalFields> = None;
-        let mut schedule: Option<InventorySchedule> = None;
-        d.for_each_element(|d, x| match x {
-            b"Destination" => {
-                if destination.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                destination = Some(d.content()?);
-                Ok(())
-            }
-            b"Filter" => {
-                if filter.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                filter = Some(d.content()?);
-                Ok(())
-            }
-            b"Id" => {
-                if id.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                id = Some(d.content()?);
-                Ok(())
-            }
-            b"IncludedObjectVersions" => {
-                if included_object_versions.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                included_object_versions = Some(d.content()?);
-                Ok(())
-            }
-            b"IsEnabled" => {
-                if is_enabled.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                is_enabled = Some(d.content()?);
-                Ok(())
-            }
-            b"OptionalFields" => {
-                if optional_fields.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                optional_fields = Some(d.list_content("Field")?);
-                Ok(())
-            }
-            b"Schedule" => {
-                if schedule.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                schedule = Some(d.content()?);
-                Ok(())
-            }
-            _ => {
-                d.skip_element_content()?;
-                Ok(())
-            }
-        })?;
-        Ok(Self {
-            destination: destination.ok_or(DeError::MissingField)?,
-            filter,
-            id: id.ok_or(DeError::MissingField)?,
-            included_object_versions: included_object_versions.ok_or(DeError::MissingField)?,
-            is_enabled: is_enabled.ok_or(DeError::MissingField)?,
-            optional_fields,
-            schedule: schedule.ok_or(DeError::MissingField)?,
-        })
-    }
-}
 impl SerializeContent for InventoryConfigurationState {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -5647,6 +7732,7 @@ impl<'xml> DeserializeContent<'xml> for InventoryConfigurationState {
         })
     }
 }
+
 impl SerializeContent for InventoryDestination {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         s.content("S3BucketDestination", &self.s3_bucket_destination)?;
@@ -5672,6 +7758,7 @@ impl<'xml> DeserializeContent<'xml> for InventoryDestination {
         })
     }
 }
+
 impl SerializeContent for InventoryEncryption {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.ssekms {
@@ -5708,6 +7795,7 @@ impl<'xml> DeserializeContent<'xml> for InventoryEncryption {
         Ok(Self { ssekms, sses3 })
     }
 }
+
 impl SerializeContent for InventoryFilter {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         s.content("Prefix", &self.prefix)?;
@@ -5733,6 +7821,7 @@ impl<'xml> DeserializeContent<'xml> for InventoryFilter {
         })
     }
 }
+
 impl SerializeContent for InventoryFormat {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -5748,6 +7837,7 @@ impl<'xml> DeserializeContent<'xml> for InventoryFormat {
         })
     }
 }
+
 impl SerializeContent for InventoryFrequency {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -5762,6 +7852,7 @@ impl<'xml> DeserializeContent<'xml> for InventoryFrequency {
         })
     }
 }
+
 impl SerializeContent for InventoryIncludedObjectVersions {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -5776,6 +7867,7 @@ impl<'xml> DeserializeContent<'xml> for InventoryIncludedObjectVersions {
         })
     }
 }
+
 impl SerializeContent for InventoryOptionalField {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -5804,6 +7896,7 @@ impl<'xml> DeserializeContent<'xml> for InventoryOptionalField {
         })
     }
 }
+
 impl SerializeContent for InventoryS3BucketDestination {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.account_id {
@@ -5875,6 +7968,7 @@ impl<'xml> DeserializeContent<'xml> for InventoryS3BucketDestination {
         })
     }
 }
+
 impl SerializeContent for InventorySchedule {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         s.content("Frequency", &self.frequency)?;
@@ -5900,6 +7994,7 @@ impl<'xml> DeserializeContent<'xml> for InventorySchedule {
         })
     }
 }
+
 impl SerializeContent for InventoryTableConfiguration {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         s.content("ConfigurationState", &self.configuration_state)?;
@@ -5937,6 +8032,7 @@ impl<'xml> DeserializeContent<'xml> for InventoryTableConfiguration {
         })
     }
 }
+
 impl SerializeContent for InventoryTableConfigurationResult {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         s.content("ConfigurationState", &self.configuration_state)?;
@@ -6010,46 +8106,7 @@ impl<'xml> DeserializeContent<'xml> for InventoryTableConfigurationResult {
         })
     }
 }
-impl SerializeContent for InventoryTableConfigurationUpdates {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("ConfigurationState", &self.configuration_state)?;
-        if let Some(ref val) = self.encryption_configuration {
-            s.content("EncryptionConfiguration", val)?;
-        }
-        Ok(())
-    }
-}
 
-impl<'xml> DeserializeContent<'xml> for InventoryTableConfigurationUpdates {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut configuration_state: Option<InventoryConfigurationState> = None;
-        let mut encryption_configuration: Option<MetadataTableEncryptionConfiguration> = None;
-        d.for_each_element(|d, x| match x {
-            b"ConfigurationState" => {
-                if configuration_state.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                configuration_state = Some(d.content()?);
-                Ok(())
-            }
-            b"EncryptionConfiguration" => {
-                if encryption_configuration.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                encryption_configuration = Some(d.content()?);
-                Ok(())
-            }
-            _ => {
-                d.skip_element_content()?;
-                Ok(())
-            }
-        })?;
-        Ok(Self {
-            configuration_state: configuration_state.ok_or(DeError::MissingField)?,
-            encryption_configuration,
-        })
-    }
-}
 impl SerializeContent for JSONInput {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.type_ {
@@ -6075,6 +8132,7 @@ impl<'xml> DeserializeContent<'xml> for JSONInput {
         Ok(Self { type_ })
     }
 }
+
 impl SerializeContent for JSONOutput {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.record_delimiter {
@@ -6100,6 +8158,7 @@ impl<'xml> DeserializeContent<'xml> for JSONOutput {
         Ok(Self { record_delimiter })
     }
 }
+
 impl SerializeContent for JSONType {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -6114,6 +8173,7 @@ impl<'xml> DeserializeContent<'xml> for JSONType {
         })
     }
 }
+
 impl SerializeContent for JournalTableConfiguration {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.encryption_configuration {
@@ -6151,6 +8211,7 @@ impl<'xml> DeserializeContent<'xml> for JournalTableConfiguration {
         })
     }
 }
+
 impl SerializeContent for JournalTableConfigurationResult {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.error {
@@ -6220,34 +8281,7 @@ impl<'xml> DeserializeContent<'xml> for JournalTableConfigurationResult {
         })
     }
 }
-impl SerializeContent for JournalTableConfigurationUpdates {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("RecordExpiration", &self.record_expiration)?;
-        Ok(())
-    }
-}
 
-impl<'xml> DeserializeContent<'xml> for JournalTableConfigurationUpdates {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut record_expiration: Option<RecordExpiration> = None;
-        d.for_each_element(|d, x| match x {
-            b"RecordExpiration" => {
-                if record_expiration.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                record_expiration = Some(d.content()?);
-                Ok(())
-            }
-            _ => {
-                d.skip_element_content()?;
-                Ok(())
-            }
-        })?;
-        Ok(Self {
-            record_expiration: record_expiration.ok_or(DeError::MissingField)?,
-        })
-    }
-}
 impl SerializeContent for LambdaFunctionConfiguration {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         {
@@ -6308,7 +8342,9 @@ impl<'xml> DeserializeContent<'xml> for LambdaFunctionConfiguration {
         })
     }
 }
+
 impl SerializeContent for LifecycleExpiration {
+    #[cfg(not(feature = "minio"))]
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.date {
             s.timestamp("Date", val, TimestampFormat::DateTime)?;
@@ -6321,9 +8357,27 @@ impl SerializeContent for LifecycleExpiration {
         }
         Ok(())
     }
+
+    #[cfg(feature = "minio")]
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.date {
+            s.timestamp("Date", val, TimestampFormat::DateTime)?;
+        }
+        if let Some(ref val) = self.days {
+            s.content("Days", val)?;
+        }
+        if let Some(ref val) = self.expired_object_all_versions {
+            s.content("ExpiredObjectAllVersions", val)?;
+        }
+        if let Some(ref val) = self.expired_object_delete_marker {
+            s.content("ExpiredObjectDeleteMarker", val)?;
+        }
+        Ok(())
+    }
 }
 
 impl<'xml> DeserializeContent<'xml> for LifecycleExpiration {
+    #[cfg(not(feature = "minio"))]
     fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
         let mut date: Option<Date> = None;
         let mut days: Option<Days> = None;
@@ -6358,8 +8412,55 @@ impl<'xml> DeserializeContent<'xml> for LifecycleExpiration {
             expired_object_delete_marker,
         })
     }
+
+    #[cfg(feature = "minio")]
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut date: Option<Date> = None;
+        let mut days: Option<Days> = None;
+        let mut expired_object_all_versions: Option<ExpiredObjectAllVersions> = None;
+        let mut expired_object_delete_marker: Option<ExpiredObjectDeleteMarker> = None;
+        d.for_each_element(|d, x| match x {
+            b"Date" => {
+                if date.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                date = Some(d.timestamp(TimestampFormat::DateTime)?);
+                Ok(())
+            }
+            b"Days" => {
+                if days.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                days = Some(d.content()?);
+                Ok(())
+            }
+            b"ExpiredObjectAllVersions" => {
+                if expired_object_all_versions.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                expired_object_all_versions = Some(d.content()?);
+                Ok(())
+            }
+            b"ExpiredObjectDeleteMarker" => {
+                if expired_object_delete_marker.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                expired_object_delete_marker = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            date,
+            days,
+            expired_object_all_versions,
+            expired_object_delete_marker,
+        })
+    }
 }
+
 impl SerializeContent for LifecycleRule {
+    #[cfg(not(feature = "minio"))]
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.abort_incomplete_multipart_upload {
             s.content("AbortIncompleteMultipartUpload", val)?;
@@ -6388,9 +8489,43 @@ impl SerializeContent for LifecycleRule {
         }
         Ok(())
     }
+
+    #[cfg(feature = "minio")]
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.abort_incomplete_multipart_upload {
+            s.content("AbortIncompleteMultipartUpload", val)?;
+        }
+        if let Some(ref val) = self.del_marker_expiration {
+            s.content("DelMarkerExpiration", val)?;
+        }
+        if let Some(ref val) = self.expiration {
+            s.content("Expiration", val)?;
+        }
+        if let Some(ref val) = self.filter {
+            s.content("Filter", val)?;
+        }
+        if let Some(ref val) = self.id {
+            s.content("ID", val)?;
+        }
+        if let Some(ref val) = self.noncurrent_version_expiration {
+            s.content("NoncurrentVersionExpiration", val)?;
+        }
+        if let Some(iter) = &self.noncurrent_version_transitions {
+            s.flattened_list("NoncurrentVersionTransition", iter)?;
+        }
+        if let Some(ref val) = self.prefix {
+            s.content("Prefix", val)?;
+        }
+        s.content("Status", &self.status)?;
+        if let Some(iter) = &self.transitions {
+            s.flattened_list("Transition", iter)?;
+        }
+        Ok(())
+    }
 }
 
 impl<'xml> DeserializeContent<'xml> for LifecycleRule {
+    #[cfg(not(feature = "minio"))]
     fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
         let mut abort_incomplete_multipart_upload: Option<AbortIncompleteMultipartUpload> = None;
         let mut expiration: Option<LifecycleExpiration> = None;
@@ -6475,7 +8610,103 @@ impl<'xml> DeserializeContent<'xml> for LifecycleRule {
             transitions,
         })
     }
+
+    #[cfg(feature = "minio")]
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut abort_incomplete_multipart_upload: Option<AbortIncompleteMultipartUpload> = None;
+        let mut del_marker_expiration: Option<DelMarkerExpiration> = None;
+        let mut expiration: Option<LifecycleExpiration> = None;
+        let mut filter: Option<LifecycleRuleFilter> = None;
+        let mut id: Option<ID> = None;
+        let mut noncurrent_version_expiration: Option<NoncurrentVersionExpiration> = None;
+        let mut noncurrent_version_transitions: Option<NoncurrentVersionTransitionList> = None;
+        let mut prefix: Option<Prefix> = None;
+        let mut status: Option<ExpirationStatus> = None;
+        let mut transitions: Option<TransitionList> = None;
+        d.for_each_element(|d, x| match x {
+            b"AbortIncompleteMultipartUpload" => {
+                if abort_incomplete_multipart_upload.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                abort_incomplete_multipart_upload = Some(d.content()?);
+                Ok(())
+            }
+            b"DelMarkerExpiration" => {
+                if del_marker_expiration.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                del_marker_expiration = Some(d.content()?);
+                Ok(())
+            }
+            b"Expiration" => {
+                if expiration.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                expiration = Some(d.content()?);
+                Ok(())
+            }
+            b"Filter" => {
+                if filter.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                filter = Some(d.content()?);
+                Ok(())
+            }
+            b"ID" => {
+                if id.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                id = Some(d.content()?);
+                Ok(())
+            }
+            b"NoncurrentVersionExpiration" => {
+                if noncurrent_version_expiration.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                noncurrent_version_expiration = Some(d.content()?);
+                Ok(())
+            }
+            b"NoncurrentVersionTransition" => {
+                let ans: NoncurrentVersionTransition = d.content()?;
+                noncurrent_version_transitions.get_or_insert_with(List::new).push(ans);
+                Ok(())
+            }
+            b"Prefix" => {
+                if prefix.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                prefix = Some(d.content()?);
+                Ok(())
+            }
+            b"Status" => {
+                if status.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                status = Some(d.content()?);
+                Ok(())
+            }
+            b"Transition" => {
+                let ans: Transition = d.content()?;
+                transitions.get_or_insert_with(List::new).push(ans);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            abort_incomplete_multipart_upload,
+            del_marker_expiration,
+            expiration,
+            filter,
+            id,
+            noncurrent_version_expiration,
+            noncurrent_version_transitions,
+            prefix,
+            status: status.ok_or(DeError::MissingField)?,
+            transitions,
+        })
+    }
 }
+
 impl SerializeContent for LifecycleRuleAndOperator {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.object_size_greater_than {
@@ -6537,6 +8768,7 @@ impl<'xml> DeserializeContent<'xml> for LifecycleRuleAndOperator {
         })
     }
 }
+
 impl SerializeContent for LifecycleRuleFilter {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.and {
@@ -6557,8 +8789,8 @@ impl SerializeContent for LifecycleRuleFilter {
         Ok(())
     }
 }
-
 impl<'xml> DeserializeContent<'xml> for LifecycleRuleFilter {
+    #[cfg(not(feature = "minio"))]
     fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
         let mut and: Option<LifecycleRuleAndOperator> = None;
         let mut object_size_greater_than: Option<ObjectSizeGreaterThanBytes> = None;
@@ -6611,295 +8843,34 @@ impl<'xml> DeserializeContent<'xml> for LifecycleRuleFilter {
             tag,
         })
     }
-}
-impl SerializeContent for ListBucketAnalyticsConfigurationsOutput {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(iter) = &self.analytics_configuration_list {
-            s.flattened_list("AnalyticsConfiguration", iter)?;
-        }
-        if let Some(ref val) = self.continuation_token {
-            s.content("ContinuationToken", val)?;
-        }
-        if let Some(ref val) = self.is_truncated {
-            s.content("IsTruncated", val)?;
-        }
-        if let Some(ref val) = self.next_continuation_token {
-            s.content("NextContinuationToken", val)?;
-        }
-        Ok(())
-    }
-}
 
-impl<'xml> DeserializeContent<'xml> for ListBucketAnalyticsConfigurationsOutput {
+    #[cfg(feature = "minio")]
     fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut analytics_configuration_list: Option<AnalyticsConfigurationList> = None;
-        let mut continuation_token: Option<Token> = None;
-        let mut is_truncated: Option<IsTruncated> = None;
-        let mut next_continuation_token: Option<NextToken> = None;
-        d.for_each_element(|d, x| match x {
-            b"AnalyticsConfiguration" => {
-                let ans: AnalyticsConfiguration = d.content()?;
-                analytics_configuration_list.get_or_insert_with(List::new).push(ans);
-                Ok(())
-            }
-            b"ContinuationToken" => {
-                if continuation_token.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                continuation_token = Some(d.content()?);
-                Ok(())
-            }
-            b"IsTruncated" => {
-                if is_truncated.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                is_truncated = Some(d.content()?);
-                Ok(())
-            }
-            b"NextContinuationToken" => {
-                if next_continuation_token.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                next_continuation_token = Some(d.content()?);
-                Ok(())
-            }
-            _ => Err(DeError::UnexpectedTagName),
-        })?;
-        Ok(Self {
-            analytics_configuration_list,
-            continuation_token,
-            is_truncated,
-            next_continuation_token,
-        })
-    }
-}
-impl SerializeContent for ListBucketIntelligentTieringConfigurationsOutput {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.continuation_token {
-            s.content("ContinuationToken", val)?;
-        }
-        if let Some(iter) = &self.intelligent_tiering_configuration_list {
-            s.flattened_list("IntelligentTieringConfiguration", iter)?;
-        }
-        if let Some(ref val) = self.is_truncated {
-            s.content("IsTruncated", val)?;
-        }
-        if let Some(ref val) = self.next_continuation_token {
-            s.content("NextContinuationToken", val)?;
-        }
-        Ok(())
-    }
-}
-
-impl<'xml> DeserializeContent<'xml> for ListBucketIntelligentTieringConfigurationsOutput {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut continuation_token: Option<Token> = None;
-        let mut intelligent_tiering_configuration_list: Option<IntelligentTieringConfigurationList> = None;
-        let mut is_truncated: Option<IsTruncated> = None;
-        let mut next_continuation_token: Option<NextToken> = None;
-        d.for_each_element(|d, x| match x {
-            b"ContinuationToken" => {
-                if continuation_token.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                continuation_token = Some(d.content()?);
-                Ok(())
-            }
-            b"IntelligentTieringConfiguration" => {
-                let ans: IntelligentTieringConfiguration = d.content()?;
-                intelligent_tiering_configuration_list.get_or_insert_with(List::new).push(ans);
-                Ok(())
-            }
-            b"IsTruncated" => {
-                if is_truncated.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                is_truncated = Some(d.content()?);
-                Ok(())
-            }
-            b"NextContinuationToken" => {
-                if next_continuation_token.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                next_continuation_token = Some(d.content()?);
-                Ok(())
-            }
-            _ => Err(DeError::UnexpectedTagName),
-        })?;
-        Ok(Self {
-            continuation_token,
-            intelligent_tiering_configuration_list,
-            is_truncated,
-            next_continuation_token,
-        })
-    }
-}
-impl SerializeContent for ListBucketInventoryConfigurationsOutput {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.continuation_token {
-            s.content("ContinuationToken", val)?;
-        }
-        if let Some(iter) = &self.inventory_configuration_list {
-            s.flattened_list("InventoryConfiguration", iter)?;
-        }
-        if let Some(ref val) = self.is_truncated {
-            s.content("IsTruncated", val)?;
-        }
-        if let Some(ref val) = self.next_continuation_token {
-            s.content("NextContinuationToken", val)?;
-        }
-        Ok(())
-    }
-}
-
-impl<'xml> DeserializeContent<'xml> for ListBucketInventoryConfigurationsOutput {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut continuation_token: Option<Token> = None;
-        let mut inventory_configuration_list: Option<InventoryConfigurationList> = None;
-        let mut is_truncated: Option<IsTruncated> = None;
-        let mut next_continuation_token: Option<NextToken> = None;
-        d.for_each_element(|d, x| match x {
-            b"ContinuationToken" => {
-                if continuation_token.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                continuation_token = Some(d.content()?);
-                Ok(())
-            }
-            b"InventoryConfiguration" => {
-                let ans: InventoryConfiguration = d.content()?;
-                inventory_configuration_list.get_or_insert_with(List::new).push(ans);
-                Ok(())
-            }
-            b"IsTruncated" => {
-                if is_truncated.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                is_truncated = Some(d.content()?);
-                Ok(())
-            }
-            b"NextContinuationToken" => {
-                if next_continuation_token.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                next_continuation_token = Some(d.content()?);
-                Ok(())
-            }
-            _ => Err(DeError::UnexpectedTagName),
-        })?;
-        Ok(Self {
-            continuation_token,
-            inventory_configuration_list,
-            is_truncated,
-            next_continuation_token,
-        })
-    }
-}
-impl SerializeContent for ListBucketMetricsConfigurationsOutput {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.continuation_token {
-            s.content("ContinuationToken", val)?;
-        }
-        if let Some(ref val) = self.is_truncated {
-            s.content("IsTruncated", val)?;
-        }
-        if let Some(iter) = &self.metrics_configuration_list {
-            s.flattened_list("MetricsConfiguration", iter)?;
-        }
-        if let Some(ref val) = self.next_continuation_token {
-            s.content("NextContinuationToken", val)?;
-        }
-        Ok(())
-    }
-}
-
-impl<'xml> DeserializeContent<'xml> for ListBucketMetricsConfigurationsOutput {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut continuation_token: Option<Token> = None;
-        let mut is_truncated: Option<IsTruncated> = None;
-        let mut metrics_configuration_list: Option<MetricsConfigurationList> = None;
-        let mut next_continuation_token: Option<NextToken> = None;
-        d.for_each_element(|d, x| match x {
-            b"ContinuationToken" => {
-                if continuation_token.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                continuation_token = Some(d.content()?);
-                Ok(())
-            }
-            b"IsTruncated" => {
-                if is_truncated.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                is_truncated = Some(d.content()?);
-                Ok(())
-            }
-            b"MetricsConfiguration" => {
-                let ans: MetricsConfiguration = d.content()?;
-                metrics_configuration_list.get_or_insert_with(List::new).push(ans);
-                Ok(())
-            }
-            b"NextContinuationToken" => {
-                if next_continuation_token.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                next_continuation_token = Some(d.content()?);
-                Ok(())
-            }
-            _ => Err(DeError::UnexpectedTagName),
-        })?;
-        Ok(Self {
-            continuation_token,
-            is_truncated,
-            metrics_configuration_list,
-            next_continuation_token,
-        })
-    }
-}
-impl SerializeContent for ListBucketsOutput {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(iter) = &self.buckets {
-            s.list("Buckets", "Bucket", iter)?;
-        }
-        if let Some(ref val) = self.continuation_token {
-            s.content("ContinuationToken", val)?;
-        }
-        if let Some(ref val) = self.owner {
-            s.content("Owner", val)?;
-        }
-        if let Some(ref val) = self.prefix {
-            s.content("Prefix", val)?;
-        }
-        Ok(())
-    }
-}
-
-impl<'xml> DeserializeContent<'xml> for ListBucketsOutput {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut buckets: Option<Buckets> = None;
-        let mut continuation_token: Option<NextToken> = None;
-        let mut owner: Option<Owner> = None;
+        let mut and: Option<LifecycleRuleAndOperator> = None;
+        let mut object_size_greater_than: Option<ObjectSizeGreaterThanBytes> = None;
+        let mut object_size_less_than: Option<ObjectSizeLessThanBytes> = None;
         let mut prefix: Option<Prefix> = None;
+        let mut tag: Option<Tag> = None;
         d.for_each_element(|d, x| match x {
-            b"Buckets" => {
-                if buckets.is_some() {
+            b"And" => {
+                if and.is_some() {
                     return Err(DeError::DuplicateField);
                 }
-                buckets = Some(d.list_content("Bucket")?);
+                and = Some(d.content()?);
                 Ok(())
             }
-            b"ContinuationToken" => {
-                if continuation_token.is_some() {
+            b"ObjectSizeGreaterThan" => {
+                if object_size_greater_than.is_some() {
                     return Err(DeError::DuplicateField);
                 }
-                continuation_token = Some(d.content()?);
+                object_size_greater_than = Some(d.content()?);
                 Ok(())
             }
-            b"Owner" => {
-                if owner.is_some() {
+            b"ObjectSizeLessThan" => {
+                if object_size_less_than.is_some() {
                     return Err(DeError::DuplicateField);
                 }
-                owner = Some(d.content()?);
+                object_size_less_than = Some(d.content()?);
                 Ok(())
             }
             b"Prefix" => {
@@ -6909,262 +8880,23 @@ impl<'xml> DeserializeContent<'xml> for ListBucketsOutput {
                 prefix = Some(d.content()?);
                 Ok(())
             }
+            b"Tag" => {
+                if tag.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                tag = Some(d.content()?);
+                Ok(())
+            }
             _ => Err(DeError::UnexpectedTagName),
         })?;
         Ok(Self {
-            buckets,
-            continuation_token,
-            owner,
+            and,
+            cached_tags: CachedTags::default(),
+            object_size_greater_than,
+            object_size_less_than,
             prefix,
+            tag,
         })
-    }
-}
-impl SerializeContent for ListDirectoryBucketsOutput {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(iter) = &self.buckets {
-            s.list("Buckets", "Bucket", iter)?;
-        }
-        if let Some(ref val) = self.continuation_token {
-            s.content("ContinuationToken", val)?;
-        }
-        Ok(())
-    }
-}
-
-impl<'xml> DeserializeContent<'xml> for ListDirectoryBucketsOutput {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut buckets: Option<Buckets> = None;
-        let mut continuation_token: Option<DirectoryBucketToken> = None;
-        d.for_each_element(|d, x| match x {
-            b"Buckets" => {
-                if buckets.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                buckets = Some(d.list_content("Bucket")?);
-                Ok(())
-            }
-            b"ContinuationToken" => {
-                if continuation_token.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                continuation_token = Some(d.content()?);
-                Ok(())
-            }
-            _ => Err(DeError::UnexpectedTagName),
-        })?;
-        Ok(Self {
-            buckets,
-            continuation_token,
-        })
-    }
-}
-impl SerializeContent for ListMultipartUploadsOutput {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.bucket {
-            s.content("Bucket", val)?;
-        }
-        if let Some(iter) = &self.common_prefixes {
-            s.flattened_list("CommonPrefixes", iter)?;
-        }
-        if let Some(ref val) = self.delimiter {
-            s.content("Delimiter", val)?;
-        }
-        if let Some(ref val) = self.encoding_type {
-            s.content("EncodingType", val)?;
-        }
-        if let Some(ref val) = self.is_truncated {
-            s.content("IsTruncated", val)?;
-        }
-        if let Some(ref val) = self.key_marker {
-            s.content("KeyMarker", val)?;
-        }
-        if let Some(ref val) = self.max_uploads {
-            s.content("MaxUploads", val)?;
-        }
-        if let Some(ref val) = self.next_key_marker {
-            s.content("NextKeyMarker", val)?;
-        }
-        if let Some(ref val) = self.next_upload_id_marker {
-            s.content("NextUploadIdMarker", val)?;
-        }
-        if let Some(ref val) = self.prefix {
-            s.content("Prefix", val)?;
-        }
-        if let Some(ref val) = self.upload_id_marker {
-            s.content("UploadIdMarker", val)?;
-        }
-        if let Some(iter) = &self.uploads {
-            s.flattened_list("Upload", iter)?;
-        }
-        Ok(())
-    }
-}
-
-impl SerializeContent for ListObjectVersionsOutput {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(iter) = &self.common_prefixes {
-            s.flattened_list("CommonPrefixes", iter)?;
-        }
-        if let Some(iter) = &self.delete_markers {
-            s.flattened_list("DeleteMarker", iter)?;
-        }
-        if let Some(ref val) = self.delimiter {
-            s.content("Delimiter", val)?;
-        }
-        if let Some(ref val) = self.encoding_type {
-            s.content("EncodingType", val)?;
-        }
-        if let Some(ref val) = self.is_truncated {
-            s.content("IsTruncated", val)?;
-        }
-        if let Some(ref val) = self.key_marker {
-            s.content("KeyMarker", val)?;
-        }
-        if let Some(ref val) = self.max_keys {
-            s.content("MaxKeys", val)?;
-        }
-        if let Some(ref val) = self.name {
-            s.content("Name", val)?;
-        }
-        if let Some(ref val) = self.next_key_marker {
-            s.content("NextKeyMarker", val)?;
-        }
-        if let Some(ref val) = self.next_version_id_marker {
-            s.content("NextVersionIdMarker", val)?;
-        }
-        if let Some(ref val) = self.prefix {
-            s.content("Prefix", val)?;
-        }
-        if let Some(ref val) = self.version_id_marker {
-            s.content("VersionIdMarker", val)?;
-        }
-        if let Some(iter) = &self.versions {
-            s.flattened_list("Version", iter)?;
-        }
-        Ok(())
-    }
-}
-
-impl SerializeContent for ListObjectsOutput {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.name {
-            s.content("Name", val)?;
-        }
-        if let Some(ref val) = self.prefix {
-            s.content("Prefix", val)?;
-        }
-        if let Some(ref val) = self.marker {
-            s.content("Marker", val)?;
-        }
-        if let Some(ref val) = self.max_keys {
-            s.content("MaxKeys", val)?;
-        }
-        if let Some(ref val) = self.is_truncated {
-            s.content("IsTruncated", val)?;
-        }
-        if let Some(iter) = &self.contents {
-            s.flattened_list("Contents", iter)?;
-        }
-        if let Some(iter) = &self.common_prefixes {
-            s.flattened_list("CommonPrefixes", iter)?;
-        }
-        if let Some(ref val) = self.delimiter {
-            s.content("Delimiter", val)?;
-        }
-        if let Some(ref val) = self.next_marker {
-            s.content("NextMarker", val)?;
-        }
-        if let Some(ref val) = self.encoding_type {
-            s.content("EncodingType", val)?;
-        }
-        Ok(())
-    }
-}
-
-impl SerializeContent for ListObjectsV2Output {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.name {
-            s.content("Name", val)?;
-        }
-        if let Some(ref val) = self.prefix {
-            s.content("Prefix", val)?;
-        }
-        if let Some(ref val) = self.max_keys {
-            s.content("MaxKeys", val)?;
-        }
-        if let Some(ref val) = self.key_count {
-            s.content("KeyCount", val)?;
-        }
-        if let Some(ref val) = self.continuation_token {
-            s.content("ContinuationToken", val)?;
-        }
-        if let Some(ref val) = self.is_truncated {
-            s.content("IsTruncated", val)?;
-        }
-        if let Some(ref val) = self.next_continuation_token {
-            s.content("NextContinuationToken", val)?;
-        }
-        if let Some(iter) = &self.contents {
-            s.flattened_list("Contents", iter)?;
-        }
-        if let Some(iter) = &self.common_prefixes {
-            s.flattened_list("CommonPrefixes", iter)?;
-        }
-        if let Some(ref val) = self.delimiter {
-            s.content("Delimiter", val)?;
-        }
-        if let Some(ref val) = self.encoding_type {
-            s.content("EncodingType", val)?;
-        }
-        if let Some(ref val) = self.start_after {
-            s.content("StartAfter", val)?;
-        }
-        Ok(())
-    }
-}
-
-impl SerializeContent for ListPartsOutput {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.bucket {
-            s.content("Bucket", val)?;
-        }
-        if let Some(ref val) = self.checksum_algorithm {
-            s.content("ChecksumAlgorithm", val)?;
-        }
-        if let Some(ref val) = self.checksum_type {
-            s.content("ChecksumType", val)?;
-        }
-        if let Some(ref val) = self.initiator {
-            s.content("Initiator", val)?;
-        }
-        if let Some(ref val) = self.is_truncated {
-            s.content("IsTruncated", val)?;
-        }
-        if let Some(ref val) = self.key {
-            s.content("Key", val)?;
-        }
-        if let Some(ref val) = self.max_parts {
-            s.content("MaxParts", val)?;
-        }
-        if let Some(ref val) = self.next_part_number_marker {
-            s.content("NextPartNumberMarker", val)?;
-        }
-        if let Some(ref val) = self.owner {
-            s.content("Owner", val)?;
-        }
-        if let Some(ref val) = self.part_number_marker {
-            s.content("PartNumberMarker", val)?;
-        }
-        if let Some(iter) = &self.parts {
-            s.flattened_list("Part", iter)?;
-        }
-        if let Some(ref val) = self.storage_class {
-            s.content("StorageClass", val)?;
-        }
-        if let Some(ref val) = self.upload_id {
-            s.content("UploadId", val)?;
-        }
-        Ok(())
     }
 }
 
@@ -7204,6 +8936,7 @@ impl<'xml> DeserializeContent<'xml> for LocationInfo {
         Ok(Self { name, type_ })
     }
 }
+
 impl SerializeContent for LocationType {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -7218,6 +8951,7 @@ impl<'xml> DeserializeContent<'xml> for LocationType {
         })
     }
 }
+
 impl SerializeContent for LoggingEnabled {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         s.content("TargetBucket", &self.target_bucket)?;
@@ -7277,6 +9011,7 @@ impl<'xml> DeserializeContent<'xml> for LoggingEnabled {
         })
     }
 }
+
 impl SerializeContent for MFADelete {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -7291,6 +9026,7 @@ impl<'xml> DeserializeContent<'xml> for MFADelete {
         })
     }
 }
+
 impl SerializeContent for MFADeleteStatus {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -7305,58 +9041,7 @@ impl<'xml> DeserializeContent<'xml> for MFADeleteStatus {
         })
     }
 }
-impl SerializeContent for MetadataConfiguration {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.annotation_table_configuration {
-            s.content("AnnotationTableConfiguration", val)?;
-        }
-        if let Some(ref val) = self.inventory_table_configuration {
-            s.content("InventoryTableConfiguration", val)?;
-        }
-        s.content("JournalTableConfiguration", &self.journal_table_configuration)?;
-        Ok(())
-    }
-}
 
-impl<'xml> DeserializeContent<'xml> for MetadataConfiguration {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut annotation_table_configuration: Option<AnnotationTableConfiguration> = None;
-        let mut inventory_table_configuration: Option<InventoryTableConfiguration> = None;
-        let mut journal_table_configuration: Option<JournalTableConfiguration> = None;
-        d.for_each_element(|d, x| match x {
-            b"AnnotationTableConfiguration" => {
-                if annotation_table_configuration.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                annotation_table_configuration = Some(d.content()?);
-                Ok(())
-            }
-            b"InventoryTableConfiguration" => {
-                if inventory_table_configuration.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                inventory_table_configuration = Some(d.content()?);
-                Ok(())
-            }
-            b"JournalTableConfiguration" => {
-                if journal_table_configuration.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                journal_table_configuration = Some(d.content()?);
-                Ok(())
-            }
-            _ => {
-                d.skip_element_content()?;
-                Ok(())
-            }
-        })?;
-        Ok(Self {
-            annotation_table_configuration,
-            inventory_table_configuration,
-            journal_table_configuration: journal_table_configuration.ok_or(DeError::MissingField)?,
-        })
-    }
-}
 impl SerializeContent for MetadataConfigurationResult {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.annotation_table_configuration_result {
@@ -7418,6 +9103,7 @@ impl<'xml> DeserializeContent<'xml> for MetadataConfigurationResult {
         })
     }
 }
+
 impl SerializeContent for MetadataEntry {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.name {
@@ -7454,34 +9140,7 @@ impl<'xml> DeserializeContent<'xml> for MetadataEntry {
         Ok(Self { name, value })
     }
 }
-impl SerializeContent for MetadataTableConfiguration {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("S3TablesDestination", &self.s3_tables_destination)?;
-        Ok(())
-    }
-}
 
-impl<'xml> DeserializeContent<'xml> for MetadataTableConfiguration {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut s3_tables_destination: Option<S3TablesDestination> = None;
-        d.for_each_element(|d, x| match x {
-            b"S3TablesDestination" => {
-                if s3_tables_destination.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                s3_tables_destination = Some(d.content()?);
-                Ok(())
-            }
-            _ => {
-                d.skip_element_content()?;
-                Ok(())
-            }
-        })?;
-        Ok(Self {
-            s3_tables_destination: s3_tables_destination.ok_or(DeError::MissingField)?,
-        })
-    }
-}
 impl SerializeContent for MetadataTableConfigurationResult {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         s.content("S3TablesDestinationResult", &self.s3_tables_destination_result)?;
@@ -7507,6 +9166,7 @@ impl<'xml> DeserializeContent<'xml> for MetadataTableConfigurationResult {
         })
     }
 }
+
 impl SerializeContent for MetadataTableEncryptionConfiguration {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.kms_key_arn {
@@ -7544,6 +9204,7 @@ impl<'xml> DeserializeContent<'xml> for MetadataTableEncryptionConfiguration {
         })
     }
 }
+
 impl SerializeContent for Metrics {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.event_threshold {
@@ -7581,6 +9242,7 @@ impl<'xml> DeserializeContent<'xml> for Metrics {
         })
     }
 }
+
 impl SerializeContent for MetricsAndOperator {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.access_point_arn {
@@ -7630,46 +9292,7 @@ impl<'xml> DeserializeContent<'xml> for MetricsAndOperator {
         })
     }
 }
-impl SerializeContent for MetricsConfiguration {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.filter {
-            s.content("Filter", val)?;
-        }
-        s.content("Id", &self.id)?;
-        Ok(())
-    }
-}
 
-impl<'xml> DeserializeContent<'xml> for MetricsConfiguration {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut filter: Option<MetricsFilter> = None;
-        let mut id: Option<MetricsId> = None;
-        d.for_each_element(|d, x| match x {
-            b"Filter" => {
-                if filter.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                filter = Some(d.content()?);
-                Ok(())
-            }
-            b"Id" => {
-                if id.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                id = Some(d.content()?);
-                Ok(())
-            }
-            _ => {
-                d.skip_element_content()?;
-                Ok(())
-            }
-        })?;
-        Ok(Self {
-            filter,
-            id: id.ok_or(DeError::MissingField)?,
-        })
-    }
-}
 impl SerializeContent for MetricsFilter {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         match self {
@@ -7691,6 +9314,7 @@ impl<'xml> DeserializeContent<'xml> for MetricsFilter {
         })
     }
 }
+
 impl SerializeContent for MetricsStatus {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -7705,6 +9329,7 @@ impl<'xml> DeserializeContent<'xml> for MetricsStatus {
         })
     }
 }
+
 impl SerializeContent for MultipartUpload {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.checksum_algorithm {
@@ -7816,6 +9441,7 @@ impl<'xml> DeserializeContent<'xml> for MultipartUpload {
         })
     }
 }
+
 impl SerializeContent for NoncurrentVersionExpiration {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.newer_noncurrent_versions {
@@ -7855,6 +9481,7 @@ impl<'xml> DeserializeContent<'xml> for NoncurrentVersionExpiration {
         })
     }
 }
+
 impl SerializeContent for NoncurrentVersionTransition {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.newer_noncurrent_versions {
@@ -7906,66 +9533,7 @@ impl<'xml> DeserializeContent<'xml> for NoncurrentVersionTransition {
         })
     }
 }
-impl SerializeContent for NotificationConfiguration {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.event_bridge_configuration {
-            s.content("EventBridgeConfiguration", val)?;
-        }
-        if let Some(iter) = &self.lambda_function_configurations {
-            s.flattened_list("CloudFunctionConfiguration", iter)?;
-        }
-        if let Some(iter) = &self.queue_configurations {
-            s.flattened_list("QueueConfiguration", iter)?;
-        }
-        if let Some(iter) = &self.topic_configurations {
-            s.flattened_list("TopicConfiguration", iter)?;
-        }
-        Ok(())
-    }
-}
 
-impl<'xml> DeserializeContent<'xml> for NotificationConfiguration {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut event_bridge_configuration: Option<EventBridgeConfiguration> = None;
-        let mut lambda_function_configurations: Option<LambdaFunctionConfigurationList> = None;
-        let mut queue_configurations: Option<QueueConfigurationList> = None;
-        let mut topic_configurations: Option<TopicConfigurationList> = None;
-        d.for_each_element(|d, x| match x {
-            b"EventBridgeConfiguration" => {
-                if event_bridge_configuration.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                event_bridge_configuration = Some(d.content()?);
-                Ok(())
-            }
-            b"CloudFunctionConfiguration" => {
-                let ans: LambdaFunctionConfiguration = d.content()?;
-                lambda_function_configurations.get_or_insert_with(List::new).push(ans);
-                Ok(())
-            }
-            b"QueueConfiguration" => {
-                let ans: QueueConfiguration = d.content()?;
-                queue_configurations.get_or_insert_with(List::new).push(ans);
-                Ok(())
-            }
-            b"TopicConfiguration" => {
-                let ans: TopicConfiguration = d.content()?;
-                topic_configurations.get_or_insert_with(List::new).push(ans);
-                Ok(())
-            }
-            _ => {
-                d.skip_element_content()?;
-                Ok(())
-            }
-        })?;
-        Ok(Self {
-            event_bridge_configuration,
-            lambda_function_configurations,
-            queue_configurations,
-            topic_configurations,
-        })
-    }
-}
 impl SerializeContent for NotificationConfigurationFilter {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.key {
@@ -7991,6 +9559,7 @@ impl<'xml> DeserializeContent<'xml> for NotificationConfigurationFilter {
         Ok(Self { key })
     }
 }
+
 impl SerializeContent for Object {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(iter) = &self.checksum_algorithm {
@@ -8112,6 +9681,7 @@ impl<'xml> DeserializeContent<'xml> for Object {
         })
     }
 }
+
 impl SerializeContent for ObjectCannedACL {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -8131,6 +9701,7 @@ impl<'xml> DeserializeContent<'xml> for ObjectCannedACL {
         })
     }
 }
+
 impl SerializeContent for ObjectIdentifier {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.e_tag {
@@ -8204,48 +9775,7 @@ impl<'xml> DeserializeContent<'xml> for ObjectIdentifier {
         })
     }
 }
-impl SerializeContent for ObjectLockConfiguration {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.object_lock_enabled {
-            s.content("ObjectLockEnabled", val)?;
-        }
-        if let Some(ref val) = self.rule {
-            s.content("Rule", val)?;
-        }
-        Ok(())
-    }
-}
 
-impl<'xml> DeserializeContent<'xml> for ObjectLockConfiguration {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut object_lock_enabled: Option<ObjectLockEnabled> = None;
-        let mut rule: Option<ObjectLockRule> = None;
-        d.for_each_element(|d, x| match x {
-            b"ObjectLockEnabled" => {
-                if object_lock_enabled.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                object_lock_enabled = Some(d.content()?);
-                Ok(())
-            }
-            b"Rule" => {
-                if rule.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                rule = Some(d.content()?);
-                Ok(())
-            }
-            _ => {
-                d.skip_element_content()?;
-                Ok(())
-            }
-        })?;
-        Ok(Self {
-            object_lock_enabled,
-            rule,
-        })
-    }
-}
 impl SerializeContent for ObjectLockEnabled {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -8259,34 +9789,7 @@ impl<'xml> DeserializeContent<'xml> for ObjectLockEnabled {
         })
     }
 }
-impl SerializeContent for ObjectLockLegalHold {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.status {
-            s.content("Status", val)?;
-        }
-        Ok(())
-    }
-}
 
-impl<'xml> DeserializeContent<'xml> for ObjectLockLegalHold {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut status: Option<ObjectLockLegalHoldStatus> = None;
-        d.for_each_element(|d, x| match x {
-            b"Status" => {
-                if status.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                status = Some(d.content()?);
-                Ok(())
-            }
-            _ => {
-                d.skip_element_content()?;
-                Ok(())
-            }
-        })?;
-        Ok(Self { status })
-    }
-}
 impl SerializeContent for ObjectLockLegalHoldStatus {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -8301,45 +9804,7 @@ impl<'xml> DeserializeContent<'xml> for ObjectLockLegalHoldStatus {
         })
     }
 }
-impl SerializeContent for ObjectLockRetention {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.mode {
-            s.content("Mode", val)?;
-        }
-        if let Some(ref val) = self.retain_until_date {
-            s.timestamp("RetainUntilDate", val, TimestampFormat::DateTime)?;
-        }
-        Ok(())
-    }
-}
 
-impl<'xml> DeserializeContent<'xml> for ObjectLockRetention {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut mode: Option<ObjectLockRetentionMode> = None;
-        let mut retain_until_date: Option<Date> = None;
-        d.for_each_element(|d, x| match x {
-            b"Mode" => {
-                if mode.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                mode = Some(d.content()?);
-                Ok(())
-            }
-            b"RetainUntilDate" => {
-                if retain_until_date.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                retain_until_date = Some(d.timestamp(TimestampFormat::DateTime)?);
-                Ok(())
-            }
-            _ => {
-                d.skip_element_content()?;
-                Ok(())
-            }
-        })?;
-        Ok(Self { mode, retain_until_date })
-    }
-}
 impl SerializeContent for ObjectLockRetentionMode {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -8354,6 +9819,7 @@ impl<'xml> DeserializeContent<'xml> for ObjectLockRetentionMode {
         })
     }
 }
+
 impl SerializeContent for ObjectLockRule {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.default_retention {
@@ -8379,6 +9845,7 @@ impl<'xml> DeserializeContent<'xml> for ObjectLockRule {
         Ok(Self { default_retention })
     }
 }
+
 impl SerializeContent for ObjectOwnership {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -8394,6 +9861,7 @@ impl<'xml> DeserializeContent<'xml> for ObjectOwnership {
         })
     }
 }
+
 impl SerializeContent for ObjectPart {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.checksum_crc32 {
@@ -8553,6 +10021,7 @@ impl<'xml> DeserializeContent<'xml> for ObjectPart {
         })
     }
 }
+
 impl SerializeContent for ObjectStorageClass {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -8580,6 +10049,7 @@ impl<'xml> DeserializeContent<'xml> for ObjectStorageClass {
         })
     }
 }
+
 impl SerializeContent for ObjectVersion {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(iter) = &self.checksum_algorithm {
@@ -8725,6 +10195,7 @@ impl<'xml> DeserializeContent<'xml> for ObjectVersion {
         })
     }
 }
+
 impl SerializeContent for ObjectVersionStorageClass {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -8738,6 +10209,7 @@ impl<'xml> DeserializeContent<'xml> for ObjectVersionStorageClass {
         })
     }
 }
+
 impl SerializeContent for OutputLocation {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.s3 {
@@ -8763,6 +10235,7 @@ impl<'xml> DeserializeContent<'xml> for OutputLocation {
         Ok(Self { s3 })
     }
 }
+
 impl SerializeContent for OutputSerialization {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.csv {
@@ -8799,6 +10272,7 @@ impl<'xml> DeserializeContent<'xml> for OutputSerialization {
         Ok(Self { csv, json })
     }
 }
+
 impl SerializeContent for Owner {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.display_name {
@@ -8835,6 +10309,7 @@ impl<'xml> DeserializeContent<'xml> for Owner {
         Ok(Self { display_name, id })
     }
 }
+
 impl SerializeContent for OwnerOverride {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -8848,35 +10323,7 @@ impl<'xml> DeserializeContent<'xml> for OwnerOverride {
         })
     }
 }
-impl SerializeContent for OwnershipControls {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        {
-            let iter = &self.rules;
-            s.flattened_list("Rule", iter)?;
-        }
-        Ok(())
-    }
-}
 
-impl<'xml> DeserializeContent<'xml> for OwnershipControls {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut rules: Option<OwnershipControlsRules> = None;
-        d.for_each_element(|d, x| match x {
-            b"Rule" => {
-                let ans: OwnershipControlsRule = d.content()?;
-                rules.get_or_insert_with(List::new).push(ans);
-                Ok(())
-            }
-            _ => {
-                d.skip_element_content()?;
-                Ok(())
-            }
-        })?;
-        Ok(Self {
-            rules: rules.ok_or(DeError::MissingField)?,
-        })
-    }
-}
 impl SerializeContent for OwnershipControlsRule {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         s.content("ObjectOwnership", &self.object_ownership)?;
@@ -8902,6 +10349,7 @@ impl<'xml> DeserializeContent<'xml> for OwnershipControlsRule {
         })
     }
 }
+
 impl SerializeContent for ParquetInput {
     fn serialize_content<W: Write>(&self, _: &mut Serializer<W>) -> SerResult {
         Ok(())
@@ -8913,6 +10361,7 @@ impl<'xml> DeserializeContent<'xml> for ParquetInput {
         Ok(Self {})
     }
 }
+
 impl SerializeContent for Part {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.checksum_crc32 {
@@ -9096,6 +10545,7 @@ impl<'xml> DeserializeContent<'xml> for Part {
         })
     }
 }
+
 impl SerializeContent for PartitionDateSource {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -9110,6 +10560,7 @@ impl<'xml> DeserializeContent<'xml> for PartitionDateSource {
         })
     }
 }
+
 impl SerializeContent for PartitionedPrefix {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.partition_date_source {
@@ -9135,6 +10586,7 @@ impl<'xml> DeserializeContent<'xml> for PartitionedPrefix {
         Ok(Self { partition_date_source })
     }
 }
+
 impl SerializeContent for Payer {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -9149,6 +10601,7 @@ impl<'xml> DeserializeContent<'xml> for Payer {
         })
     }
 }
+
 impl SerializeContent for Permission {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -9166,82 +10619,7 @@ impl<'xml> DeserializeContent<'xml> for Permission {
         })
     }
 }
-impl SerializeContent for PolicyStatus {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.is_public {
-            s.content("IsPublic", val)?;
-        }
-        Ok(())
-    }
-}
 
-impl<'xml> DeserializeContent<'xml> for PolicyStatus {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut is_public: Option<IsPublic> = None;
-        d.for_each_element(|d, x| match x {
-            b"IsPublic" => {
-                if is_public.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                is_public = Some(d.content()?);
-                Ok(())
-            }
-            _ => Err(DeError::UnexpectedTagName),
-        })?;
-        Ok(Self { is_public })
-    }
-}
-impl SerializeContent for Progress {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.bytes_processed {
-            s.content("BytesProcessed", val)?;
-        }
-        if let Some(ref val) = self.bytes_returned {
-            s.content("BytesReturned", val)?;
-        }
-        if let Some(ref val) = self.bytes_scanned {
-            s.content("BytesScanned", val)?;
-        }
-        Ok(())
-    }
-}
-
-impl<'xml> DeserializeContent<'xml> for Progress {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut bytes_processed: Option<BytesProcessed> = None;
-        let mut bytes_returned: Option<BytesReturned> = None;
-        let mut bytes_scanned: Option<BytesScanned> = None;
-        d.for_each_element(|d, x| match x {
-            b"BytesProcessed" => {
-                if bytes_processed.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                bytes_processed = Some(d.content()?);
-                Ok(())
-            }
-            b"BytesReturned" => {
-                if bytes_returned.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                bytes_returned = Some(d.content()?);
-                Ok(())
-            }
-            b"BytesScanned" => {
-                if bytes_scanned.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                bytes_scanned = Some(d.content()?);
-                Ok(())
-            }
-            _ => Err(DeError::UnexpectedTagName),
-        })?;
-        Ok(Self {
-            bytes_processed,
-            bytes_returned,
-            bytes_scanned,
-        })
-    }
-}
 impl SerializeContent for Protocol {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -9256,72 +10634,7 @@ impl<'xml> DeserializeContent<'xml> for Protocol {
         })
     }
 }
-impl SerializeContent for PublicAccessBlockConfiguration {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.block_public_acls {
-            s.content("BlockPublicAcls", val)?;
-        }
-        if let Some(ref val) = self.block_public_policy {
-            s.content("BlockPublicPolicy", val)?;
-        }
-        if let Some(ref val) = self.ignore_public_acls {
-            s.content("IgnorePublicAcls", val)?;
-        }
-        if let Some(ref val) = self.restrict_public_buckets {
-            s.content("RestrictPublicBuckets", val)?;
-        }
-        Ok(())
-    }
-}
 
-impl<'xml> DeserializeContent<'xml> for PublicAccessBlockConfiguration {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut block_public_acls: Option<Setting> = None;
-        let mut block_public_policy: Option<Setting> = None;
-        let mut ignore_public_acls: Option<Setting> = None;
-        let mut restrict_public_buckets: Option<Setting> = None;
-        d.for_each_element(|d, x| match x {
-            b"BlockPublicAcls" => {
-                if block_public_acls.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                block_public_acls = Some(d.content()?);
-                Ok(())
-            }
-            b"BlockPublicPolicy" => {
-                if block_public_policy.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                block_public_policy = Some(d.content()?);
-                Ok(())
-            }
-            b"IgnorePublicAcls" => {
-                if ignore_public_acls.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                ignore_public_acls = Some(d.content()?);
-                Ok(())
-            }
-            b"RestrictPublicBuckets" => {
-                if restrict_public_buckets.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                restrict_public_buckets = Some(d.content()?);
-                Ok(())
-            }
-            _ => {
-                d.skip_element_content()?;
-                Ok(())
-            }
-        })?;
-        Ok(Self {
-            block_public_acls,
-            block_public_policy,
-            ignore_public_acls,
-            restrict_public_buckets,
-        })
-    }
-}
 impl SerializeContent for QueueConfiguration {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         {
@@ -9382,6 +10695,7 @@ impl<'xml> DeserializeContent<'xml> for QueueConfiguration {
         })
     }
 }
+
 impl SerializeContent for QuoteFields {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -9396,6 +10710,7 @@ impl<'xml> DeserializeContent<'xml> for QuoteFields {
         })
     }
 }
+
 impl SerializeContent for RecordExpiration {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.days {
@@ -9433,6 +10748,7 @@ impl<'xml> DeserializeContent<'xml> for RecordExpiration {
         })
     }
 }
+
 impl SerializeContent for Redirect {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.host_name {
@@ -9508,6 +10824,7 @@ impl<'xml> DeserializeContent<'xml> for Redirect {
         })
     }
 }
+
 impl SerializeContent for RedirectAllRequestsTo {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         s.content("HostName", &self.host_name)?;
@@ -9545,6 +10862,7 @@ impl<'xml> DeserializeContent<'xml> for RedirectAllRequestsTo {
         })
     }
 }
+
 impl SerializeContent for ReplicaModifications {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         s.content("Status", &self.status)?;
@@ -9570,6 +10888,7 @@ impl<'xml> DeserializeContent<'xml> for ReplicaModifications {
         })
     }
 }
+
 impl SerializeContent for ReplicaModificationsStatus {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -9584,46 +10903,9 @@ impl<'xml> DeserializeContent<'xml> for ReplicaModificationsStatus {
         })
     }
 }
-impl SerializeContent for ReplicationConfiguration {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("Role", &self.role)?;
-        {
-            let iter = &self.rules;
-            s.flattened_list("Rule", iter)?;
-        }
-        Ok(())
-    }
-}
 
-impl<'xml> DeserializeContent<'xml> for ReplicationConfiguration {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut role: Option<Role> = None;
-        let mut rules: Option<ReplicationRules> = None;
-        d.for_each_element(|d, x| match x {
-            b"Role" => {
-                if role.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                role = Some(d.content()?);
-                Ok(())
-            }
-            b"Rule" => {
-                let ans: ReplicationRule = d.content()?;
-                rules.get_or_insert_with(List::new).push(ans);
-                Ok(())
-            }
-            _ => {
-                d.skip_element_content()?;
-                Ok(())
-            }
-        })?;
-        Ok(Self {
-            role: role.ok_or(DeError::MissingField)?,
-            rules: rules.ok_or(DeError::MissingField)?,
-        })
-    }
-}
 impl SerializeContent for ReplicationRule {
+    #[cfg(not(feature = "minio"))]
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.delete_marker_replication {
             s.content("DeleteMarkerReplication", val)?;
@@ -9650,9 +10932,41 @@ impl SerializeContent for ReplicationRule {
         s.content("Status", &self.status)?;
         Ok(())
     }
+
+    #[cfg(feature = "minio")]
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.delete_marker_replication {
+            s.content("DeleteMarkerReplication", val)?;
+        }
+        if let Some(ref val) = self.delete_replication {
+            s.content("DeleteReplication", val)?;
+        }
+        s.content("Destination", &self.destination)?;
+        if let Some(ref val) = self.existing_object_replication {
+            s.content("ExistingObjectReplication", val)?;
+        }
+        if let Some(ref val) = self.filter {
+            s.content("Filter", val)?;
+        }
+        if let Some(ref val) = self.id {
+            s.content("ID", val)?;
+        }
+        if let Some(ref val) = self.prefix {
+            s.content("Prefix", val)?;
+        }
+        if let Some(ref val) = self.priority {
+            s.content("Priority", val)?;
+        }
+        if let Some(ref val) = self.source_selection_criteria {
+            s.content("SourceSelectionCriteria", val)?;
+        }
+        s.content("Status", &self.status)?;
+        Ok(())
+    }
 }
 
 impl<'xml> DeserializeContent<'xml> for ReplicationRule {
+    #[cfg(not(feature = "minio"))]
     fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
         let mut delete_marker_replication: Option<DeleteMarkerReplication> = None;
         let mut destination: Option<Destination> = None;
@@ -9741,7 +11055,107 @@ impl<'xml> DeserializeContent<'xml> for ReplicationRule {
             status: status.ok_or(DeError::MissingField)?,
         })
     }
+
+    #[cfg(feature = "minio")]
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut delete_marker_replication: Option<DeleteMarkerReplication> = None;
+        let mut delete_replication: Option<DeleteReplication> = None;
+        let mut destination: Option<Destination> = None;
+        let mut existing_object_replication: Option<ExistingObjectReplication> = None;
+        let mut filter: Option<ReplicationRuleFilter> = None;
+        let mut id: Option<ID> = None;
+        let mut prefix: Option<Prefix> = None;
+        let mut priority: Option<Priority> = None;
+        let mut source_selection_criteria: Option<SourceSelectionCriteria> = None;
+        let mut status: Option<ReplicationRuleStatus> = None;
+        d.for_each_element(|d, x| match x {
+            b"DeleteMarkerReplication" => {
+                if delete_marker_replication.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                delete_marker_replication = Some(d.content()?);
+                Ok(())
+            }
+            b"DeleteReplication" => {
+                if delete_replication.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                delete_replication = Some(d.content()?);
+                Ok(())
+            }
+            b"Destination" => {
+                if destination.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                destination = Some(d.content()?);
+                Ok(())
+            }
+            b"ExistingObjectReplication" => {
+                if existing_object_replication.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                existing_object_replication = Some(d.content()?);
+                Ok(())
+            }
+            b"Filter" => {
+                if filter.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                filter = Some(d.content()?);
+                Ok(())
+            }
+            b"ID" => {
+                if id.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                id = Some(d.content()?);
+                Ok(())
+            }
+            b"Prefix" => {
+                if prefix.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                prefix = Some(d.content()?);
+                Ok(())
+            }
+            b"Priority" => {
+                if priority.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                priority = Some(d.content()?);
+                Ok(())
+            }
+            b"SourceSelectionCriteria" => {
+                if source_selection_criteria.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                source_selection_criteria = Some(d.content()?);
+                Ok(())
+            }
+            b"Status" => {
+                if status.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                status = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            delete_marker_replication,
+            delete_replication,
+            destination: destination.ok_or(DeError::MissingField)?,
+            existing_object_replication,
+            filter,
+            id,
+            prefix,
+            priority,
+            source_selection_criteria,
+            status: status.ok_or(DeError::MissingField)?,
+        })
+    }
 }
+
 impl SerializeContent for ReplicationRuleAndOperator {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.prefix {
@@ -9776,6 +11190,7 @@ impl<'xml> DeserializeContent<'xml> for ReplicationRuleAndOperator {
         Ok(Self { prefix, tags })
     }
 }
+
 impl SerializeContent for ReplicationRuleFilter {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.and {
@@ -9790,8 +11205,8 @@ impl SerializeContent for ReplicationRuleFilter {
         Ok(())
     }
 }
-
 impl<'xml> DeserializeContent<'xml> for ReplicationRuleFilter {
+    #[cfg(not(feature = "minio"))]
     fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
         let mut and: Option<ReplicationRuleAndOperator> = None;
         let mut prefix: Option<Prefix> = None;
@@ -9822,7 +11237,45 @@ impl<'xml> DeserializeContent<'xml> for ReplicationRuleFilter {
         })?;
         Ok(Self { and, prefix, tag })
     }
+
+    #[cfg(feature = "minio")]
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut and: Option<ReplicationRuleAndOperator> = None;
+        let mut prefix: Option<Prefix> = None;
+        let mut tag: Option<Tag> = None;
+        d.for_each_element(|d, x| match x {
+            b"And" => {
+                if and.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                and = Some(d.content()?);
+                Ok(())
+            }
+            b"Prefix" => {
+                if prefix.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                prefix = Some(d.content()?);
+                Ok(())
+            }
+            b"Tag" => {
+                if tag.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                tag = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            and,
+            cached_tags: CachedTags::default(),
+            prefix,
+            tag,
+        })
+    }
 }
+
 impl SerializeContent for ReplicationRuleStatus {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -9837,6 +11290,25 @@ impl<'xml> DeserializeContent<'xml> for ReplicationRuleStatus {
         })
     }
 }
+
+impl SerializeContent for ReplicationStatus {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        self.as_str().serialize_content(s)
+    }
+}
+impl<'xml> DeserializeContent<'xml> for ReplicationStatus {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        d.text(|s| match s {
+            "COMPLETE" => Ok(Self::from_static(ReplicationStatus::COMPLETE)),
+            "COMPLETED" => Ok(Self::from_static(ReplicationStatus::COMPLETED)),
+            "FAILED" => Ok(Self::from_static(ReplicationStatus::FAILED)),
+            "PENDING" => Ok(Self::from_static(ReplicationStatus::PENDING)),
+            "REPLICA" => Ok(Self::from_static(ReplicationStatus::REPLICA)),
+            _ => Ok(Self::from(s.to_owned())),
+        })
+    }
+}
+
 impl SerializeContent for ReplicationTime {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         s.content("Status", &self.status)?;
@@ -9872,6 +11344,7 @@ impl<'xml> DeserializeContent<'xml> for ReplicationTime {
         })
     }
 }
+
 impl SerializeContent for ReplicationTimeStatus {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -9886,6 +11359,7 @@ impl<'xml> DeserializeContent<'xml> for ReplicationTimeStatus {
         })
     }
 }
+
 impl SerializeContent for ReplicationTimeValue {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.minutes {
@@ -9911,34 +11385,7 @@ impl<'xml> DeserializeContent<'xml> for ReplicationTimeValue {
         Ok(Self { minutes })
     }
 }
-impl SerializeContent for RequestPaymentConfiguration {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("Payer", &self.payer)?;
-        Ok(())
-    }
-}
 
-impl<'xml> DeserializeContent<'xml> for RequestPaymentConfiguration {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut payer: Option<Payer> = None;
-        d.for_each_element(|d, x| match x {
-            b"Payer" => {
-                if payer.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                payer = Some(d.content()?);
-                Ok(())
-            }
-            _ => {
-                d.skip_element_content()?;
-                Ok(())
-            }
-        })?;
-        Ok(Self {
-            payer: payer.ok_or(DeError::MissingField)?,
-        })
-    }
-}
 impl SerializeContent for RequestProgress {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.enabled {
@@ -9964,108 +11411,7 @@ impl<'xml> DeserializeContent<'xml> for RequestProgress {
         Ok(Self { enabled })
     }
 }
-impl SerializeContent for RestoreRequest {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.days {
-            s.content("Days", val)?;
-        }
-        if let Some(ref val) = self.description {
-            s.content("Description", val)?;
-        }
-        if let Some(ref val) = self.glacier_job_parameters {
-            s.content("GlacierJobParameters", val)?;
-        }
-        if let Some(ref val) = self.output_location {
-            s.content("OutputLocation", val)?;
-        }
-        if let Some(ref val) = self.select_parameters {
-            s.content("SelectParameters", val)?;
-        }
-        if let Some(ref val) = self.tier {
-            s.content("Tier", val)?;
-        }
-        if let Some(ref val) = self.type_ {
-            s.content("Type", val)?;
-        }
-        Ok(())
-    }
-}
 
-impl<'xml> DeserializeContent<'xml> for RestoreRequest {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut days: Option<Days> = None;
-        let mut description: Option<Description> = None;
-        let mut glacier_job_parameters: Option<GlacierJobParameters> = None;
-        let mut output_location: Option<OutputLocation> = None;
-        let mut select_parameters: Option<SelectParameters> = None;
-        let mut tier: Option<Tier> = None;
-        let mut type_: Option<RestoreRequestType> = None;
-        d.for_each_element(|d, x| match x {
-            b"Days" => {
-                if days.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                days = Some(d.content()?);
-                Ok(())
-            }
-            b"Description" => {
-                if description.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                description = Some(d.content()?);
-                Ok(())
-            }
-            b"GlacierJobParameters" => {
-                if glacier_job_parameters.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                glacier_job_parameters = Some(d.content()?);
-                Ok(())
-            }
-            b"OutputLocation" => {
-                if output_location.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                output_location = Some(d.content()?);
-                Ok(())
-            }
-            b"SelectParameters" => {
-                if select_parameters.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                select_parameters = Some(d.content()?);
-                Ok(())
-            }
-            b"Tier" => {
-                if tier.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                tier = Some(d.content()?);
-                Ok(())
-            }
-            b"Type" => {
-                if type_.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                type_ = Some(d.content()?);
-                Ok(())
-            }
-            _ => {
-                d.skip_element_content()?;
-                Ok(())
-            }
-        })?;
-        Ok(Self {
-            days,
-            description,
-            glacier_job_parameters,
-            output_location,
-            select_parameters,
-            tier,
-            type_,
-        })
-    }
-}
 impl SerializeContent for RestoreRequestType {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -10079,6 +11425,7 @@ impl<'xml> DeserializeContent<'xml> for RestoreRequestType {
         })
     }
 }
+
 impl SerializeContent for RestoreStatus {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.is_restore_in_progress {
@@ -10118,6 +11465,7 @@ impl<'xml> DeserializeContent<'xml> for RestoreStatus {
         })
     }
 }
+
 impl SerializeContent for RoutingRule {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.condition {
@@ -10155,6 +11503,7 @@ impl<'xml> DeserializeContent<'xml> for RoutingRule {
         })
     }
 }
+
 impl SerializeContent for S3KeyFilter {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(iter) = &self.filter_rules {
@@ -10178,6 +11527,7 @@ impl<'xml> DeserializeContent<'xml> for S3KeyFilter {
         Ok(Self { filter_rules })
     }
 }
+
 impl SerializeContent for S3Location {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(iter) = &self.access_control_list {
@@ -10285,6 +11635,7 @@ impl<'xml> DeserializeContent<'xml> for S3Location {
         })
     }
 }
+
 impl SerializeContent for S3TablesBucketType {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -10299,6 +11650,7 @@ impl<'xml> DeserializeContent<'xml> for S3TablesBucketType {
         })
     }
 }
+
 impl SerializeContent for S3TablesDestination {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         s.content("TableBucketArn", &self.table_bucket_arn)?;
@@ -10334,6 +11686,7 @@ impl<'xml> DeserializeContent<'xml> for S3TablesDestination {
         })
     }
 }
+
 impl SerializeContent for S3TablesDestinationResult {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         s.content("TableArn", &self.table_arn)?;
@@ -10389,6 +11742,7 @@ impl<'xml> DeserializeContent<'xml> for S3TablesDestinationResult {
         })
     }
 }
+
 impl SerializeContent for SSEKMS {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         s.content("KeyId", &self.key_id)?;
@@ -10414,6 +11768,45 @@ impl<'xml> DeserializeContent<'xml> for SSEKMS {
         })
     }
 }
+
+impl SerializeContent for SSEKMSEncryption {
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(ref val) = self.bucket_key_enabled {
+            s.content("BucketKeyEnabled", val)?;
+        }
+        s.content("KMSKeyArn", &self.kms_key_arn)?;
+        Ok(())
+    }
+}
+
+impl<'xml> DeserializeContent<'xml> for SSEKMSEncryption {
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut bucket_key_enabled: Option<BucketKeyEnabled> = None;
+        let mut kms_key_arn: Option<NonEmptyKmsKeyArnString> = None;
+        d.for_each_element(|d, x| match x {
+            b"BucketKeyEnabled" => {
+                if bucket_key_enabled.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                bucket_key_enabled = Some(d.content()?);
+                Ok(())
+            }
+            b"KMSKeyArn" => {
+                if kms_key_arn.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                kms_key_arn = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            bucket_key_enabled,
+            kms_key_arn: kms_key_arn.ok_or(DeError::MissingField)?,
+        })
+    }
+}
+
 impl SerializeContent for SSES3 {
     fn serialize_content<W: Write>(&self, _: &mut Serializer<W>) -> SerResult {
         Ok(())
@@ -10425,6 +11818,7 @@ impl<'xml> DeserializeContent<'xml> for SSES3 {
         Ok(Self {})
     }
 }
+
 impl SerializeContent for ScanRange {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.end {
@@ -10461,88 +11855,7 @@ impl<'xml> DeserializeContent<'xml> for ScanRange {
         Ok(Self { end, start })
     }
 }
-impl SerializeContent for SelectObjectContentRequest {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        s.content("Expression", &self.expression)?;
-        s.content("ExpressionType", &self.expression_type)?;
-        s.content("InputSerialization", &self.input_serialization)?;
-        s.content("OutputSerialization", &self.output_serialization)?;
-        if let Some(ref val) = self.request_progress {
-            s.content("RequestProgress", val)?;
-        }
-        if let Some(ref val) = self.scan_range {
-            s.content("ScanRange", val)?;
-        }
-        Ok(())
-    }
-}
 
-impl<'xml> DeserializeContent<'xml> for SelectObjectContentRequest {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut expression: Option<Expression> = None;
-        let mut expression_type: Option<ExpressionType> = None;
-        let mut input_serialization: Option<InputSerialization> = None;
-        let mut output_serialization: Option<OutputSerialization> = None;
-        let mut request_progress: Option<RequestProgress> = None;
-        let mut scan_range: Option<ScanRange> = None;
-        d.for_each_element(|d, x| match x {
-            b"Expression" => {
-                if expression.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                expression = Some(d.content()?);
-                Ok(())
-            }
-            b"ExpressionType" => {
-                if expression_type.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                expression_type = Some(d.content()?);
-                Ok(())
-            }
-            b"InputSerialization" => {
-                if input_serialization.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                input_serialization = Some(d.content()?);
-                Ok(())
-            }
-            b"OutputSerialization" => {
-                if output_serialization.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                output_serialization = Some(d.content()?);
-                Ok(())
-            }
-            b"RequestProgress" => {
-                if request_progress.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                request_progress = Some(d.content()?);
-                Ok(())
-            }
-            b"ScanRange" => {
-                if scan_range.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                scan_range = Some(d.content()?);
-                Ok(())
-            }
-            _ => {
-                d.skip_element_content()?;
-                Ok(())
-            }
-        })?;
-        Ok(Self {
-            expression: expression.ok_or(DeError::MissingField)?,
-            expression_type: expression_type.ok_or(DeError::MissingField)?,
-            input_serialization: input_serialization.ok_or(DeError::MissingField)?,
-            output_serialization: output_serialization.ok_or(DeError::MissingField)?,
-            request_progress,
-            scan_range,
-        })
-    }
-}
 impl SerializeContent for SelectParameters {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         s.content("Expression", &self.expression)?;
@@ -10598,6 +11911,7 @@ impl<'xml> DeserializeContent<'xml> for SelectParameters {
         })
     }
 }
+
 impl SerializeContent for ServerSideEncryption {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -10607,12 +11921,15 @@ impl<'xml> DeserializeContent<'xml> for ServerSideEncryption {
     fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
         d.text(|s| match s {
             "AES256" => Ok(Self::from_static(ServerSideEncryption::AES256)),
+            "aws:backup" => Ok(Self::from_static(ServerSideEncryption::AWS_BACKUP)),
+            "aws:fsx" => Ok(Self::from_static(ServerSideEncryption::AWS_FSX)),
             "aws:kms" => Ok(Self::from_static(ServerSideEncryption::AWS_KMS)),
             "aws:kms:dsse" => Ok(Self::from_static(ServerSideEncryption::AWS_KMS_DSSE)),
             _ => Ok(Self::from(s.to_owned())),
         })
     }
 }
+
 impl SerializeContent for ServerSideEncryptionByDefault {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.kms_master_key_id {
@@ -10650,39 +11967,14 @@ impl<'xml> DeserializeContent<'xml> for ServerSideEncryptionByDefault {
         })
     }
 }
-impl SerializeContent for ServerSideEncryptionConfiguration {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        {
-            let iter = &self.rules;
-            s.flattened_list("Rule", iter)?;
-        }
-        Ok(())
-    }
-}
 
-impl<'xml> DeserializeContent<'xml> for ServerSideEncryptionConfiguration {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut rules: Option<ServerSideEncryptionRules> = None;
-        d.for_each_element(|d, x| match x {
-            b"Rule" => {
-                let ans: ServerSideEncryptionRule = d.content()?;
-                rules.get_or_insert_with(List::new).push(ans);
-                Ok(())
-            }
-            _ => {
-                d.skip_element_content()?;
-                Ok(())
-            }
-        })?;
-        Ok(Self {
-            rules: rules.ok_or(DeError::MissingField)?,
-        })
-    }
-}
 impl SerializeContent for ServerSideEncryptionRule {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.apply_server_side_encryption_by_default {
             s.content("ApplyServerSideEncryptionByDefault", val)?;
+        }
+        if let Some(ref val) = self.blocked_encryption_types {
+            s.content("BlockedEncryptionTypes", val)?;
         }
         if let Some(ref val) = self.bucket_key_enabled {
             s.content("BucketKeyEnabled", val)?;
@@ -10694,6 +11986,7 @@ impl SerializeContent for ServerSideEncryptionRule {
 impl<'xml> DeserializeContent<'xml> for ServerSideEncryptionRule {
     fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
         let mut apply_server_side_encryption_by_default: Option<ServerSideEncryptionByDefault> = None;
+        let mut blocked_encryption_types: Option<BlockedEncryptionTypes> = None;
         let mut bucket_key_enabled: Option<BucketKeyEnabled> = None;
         d.for_each_element(|d, x| match x {
             b"ApplyServerSideEncryptionByDefault" => {
@@ -10701,6 +11994,13 @@ impl<'xml> DeserializeContent<'xml> for ServerSideEncryptionRule {
                     return Err(DeError::DuplicateField);
                 }
                 apply_server_side_encryption_by_default = Some(d.content()?);
+                Ok(())
+            }
+            b"BlockedEncryptionTypes" => {
+                if blocked_encryption_types.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                blocked_encryption_types = Some(d.content()?);
                 Ok(())
             }
             b"BucketKeyEnabled" => {
@@ -10714,10 +12014,12 @@ impl<'xml> DeserializeContent<'xml> for ServerSideEncryptionRule {
         })?;
         Ok(Self {
             apply_server_side_encryption_by_default,
+            blocked_encryption_types,
             bucket_key_enabled,
         })
     }
 }
+
 impl SerializeContent for SessionCredentials {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         s.content("AccessKeyId", &self.access_key_id)?;
@@ -10773,6 +12075,7 @@ impl<'xml> DeserializeContent<'xml> for SessionCredentials {
         })
     }
 }
+
 impl SerializeContent for SimplePrefix {
     fn serialize_content<W: Write>(&self, _: &mut Serializer<W>) -> SerResult {
         Ok(())
@@ -10784,6 +12087,7 @@ impl<'xml> DeserializeContent<'xml> for SimplePrefix {
         Ok(Self {})
     }
 }
+
 impl SerializeContent for SourceSelectionCriteria {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.replica_modifications {
@@ -10823,6 +12127,7 @@ impl<'xml> DeserializeContent<'xml> for SourceSelectionCriteria {
         })
     }
 }
+
 impl SerializeContent for SseKmsEncryptedObjects {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         s.content("Status", &self.status)?;
@@ -10848,6 +12153,7 @@ impl<'xml> DeserializeContent<'xml> for SseKmsEncryptedObjects {
         })
     }
 }
+
 impl SerializeContent for SseKmsEncryptedObjectsStatus {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -10862,57 +12168,7 @@ impl<'xml> DeserializeContent<'xml> for SseKmsEncryptedObjectsStatus {
         })
     }
 }
-impl SerializeContent for Stats {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.bytes_processed {
-            s.content("BytesProcessed", val)?;
-        }
-        if let Some(ref val) = self.bytes_returned {
-            s.content("BytesReturned", val)?;
-        }
-        if let Some(ref val) = self.bytes_scanned {
-            s.content("BytesScanned", val)?;
-        }
-        Ok(())
-    }
-}
 
-impl<'xml> DeserializeContent<'xml> for Stats {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut bytes_processed: Option<BytesProcessed> = None;
-        let mut bytes_returned: Option<BytesReturned> = None;
-        let mut bytes_scanned: Option<BytesScanned> = None;
-        d.for_each_element(|d, x| match x {
-            b"BytesProcessed" => {
-                if bytes_processed.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                bytes_processed = Some(d.content()?);
-                Ok(())
-            }
-            b"BytesReturned" => {
-                if bytes_returned.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                bytes_returned = Some(d.content()?);
-                Ok(())
-            }
-            b"BytesScanned" => {
-                if bytes_scanned.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                bytes_scanned = Some(d.content()?);
-                Ok(())
-            }
-            _ => Err(DeError::UnexpectedTagName),
-        })?;
-        Ok(Self {
-            bytes_processed,
-            bytes_returned,
-            bytes_scanned,
-        })
-    }
-}
 impl SerializeContent for StorageClass {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -10940,6 +12196,7 @@ impl<'xml> DeserializeContent<'xml> for StorageClass {
         })
     }
 }
+
 impl SerializeContent for StorageClassAnalysis {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.data_export {
@@ -10965,6 +12222,7 @@ impl<'xml> DeserializeContent<'xml> for StorageClassAnalysis {
         Ok(Self { data_export })
     }
 }
+
 impl SerializeContent for StorageClassAnalysisDataExport {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         s.content("Destination", &self.destination)?;
@@ -11000,6 +12258,7 @@ impl<'xml> DeserializeContent<'xml> for StorageClassAnalysisDataExport {
         })
     }
 }
+
 impl SerializeContent for StorageClassAnalysisSchemaVersion {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -11013,6 +12272,7 @@ impl<'xml> DeserializeContent<'xml> for StorageClassAnalysisSchemaVersion {
         })
     }
 }
+
 impl SerializeContent for TableSseAlgorithm {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -11027,6 +12287,7 @@ impl<'xml> DeserializeContent<'xml> for TableSseAlgorithm {
         })
     }
 }
+
 impl SerializeContent for Tag {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.key {
@@ -11063,37 +12324,7 @@ impl<'xml> DeserializeContent<'xml> for Tag {
         Ok(Self { key, value })
     }
 }
-impl SerializeContent for Tagging {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        {
-            let iter = &self.tag_set;
-            s.list("TagSet", "Tag", iter)?;
-        }
-        Ok(())
-    }
-}
 
-impl<'xml> DeserializeContent<'xml> for Tagging {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut tag_set: Option<TagSet> = None;
-        d.for_each_element(|d, x| match x {
-            b"TagSet" => {
-                if tag_set.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                tag_set = Some(d.list_content("Tag")?);
-                Ok(())
-            }
-            _ => {
-                d.skip_element_content()?;
-                Ok(())
-            }
-        })?;
-        Ok(Self {
-            tag_set: tag_set.ok_or(DeError::MissingField)?,
-        })
-    }
-}
 impl SerializeContent for TargetGrant {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.grantee {
@@ -11187,6 +12418,7 @@ impl<'xml> DeserializeContent<'xml> for TargetGrant {
         Ok(Self { grantee, permission })
     }
 }
+
 impl SerializeContent for TargetObjectKeyFormat {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.partitioned_prefix {
@@ -11226,6 +12458,7 @@ impl<'xml> DeserializeContent<'xml> for TargetObjectKeyFormat {
         })
     }
 }
+
 impl SerializeContent for Tier {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -11241,6 +12474,7 @@ impl<'xml> DeserializeContent<'xml> for Tier {
         })
     }
 }
+
 impl SerializeContent for Tiering {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         s.content("AccessTier", &self.access_tier)?;
@@ -11276,6 +12510,7 @@ impl<'xml> DeserializeContent<'xml> for Tiering {
         })
     }
 }
+
 impl SerializeContent for TopicConfiguration {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         {
@@ -11336,6 +12571,7 @@ impl<'xml> DeserializeContent<'xml> for TopicConfiguration {
         })
     }
 }
+
 impl SerializeContent for Transition {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(ref val) = self.date {
@@ -11387,6 +12623,7 @@ impl<'xml> DeserializeContent<'xml> for Transition {
         })
     }
 }
+
 impl SerializeContent for TransitionStorageClass {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -11405,6 +12642,7 @@ impl<'xml> DeserializeContent<'xml> for TransitionStorageClass {
         })
     }
 }
+
 impl SerializeContent for Type {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         self.as_str().serialize_content(s)
@@ -11417,111 +12655,6 @@ impl<'xml> DeserializeContent<'xml> for Type {
             "CanonicalUser" => Ok(Self::from_static(Type::CANONICAL_USER)),
             "Group" => Ok(Self::from_static(Type::GROUP)),
             _ => Ok(Self::from(s.to_owned())),
-        })
-    }
-}
-impl SerializeContent for VersioningConfiguration {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.mfa_delete {
-            s.content("MfaDelete", val)?;
-        }
-        if let Some(ref val) = self.status {
-            s.content("Status", val)?;
-        }
-        Ok(())
-    }
-}
-
-impl<'xml> DeserializeContent<'xml> for VersioningConfiguration {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut mfa_delete: Option<MFADelete> = None;
-        let mut status: Option<BucketVersioningStatus> = None;
-        d.for_each_element(|d, x| match x {
-            b"MfaDelete" => {
-                if mfa_delete.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                mfa_delete = Some(d.content()?);
-                Ok(())
-            }
-            b"Status" => {
-                if status.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                status = Some(d.content()?);
-                Ok(())
-            }
-            _ => {
-                d.skip_element_content()?;
-                Ok(())
-            }
-        })?;
-        Ok(Self { mfa_delete, status })
-    }
-}
-impl SerializeContent for WebsiteConfiguration {
-    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
-        if let Some(ref val) = self.error_document {
-            s.content("ErrorDocument", val)?;
-        }
-        if let Some(ref val) = self.index_document {
-            s.content("IndexDocument", val)?;
-        }
-        if let Some(ref val) = self.redirect_all_requests_to {
-            s.content("RedirectAllRequestsTo", val)?;
-        }
-        if let Some(iter) = &self.routing_rules {
-            s.list("RoutingRules", "RoutingRule", iter)?;
-        }
-        Ok(())
-    }
-}
-
-impl<'xml> DeserializeContent<'xml> for WebsiteConfiguration {
-    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
-        let mut error_document: Option<ErrorDocument> = None;
-        let mut index_document: Option<IndexDocument> = None;
-        let mut redirect_all_requests_to: Option<RedirectAllRequestsTo> = None;
-        let mut routing_rules: Option<RoutingRules> = None;
-        d.for_each_element(|d, x| match x {
-            b"ErrorDocument" => {
-                if error_document.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                error_document = Some(d.content()?);
-                Ok(())
-            }
-            b"IndexDocument" => {
-                if index_document.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                index_document = Some(d.content()?);
-                Ok(())
-            }
-            b"RedirectAllRequestsTo" => {
-                if redirect_all_requests_to.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                redirect_all_requests_to = Some(d.content()?);
-                Ok(())
-            }
-            b"RoutingRules" => {
-                if routing_rules.is_some() {
-                    return Err(DeError::DuplicateField);
-                }
-                routing_rules = Some(d.list_content("RoutingRule")?);
-                Ok(())
-            }
-            _ => {
-                d.skip_element_content()?;
-                Ok(())
-            }
-        })?;
-        Ok(Self {
-            error_document,
-            index_document,
-            redirect_all_requests_to,
-            routing_rules,
         })
     }
 }

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
+use hyper::StatusCode;
+
 macro_rules! wrap_sdk_error {
     ($e:expr) => {{
         use aws_sdk_s3::error::SdkError;
@@ -40,7 +42,17 @@ pub struct SetStatusCode<'a, 'b, E, R>(
 impl<E> SetStatusCode<'_, '_, E, aws_smithy_runtime_api::client::orchestrator::HttpResponse> {
     pub fn call(self) {
         let Self(err, e) = self;
-        err.set_status_code(hyper_status_code_from_aws(e.raw().status()));
+        let status = hyper_status_code_from_aws(e.raw().status());
+        // A successful raw status paired with an error body is a protocol
+        // violation. It can only originate from a failed response
+        // deserialization (e.g. `XmlDecodeError` on a 200 response), which
+        // carries no error code; force 500 in that case instead of echoing
+        // the 2xx status to the client.
+        if status.is_success() {
+            err.set_status_code(StatusCode::INTERNAL_SERVER_ERROR);
+        } else {
+            err.set_status_code(status);
+        }
         // TODO: headers?
     }
 }

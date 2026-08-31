@@ -19,7 +19,7 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
         "use super::*;",
         "",
         "use crate::conv::{try_from_aws, try_into_aws};",
-        "use crate::conv::string_from_integer;",
+        "use crate::conv::{expires_into_aws, string_from_integer};",
         "",
         "use s3s::S3;",
         "use s3s::{S3Request, S3Response};",
@@ -46,6 +46,7 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
             // forwards them through the official MinIO SDK, delegating to a
             // same-named helper in `listen.rs`.
             g!("#[tracing::instrument(skip(self, req))]");
+            g!("#[cfg(feature = \"minio\")]");
             g!("async fn {method_name}(&self, req: S3Request<{s3s_input}>) -> S3Result<S3Response<{s3s_output}>> {{");
             g!("super::listen::{method_name}(&self.minio, req).await");
             g!("}}");
@@ -103,6 +104,12 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
 
                 if field.type_ == "PartNumberMarker" || field.type_ == "NextPartNumberMarker" {
                     g!("b = b.set_{aws_field_name}(input.{s3s_field_name}.map(string_from_integer));");
+                    continue;
+                }
+
+                if field.type_ == "Expires" {
+                    // s3s keeps the raw string; the SDK input takes `DateTime`.
+                    g!("b = b.set_{aws_field_name}(expires_into_aws(input.{s3s_field_name})?);");
                     continue;
                 }
 

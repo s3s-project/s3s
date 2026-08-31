@@ -7,14 +7,7 @@
 //! invokes the user-provided [`S3`](crate::S3) implementation, and converts
 //! the resulting outputs or errors back into HTTP responses.
 
-cfg_if::cfg_if! {
-    if #[cfg(feature = "minio")] {
-        mod generated_minio;
-        use self::generated_minio as generated;
-    } else {
-        mod generated;
-    }
-}
+mod generated;
 
 pub use self::generated::*;
 
@@ -26,6 +19,12 @@ mod multipart;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod bodyless_error_tests;
+
+#[cfg(test)]
+mod head_error_tests;
 
 #[cfg(test)]
 mod route_skip_validation_tests;
@@ -51,6 +50,7 @@ use crate::post_policy::PostPolicy;
 use crate::protocol::S3Request;
 use crate::route::S3Route;
 use crate::s3_trait::S3;
+use crate::stream::ByteStream as _;
 use crate::validation::{AwsNameValidation, NameValidation};
 
 use std::mem;
@@ -83,6 +83,17 @@ pub trait Operation: Send + Sync + 'static {
     /// `DeleteObjects`, `PutObject`, `PutBucketPolicy`), `false` for
     /// bodyless operations such as `GetObject` and `DeleteObject`.
     fn has_request_payload(&self) -> bool;
+
+    /// Whether this operation streams the request body directly to the
+    /// user-implemented [`S3`] handler without buffering.
+    ///
+    /// `true` for operations whose input carries a `StreamingBlob` payload
+    /// (e.g. `PutObject`, `UploadPart`). These bodies are not bounded by
+    /// [`S3Config::xml_max_body_size`]; see
+    /// [`S3Config::put_object_max_size`].
+    fn has_streaming_body(&self) -> bool {
+        false
+    }
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut Request) -> S3Result<Response>;
 }
@@ -123,15 +134,36 @@ fn build_s3_request<T>(input: T, req: &mut Request) -> S3Request<T> {
 pub(crate) fn serialize_error(mut e: S3Error, no_decl: bool) -> S3Result<Response> {
     let status = e.status_code().unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
     let mut res = Response::with_status(status);
-    if no_decl {
-        http::set_xml_body_no_decl(&mut res, &e)?;
-    } else {
-        http::set_xml_body(&mut res, &e)?;
+    let bodyless = http::is_bodyless_status(status);
+    if !bodyless {
+        if no_decl {
+            http::set_xml_body_no_decl(&mut res, &e)?;
+        } else {
+            http::set_xml_body(&mut res, &e)?;
+        }
     }
     if let Some(headers) = e.take_headers() {
         res.headers = headers;
     }
+    if bodyless {
+        // RFC 9110 §6.4.1: 1xx/204/205/304 responses MUST NOT carry a body. The
+        // XML body is skipped above; drop any body-describing headers too
+        // (e.g. `content-type` from a custom error or the error's own headers).
+        res.headers.remove(hyper::header::CONTENT_LENGTH);
+        res.headers.remove(hyper::header::CONTENT_TYPE);
+        http::strip_body(&mut res);
+    }
     drop(e);
+    Ok(res)
+}
+/// Serializes an error response for the given request method. `HEAD` responses
+/// must not carry a body (RFC 9110 §9.3.2): the body is stripped while the
+/// metadata headers are preserved.
+pub(crate) fn serialize_error_for_method(method: &Method, e: S3Error, no_decl: bool) -> S3Result<Response> {
+    let mut res = serialize_error(e, no_decl)?;
+    if *method == Method::HEAD {
+        http::strip_body(&mut res);
+    }
     Ok(res)
 }
 
@@ -155,8 +187,15 @@ fn extract_http2_authority(req: &Request) -> Option<&str> {
 }
 
 fn extract_host(req: &Request) -> S3Result<Option<String>> {
-    // First try to get from Host header.
-    if let Some(val) = req.headers.get(crate::header::HOST) {
+    // First try to get from Host header. Repeated Host lines are rejected
+    // instead of silently picking the first value: signature verification
+    // signs every value of a repeated header, so accepting only one here
+    // would let routing and the signature disagree about the host.
+    let mut iter = req.headers.get_all(crate::header::HOST).iter();
+    if let Some(val) = iter.next() {
+        if iter.next().is_some() {
+            return Err(invalid_request!("duplicate header: Host"));
+        }
         let on_err = |e| s3_error!(e, InvalidRequest, "invalid header: Host: {val:?}");
         let host = val.to_str().map_err(on_err)?;
         return Ok(Some(host.into()));
@@ -255,7 +294,7 @@ fn signature_content_length(req: &Request, content_length: Option<u64>, request_
     if content_length.is_none()
         && !request_has_payload
         && http::get_unique_header_str(&req.headers, header::X_AMZ_CONTENT_SHA256.as_str())
-            == Some(crate::sig_v4::EMPTY_STRING_SHA256_HASH)
+            == Some(s3s_sigv4::EMPTY_STRING_SHA256_HASH)
     {
         Some(0)
     } else {
@@ -379,7 +418,7 @@ pub async fn call(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Response
         Ok(op) => op,
         Err(err) => {
             error!(?err, "failed to prepare");
-            return serialize_error(err, false);
+            return serialize_error_for_method(&req.method, err, false);
         }
     };
 
@@ -391,7 +430,7 @@ pub async fn call(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Response
                 }
                 Err(err) => {
                     error!(op = %op.name(), ?err, "op returns error");
-                    serialize_error(err, false)
+                    serialize_error_for_method(&req.method, err, false)
                 }
             }
         }
@@ -400,7 +439,7 @@ pub async fn call(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Response
             let result = reject_custom_route_body_too_large(extract_content_length(req)?, max_body_size);
             if let Err(err) = result {
                 error!(?err, "custom route request body is too large");
-                return serialize_error(err, false);
+                return serialize_error_for_method(&req.method, err, false);
             }
 
             let mut body = mem::take(&mut req.body);
@@ -423,7 +462,7 @@ pub async fn call(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Response
                 }),
                 Err(err) => {
                     error!(?err, "custom route returns error");
-                    serialize_error(err, false)
+                    serialize_error_for_method(&req.method, err, false)
                 }
             }
         }
@@ -832,7 +871,11 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                         req.s3ext.post_policy = policy;
                         break 'resolve &PostObject as &'static dyn Operation;
                     }
-                    // FIXME: POST /bucket/key hits this branch
+                    // A multipart POST whose path names an object is not a modeled S3
+                    // operation: `PostObject` binds to `/{Bucket}` only — the key is
+                    // carried by the `key` form field, never the URL path. AWS and
+                    // MinIO reject such requests with `MethodNotAllowed`; keep that
+                    // behavior.
                     S3Path::Object { .. } => return Err(s3_error!(MethodNotAllowed)),
                 }
             }
@@ -857,9 +900,27 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
 
     debug!(op = %op.name(), ?s3_path, "checked access");
 
+    let config = ccx.config.snapshot();
     if op.needs_full_body() {
-        let config = ccx.config.snapshot();
         extract_full_body(content_length, &mut req.body, config.xml_max_body_size).await?;
+    } else if op.has_streaming_body() {
+        req.body.set_limit(config.put_object_max_size);
+        // Backfill a known request-body length so that the `S3`
+        // implementation never sees an ambiguous missing `Content-Length`.
+        // The `x-amz-decoded-content-length` value wins (aws-chunked uploads),
+        // otherwise an exact remaining length (e.g. an empty body without
+        // `Content-Length`, which is empty by definition per RFC 9112 §6.3).
+        // Unknown-length bodies (chunked transfer-encoding without
+        // aws-chunked) stay untouched.
+        if config.normalize_content_length && content_length.is_none() {
+            let known = extract_decoded_content_length(&req.headers)?
+                .map(|x| x as u64)
+                .or_else(|| req.body.remaining_length().exact().map(|x| x as u64));
+            if let Some(known) = known {
+                req.headers
+                    .insert(hyper::header::CONTENT_LENGTH, hyper::header::HeaderValue::from(known));
+            }
+        }
     }
 
     Ok(Prepare::S3(op))

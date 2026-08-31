@@ -126,6 +126,83 @@ fn collect_errors(model: &smithy::Model) -> Errors {
     errors
 }
 
+// The AWS official error-code table (`data/s3_error_codes.json`) carries the current
+// description text for every code. Descriptions from the Smithy model docs may contain
+// stale wording or HTML remnants, so the JSON table takes precedence for the default
+// message table (the enum doc comments keep the model-derived text unchanged).
+fn load_json_desc() -> BTreeMap<String, String> {
+    let extra = error_codes::load_json("data/s3_error_codes.json").unwrap();
+    let mut json_desc: BTreeMap<String, String> = BTreeMap::new();
+    for group in extra.values() {
+        for ec in group {
+            json_desc.entry(ec.code.clone()).or_insert_with(|| ec.description.clone());
+        }
+    }
+    json_desc
+}
+
+// Curated messages for codes whose official description is misleading, context-specific
+// or otherwise unsuitable as an error message. Entries are asserted non-empty at codegen
+// time so a typo cannot silently produce an empty `<Message>` element.
+const OVERRIDE_MESSAGES: &[(&str, &str)] = &[
+    ("IllegalLocationConstraintException", "The specified location constraint is not valid."),
+    ("InvalidArgument", "Invalid argument."),
+    ("InvalidRequest", "Invalid request."),
+    ("MissingAuthenticationToken", "The request was not signed."),
+];
+
+fn load_overrides() -> BTreeMap<String, String> {
+    OVERRIDE_MESSAGES
+        .iter()
+        .map(|(code, msg)| {
+            assert!(!msg.trim().is_empty(), "empty override message for {code}");
+            ((*code).to_string(), (*msg).to_string())
+        })
+        .collect()
+}
+
+// Collapses all whitespace runs (including U+00C2, a mojibake of NBSP whose UTF-8 lead
+// byte was decoded as Latin-1) into a single space and trims the edges. Error messages
+// are emitted as single-line text: multi-line documentation text is not a message, and
+// Display/log consumers process messages line-by-line.
+fn normalize_message(desc: &str) -> String {
+    let mut out = String::with_capacity(desc.len());
+    let mut pending_space = false;
+    for c in desc.chars() {
+        if c.is_whitespace() || c == '\u{c2}' {
+            if !out.is_empty() {
+                pending_space = true;
+            }
+        } else if pending_space {
+            out.push(' ');
+            out.push(c);
+            pending_space = false;
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+const NEUTRAL_DEFAULT_MESSAGE: &str = "The request failed.";
+
+fn resolve_default_message(
+    err: &Error,
+    json_desc: &BTreeMap<String, String>,
+    overrides: &BTreeMap<String, String>,
+) -> Option<String> {
+    if let Some(msg) = overrides.get(&err.code) {
+        return Some(normalize_message(msg));
+    }
+    if let Some(msg) = json_desc.get(&err.code) {
+        return Some(normalize_message(msg));
+    }
+    if let Some(Some(desc)) = err.description.first() {
+        return Some(normalize_message(desc));
+    }
+    None
+}
+
 // https://github.com/Nugine/s3s/issues/224
 fn patch_extra_errors(errors: &mut Errors) {
     {
@@ -163,6 +240,9 @@ fn patch_extra_errors(errors: &mut Errors) {
 #[allow(clippy::too_many_lines)]
 pub fn codegen(model: &smithy::Model) {
     let errors = collect_errors(model);
+
+    let json_desc = load_json_desc();
+    let overrides = load_overrides();
 
     declare_codegen!();
 
@@ -255,6 +335,22 @@ pub fn codegen(model: &smithy::Model) {
         g!();
     }
 
+    {
+        let mut msg_map = phf_codegen::Map::new();
+        for err in errors.values() {
+            let msg = resolve_default_message(err, &json_desc, &overrides)
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| NEUTRAL_DEFAULT_MESSAGE.to_string());
+            msg_map.entry(err.code.as_str(), format!("{msg:?}"));
+        }
+
+        g!(
+            "static S3_ERROR_CODE_DEFAULT_MESSAGE: phf::Map<&'static str, &'static str> = {};",
+            msg_map.build()
+        );
+        g!();
+    }
+
     g!("impl S3ErrorCode {{");
 
     {
@@ -320,7 +416,7 @@ pub fn codegen(model: &smithy::Model) {
                         assert!(status.starts_with("307"));
                         o("TEMPORARY_REDIRECT")
                     }
-                    "Requested Range NotSatisfiable" => {
+                    "Requested Range Not Satisfiable" => {
                         assert!(status.starts_with("416"));
                         o("RANGE_NOT_SATISFIABLE")
                     }
@@ -339,6 +435,15 @@ pub fn codegen(model: &smithy::Model) {
         g!("Self::Custom(_) => None,");
         g!("}}");
 
+        g!("}}");
+        g!();
+    }
+
+    {
+        g!("#[must_use]");
+        g!("pub fn default_message(&self) -> Option<&'static str> {{");
+        g!("let s = self.as_static_str()?;");
+        g!("S3_ERROR_CODE_DEFAULT_MESSAGE.get(s).copied()");
         g!("}}");
         g!();
     }

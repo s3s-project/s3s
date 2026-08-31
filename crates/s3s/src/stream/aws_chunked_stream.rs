@@ -2,22 +2,37 @@
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
 //! aws-chunked stream
+//!
+//! Decodes an `aws-chunked` request body, verifying the per-chunk signature
+//! chain for signed modes and the trailer signature for
+//! `STREAMING-AWS4-HMAC-SHA256-PAYLOAD-TRAILER`. The decoded bytes are never
+//! yielded before their signature has been verified.
+//!
+//! # Checksum trailers
+//!
+//! `x-amz-checksum-*` trailer values are exposed via [`TrailingHeaders`]
+//! without verification: comparing them against a digest computed while
+//! consuming the body is the responsibility of the [`S3`](crate::S3)
+//! implementation (the reference implementation `s3s-fs` rejects mismatches
+//! with `BadDigest`). The unsigned mode
+//! (`STREAMING-UNSIGNED-PAYLOAD-TRAILER`) relies on those values for data
+//! integrity, so implementations that skip checksum verification accept
+//! unauthenticated data — a trade-off `s3s` leaves to the implementation.
 
 use crate::auth::SecretKey;
-use crate::error::StdError;
+use crate::error::{S3ErrorCode, StdError};
 use crate::protocol::TrailingHeaders;
-use crate::sig_v4;
-use crate::sig_v4::create_trailer_string_to_sign;
 use crate::stream::{ByteStream, DynByteStream, RemainingLength};
 use crate::utils::SyncBoxFuture;
 use crate::utils::crypto::{Sha256Sum, hex_bytes32};
 use s3s_sigv4::AmzDate;
+use s3s_sigv4::create_trailer_string_to_sign;
 
 use hyper::HeaderMap;
 use hyper::http::{HeaderName, HeaderValue};
 use std::fmt::{self, Debug};
 use std::pin::Pin;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::task::{Context, Poll};
 
 use futures::pin_mut;
@@ -102,6 +117,9 @@ pub enum AwsChunkedStreamError {
     /// Incomplete stream
     #[error("AwsChunkedStreamError: Incomplete")]
     Incomplete,
+    /// More bytes produced than the declared decoded length
+    #[error("AwsChunkedStreamError: LengthMismatch")]
+    LengthMismatch,
     /// Chunk metadata too large
     #[error("AwsChunkedStreamError: ChunkMetaTooLarge: size {0} exceeds limit {1}")]
     ChunkMetaTooLarge(usize, usize),
@@ -114,6 +132,24 @@ pub enum AwsChunkedStreamError {
     /// Too many trailer headers
     #[error("AwsChunkedStreamError: TooManyTrailerHeaders: count {0} exceeds limit {1}")]
     TooManyTrailerHeaders(usize, usize),
+}
+
+impl AwsChunkedStreamError {
+    /// Maps a stream-verification error to the `S3` error code a conforming
+    /// implementation should report.
+    #[must_use]
+    pub fn to_s3_error_code(&self) -> S3ErrorCode {
+        match self {
+            Self::Underlying(_) => S3ErrorCode::InternalError,
+            Self::SignatureMismatch => S3ErrorCode::SignatureDoesNotMatch,
+            Self::FormatError
+            | Self::Incomplete
+            | Self::LengthMismatch
+            | Self::TrailersTooLarge(..)
+            | Self::TooManyTrailerHeaders(..) => S3ErrorCode::IncompleteBody,
+            Self::ChunkMetaTooLarge(..) | Self::ChunkDataTooLarge(..) => S3ErrorCode::EntityTooLarge,
+        }
+    }
 }
 
 /// Chunk meta
@@ -161,10 +197,10 @@ fn check_signature(ctx: &SignatureCtx, expected_signature: &[u8], chunk_data: &[
     let expected = Sha256Sum::from_hex(std::str::from_utf8(expected_signature).ok()?)?;
 
     let string_to_sign = hex_bytes32(ctx.prev_signature.as_bytes(), |prev_signature| {
-        sig_v4::create_chunk_string_to_sign(&ctx.amz_date, &ctx.region, &ctx.service, prev_signature, chunk_data)
+        s3s_sigv4::create_chunk_string_to_sign(&ctx.amz_date, &ctx.region, &ctx.service, prev_signature, chunk_data)
     });
 
-    let signature = sig_v4::calculate_signature_with_key(&string_to_sign, &ctx.signing_key);
+    let signature = Sha256Sum::from_bytes(s3s_sigv4::calculate_signature_with_key(&string_to_sign, &ctx.signing_key));
 
     (expected == signature).then_some(signature)
 }
@@ -201,7 +237,8 @@ impl AwsChunkedStream {
                 pin_mut!(body);
                 let mut prev_bytes = Bytes::new();
                 let mut buf: Vec<u8> = Vec::new();
-                let signing_key = Zeroizing::new(sig_v4::derive_signing_key(&secret_key, &amz_date, &region, &service));
+                let signing_key =
+                    Zeroizing::new(s3s_sigv4::derive_signing_key(secret_key.expose(), &amz_date, &region, &service));
                 drop(secret_key);
                 let mut ctx = SignatureCtx {
                     amz_date,
@@ -288,7 +325,7 @@ impl AwsChunkedStream {
                                     map.append(hn, hv);
                                 }
                                 tracing::debug!(trailers=?map);
-                                *trailers_for_worker.lock().unwrap() = Some(map);
+                                *trailers_for_worker.lock().unwrap_or_else(PoisonError::into_inner) = Some(map);
                                 break;
                             }
                         }
@@ -372,7 +409,7 @@ impl AwsChunkedStream {
             let string_to_sign = hex_bytes32(ctx.prev_signature.as_bytes(), |prev_signature| {
                 create_trailer_string_to_sign(&ctx.amz_date, &ctx.region, &ctx.service, prev_signature, &canonical_trailers)
             });
-            let signature = sig_v4::calculate_signature_with_key(&string_to_sign, &ctx.signing_key);
+            let signature = Sha256Sum::from_bytes(s3s_sigv4::calculate_signature_with_key(&string_to_sign, &ctx.signing_key));
             if provided != signature {
                 return Some(Err(AwsChunkedStreamError::SignatureMismatch));
             }
@@ -647,17 +684,31 @@ impl AwsChunkedStream {
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Result<Bytes, AwsChunkedStreamError>>> {
         let ans = Pin::new(&mut self.inner).poll_next(cx);
-        if let Poll::Ready(Some(Ok(ref bytes))) = ans {
-            self.remaining_length = self.remaining_length.saturating_sub(bytes.len());
+        match ans {
+            Poll::Ready(Some(Ok(bytes))) => {
+                // The declared decoded length must match the actual chunk data:
+                // producing more bytes than the declaration is an overrun
+                // (previously masked by saturating subtraction).
+                if !bytes.is_empty() && bytes.len() > self.remaining_length {
+                    return Poll::Ready(Some(Err(AwsChunkedStreamError::LengthMismatch)));
+                }
+                self.remaining_length = self.remaining_length.saturating_sub(bytes.len());
+                Poll::Ready(Some(Ok(bytes)))
+            }
+            // The chunk stream ended (0-size chunk and trailers processed)
+            // before the declared decoded length was delivered.
+            Poll::Ready(None) if self.remaining_length != 0 => Poll::Ready(Some(Err(AwsChunkedStreamError::Incomplete))),
+            other => other,
         }
-        ans
     }
 
+    /// Returns the declared decoded length minus the bytes produced so far.
     #[must_use]
     pub fn exact_remaining_length(&self) -> usize {
         self.remaining_length
     }
 
+    /// Converts this stream into a dynamic byte stream.
     #[must_use]
     pub fn into_byte_stream(self) -> DynByteStream {
         crate::stream::into_dyn(self)
@@ -705,6 +756,27 @@ fn trim_ascii_whitespace(mut s: &[u8]) -> &[u8] {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn to_s3_error_code_maps_all_variants() {
+        let cases = [
+            (
+                AwsChunkedStreamError::Underlying(Box::new(std::io::Error::other("boom"))),
+                S3ErrorCode::InternalError,
+            ),
+            (AwsChunkedStreamError::SignatureMismatch, S3ErrorCode::SignatureDoesNotMatch),
+            (AwsChunkedStreamError::FormatError, S3ErrorCode::IncompleteBody),
+            (AwsChunkedStreamError::Incomplete, S3ErrorCode::IncompleteBody),
+            (AwsChunkedStreamError::LengthMismatch, S3ErrorCode::IncompleteBody),
+            (AwsChunkedStreamError::ChunkMetaTooLarge(1, 2), S3ErrorCode::EntityTooLarge),
+            (AwsChunkedStreamError::ChunkDataTooLarge(1, 2), S3ErrorCode::EntityTooLarge),
+            (AwsChunkedStreamError::TrailersTooLarge(1, 2), S3ErrorCode::IncompleteBody),
+            (AwsChunkedStreamError::TooManyTrailerHeaders(1, 2), S3ErrorCode::IncompleteBody),
+        ];
+        for (err, expected) in cases {
+            assert_eq!(err.to_s3_error_code(), expected, "{err:?}");
+        }
+    }
 
     #[test]
     fn signature_ctx_debug_redacts_signing_key() {
@@ -930,6 +1002,59 @@ mod tests {
         assert!(chunked_stream.next().await.is_none());
     }
 
+    #[tokio::test]
+    async fn unsigned_chunk_overrun_rejected_when_declaration_exceeded() {
+        // The decoded-length declaration says 4 bytes but the chunk carries 6:
+        // structurally valid, yet the produced bytes exceed the declaration.
+        let chunk1 = join(&[b"6\r\n", b"abcdef\r\n", b"0\r\n\r\n"]);
+        let chunk_results = vec![Ok(chunk1)];
+
+        let stream = futures::stream::iter(chunk_results);
+        let mut chunked_stream = AwsChunkedStream::new(
+            stream,
+            Sha256Sum::from_hex("0000000000000000000000000000000000000000000000000000000000000000").unwrap(),
+            AmzDate::parse("20130524T000000Z").unwrap(),
+            "us-east-1".into(),
+            "s3".into(),
+            "test-key".into(),
+            4, // decoded_content_length declaration
+            true,
+            crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
+        );
+
+        // The whole chunk is streamed in one poll, so the overrun is reported
+        // on the first read.
+        let result = chunked_stream.next().await;
+        assert!(matches!(result, Some(Err(AwsChunkedStreamError::LengthMismatch))));
+    }
+
+    #[tokio::test]
+    async fn unsigned_chunk_shortfall_rejected_when_declaration_not_met() {
+        // The decoded-length declaration says 8 bytes but the chunk carries 4
+        // and the stream ends cleanly with a 0-size chunk.
+        let chunk1 = join(&[b"4\r\n", b"abcd\r\n", b"0\r\n\r\n"]);
+        let chunk_results = vec![Ok(chunk1)];
+
+        let stream = futures::stream::iter(chunk_results);
+        let mut chunked_stream = AwsChunkedStream::new(
+            stream,
+            Sha256Sum::from_hex("0000000000000000000000000000000000000000000000000000000000000000").unwrap(),
+            AmzDate::parse("20130524T000000Z").unwrap(),
+            "us-east-1".into(),
+            "s3".into(),
+            "test-key".into(),
+            8, // decoded_content_length declaration
+            true,
+            crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
+        );
+
+        let first = chunked_stream.next().await.unwrap().unwrap();
+        assert_eq!(first.as_ref(), b"abcd");
+
+        let result = chunked_stream.next().await;
+        assert!(matches!(result, Some(Err(AwsChunkedStreamError::Incomplete))));
+    }
+
     fn join(bytes: &[&[u8]]) -> Bytes {
         let mut buf = Vec::new();
         for b in bytes {
@@ -1051,7 +1176,7 @@ mod tests {
     #[tokio::test]
     async fn unsigned_payload_with_trailer_minimal() {
         // Construct a minimal unsigned aws-chunked stream: two data chunks and a 0 chunk, then trailers block.
-        // Here we compute signatures using existing test vectors in sig_v4::methods.rs indirectly by using
+        // Here we compute signatures using existing test vectors in s3s_sigv4::methods.rs indirectly by using
         // a known seed and the create_trailer_string_to_sign path inside AwsChunkedStream.
 
         // For unsigned per-chunk mode, meta lines are plain sizes without extensions.
@@ -1078,7 +1203,7 @@ mod tests {
         // Canonical trailers: one additional header besides x-amz-trailer-signature
         let canonical = b"x-amz-meta-foo:bar\n".to_vec();
         let string_to_sign = create_trailer_string_to_sign(&date, region, service, seed_signature, &canonical);
-        let sig = sig_v4::calculate_signature(&string_to_sign, &SecretKey::from(secret_access_key), &date, region, service);
+        let sig = s3s_sigv4::calculate_signature(&string_to_sign, secret_access_key, &date, region, service);
         let trailers_block = Bytes::from(format!("x-amz-meta-foo: bar\r\nx-amz-trailer-signature:{}", sig.as_str()));
 
         let chunk_results: Vec<Result<Bytes, _>> = vec![Ok(chunk1), Ok(chunk2), Ok(chunk3), Ok(trailers_block)];
@@ -1212,9 +1337,11 @@ mod tests {
             crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
         );
 
-        // Stream ends without proper chunk metadata
+        // Stream ends without proper chunk metadata; the declared decoded
+        // length was never delivered, so the stream reports an incomplete
+        // upload instead of ending silently.
         let result = chunked_stream.next().await;
-        assert!(result.is_none());
+        assert!(matches!(result, Some(Err(AwsChunkedStreamError::Incomplete))));
     }
 
     #[tokio::test]

@@ -2,6 +2,13 @@
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
 #![deny(missing_docs)]
+#![deny(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::unwrap_used
+)]
 use crate::error::StdError;
 use crate::stream::ByteStream;
 use crate::stream::DynByteStream;
@@ -11,6 +18,7 @@ use std::fmt;
 use std::mem;
 use std::pin::Pin;
 use std::sync::Mutex;
+use std::sync::PoisonError;
 use std::task::Context;
 use std::task::Poll;
 
@@ -200,7 +208,7 @@ impl http_body::Body for Body {
                 //
             }
             KindProj::UnsyncBoxBody { inner } => {
-                let mut inner = inner.lock().unwrap();
+                let mut inner = inner.lock().unwrap_or_else(PoisonError::into_inner);
                 http_body::Body::poll_frame(Pin::new(&mut *inner), cx)
                 //
             }
@@ -230,7 +238,7 @@ impl http_body::Body for Body {
             Kind::Once { inner } => inner.is_empty(),
             Kind::Hyper { inner } => http_body::Body::is_end_stream(inner),
             Kind::BoxBody { inner } => http_body::Body::is_end_stream(inner),
-            Kind::UnsyncBoxBody { inner } => inner.lock().unwrap().is_end_stream(),
+            Kind::UnsyncBoxBody { inner } => inner.lock().unwrap_or_else(PoisonError::into_inner).is_end_stream(),
             Kind::DynStream { inner } => inner.remaining_length().exact() == Some(0),
         }
     }
@@ -241,7 +249,7 @@ impl http_body::Body for Body {
             Kind::Once { inner } => http_body::SizeHint::with_exact(inner.len() as u64),
             Kind::Hyper { inner } => http_body::Body::size_hint(inner),
             Kind::BoxBody { inner } => http_body::Body::size_hint(inner),
-            Kind::UnsyncBoxBody { inner } => inner.lock().unwrap().size_hint(),
+            Kind::UnsyncBoxBody { inner } => inner.lock().unwrap_or_else(PoisonError::into_inner).size_hint(),
             Kind::DynStream { inner } => inner.remaining_length().into(),
         }
     }
@@ -270,7 +278,9 @@ impl ByteStream for Body {
             Kind::Once { inner } => RemainingLength::new_exact(inner.len()),
             Kind::Hyper { inner } => http_body::Body::size_hint(inner).into(),
             Kind::BoxBody { inner } => http_body::Body::size_hint(inner).into(),
-            Kind::UnsyncBoxBody { inner } => http_body::Body::size_hint(&*inner.lock().unwrap()).into(),
+            Kind::UnsyncBoxBody { inner } => {
+                http_body::Body::size_hint(&*inner.lock().unwrap_or_else(PoisonError::into_inner)).into()
+            }
             Kind::DynStream { inner } => inner.remaining_length(),
         }
     }
@@ -293,7 +303,10 @@ impl fmt::Debug for Body {
             }
             Kind::UnsyncBoxBody { inner } => {
                 d.field("body", &"{..}");
-                d.field("remaining_length", &http_body::Body::size_hint(&*inner.lock().unwrap()));
+                d.field(
+                    "remaining_length",
+                    &http_body::Body::size_hint(&*inner.lock().unwrap_or_else(PoisonError::into_inner)),
+                );
             }
             Kind::DynStream { inner } => {
                 d.field("dyn_stream", &"{..}");
@@ -361,6 +374,13 @@ impl Body {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::unwrap_used
+)]
 mod tests {
     use super::*;
 

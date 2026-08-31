@@ -309,7 +309,7 @@ impl S3 for FileSystem {
                 checksum_algorithm: None,
                 checksum_type: None,
             };
-            dst_attrs.set_expires_timestamp(input.expires);
+            dst_attrs.expires = input.expires;
             self.save_object_attributes(&input.bucket, &input.key, &dst_attrs, None)
                 .await?;
         } else {
@@ -502,7 +502,7 @@ impl S3 for FileSystem {
             content_disposition: obj_attrs.as_ref().and_then(|a| a.content_disposition.clone()),
             content_language: obj_attrs.as_ref().and_then(|a| a.content_language.clone()),
             cache_control: obj_attrs.as_ref().and_then(|a| a.cache_control.clone()),
-            expires: obj_attrs.as_ref().and_then(|a| a.get_expires_timestamp()),
+            expires: obj_attrs.as_ref().and_then(|a| a.expires.clone()),
             website_redirect_location: obj_attrs.as_ref().and_then(|a| a.website_redirect_location.clone()),
             e_tag: Some(ETag::Strong(md5_sum)),
             checksum_crc32: checksum.checksum_crc32,
@@ -573,7 +573,7 @@ impl S3 for FileSystem {
             content_disposition: obj_attrs.as_ref().and_then(|a| a.content_disposition.clone()),
             content_language: obj_attrs.as_ref().and_then(|a| a.content_language.clone()),
             cache_control: obj_attrs.as_ref().and_then(|a| a.cache_control.clone()),
-            expires: obj_attrs.as_ref().and_then(|a| a.get_expires_timestamp()),
+            expires: obj_attrs.as_ref().and_then(|a| a.expires.clone()),
             website_redirect_location: obj_attrs.as_ref().and_then(|a| a.website_redirect_location.clone()),
             last_modified: Some(last_modified),
             metadata: obj_attrs.as_ref().and_then(|a| a.user_metadata.clone()),
@@ -619,6 +619,7 @@ impl S3 for FileSystem {
                 creation_date: Some(created_or_modified_date),
                 name: Some(name.to_owned()),
                 bucket_region: None,
+                bucket_arn: None,
             };
             buckets.push(bucket);
         }
@@ -1008,7 +1009,7 @@ impl S3 for FileSystem {
             checksum_algorithm: None,
             checksum_type: None,
         };
-        obj_attrs.set_expires_timestamp(expires);
+        obj_attrs.expires = expires;
         self.save_object_attributes(&bucket, &key, &obj_attrs, None).await?;
 
         let mut info: InternalInfo = default();
@@ -1064,7 +1065,7 @@ impl S3 for FileSystem {
             checksum_algorithm,
             checksum_type,
         };
-        obj_attrs.set_expires_timestamp(input.expires);
+        obj_attrs.expires = input.expires;
         self.save_object_attributes(&input.bucket, &input.key, &obj_attrs, Some(upload_id))
             .await?;
 

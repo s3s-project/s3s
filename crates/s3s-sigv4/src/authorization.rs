@@ -6,6 +6,7 @@
 //! See [sigv4-auth-using-authorization-header](https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-auth-using-authorization-header.html)
 //!
 
+use crate::crypto::is_sha256_checksum;
 use serde::{Deserialize, Serialize};
 
 /// Authorization
@@ -44,10 +45,13 @@ pub struct CredentialV4<'a> {
 
 /// [`AuthorizationV4`]
 #[derive(Debug, thiserror::Error)]
-#[error("ParseAuthorizationError")]
-pub struct ParseAuthorizationError {
-    /// private placeholder
-    _priv: (),
+pub enum ParseAuthorizationError {
+    /// The header does not match the `Authorization` header structure.
+    #[error("ParseAuthorizationError: malformed authorization header")]
+    Malformed,
+    /// The `Signature=` value is not a canonical lowercase hex SHA-256 digest.
+    #[error("ParseAuthorizationError: invalid signature format")]
+    InvalidSignature,
 }
 
 /// [`CredentialV4`]
@@ -77,10 +81,17 @@ impl<'a> AuthorizationV4<'a> {
     /// # Errors
     /// Returns an `Err` if the header is invalid
     pub fn parse(header: &'a str) -> Result<Self, ParseAuthorizationError> {
-        match parser::parse_authorization(header) {
-            Ok(("", ans)) => Ok(ans),
-            Ok(_) | Err(_) => Err(ParseAuthorizationError { _priv: () }),
+        let Ok(("", ans)) = parser::parse_authorization(header) else {
+            return Err(ParseAuthorizationError::Malformed);
+        };
+
+        // Validate the signature segment eagerly so callers can distinguish a
+        // malformed header from a syntactically invalid signature.
+        if !is_sha256_checksum(ans.signature) {
+            return Err(ParseAuthorizationError::InvalidSignature);
         }
+
+        Ok(ans)
     }
 }
 
@@ -170,10 +181,7 @@ mod parser {
     }
 
     fn verify_date(s: &str) -> Result<(), Error> {
-        let x = s.as_bytes();
-        if x.len() != 8 {
-            return Err(Error);
-        }
+        let x: &[u8; 8] = s.as_bytes().try_into().map_err(|_| Error)?;
 
         let yyyy = digit4([x[0], x[1], x[2], x[3]])?;
         let mm = digit2([x[4], x[5]])?;
@@ -190,6 +198,13 @@ mod parser {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::unwrap_used
+)]
 mod tests {
     use super::*;
 
@@ -260,6 +275,50 @@ mod tests {
     fn parse_rejects_empty_or_whitespace_input() {
         assert!(AuthorizationV4::parse("").is_err());
         assert!(AuthorizationV4::parse("AWS4-HMAC-SHA256").is_err());
+    }
+
+    #[test]
+    fn parse_rejects_invalid_signature_formats() {
+        let header = |signature: &str| {
+            format!(
+                "AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request, SignedHeaders=host, Signature={signature}"
+            )
+        };
+
+        // wrong length
+        assert!(matches!(
+            AuthorizationV4::parse(&header("abc")),
+            Err(ParseAuthorizationError::InvalidSignature)
+        ));
+        assert!(matches!(
+            AuthorizationV4::parse(&header(&"a".repeat(63))),
+            Err(ParseAuthorizationError::InvalidSignature)
+        ));
+        assert!(matches!(
+            AuthorizationV4::parse(&header(&"a".repeat(65))),
+            Err(ParseAuthorizationError::InvalidSignature)
+        ));
+        // non-hex characters
+        assert!(matches!(
+            AuthorizationV4::parse(&header(&format!("z{}", "a".repeat(63)))),
+            Err(ParseAuthorizationError::InvalidSignature)
+        ));
+        // uppercase hex is not canonical
+        assert!(matches!(
+            AuthorizationV4::parse(&header(&"A".repeat(64))),
+            Err(ParseAuthorizationError::InvalidSignature)
+        ));
+        // empty
+        assert!(matches!(
+            AuthorizationV4::parse(&header("")),
+            Err(ParseAuthorizationError::InvalidSignature)
+        ));
+    }
+
+    #[test]
+    fn parse_distinguishes_invalid_signature_from_malformed() {
+        let malformed = "AWS4-HMAC-SHA256 not-an-authorization";
+        assert!(matches!(AuthorizationV4::parse(malformed), Err(ParseAuthorizationError::Malformed)));
     }
 
     #[test]

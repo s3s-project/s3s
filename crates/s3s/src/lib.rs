@@ -92,7 +92,21 @@
 //! protection. If exposed to the Internet directly, they may be vulnerable to attacks.
 //!
 //! It is the user's responsibility to implement security enhancements such as:
+//! - Authentication: without
+//!   [`set_auth`](crate::service::S3ServiceBuilder::set_auth), the service
+//!   accepts anonymous requests and skips authorization entirely — every S3
+//!   operation is open to any client
 //! - HTTP body length limits
+//! - Object-size limits in the [`S3`] implementation for streaming uploads
+//!   (`PUT Object`, `UploadPart`): `s3s` applies a default 5 GiB cap via
+//!   [`S3Config::put_object_max_size`](crate::config::S3Config::put_object_max_size);
+//!   implementations should still enforce their own deployment-specific
+//!   limits, and must do so if the cap is disabled (set to `None`)
+//! - List-type response bodies (`ListObjects`, `ListBuckets`, ...) are
+//!   serialized in full by `s3s`: their memory usage grows with the number of
+//!   entries the [`S3`] implementation returns. Implementations should
+//!   paginate (`max-keys` / continuation tokens) and deployments should bound
+//!   response sizes
 //! - Rate limiting
 //! - Back pressure
 //! - Network-level security (firewalls, VPNs, etc.)
@@ -139,8 +153,6 @@ mod ops;
 mod protocol;
 mod s3_op;
 mod s3_trait;
-mod sig_v2;
-mod sig_v4;
 mod time;
 
 pub mod access;
@@ -169,8 +181,6 @@ pub use self::s3_trait::S3;
 // otherwise-private internals. Gated on the `fuzzing` cfg set by
 // cargo-fuzz / oss-fuzz build environments (no cargo feature, hence no
 // public feature surface and no semver impact).
-#[cfg(fuzzing)]
-pub use self::http::{AwsChunkedStream, AwsChunkedStreamError};
 #[cfg(fuzzing)]
 pub use self::http::{MultipartError, MultipartLimits, OrderedQs, ParseOrderedQsError, transform_multipart};
 #[cfg(fuzzing)]

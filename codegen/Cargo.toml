@@ -22,3 +22,5 @@ serde_urlencoded = "0.7.1"
 s3s-model = { version = "0.15.0", path = "../crates/s3s-model" }
 http.workspace = true
 phf_codegen.workspace = true
+tree-sitter-rust = "0.24.2"
+tree-sitter = "0.26.13"

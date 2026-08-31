@@ -1,13 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
-
 //! Byte-stream types for S3 request and response bodies.
 //!
 //! This module defines the [`ByteStream`] trait, the [`DynByteStream`] type
 //! alias for heap-allocated streams, and [`RemainingLength`] which
 //! communicates a known or estimated byte count remaining in a stream.
+//!
+//! [`upload_stream`] provides a wrapper that verifies a payload SHA-256 while
+//! forwarding bytes.
+//! [`aws_chunked_stream`] decodes `aws-chunked` request bodies and verifies
+//! their chunk signature chain.
 
 #![deny(missing_docs)]
+
+pub mod aws_chunked_stream;
+pub mod upload_stream;
 
 use crate::error::StdError;
 
@@ -164,11 +171,7 @@ pub(crate) struct VecByteStream {
 
 impl VecByteStream {
     pub fn new(v: Vec<Bytes>) -> Self {
-        let total = v
-            .iter()
-            .map(Bytes::len)
-            .try_fold(0, usize::checked_add)
-            .expect("length overflow");
+        let total = v.iter().map(Bytes::len).fold(0, usize::saturating_add);
 
         Self {
             queue: v.into(),

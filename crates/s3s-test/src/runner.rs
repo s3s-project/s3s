@@ -165,7 +165,7 @@ enum CaseHandle {
 }
 
 #[allow(clippy::similar_names)]
-async fn run_case(case_name: String, case_future: BoxFuture<'static, crate::Result>) -> CaseReport {
+async fn run_case(case_name: String, case_future: BoxFuture<'static, crate::Result>, should_panic: bool) -> CaseReport {
     info!("Test case start");
     let t0 = Instant::now();
 
@@ -173,31 +173,19 @@ async fn run_case(case_name: String, case_future: BoxFuture<'static, crate::Resu
     let elapsed_ns = t0.elapsed().as_nanos() as u64;
     let elapsed_ms = elapsed_ns as f64 / 1e6;
 
-    let summary = match result {
-        Ok(Ok(())) => FnSummary {
-            result: FnResult::Ok,
-            duration_ns: elapsed_ns,
-            duration_ms: elapsed_ms,
-        },
-        Ok(Err(ref e)) => FnSummary {
-            result: FnResult::Err(e.to_string()),
-            duration_ns: elapsed_ns,
-            duration_ms: elapsed_ms,
-        },
-        Err(ref e) if e.is_panic() => FnSummary {
-            result: FnResult::Panicked,
-            duration_ns: elapsed_ns,
-            duration_ms: elapsed_ms,
-        },
-        Err(ref e) => FnSummary {
-            result: FnResult::Err(e.to_string()),
-            duration_ns: elapsed_ns,
-            duration_ms: elapsed_ms,
-        },
+    let (passed, result) = match result {
+        Ok(Ok(())) => (!should_panic, FnResult::Ok),
+        Ok(Err(ref e)) => (false, FnResult::Err(e.to_string())),
+        Err(ref e) if e.is_panic() => (should_panic, FnResult::Panicked),
+        Err(ref e) => (false, FnResult::Err(e.to_string())),
+    };
+    let summary = FnSummary {
+        result,
+        duration_ns: elapsed_ns,
+        duration_ms: elapsed_ms,
     };
 
     info!(?summary, "Test case end");
-    let passed = summary.result.is_ok();
 
     CaseReport {
         name: case_name,
@@ -247,11 +235,12 @@ async fn run_fixture(fixture: &FixtureInfo, suite_data: &ArcAny, concurrent: boo
                     continue;
                 }
 
+                let should_panic = case.tags.contains(&CaseTag::ShouldPanic);
                 let case_name = case.name.clone();
                 let case_future = (case.run)(Arc::clone(&fixture_data));
                 let span = info_span!("case", name = case_name.as_str());
 
-                let handle = spawn(run_case(case_name, case_future).instrument(span));
+                let handle = spawn(run_case(case_name, case_future, should_panic).instrument(span));
                 handles.push(CaseHandle::Running(handle));
             }
 
@@ -280,11 +269,12 @@ async fn run_fixture(fixture: &FixtureInfo, suite_data: &ArcAny, concurrent: boo
                     continue;
                 }
 
+                let should_panic = case.tags.contains(&CaseTag::ShouldPanic);
                 let case_name = case.name.clone();
                 let case_future = (case.run)(Arc::clone(&fixture_data));
                 let span = info_span!("case", name = case_name.as_str());
 
-                let report = run_case(case_name, case_future).instrument(span).await;
+                let report = run_case(case_name, case_future, should_panic).instrument(span).await;
                 cases.push(report);
             }
         }
@@ -307,5 +297,144 @@ async fn run_fixture(fixture: &FixtureInfo, suite_data: &ArcAny, concurrent: boo
         duration_ns,
         duration_ms: duration_ns as f64 / 1e6,
         cases,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tcx::CaseTag;
+    use crate::tcx::TestContext;
+    use crate::test_support::*;
+
+    use std::sync::Arc;
+
+    async fn ok_case(_: Arc<MockFixture>) -> crate::Result {
+        Ok(())
+    }
+
+    async fn panic_case(_: Arc<MockFixture>) -> crate::Result {
+        panic!("boom");
+    }
+
+    async fn err_case(_: Arc<MockFixture>) -> crate::Result {
+        Err(crate::Failed::from_string("boom"))
+    }
+
+    async fn run_case_passed(tcx: &mut TestContext) -> bool {
+        run_single_case(tcx).await.passed
+    }
+
+    #[tokio::test]
+    async fn should_panic_tag_with_panic_passes() {
+        let mut tcx = register_case_with_tags("panics", panic_case, &[CaseTag::ShouldPanic]);
+        assert!(run_case_passed(&mut tcx).await, "should_panic case that panics should pass");
+    }
+
+    #[tokio::test]
+    async fn should_panic_tag_without_panic_fails() {
+        let mut tcx = register_case_with_tags("no-panic", ok_case, &[CaseTag::ShouldPanic]);
+        assert!(!run_case_passed(&mut tcx).await, "should_panic case that does not panic should fail");
+    }
+
+    #[tokio::test]
+    async fn untagged_case_with_panic_fails() {
+        let mut tcx = register_case("panics", panic_case);
+        assert!(!run_case_passed(&mut tcx).await, "untagged case that panics should fail");
+    }
+
+    #[tokio::test]
+    async fn untagged_case_without_panic_passes() {
+        let mut tcx = register_case("ok", ok_case);
+        assert!(run_case_passed(&mut tcx).await, "untagged case that returns Ok should pass");
+    }
+
+    #[tokio::test]
+    async fn case_returning_err_fails() {
+        let mut tcx = register_case("err", err_case);
+        let case = run_single_case(&mut tcx).await;
+        assert!(!case.passed, "case returning Err should fail");
+        assert!(matches!(case.run.unwrap().result, crate::report::FnResult::Err(_)));
+    }
+
+    #[tokio::test]
+    async fn ignored_case_is_skipped() {
+        let mut tcx = register_case_with_tags("ignored", panic_case, &[CaseTag::Ignored]);
+        let case = run_single_case(&mut tcx).await;
+        assert!(case.passed, "ignored case is reported as passed");
+        assert!(case.ignored);
+        assert!(case.run.is_none(), "ignored case has no run summary");
+    }
+
+    #[tokio::test]
+    async fn ignored_case_is_skipped_when_concurrent() {
+        let mut tcx = register_case_with_tags("ignored", panic_case, &[CaseTag::Ignored]);
+        let report = run(&mut tcx, true).await;
+        let case = &report.suites[0].fixtures[0].cases[0];
+        assert!(case.passed, "ignored case is reported as passed");
+        assert!(case.ignored);
+    }
+
+    #[tokio::test]
+    async fn default_suite_teardown_is_used() {
+        let mut tcx = TestContext::new();
+        let mut suite = tcx.suite::<PlainSuite>("suite");
+        let mut fixture = suite.fixture::<MockFixture>("fixture");
+        fixture.case("ok", ok_case);
+
+        let report = run(&mut tcx, false).await;
+        let suite_report = &report.suites[0];
+        assert!(suite_report.teardown.as_ref().is_some_and(|s| s.result.is_ok()));
+    }
+
+    #[tokio::test]
+    async fn concurrent_cases_run_and_pass() {
+        let mut tcx = TestContext::new();
+        let mut suite = tcx.suite::<MockSuite>("suite");
+        let mut fixture = suite.fixture::<MockFixture>("fixture");
+        for i in 0..8 {
+            fixture.case(format!("case-{i}"), ok_case);
+        }
+
+        let report = run(&mut tcx, true).await;
+        let fixture_report = &report.suites[0].fixtures[0];
+        assert_eq!(fixture_report.cases.len(), 8);
+        for case in &fixture_report.cases {
+            assert!(case.passed, "concurrent case {} should pass", case.name);
+        }
+    }
+
+    #[tokio::test]
+    async fn suite_setup_failure_skips_fixtures_and_cases() {
+        let mut tcx = TestContext::new();
+        let mut suite = tcx.suite::<FailSetupSuite>("suite");
+        let mut fixture = suite.fixture::<MockFixture>("fixture");
+        fixture.case("never-runs", ok_case);
+
+        let report = run(&mut tcx, false).await;
+        let suite_report = &report.suites[0];
+        assert!(suite_report.setup.as_ref().is_some_and(|s| !s.result.is_ok()));
+        assert!(suite_report.fixtures.is_empty(), "fixtures must not run when suite setup fails");
+    }
+
+    #[tokio::test]
+    async fn suite_teardown_runs_and_teardown_failure_is_recorded() {
+        let mut tcx = TestContext::new();
+        let mut suite = tcx.suite::<MockSuite>("suite");
+        let mut fixture = suite.fixture::<MockFixture>("fixture");
+        fixture.case("ok", ok_case);
+
+        let report = run(&mut tcx, false).await;
+        let suite_report = &report.suites[0];
+        assert!(suite_report.teardown.as_ref().is_some_and(|s| s.result.is_ok()));
+
+        let mut tcx = TestContext::new();
+        let mut suite = tcx.suite::<FailTeardownSuite>("suite");
+        let mut fixture = suite.fixture::<MockFixture>("fixture");
+        fixture.case("ok", ok_case);
+
+        let report = run(&mut tcx, false).await;
+        let suite_report = &report.suites[0];
+        assert!(suite_report.teardown.as_ref().is_some_and(|s| !s.result.is_ok()));
     }
 }

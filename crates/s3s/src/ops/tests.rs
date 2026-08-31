@@ -519,6 +519,56 @@ async fn vh_region_fallback_for_anonymous_request() {
     );
 }
 
+/// A repeated `Host` header must be rejected by `extract_host` instead of
+/// silently picking the first value: signature verification signs every
+/// value of a repeated header, so accepting only one would let routing and
+/// the signature disagree about the host.
+#[test]
+fn extract_host_rejects_duplicate_host_header() {
+    use crate::http::{Body, Request};
+
+    let req = Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri("http://example.com/test-key")
+            .header(crate::header::HOST, "example.com")
+            .header(crate::header::HOST, "attacker.example.com")
+            .body(Body::empty())
+            .unwrap(),
+    );
+
+    let err = super::extract_host(&req).expect_err("duplicate Host must be rejected");
+    assert_eq!(err.code(), &crate::S3ErrorCode::InvalidRequest);
+    assert_eq!(err.message(), Some("duplicate header: Host"));
+}
+
+/// `extract_host` keeps resolving a single Host value and the HTTP/2/3
+/// authority fallback.
+#[test]
+fn extract_host_accepts_single_value_and_authority() {
+    use crate::http::{Body, Request};
+
+    let req = Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri("http://example.com/test-key")
+            .header(crate::header::HOST, "example.com")
+            .body(Body::empty())
+            .unwrap(),
+    );
+    assert_eq!(super::extract_host(&req).unwrap().as_deref(), Some("example.com"));
+
+    let req = Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .version(::http::Version::HTTP_2)
+            .uri("http://bucket.example.com:19000/test-key")
+            .body(Body::empty())
+            .unwrap(),
+    );
+    assert_eq!(super::extract_host(&req).unwrap().as_deref(), Some("bucket.example.com:19000"));
+}
+
 /// With an `S3Host` configured, an unrecognized host carrying a port
 /// (e.g. `localhost:8014`) can never be a CNAME bucket and must fall back
 /// to path-style parsing; a portless host that is a valid bucket name keeps
@@ -579,6 +629,111 @@ async fn host_fallback_path_style_and_cname() {
     assert!(
         matches!(req.s3ext.s3_path, Some(S3Path::Bucket { ref bucket }) if bucket.as_ref() == "localhost"),
         "portless valid-bucket host must keep the CNAME fallback"
+    );
+}
+
+/// A virtual-hosted-style request carrying an explicit non-default port must
+/// still route to the bucket (issue #438). Routing matches the port-stripped
+/// host; the signature path keeps the raw value (pinned in the signature
+/// tests). See
+/// [s3s-project/s3s#438](https://github.com/s3s-project/s3s/issues/438).
+#[tokio::test]
+async fn vhost_with_port_routes_bucket() {
+    use crate::config::{S3ConfigProvider, StaticConfigProvider};
+    use crate::host::MultiDomain;
+    use crate::http::{Body, Request};
+    use crate::path::S3Path;
+    use std::sync::Arc;
+
+    struct NoOpS3;
+    #[async_trait::async_trait]
+    impl crate::s3_trait::S3 for NoOpS3 {}
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(NoOpS3);
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+    let host = MultiDomain::new(["fs.example.com"]).unwrap();
+    let ccx = CallContext {
+        s3: &s3,
+        config: &config,
+        host: Some(&host),
+        auth: None,
+        access: None,
+        route: None,
+        validation: None,
+    };
+
+    // HTTP/1.1: the Host header carries the port.
+    let mut req = Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri("http://user.fs.example.com:19000/avatar.png")
+            .header(crate::header::HOST, "user.fs.example.com:19000")
+            .body(Body::empty())
+            .unwrap(),
+    );
+    let _ = super::prepare(&mut req, &ccx).await;
+    assert!(
+        matches!(req.s3ext.s3_path, Some(S3Path::Object { ref bucket, .. }) if bucket.as_ref() == "user"),
+        "port-carrying vhost host must route to its bucket"
+    );
+
+    // HTTP/2: no Host header; the :authority is injected as the host.
+    let mut req = Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .version(::http::Version::HTTP_2)
+            .uri("http://user.fs.example.com:19000/avatar.png")
+            .body(Body::empty())
+            .unwrap(),
+    );
+    assert!(req.headers.get(crate::header::HOST).is_none());
+    let _ = super::prepare(&mut req, &ccx).await;
+    assert!(
+        matches!(req.s3ext.s3_path, Some(S3Path::Object { ref bucket, .. }) if bucket.as_ref() == "user"),
+        "HTTP/2 :authority with a port must route to its bucket"
+    );
+}
+
+/// Control group for the port-agnostic fix: when the base domain is not
+/// configured, the port-carrying host must keep the pre-fix path-style
+/// behavior (#643 semantics untouched).
+#[tokio::test]
+async fn vhost_with_port_unconfigured_domain_falls_back_to_path_style() {
+    use crate::config::{S3ConfigProvider, StaticConfigProvider};
+    use crate::host::MultiDomain;
+    use crate::http::{Body, Request};
+    use crate::path::S3Path;
+    use std::sync::Arc;
+
+    struct NoOpS3;
+    #[async_trait::async_trait]
+    impl crate::s3_trait::S3 for NoOpS3 {}
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(NoOpS3);
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+    let host = MultiDomain::new(["other.example.com"]).unwrap();
+    let ccx = CallContext {
+        s3: &s3,
+        config: &config,
+        host: Some(&host),
+        auth: None,
+        access: None,
+        route: None,
+        validation: None,
+    };
+
+    let mut req = Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri("http://user.fs.example.com:19000/avatar.png")
+            .header(crate::header::HOST, "user.fs.example.com:19000")
+            .body(Body::empty())
+            .unwrap(),
+    );
+    let _ = super::prepare(&mut req, &ccx).await;
+    assert!(
+        !matches!(req.s3ext.s3_path, Some(S3Path::Object { ref bucket, .. }) if bucket.as_ref() == "user"),
+        "an unconfigured domain with a port must not route to a vhost bucket"
     );
 }
 
@@ -697,7 +852,8 @@ fn error_custom_headers() {
         body,
         concat!(
             "<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
-            "<Error><Code>TemporaryRedirect</Code></Error>"
+            "<Error><Code>TemporaryRedirect</Code>",
+            "<Message>You are being redirected to the bucket while DNS updates.</Message></Error>"
         )
     );
 }
@@ -945,6 +1101,118 @@ async fn presigned_url_expires_0_should_be_expired() {
     assert_eq!(err.code(), &S3ErrorCode::AccessDenied);
 }
 
+/// End-to-end: a `SigV4` presigned URL whose host carries an explicit
+/// non-default port must route to the bucket and verify (issue #438,
+/// rustfs/rustfs#1099). Covers the full chain: routing (port-agnostic base
+/// domain match), signature verification (raw Host value), and dispatch to
+/// the `S3` implementation with the correct bucket.
+#[tokio::test]
+async fn presigned_url_with_port_and_vhost_routes_bucket() {
+    use crate::auth::{SecretKey, SimpleAuth};
+    use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
+    use crate::host::MultiDomain;
+    use crate::http::{Body, Request};
+    use std::sync::Arc;
+
+    struct RecordingS3 {
+        received: std::sync::Mutex<Option<(String, String)>>, // (bucket, key)
+    }
+    #[async_trait::async_trait]
+    impl crate::s3_trait::S3 for RecordingS3 {
+        async fn get_object(
+            &self,
+            req: crate::S3Request<crate::dto::GetObjectInput>,
+        ) -> crate::error::S3Result<crate::protocol::S3Response<crate::dto::GetObjectOutput>> {
+            *self.received.lock().unwrap() = Some((req.input.bucket.clone(), req.input.key.clone()));
+            Ok(crate::protocol::S3Response::new(crate::dto::GetObjectOutput::default()))
+        }
+    }
+
+    let access_key = "AKIAIOSFODNN7EXAMPLE";
+    let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".into();
+    let recording = Arc::new(RecordingS3 {
+        received: std::sync::Mutex::new(None),
+    });
+    let s3: Arc<dyn crate::s3_trait::S3> = recording.clone();
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(S3Config {
+        presigned_url_max_skew_time_secs: u32::MAX,
+        ..Default::default()
+    })));
+    let auth = SimpleAuth::from_single(access_key, secret_key.clone());
+    let host = MultiDomain::new(["fs.example.com"]).unwrap();
+    let ccx = CallContext {
+        s3: &s3,
+        config: &config,
+        host: Some(&host),
+        auth: Some(&auth),
+        access: None,
+        route: None,
+        validation: None,
+    };
+
+    // Sign a presigned URL for the port-carrying vhost host.
+    let host_hdr = "user.fs.example.com:19000";
+    let amz_date = s3s_sigv4::AmzDate::parse(&format_current_amz_date()).expect("current time is a valid x-amz-date");
+    let query_fields = [
+        ("X-Amz-Algorithm".to_owned(), "AWS4-HMAC-SHA256".to_owned()),
+        (
+            "X-Amz-Credential".to_owned(),
+            format!("{access_key}/{}/us-east-1/s3/aws4_request", amz_date.fmt_date()),
+        ),
+        ("X-Amz-Date".to_owned(), amz_date.fmt_iso8601().to_string()),
+        ("X-Amz-Expires".to_owned(), "604800".to_owned()),
+        ("X-Amz-SignedHeaders".to_owned(), "host".to_owned()),
+    ];
+    let canonical_request =
+        s3s_sigv4::create_presigned_canonical_request("GET", "/avatar.png", &query_fields, [("host", host_hdr)]);
+    let string_to_sign = s3s_sigv4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
+    let signature = s3s_sigv4::calculate_signature(&string_to_sign, secret_key.expose(), &amz_date, "us-east-1", "s3");
+    let mut query_fields: Vec<(String, String)> = query_fields.into();
+    query_fields.push(("X-Amz-Signature".to_owned(), signature));
+
+    let mut uri = format!("https://{host_hdr}/avatar.png?").to_owned();
+    uri.push_str(
+        &query_fields
+            .iter()
+            .map(|(k, v)| format!("{k}={}", urlencoding::encode(v)))
+            .collect::<Vec<_>>()
+            .join("&"),
+    );
+
+    let mut req = Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri(uri)
+            .header(crate::header::HOST, host_hdr)
+            .body(Body::empty())
+            .unwrap(),
+    );
+
+    let response = super::call(&mut req, &ccx).await.unwrap();
+    assert_eq!(
+        response.status,
+        hyper::StatusCode::OK,
+        "presigned URL with a port-carrying host must succeed"
+    );
+
+    let (bucket, key) = recording.received.lock().unwrap().take().expect("get_object was called");
+    assert_eq!(bucket.as_str(), "user");
+    assert_eq!(key.as_str(), "avatar.png");
+}
+
+fn format_current_amz_date() -> String {
+    let dt = time::OffsetDateTime::now_utc();
+    format!(
+        "{:04}{:02}{:02}T{:02}{:02}{:02}Z",
+        dt.year(),
+        u8::from(dt.month()),
+        dt.day(),
+        dt.hour(),
+        dt.minute(),
+        dt.second()
+    )
+}
+
 #[allow(clippy::too_many_lines)]
 #[tokio::test]
 async fn post_multipart_bucket_routes_to_post_object() {
@@ -1019,7 +1287,7 @@ async fn post_multipart_bucket_routes_to_post_object() {
     let credential = "AKIAIOSFODNN7EXAMPLE/20200926/us-east-1/s3/aws4_request";
     let region = "us-east-1";
     let service = "s3";
-    let signature = crate::sig_v4::calculate_signature(policy_b64, &secret_key, &amz_date, region, service);
+    let signature = s3s_sigv4::calculate_signature(policy_b64, secret_key.expose(), &amz_date, region, service);
 
     let body = format!(
         concat!(
@@ -1080,6 +1348,40 @@ async fn post_multipart_bucket_routes_to_post_object() {
         Err(err) => assert_eq!(*err.code(), crate::error::S3ErrorCode::AccessDenied),
         Ok(_) => panic!("expected AccessDenied error for expired policy"),
     }
+}
+
+/// A multipart POST whose path names an object is not a modeled S3
+/// operation: `PostObject` binds to `/{Bucket}` only — the key is carried by
+/// the form fields, never the URL path. AWS and `MinIO` reject such requests
+/// with `MethodNotAllowed`; this test locks the behavior.
+#[tokio::test]
+async fn post_multipart_object_path_rejected_as_method_not_allowed() {
+    use crate::auth::SecretKey;
+    use std::sync::Arc;
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+    let config = post_policy_test_helpers::create_test_config(1024 * 1024);
+    let auth = post_policy_test_helpers::create_test_auth();
+    let ccx = post_policy_test_helpers::create_test_context(&s3, &config, &auth);
+
+    let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+    let policy_json = &format!(
+        r#"{{"expiration":"2030-01-01T00:00:00.000Z","conditions":[{}]}}"#,
+        post_policy_test_helpers::BASE_CONDITIONS,
+    );
+    let mut req = post_policy_test_helpers::build_post_object_request(policy_json, "hello", &secret_key, false);
+    // Reroute the request to the object level: `POST /bucket/key`.
+    req.uri = req
+        .uri
+        .to_string()
+        .replace("/test-bucket", "/test-bucket/test-key")
+        .parse()
+        .expect("valid test URI");
+
+    let Err(err) = super::prepare(&mut req, &ccx).await else {
+        panic!("multipart POST to an object path must be rejected");
+    };
+    assert_eq!(err.code(), &crate::error::S3ErrorCode::MethodNotAllowed);
 }
 
 // Helper functions for POST policy resource exhaustion tests
@@ -1233,7 +1535,7 @@ mod post_policy_test_helpers {
 
         let policy_json = augment_post_policy_for_test(policy_json, amz_date_str.as_str(), credential, algorithm);
         let policy_b64 = base64_simd::STANDARD.encode_to_string(&policy_json);
-        let signature = crate::sig_v4::calculate_signature(&policy_b64, secret_key, &amz_date, region, service);
+        let signature = s3s_sigv4::calculate_signature(&policy_b64, secret_key.expose(), &amz_date, region, service);
 
         let fields = {
             let mut f = vec![
@@ -1296,7 +1598,7 @@ mod post_policy_test_helpers {
 
         let policy_json = augment_post_policy_for_test(policy_json, amz_date_str.as_str(), credential, algorithm);
         let policy_b64 = base64_simd::STANDARD.encode_to_string(&policy_json);
-        let signature = crate::sig_v4::calculate_signature(&policy_b64, secret_key, &amz_date, region, service);
+        let signature = s3s_sigv4::calculate_signature(&policy_b64, secret_key.expose(), &amz_date, region, service);
 
         let body = build_multipart_fields(
             &[
@@ -1332,6 +1634,378 @@ mod post_policy_test_helpers {
                 .body(Body::http_body(stream_body))
                 .unwrap(),
         )
+    }
+}
+
+mod put_object_max_size_tests {
+    use super::*;
+
+    use crate::auth::{SecretKey, SimpleAuth};
+    use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
+    use crate::dto::StreamingBlob;
+    use crate::error::StdError;
+    use crate::s3_trait::S3;
+    use bytes::Bytes;
+    use futures::StreamExt;
+    use std::sync::Arc;
+
+    /// The streaming-body predicate is model-driven: exactly the operations
+    /// whose input carries a `StreamingBlob` payload (`PutObject`,
+    /// `UploadPart`, `WriteGetObjectResponse`). `PostObject` is excluded —
+    /// its body is the multipart file stream governed by
+    /// `post_object_max_file_size`.
+    #[test]
+    fn has_streaming_body_matches_streaming_payload_operations() {
+        assert!(PutObject.has_streaming_body());
+        assert!(UploadPart.has_streaming_body());
+        assert!(WriteGetObjectResponse.has_streaming_body());
+        assert!(!PostObject.has_streaming_body());
+        assert!(!GetObject.has_streaming_body());
+        assert!(!DeleteObjects.has_streaming_body());
+        assert!(!PutBucketPolicy.has_streaming_body());
+    }
+
+    fn test_config(put_object_max_size: Option<u64>) -> Arc<dyn S3ConfigProvider> {
+        Arc::new(StaticConfigProvider::new(Arc::new(S3Config {
+            put_object_max_size,
+            presigned_url_max_skew_time_secs: u32::MAX,
+            ..Default::default()
+        })))
+    }
+
+    fn test_context<'a>(
+        s3: &'a Arc<dyn S3>,
+        config: &'a Arc<dyn S3ConfigProvider>,
+        auth: Option<&'a dyn crate::auth::S3Auth>,
+    ) -> CallContext<'a> {
+        CallContext {
+            s3,
+            config,
+            host: None,
+            auth,
+            access: None,
+            route: None,
+            validation: None,
+        }
+    }
+
+    fn plain_put_request(body: Bytes) -> Request {
+        Request::from(
+            hyper::Request::builder()
+                .method(Method::PUT)
+                .uri("http://localhost/test-bucket/test-key")
+                .header(crate::header::HOST, "localhost")
+                .header(hyper::header::CONTENT_LENGTH, body.len())
+                .body(Body::from(body))
+                .unwrap(),
+        )
+    }
+
+    fn upload_part_request(body: Bytes) -> Request {
+        Request::from(
+            hyper::Request::builder()
+                .method(Method::PUT)
+                .uri("http://localhost/test-bucket/test-key?partNumber=1&uploadId=test-upload")
+                .header(crate::header::HOST, "localhost")
+                .header(hyper::header::CONTENT_LENGTH, body.len())
+                .body(Body::from(body))
+                .unwrap(),
+        )
+    }
+
+    async fn collect_stream<S>(mut stream: S) -> Result<Bytes, StdError>
+    where
+        S: futures::Stream<Item = Result<Bytes, StdError>> + Unpin,
+    {
+        let mut collected = Vec::new();
+        while let Some(chunk) = stream.next().await {
+            collected.extend_from_slice(&chunk?);
+        }
+        Ok(Bytes::from(collected))
+    }
+
+    async fn expect_limit_error(blob: StreamingBlob) -> StdError {
+        let err = collect_stream(blob)
+            .await
+            .expect_err("stream should fail once the object-size limit is exceeded");
+        assert!(err.to_string().contains("exceeds limit"), "limit error should be clear, got: {err}");
+        err
+    }
+
+    fn signed_aws_chunked_put_request(chunk_data: &Bytes, access_key: &str, secret_key: &SecretKey) -> Request {
+        let method = Method::PUT;
+        let uri_path = "/test-bucket/test-key";
+        let amz_date = s3s_sigv4::AmzDate::parse("20130524T000000Z").unwrap();
+        let decoded_content_length = chunk_data.len().to_string();
+        let headers_for_signing = [
+            ("host", "s3.amazonaws.com"),
+            ("x-amz-content-sha256", "STREAMING-AWS4-HMAC-SHA256-PAYLOAD"),
+            ("x-amz-date", "20130524T000000Z"),
+            ("x-amz-decoded-content-length", decoded_content_length.as_str()),
+        ];
+        let canonical_request = s3s_sigv4::create_canonical_request(
+            method.as_str(),
+            uri_path,
+            &[] as &[(&str, &str)],
+            headers_for_signing,
+            s3s_sigv4::Payload::MultipleChunks,
+        );
+        let seed_string_to_sign = s3s_sigv4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
+        let seed_signature =
+            s3s_sigv4::calculate_signature(&seed_string_to_sign, secret_key.expose(), &amz_date, "us-east-1", "s3");
+
+        let chunk_string_to_sign = s3s_sigv4::create_chunk_string_to_sign(
+            &amz_date,
+            "us-east-1",
+            "s3",
+            seed_signature.as_str(),
+            std::slice::from_ref(chunk_data),
+        );
+        let chunk_signature =
+            s3s_sigv4::calculate_signature(&chunk_string_to_sign, secret_key.expose(), &amz_date, "us-east-1", "s3");
+        let final_string_to_sign =
+            s3s_sigv4::create_chunk_string_to_sign(&amz_date, "us-east-1", "s3", chunk_signature.as_str(), &[] as &[Vec<u8>]);
+        let final_signature =
+            s3s_sigv4::calculate_signature(&final_string_to_sign, secret_key.expose(), &amz_date, "us-east-1", "s3");
+
+        let mut streaming_body = Vec::new();
+        streaming_body
+            .extend_from_slice(format!("{:x};chunk-signature={}\r\n", chunk_data.len(), chunk_signature.as_str()).as_bytes());
+        streaming_body.extend_from_slice(chunk_data);
+        streaming_body.extend_from_slice(b"\r\n");
+        streaming_body.extend_from_slice(format!("0;chunk-signature={}\r\n\r\n", final_signature.as_str()).as_bytes());
+
+        let authorization = format!(
+            "AWS4-HMAC-SHA256 Credential={access_key}/20130524/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date;x-amz-decoded-content-length, Signature={}",
+            seed_signature.as_str(),
+        );
+
+        Request::from(
+            hyper::Request::builder()
+                .method(method)
+                .uri("https://s3.amazonaws.com/test-bucket/test-key")
+                .header(crate::header::HOST, "s3.amazonaws.com")
+                .header(hyper::header::CONTENT_LENGTH, streaming_body.len())
+                .header("content-encoding", "aws-chunked")
+                .header(crate::header::AUTHORIZATION, authorization)
+                .header(crate::header::X_AMZ_CONTENT_SHA256, "STREAMING-AWS4-HMAC-SHA256-PAYLOAD")
+                .header(crate::header::X_AMZ_DATE, "20130524T000000Z")
+                .header(crate::header::X_AMZ_DECODED_CONTENT_LENGTH, decoded_content_length)
+                .body(Body::from(Bytes::from(streaming_body)))
+                .unwrap(),
+        )
+    }
+
+    #[tokio::test]
+    async fn none_leaves_plain_put_stream_unchanged() {
+        let s3: Arc<dyn S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+        let config = test_config(None);
+        let ccx = test_context(&s3, &config, None);
+        let expected_body = Bytes::from_static(b"hello");
+        let mut req = plain_put_request(expected_body.clone());
+
+        let Prepare::S3(op) = super::prepare(&mut req, &ccx).await.expect("prepare should succeed") else {
+            panic!("plain PUT should resolve to an S3 operation");
+        };
+        assert_eq!(op.name(), "PutObject");
+
+        let input = generated::PutObject::deserialize_http(&mut req).expect("deserialize should succeed");
+        let body = input.body.expect("put object input should carry a body");
+        let collected = collect_stream(body).await.expect("unlimited stream should be readable");
+        assert_eq!(collected, expected_body);
+    }
+
+    #[tokio::test]
+    async fn rejects_oversized_plain_put_at_read_time() {
+        let s3: Arc<dyn S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+        let config = test_config(Some(4));
+        let ccx = test_context(&s3, &config, None);
+        let mut req = plain_put_request(Bytes::from_static(b"hello"));
+
+        let Prepare::S3(op) = super::prepare(&mut req, &ccx).await.expect("prepare should succeed") else {
+            panic!("plain PUT should resolve to an S3 operation");
+        };
+        assert_eq!(op.name(), "PutObject");
+
+        let input = generated::PutObject::deserialize_http(&mut req).expect("deserialize should succeed");
+        expect_limit_error(input.body.expect("put object input should carry a body")).await;
+    }
+
+    #[tokio::test]
+    async fn rejects_oversized_upload_part_at_read_time() {
+        let s3: Arc<dyn S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+        let config = test_config(Some(4));
+        let ccx = test_context(&s3, &config, None);
+        let mut req = upload_part_request(Bytes::from_static(b"hello"));
+
+        let Prepare::S3(op) = super::prepare(&mut req, &ccx).await.expect("prepare should succeed") else {
+            panic!("upload part should resolve to an S3 operation");
+        };
+        assert_eq!(op.name(), "UploadPart");
+
+        let input = generated::UploadPart::deserialize_http(&mut req).expect("deserialize should succeed");
+        expect_limit_error(input.body.expect("upload part input should carry a body")).await;
+    }
+
+    #[tokio::test]
+    async fn empty_body_operations_are_unaffected_when_limit_is_set() {
+        let s3: Arc<dyn S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+        let config = test_config(Some(0));
+        let ccx = test_context(&s3, &config, None);
+        let mut req = Request::from(
+            hyper::Request::builder()
+                .method(Method::GET)
+                .uri("http://localhost/test-bucket/test-key")
+                .header(crate::header::HOST, "localhost")
+                .body(Body::empty())
+                .unwrap(),
+        );
+
+        let Prepare::S3(op) = super::prepare(&mut req, &ccx).await.expect("prepare should succeed") else {
+            panic!("GET object should resolve to an S3 operation");
+        };
+        assert_eq!(op.name(), "GetObject");
+
+        let input = generated::GetObject::deserialize_http(&mut req).expect("deserialize should succeed");
+        assert_eq!(input.bucket, "test-bucket");
+        assert_eq!(input.key, "test-key");
+        assert!(
+            req.body
+                .store_all_limited(0)
+                .await
+                .expect("empty limited body should be readable")
+                .is_empty()
+        );
+    }
+
+    /// A `ListObjects` response that echoes a request-controlled object key
+    /// containing a control character must not produce an invalid XML body:
+    /// the serialization layer rejects it with an internal error.
+    #[tokio::test]
+    async fn list_objects_with_control_character_key_rejected_at_serialization() {
+        use crate::config::{S3ConfigProvider, StaticConfigProvider};
+        use crate::http::{Body, Request};
+
+        struct ControlCharS3;
+        #[async_trait::async_trait]
+        impl crate::s3_trait::S3 for ControlCharS3 {
+            async fn list_objects(
+                &self,
+                _req: crate::S3Request<crate::dto::ListObjectsInput>,
+            ) -> crate::error::S3Result<crate::protocol::S3Response<crate::dto::ListObjectsOutput>> {
+                let output = crate::dto::ListObjectsOutput {
+                    name: Some("bucket".into()),
+                    contents: Some(vec![crate::dto::Object {
+                        key: Some("a\x01b".into()),
+                        ..Default::default()
+                    }]),
+                    ..Default::default()
+                };
+                Ok(crate::protocol::S3Response::new(output))
+            }
+        }
+
+        let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(ControlCharS3);
+        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+        let ccx = CallContext {
+            s3: &s3,
+            config: &config,
+            host: None,
+            auth: None,
+            access: None,
+            route: None,
+            validation: None,
+        };
+
+        let mut req = Request::from(
+            hyper::Request::builder()
+                .method(Method::GET)
+                .uri("http://localhost/bucket")
+                .header(crate::header::HOST, "localhost")
+                .body(Body::empty())
+                .unwrap(),
+        );
+
+        let resp = super::call(&mut req, &ccx).await.unwrap();
+        assert_eq!(resp.status, hyper::StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[tokio::test]
+    async fn post_object_keeps_post_object_max_file_size_when_put_limit_is_set() {
+        let s3: Arc<dyn S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(S3Config {
+            post_object_max_file_size: 1024,
+            put_object_max_size: Some(1),
+            expected_region: Some("us-east-1".parse().expect("valid test region")),
+            presigned_url_max_skew_time_secs: u32::MAX,
+            ..Default::default()
+        })));
+        let auth = post_policy_test_helpers::create_test_auth();
+        let ccx = test_context(&s3, &config, Some(&auth));
+        let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+        let policy_json = &format!(
+            r#"{{"expiration":"2030-01-01T00:00:00.000Z","conditions":[{}]}}"#,
+            post_policy_test_helpers::BASE_CONDITIONS,
+        );
+        let file_content = "hello";
+        let mut req = post_policy_test_helpers::build_post_object_request(policy_json, file_content, &secret_key, false);
+
+        let Prepare::S3(op) = super::prepare(&mut req, &ccx).await.expect("prepare should succeed") else {
+            panic!("POST Object should resolve to an S3 operation");
+        };
+        assert_eq!(op.name(), "PostObject");
+
+        let stream = req
+            .s3ext
+            .post_object_stream
+            .take()
+            .expect("post object stream should be prepared");
+        let collected = collect_stream(stream)
+            .await
+            .expect("POST Object stream should use its own limit");
+        assert_eq!(collected, Bytes::from_static(b"hello"));
+    }
+
+    #[tokio::test]
+    async fn aws_chunked_put_limit_applies_after_decoding() {
+        let s3: Arc<dyn S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+        let access_key = "AKIAIOSFODNN7EXAMPLE";
+        let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+        let auth = SimpleAuth::from_single(access_key, secret_key.clone());
+
+        let config = test_config(Some(5));
+        let ccx = test_context(&s3, &config, Some(&auth));
+        let decoded = Bytes::from_static(b"hello");
+        let mut req = signed_aws_chunked_put_request(&decoded, access_key, &secret_key);
+
+        let Prepare::S3(op) = super::prepare(&mut req, &ccx)
+            .await
+            .expect("prepare should decode before limiting")
+        else {
+            panic!("aws-chunked PUT should resolve to an S3 operation");
+        };
+        assert_eq!(op.name(), "PutObject");
+
+        let input = generated::PutObject::deserialize_http(&mut req).expect("deserialize should succeed");
+        let body = input.body.expect("put object input should carry a body");
+        let collected = collect_stream(body)
+            .await
+            .expect("decoded stream at limit should be readable");
+        assert_eq!(collected, decoded);
+
+        let config = test_config(Some(4));
+        let ccx = test_context(&s3, &config, Some(&auth));
+        let mut req = signed_aws_chunked_put_request(&decoded, access_key, &secret_key);
+        let Prepare::S3(op) = super::prepare(&mut req, &ccx)
+            .await
+            .expect("prepare should still finish before read-time limit")
+        else {
+            panic!("aws-chunked PUT should resolve to an S3 operation");
+        };
+        assert_eq!(op.name(), "PutObject");
+
+        let input = generated::PutObject::deserialize_http(&mut req).expect("deserialize should succeed");
+        expect_limit_error(input.body.expect("put object input should carry a body")).await;
     }
 }
 
@@ -1816,7 +2490,7 @@ async fn post_object_chunked_rejects_broken_body() {
 
     let augmented = post_policy_test_helpers::augment_post_policy_for_test(policy_json, &amz_date_str, credential, algorithm);
     let policy_b64 = base64_simd::STANDARD.encode_to_string(&augmented);
-    let signature = crate::sig_v4::calculate_signature(&policy_b64, &secret_key, &amz_date, "us-east-1", "s3");
+    let signature = s3s_sigv4::calculate_signature(&policy_b64, secret_key.expose(), &amz_date, "us-east-1", "s3");
 
     let fields = post_policy_test_helpers::build_multipart_fields(
         &[
@@ -3067,14 +3741,15 @@ fn list_directory_buckets_serialize_http() {
 
 mod bodyless_content_length_tests {
     use super::*;
-    use crate::auth::{SecretKey, SimpleAuth};
+    use crate::auth::SimpleAuth;
     use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
     use crate::http::{Body, OrderedQs, Request};
     use crate::protocol::S3Response;
-    use crate::sig_v4;
     use bytes::Bytes;
+    use hyper::header::HeaderValue;
     use hyper::{Method, StatusCode, Uri, Version};
     use std::sync::Arc;
+    use std::sync::Mutex;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     const ACCESS_KEY: &str = "test-access";
@@ -3082,7 +3757,7 @@ mod bodyless_content_length_tests {
     const AMZ_DATE: &str = "20260828T000000Z";
     const REGION: &str = "us-east-1";
     const SERVICE: &str = "s3";
-    const EMPTY_SHA256: &str = crate::sig_v4::EMPTY_STRING_SHA256_HASH;
+    const EMPTY_SHA256: &str = s3s_sigv4::EMPTY_STRING_SHA256_HASH;
 
     #[derive(Default)]
     struct TestS3 {
@@ -3197,15 +3872,15 @@ mod bodyless_content_length_tests {
             ("x-amz-date", amz_date_str.as_str()),
         ];
 
-        let canonical_request = sig_v4::create_canonical_request(
-            method,
+        let canonical_request = s3s_sigv4::create_canonical_request(
+            method.as_str(),
             uri.path(),
             query,
             signed_headers,
-            sig_v4::Payload::SingleChunk(payload_sha256),
+            s3s_sigv4::Payload::SingleChunk(payload_sha256),
         );
-        let string_to_sign = sig_v4::create_string_to_sign(&canonical_request, &amz_date, REGION, SERVICE);
-        let signature = sig_v4::calculate_signature(&string_to_sign, &SecretKey::from(SECRET_KEY), &amz_date, REGION, SERVICE);
+        let string_to_sign = s3s_sigv4::create_string_to_sign(&canonical_request, &amz_date, REGION, SERVICE);
+        let signature = s3s_sigv4::calculate_signature(&string_to_sign, SECRET_KEY, &amz_date, REGION, SERVICE);
 
         format!(
             "AWS4-HMAC-SHA256 Credential={ACCESS_KEY}/{}/{REGION}/{SERVICE}/aws4_request, \
@@ -3342,6 +4017,123 @@ mod bodyless_content_length_tests {
         assert_eq!(test_s3.put_object.load(Ordering::SeqCst), 0);
     }
 
+    struct ContentLengthRecordingS3 {
+        received: Mutex<Option<(Option<i64>, Option<u64>)>>, // (input.content_length, headers content-length)
+    }
+
+    #[async_trait::async_trait]
+    impl crate::s3_trait::S3 for ContentLengthRecordingS3 {
+        async fn put_object(
+            &self,
+            req: crate::S3Request<crate::dto::PutObjectInput>,
+        ) -> crate::error::S3Result<S3Response<crate::dto::PutObjectOutput>> {
+            let header_cl = req.headers.get(hyper::header::CONTENT_LENGTH).map(|v| {
+                v.to_str()
+                    .expect("test header is ASCII")
+                    .parse::<u64>()
+                    .expect("test header parses")
+            });
+            *self.received.lock().unwrap() = Some((req.input.content_length, header_cl));
+            Ok(S3Response::new(crate::dto::PutObjectOutput::default()))
+        }
+    }
+
+    fn empty_body_signed_put(version: Version) -> Request {
+        let uri = "http://localhost/test-bucket/test-key.txt".parse::<Uri>().unwrap();
+        let authorization = sign_request(&Method::PUT, &uri, EMPTY_SHA256);
+        Request::from(
+            hyper::Request::builder()
+                .method(Method::PUT)
+                .version(version)
+                .uri(uri.clone())
+                .header(crate::header::HOST, uri.authority().unwrap().as_str())
+                .header(crate::header::X_AMZ_CONTENT_SHA256, EMPTY_SHA256)
+                .header(crate::header::X_AMZ_DATE, AMZ_DATE)
+                .header(crate::header::AUTHORIZATION, authorization)
+                .body(Body::empty())
+                .unwrap(),
+        )
+    }
+
+    #[tokio::test]
+    async fn backfills_known_content_length_for_zero_length_put() {
+        // RFC 9112 §6.3: a PUT without `Content-Length` and without
+        // `Transfer-Encoding` has an empty body. The length is known (exact
+        // zero), so with the default `normalize_content_length` the `S3`
+        // implementation must observe `Some(0)` and an inserted
+        // `Content-Length: 0` header instead of an ambiguous `None`.
+        let recording = Arc::new(ContentLengthRecordingS3 {
+            received: Mutex::new(None),
+        });
+        let s3: Arc<dyn crate::s3_trait::S3> = recording.clone();
+        let config = test_config();
+        let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
+        let ccx = test_context(&s3, &config, &auth);
+
+        for version in [Version::HTTP_11, Version::HTTP_2] {
+            let mut req = empty_body_signed_put(version);
+            assert!(req.headers.get(hyper::header::CONTENT_LENGTH).is_none());
+
+            let response = super::call(&mut req, &ccx).await.unwrap();
+            assert_eq!(response.status, StatusCode::OK, "empty-body PutObject over {version:?} must be accepted");
+
+            let (input_len, header_len) = recording.received.lock().unwrap().take().expect("put_object was called");
+            assert_eq!(input_len, Some(0), "dto content_length must be backfilled over {version:?}");
+            assert_eq!(header_len, Some(0), "Content-Length header must be inserted over {version:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn decoded_content_length_takes_priority_over_exact_length() {
+        // aws-chunked uploads express the object size via
+        // `x-amz-decoded-content-length`; when present it must win over the
+        // exact remaining length of the (empty) body.
+        let recording = Arc::new(ContentLengthRecordingS3 {
+            received: Mutex::new(None),
+        });
+        let s3: Arc<dyn crate::s3_trait::S3> = recording.clone();
+        let config = test_config();
+        let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
+        let ccx = test_context(&s3, &config, &auth);
+
+        let mut req = empty_body_signed_put(Version::HTTP_11);
+        req.headers
+            .insert(crate::header::X_AMZ_DECODED_CONTENT_LENGTH, HeaderValue::from_static("5"));
+
+        let response = super::call(&mut req, &ccx).await.unwrap();
+        assert_eq!(response.status, StatusCode::OK);
+
+        let (input_len, header_len) = recording.received.lock().unwrap().take().expect("put_object was called");
+        assert_eq!(input_len, Some(5), "decoded content length must take priority");
+        assert_eq!(header_len, Some(5));
+    }
+
+    #[tokio::test]
+    async fn normalize_content_length_disabled_keeps_strict_header_semantics() {
+        let recording = Arc::new(ContentLengthRecordingS3 {
+            received: Mutex::new(None),
+        });
+        let s3: Arc<dyn crate::s3_trait::S3> = recording.clone();
+        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(S3Config {
+            presigned_url_max_skew_time_secs: u32::MAX,
+            expected_region: Some(REGION.parse().expect("valid test region")),
+            normalize_content_length: false,
+            ..Default::default()
+        })));
+        let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
+        let ccx = test_context(&s3, &config, &auth);
+
+        let mut req = empty_body_signed_put(Version::HTTP_11);
+        assert!(req.headers.get(hyper::header::CONTENT_LENGTH).is_none());
+
+        let response = super::call(&mut req, &ccx).await.unwrap();
+        assert_eq!(response.status, StatusCode::OK, "s3s still accepts the request");
+
+        let (input_len, header_len) = recording.received.lock().unwrap().take().expect("put_object was called");
+        assert_eq!(input_len, None, "dto content_length must reflect the wire headers when disabled");
+        assert_eq!(header_len, None, "no Content-Length may be inserted when disabled");
+    }
+
     #[tokio::test]
     async fn signed_bodyless_operations_reject_invalid_content_length() {
         let test_s3 = Arc::new(TestS3::default());
@@ -3464,7 +4256,7 @@ mod bodyless_content_length_tests {
         let mut req = post_policy_test_helpers::build_post_object_request(policy_json, "hello", &secret_key, false);
         req.headers.insert(
             crate::header::X_AMZ_CONTENT_SHA256,
-            hyper::header::HeaderValue::from_static(crate::sig_v4::EMPTY_STRING_SHA256_HASH),
+            hyper::header::HeaderValue::from_static(s3s_sigv4::EMPTY_STRING_SHA256_HASH),
         );
         req.headers.remove(hyper::header::CONTENT_LENGTH);
 
@@ -3641,6 +4433,11 @@ mod virtual_hosted_style_hint_tests {
             assert!(result.is_ok(), "call failed for {method}");
             let resp = result.unwrap();
             assert_eq!(resp.status, http::StatusCode::NOT_IMPLEMENTED, "wrong status for {method}");
+            if method == Method::HEAD {
+                // RFC 9110 §9.3.2: HEAD responses must not carry a body.
+                assert!(http_body::Body::is_end_stream(&resp.body), "HEAD response must be bodyless");
+                continue;
+            }
             let text = body_str(&resp);
             assert!(
                 text.contains("virtual-hosted-style"),
@@ -3769,7 +4566,7 @@ mod virtual_hosted_style_hint_tests {
 mod listen_bucket_notification {
     use super::*;
 
-    use crate::ops::generated_minio::resolve_route;
+    use crate::ops::generated::resolve_route;
     use crate::path::S3Path;
 
     fn make_get_request(uri: &str) -> crate::http::Request {
@@ -3814,7 +4611,7 @@ mod listen_bucket_notification {
         let pairs: Vec<(String, String)> = serde_urlencoded::from_str(query).unwrap();
         req.s3ext.qs = Some(crate::http::OrderedQs::from_vec_unchecked(pairs));
         req.s3ext.s3_path = Some(S3Path::Bucket { bucket: "bucket".into() });
-        let input = crate::ops::generated_minio::ListenBucketNotification::deserialize_http(&mut req).unwrap();
+        let input = crate::ops::generated::ListenBucketNotification::deserialize_http(&mut req).unwrap();
         assert_eq!(input.events.as_deref(), Some("s3:ObjectCreated:*,s3:ObjectRemoved:*,s3:ObjectAccessed:*"));
         assert_eq!(input.prefix.as_deref(), None);
     }

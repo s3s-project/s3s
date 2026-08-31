@@ -1,21 +1,26 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
+#![deny(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::unwrap_used
+)]
 use super::Body;
 use super::Response;
 
 use crate::StdError;
 use crate::dto::SelectObjectContentEventStream;
 use crate::dto::{Metadata, StreamingBlob, Timestamp, TimestampFormat};
-use crate::error::{S3Error, S3Result};
+use crate::error::{S3Error, S3ErrorCode, S3Result};
 use crate::http::KeepAliveBody;
 use crate::http::{HeaderName, HeaderValue};
 use crate::utils::format::fmt_timestamp;
-use crate::utils::rfc2047;
 use crate::xml;
 
 use std::convert::Infallible;
-use std::fmt::Write as _;
 
 use hyper::header::{IntoHeaderName, InvalidHeaderValue};
 
@@ -98,6 +103,23 @@ impl TryIntoHeaderValue for String {
 #[allow(clippy::declare_interior_mutable_const)]
 const APPLICATION_XML: HeaderValue = HeaderValue::from_static("application/xml");
 
+/// Rejects XML 1.0 control characters (anything below `0x20` except `\t`,
+/// `\n`, `\r`) in a serialized response body.
+///
+/// quick-xml does not validate the XML 1.0 Char production on output, so
+/// control characters in DTO values (request-controlled echoes like object
+/// keys in `ListObjects`, or implementation-provided values) would otherwise
+/// produce responses that strict XML parsers reject.
+fn reject_control_characters(buf: &[u8]) -> S3Result {
+    if buf.iter().any(|&b| b < b' ' && !matches!(b, b'\t' | b'\n' | b'\r')) {
+        return Err(S3Error::with_message(
+            S3ErrorCode::InternalError,
+            "XML response contains a control character",
+        ));
+    }
+    Ok(())
+}
+
 pub fn set_xml_body<T: xml::Serialize>(res: &mut Response, val: &T) -> S3Result {
     let mut buf = Vec::with_capacity(256);
     {
@@ -106,6 +128,7 @@ pub fn set_xml_body<T: xml::Serialize>(res: &mut Response, val: &T) -> S3Result 
             .and_then(|()| val.serialize(&mut ser))
             .map_err(S3Error::internal_error)?;
     }
+    reject_control_characters(&buf)?;
     res.body = Body::from(buf);
     res.headers.insert(hyper::header::CONTENT_TYPE, APPLICATION_XML);
     Ok(())
@@ -134,6 +157,7 @@ pub fn set_xml_body_no_decl<T: xml::Serialize>(res: &mut Response, val: &T) -> S
     let mut buf = Vec::with_capacity(256);
     let mut ser = xml::Serializer::new(&mut buf);
     val.serialize(&mut ser).map_err(S3Error::internal_error)?;
+    reject_control_characters(&buf)?;
     res.body = Body::from(buf);
     res.headers.insert(hyper::header::CONTENT_TYPE, APPLICATION_XML);
     Ok(())
@@ -153,9 +177,10 @@ pub fn add_opt_metadata(res: &mut Response, metadata: Option<Metadata>) -> S3Res
     if let Some(map) = metadata {
         let mut buf = String::new();
         for (key, val) in map {
-            write!(&mut buf, "x-amz-meta-{key}").unwrap();
+            buf.push_str("x-amz-meta-");
+            buf.push_str(&key);
             let name = HeaderName::from_bytes(buf.as_bytes()).map_err(S3Error::internal_error)?;
-            let value = rfc2047::encode(&val)
+            let value = s3s_rfc2047::encode(&val)
                 .map_err(S3Error::internal_error)
                 .and_then(|s| HeaderValue::try_from(s.as_ref()).map_err(S3Error::internal_error))?;
             res.headers.insert(name, value);
@@ -166,12 +191,76 @@ pub fn add_opt_metadata(res: &mut Response, metadata: Option<Metadata>) -> S3Res
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::unwrap_used
+)]
 mod tests {
     use super::*;
     use bytes::Bytes;
 
     fn new_response() -> Response {
         Response::default()
+    }
+
+    #[test]
+    fn reject_control_characters_rejects_invalid_xml_characters() {
+        for b in [0x00u8, 0x01, 0x08, 0x0b, 0x0c, 0x0e, 0x1f] {
+            let buf = [b'<', b'x', b'>', b, b'<', b'/', b'x', b'>'];
+            assert!(
+                reject_control_characters(&buf).is_err(),
+                "byte 0x{b:02x} must be rejected as an invalid XML character"
+            );
+        }
+    }
+
+    #[test]
+    fn reject_control_characters_accepts_legal_whitespace() {
+        let buf = b"<x>a\tb\nc\rd</x>";
+        assert!(reject_control_characters(buf).is_ok());
+    }
+
+    #[test]
+    fn reject_control_characters_accepts_plain_body() {
+        assert!(reject_control_characters(b"<xml>hello</xml>").is_ok());
+        assert!(reject_control_characters(b"").is_ok());
+    }
+
+    #[test]
+    fn set_xml_body_rejects_control_characters() {
+        let mut res = new_response();
+        let val = crate::dto::ListObjectsOutput {
+            name: Some("a\x01b".into()),
+            ..Default::default()
+        };
+        let err = set_xml_body(&mut res, &val).expect_err("control characters in the response must be rejected");
+        assert_eq!(err.code(), &S3ErrorCode::InternalError);
+    }
+
+    #[test]
+    fn set_xml_body_accepts_legal_whitespace_values() {
+        let mut res = new_response();
+        let val = crate::dto::ListObjectsOutput {
+            name: Some("a\tb\nc".into()),
+            ..Default::default()
+        };
+        set_xml_body(&mut res, &val).expect("legal whitespace must pass");
+        let body = res.body.bytes().expect("in-memory body");
+        assert!(body.starts_with(b"<?xml"));
+    }
+
+    #[test]
+    fn set_xml_body_no_decl_rejects_control_characters() {
+        let mut res = new_response();
+        let val = crate::dto::ListObjectsOutput {
+            name: Some("a\x1fb".into()),
+            ..Default::default()
+        };
+        let err = set_xml_body_no_decl(&mut res, &val).expect_err("control characters must be rejected");
+        assert_eq!(err.code(), &S3ErrorCode::InternalError);
     }
 
     #[test]

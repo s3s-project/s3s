@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
+#![deny(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::unwrap_used
+)]
 //! POST Object policy parsing and validation.
 //!
 //! A POST policy is a base64-encoded JSON document attached to a browser-based
@@ -337,41 +344,41 @@ impl RawCondition {
     }
 
     fn parse_array_condition(items: &[serde_json::Value]) -> Result<PostPolicyCondition, PostPolicyError> {
-        if items.is_empty() {
+        let [operator, ..] = items else {
             return Err(PostPolicyError::InvalidCondition);
-        }
+        };
 
-        let operator = items[0].as_str().ok_or(PostPolicyError::InvalidCondition)?;
+        let operator = operator.as_str().ok_or(PostPolicyError::InvalidCondition)?;
 
         match operator.to_ascii_lowercase().as_str() {
             "eq" => {
-                if items.len() != 3 {
+                let [_, field, value] = items else {
                     return Err(PostPolicyError::InvalidCondition);
-                }
-                let field = items[1].as_str().ok_or(PostPolicyError::InvalidCondition)?;
-                let value = items[2].as_str().ok_or(PostPolicyError::InvalidCondition)?;
+                };
+                let field = field.as_str().ok_or(PostPolicyError::InvalidCondition)?;
+                let value = value.as_str().ok_or(PostPolicyError::InvalidCondition)?;
                 Ok(PostPolicyCondition::Eq {
                     field: normalize_field_name(field),
                     value: value.to_owned(),
                 })
             }
             "starts-with" => {
-                if items.len() != 3 {
+                let [_, field, prefix] = items else {
                     return Err(PostPolicyError::InvalidCondition);
-                }
-                let field = items[1].as_str().ok_or(PostPolicyError::InvalidCondition)?;
-                let prefix = items[2].as_str().ok_or(PostPolicyError::InvalidCondition)?;
+                };
+                let field = field.as_str().ok_or(PostPolicyError::InvalidCondition)?;
+                let prefix = prefix.as_str().ok_or(PostPolicyError::InvalidCondition)?;
                 Ok(PostPolicyCondition::StartsWith {
                     field: normalize_field_name(field),
                     prefix: prefix.to_owned(),
                 })
             }
             "content-length-range" => {
-                if items.len() != 3 {
+                let [_, min, max] = items else {
                     return Err(PostPolicyError::InvalidCondition);
-                }
-                let min = items[1].as_u64().ok_or(PostPolicyError::InvalidCondition)?;
-                let max = items[2].as_u64().ok_or(PostPolicyError::InvalidCondition)?;
+                };
+                let min = min.as_u64().ok_or(PostPolicyError::InvalidCondition)?;
+                let max = max.as_u64().ok_or(PostPolicyError::InvalidCondition)?;
                 if min > max {
                     return Err(PostPolicyError::InvalidCondition);
                 }
@@ -402,6 +409,13 @@ fn normalize_field_name(field: &str) -> String {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::unwrap_used
+)]
 mod tests {
     use super::*;
 

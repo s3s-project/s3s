@@ -68,6 +68,7 @@ fn parse_unix_timestamp(s: &str) -> Option<Timestamp> {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::indexing_slicing, clippy::unwrap_used)]
 mod tests {
     use super::*;
 

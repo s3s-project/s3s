@@ -47,6 +47,9 @@ pub fn codegen(model: &smithy::Model) {
 
     for header in headers {
         let name = to_constant_name(header);
+        if header.starts_with("x-minio") {
+            g!("#[cfg(feature = \"minio\")]");
+        }
         if header.starts_with("x-amz-") || header == "Content-MD5" || header.starts_with("x-minio") {
             let value = header.to_ascii_lowercase();
             g!("pub const {name}: HeaderName = HeaderName::from_static({value:?});",);
