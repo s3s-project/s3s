@@ -743,6 +743,7 @@ impl super::Operation for CompleteMultipartUpload {
 }
 
 pub struct CopyObject;
+
 impl CopyObject {
     #[cfg(not(feature = "minio"))]
     pub fn deserialize_http(req: &mut http::Request) -> S3Result<CopyObjectInput> {
@@ -1319,6 +1320,7 @@ impl super::Operation for CreateBucketMetadataTableConfiguration {
 }
 
 pub struct CreateMultipartUpload;
+
 impl CreateMultipartUpload {
     #[cfg(not(feature = "minio"))]
     pub fn deserialize_http(req: &mut http::Request) -> S3Result<CreateMultipartUploadInput> {
@@ -1663,6 +1665,7 @@ impl super::Operation for CreateSession {
 }
 
 pub struct DeleteBucket;
+
 impl DeleteBucket {
     #[cfg(not(feature = "minio"))]
     pub fn deserialize_http(req: &mut http::Request) -> S3Result<DeleteBucketInput> {
@@ -7338,6 +7341,7 @@ impl super::Operation for PutBucketTagging {
 }
 
 pub struct PutBucketVersioning;
+
 impl PutBucketVersioning {
     #[cfg(not(feature = "minio"))]
     pub fn deserialize_http(req: &mut http::Request) -> S3Result<PutBucketVersioningInput> {
@@ -7496,6 +7500,7 @@ impl super::Operation for PutBucketWebsite {
 }
 
 pub struct PutObject;
+
 impl PutObject {
     #[cfg(not(feature = "minio"))]
     pub fn deserialize_http(req: &mut http::Request) -> S3Result<PutObjectInput> {
@@ -8518,6 +8523,7 @@ impl super::Operation for PutObjectLegalHold {
 }
 
 pub struct PutObjectLockConfiguration;
+
 impl PutObjectLockConfiguration {
     #[cfg(not(feature = "minio"))]
     pub fn deserialize_http(req: &mut http::Request) -> S3Result<PutObjectLockConfigurationInput> {

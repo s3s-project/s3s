@@ -20,7 +20,7 @@ use heck::ToSnakeCase;
 use scoped_writer::g;
 use stdx::default::default;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Operation {
     pub name: String,
 
@@ -168,11 +168,20 @@ pub fn is_op_output(name: &str, ops: &Operations) -> bool {
     name.strip_suffix("Output").is_some_and(|x| ops.contains_key(x))
 }
 
-pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
+/// Generate the merged operation code from the union (`MinIO`) model.
+///
+/// `ops` is the union operation set (base ⊆ `MinIO`). `rust_types_base` and
+/// `rust_types_minio` are the rust type collections of the two model
+/// variants; per-operation differences between them are emitted inline with
+/// mutually exclusive `#[cfg(feature = "minio")]` / `#[cfg(not(feature = "minio"))]`
+/// gates instead of generating two files and merging them textually.
+pub fn codegen(ops: &Operations, rust_types_base: &RustTypes, rust_types_minio: &RustTypes) {
     declare_codegen!();
 
     for op in ops.values() {
-        g!("// {}", op.name);
+        if op.is_minio.not() {
+            g!("// {}", op.name);
+        }
     }
     g!();
 
@@ -200,8 +209,70 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
         "",
     ]);
 
-    codegen_http(ops, rust_types);
-    codegen_router(ops, rust_types);
+    codegen_http(ops, rust_types_base, rust_types_minio);
+    codegen_router_twins(ops, rust_types_base, rust_types_minio);
+}
+
+/// Whether the operation input struct differs between the base and `MinIO` model variants.
+fn op_input_differs(op: &Operation, rust_types_base: &RustTypes, rust_types_minio: &RustTypes) -> bool {
+    assert!(op.is_minio.not());
+    let (rust::Type::Struct(base), rust::Type::Struct(minio)) =
+        (&rust_types_base[op.input.as_str()], &rust_types_minio[op.input.as_str()])
+    else {
+        panic!("op input must be a struct");
+    };
+    base.fields != minio.fields
+}
+
+fn codegen_http(ops: &Operations, rust_types_base: &RustTypes, rust_types_minio: &RustTypes) {
+    codegen_header_value(ops, rust_types_minio);
+
+    for op in ops.values() {
+        if op.name == "PostObject" {
+            continue;
+        }
+
+        if op.is_minio {
+            g!("#[cfg(feature = \"minio\")]");
+        }
+        g!("pub struct {};", op.name);
+        g!();
+
+        if op.is_minio {
+            g!("#[cfg(feature = \"minio\")]");
+        }
+        g!("impl {} {{", op.name);
+
+        let input_differs = op.is_minio.not() && op_input_differs(op, rust_types_base, rust_types_minio);
+
+        if input_differs {
+            g!("#[cfg(not(feature = \"minio\"))]");
+            codegen_op_http_de_fn(op, rust_types_base);
+            g!("#[cfg(feature = \"minio\")]");
+            codegen_op_http_de_fn(op, rust_types_minio);
+            if op.name == "PutObject" {
+                g!();
+                g!("#[cfg(not(feature = \"minio\"))]");
+                codegen_op_http_de_multipart(op, rust_types_base);
+                g!();
+                g!("#[cfg(feature = \"minio\")]");
+                codegen_op_http_de_multipart(op, rust_types_minio);
+            }
+            g!();
+        } else {
+            codegen_op_http_de(op, rust_types_minio);
+        }
+
+        codegen_op_http_ser(op, rust_types_minio);
+
+        g!("}}");
+        g!();
+
+        codegen_op_http_call(op, rust_types_minio);
+        g!();
+    }
+
+    codegen_post_object_fork_op(rust_types_minio);
 }
 
 fn status_code_name(code: u16) -> &'static str {
@@ -210,31 +281,6 @@ fn status_code_name(code: u16) -> &'static str {
         204 => "NO_CONTENT",
         _ => unimplemented!(),
     }
-}
-
-fn codegen_http(ops: &Operations, rust_types: &RustTypes) {
-    codegen_header_value(ops, rust_types);
-
-    for op in ops.values() {
-        if op.name == "PostObject" {
-            continue;
-        }
-        g!("pub struct {};", op.name);
-        g!();
-
-        g!("impl {} {{", op.name);
-
-        codegen_op_http_de(op, rust_types);
-        codegen_op_http_ser(op, rust_types);
-
-        g!("}}");
-        g!();
-
-        codegen_op_http_call(op, rust_types);
-        g!();
-    }
-
-    codegen_post_object_fork_op(rust_types);
 }
 
 #[allow(clippy::too_many_lines)]
@@ -436,9 +482,16 @@ fn codegen_header_value(ops: &Operations, rust_types: &RustTypes) {
         }
     }
 
+    // Each enum emits its `TryIntoHeaderValue` impl immediately followed by its
+    // `TryFromHeaderValue` impl, matching the interleaved layout of the merged file.
     for rust_type in str_enum_names.iter().map(|&x| &rust_types[x]) {
         let rust::Type::StrEnum(ty) = rust_type else { panic!() };
 
+        // MinIO-only enums are gated so that no-minio builds keep compiling
+        // (none exist today; this is a defensive guard for model evolution).
+        if ty.is_custom_extension {
+            g!("#[cfg(feature = \"minio\")]");
+        }
         g!("impl http::TryIntoHeaderValue for {} {{", ty.name);
         g!("type Error = http::InvalidHeaderValue;");
         g!("fn try_into_header_value(self) -> Result<http::HeaderValue, Self::Error> {{");
@@ -449,11 +502,10 @@ fn codegen_header_value(ops: &Operations, rust_types: &RustTypes) {
         g!("}}");
         g!("}}");
         g!();
-    }
 
-    for rust_type in str_enum_names.iter().map(|&x| &rust_types[x]) {
-        let rust::Type::StrEnum(ty) = rust_type else { panic!() };
-
+        if ty.is_custom_extension {
+            g!("#[cfg(feature = \"minio\")]");
+        }
         g!("impl http::TryFromHeaderValue for {} {{", ty.name);
         g!("type Error = http::ParseHeaderError;");
         g!("fn try_from_header_value(val: &http::HeaderValue) -> Result<Self, Self::Error> {{");
@@ -597,6 +649,15 @@ fn codegen_op_http_ser(op: &Operation, rust_types: &RustTypes) {
 
 #[allow(clippy::too_many_lines)]
 fn codegen_op_http_de(op: &Operation, rust_types: &RustTypes) {
+    codegen_op_http_de_fn(op, rust_types);
+    if op.name == "PutObject" {
+        codegen_op_http_de_multipart(op, rust_types);
+    }
+    g!();
+}
+
+#[allow(clippy::too_many_lines)]
+fn codegen_op_http_de_fn(op: &Operation, rust_types: &RustTypes) {
     let input = op.input.as_str();
     let rust_type = &rust_types[input];
     match rust_type {
@@ -782,15 +843,10 @@ fn codegen_op_http_de(op: &Operation, rust_types: &RustTypes) {
 
                 g!("}}");
                 g!();
-
-                if op.name == "PutObject" {
-                    codegen_op_http_de_multipart(op, rust_types);
-                }
             }
         }
         _ => unimplemented!(),
     }
-    g!();
 }
 
 fn codegen_field_de_query(field: &rust::StructField, rust_types: &RustTypes) {
@@ -944,6 +1000,9 @@ fn codegen_op_http_de_multipart(op: &Operation, rust_types: &RustTypes) {
 
 fn codegen_op_http_call(op: &Operation, rust_types: &RustTypes) {
     g!("#[async_trait::async_trait]");
+    if op.is_minio {
+        g!("#[cfg(feature = \"minio\")]");
+    }
     g!("impl super::Operation for {} {{", op.name);
 
     g!("fn name(&self) -> &'static str {{");
@@ -1181,6 +1240,23 @@ fn has_streaming_body(op: &Operation, rust_types: &RustTypes) -> bool {
     ty.fields
         .iter()
         .any(|field| field.position == "payload" && field.type_ == "StreamingBlob")
+}
+
+/// Emit the base and `MinIO` `resolve_route` twins under mutually exclusive
+/// gates, mirroring the pre-merge layout. The twins are folded into a single
+/// function with an inline gated branch in a later refactoring.
+fn codegen_router_twins(ops: &Operations, rust_types_base: &RustTypes, rust_types_minio: &RustTypes) {
+    let base_ops: Operations = ops
+        .iter()
+        .filter(|(_, op)| op.is_minio.not())
+        .map(|(name, op)| (name.clone(), op.clone()))
+        .collect();
+
+    g!("#[cfg(not(feature = \"minio\"))]");
+    codegen_router(&base_ops, rust_types_base);
+    g!();
+    g!("#[cfg(feature = \"minio\")]");
+    codegen_router(ops, rust_types_minio);
 }
 
 #[allow(clippy::too_many_lines)]

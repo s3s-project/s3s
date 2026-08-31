@@ -36,12 +36,20 @@ enum Patch {
 }
 
 pub fn run() {
-    inner_run(None);
-    inner_run(Some(Patch::Minio));
+    let base = inner_run(None);
+    let minio = inner_run(Some(Patch::Minio));
+    // ops 以 union（minio 全集）模型单次生成，base/minio 差异在 codegen 内内联门控。
+    let path = "crates/s3s/src/ops/generated.rs";
+    write_file(path, || ops::codegen(&minio.ops, &base.rust_types, &minio.rust_types));
     postprocess();
 }
 
-fn inner_run(code_patch: Option<Patch>) {
+struct ModelData {
+    ops: ops::Operations,
+    rust_types: dto::RustTypes,
+}
+
+fn inner_run(code_patch: Option<Patch>) -> ModelData {
     let model = {
         let mut s3_model = smithy::Model::load_json("data/s3.json").unwrap();
 
@@ -90,11 +98,6 @@ fn inner_run(code_patch: Option<Patch>) {
     }
 
     {
-        let path = format!("crates/s3s/src/ops/generated{suffix}.rs");
-        write_file(&path, || ops::codegen(&ops, &rust_types));
-    }
-
-    {
         let path = "crates/s3s/src/access/generated.rs";
         write_file(path, || access::codegen(&ops));
     }
@@ -108,6 +111,8 @@ fn inner_run(code_patch: Option<Patch>) {
         let path = "crates/s3s-aws/src/proxy/generated.rs";
         write_file(path, || aws_proxy::codegen(&ops, &rust_types));
     }
+
+    ModelData { ops, rust_types }
 }
 
 /// Merge each `generated.rs` / `generated_minio.rs` pair into a single file:
@@ -117,7 +122,6 @@ pub fn postprocess() {
     postprocess::run(&[
         ("crates/s3s/src/dto/generated.rs", "crates/s3s/src/dto/generated_minio.rs"),
         ("crates/s3s/src/xml/generated.rs", "crates/s3s/src/xml/generated_minio.rs"),
-        ("crates/s3s/src/ops/generated.rs", "crates/s3s/src/ops/generated_minio.rs"),
         ("crates/s3s-aws/src/conv/generated.rs", "crates/s3s-aws/src/conv/generated_minio.rs"),
     ]);
 }
