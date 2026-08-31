@@ -30,6 +30,11 @@ fn write_file(path: &str, f: impl FnOnce()) {
     scoped_writer::scoped(&mut writer, f);
 }
 
+fn write_dir_file(dir: &str, name: &str, f: impl FnOnce()) {
+    std::fs::create_dir_all(dir).unwrap();
+    write_file(&format!("{dir}/{name}"), f);
+}
+
 #[derive(Debug, Clone, Copy)]
 enum Patch {
     Minio,
@@ -39,8 +44,7 @@ pub fn run() {
     let base = inner_run(None);
     let minio = inner_run(Some(Patch::Minio));
     // ops 以 union（minio 全集）模型单次生成，base/minio 差异在 codegen 内内联门控。
-    let path = "crates/s3s/src/ops/generated.rs";
-    write_file(path, || ops::codegen(&minio.ops, &base.rust_types, &minio.rust_types));
+    ops::codegen(&minio.ops, &base.rust_types, &minio.rust_types);
     postprocess();
 }
 
