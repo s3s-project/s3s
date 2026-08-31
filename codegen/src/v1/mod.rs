@@ -10,6 +10,7 @@ mod dto;
 mod error;
 mod headers;
 mod minio;
+mod oir;
 mod ops;
 mod order;
 mod postprocess;
@@ -30,7 +31,7 @@ fn write_file(path: &str, f: impl FnOnce()) {
     scoped_writer::scoped(&mut writer, f);
 }
 
-fn write_dir_file(dir: &str, name: &str, f: impl FnOnce()) {
+pub(super) fn write_dir_file(dir: &str, name: &str, f: impl FnOnce()) {
     std::fs::create_dir_all(dir).unwrap();
     write_file(&format!("{dir}/{name}"), f);
 }

@@ -26,17 +26,17 @@ fn future_size() {
 
     #[rustfmt::skip]
     let sizes = [
-        future_size!(S3Service::call,                           3300),
-        future_size!(call,                                      1900),
-        future_size!(prepare,                                   1850),
-        future_size!(SignatureContext::check,                    880),
-        future_size!(SignatureContext::v2_check,                 270),
-        future_size!(SignatureContext::v2_check_presigned_url,   120),
-        future_size!(SignatureContext::v2_check_header_auth,     150),
-        future_size!(SignatureContext::v4_check,                 760),
-        future_size!(SignatureContext::v4_check_post_signature,  580),
-        future_size!(SignatureContext::v4_check_presigned_url,   535),
-        future_size!(SignatureContext::v4_check_header_auth,     645),
+        future_size!(S3Service::call,                           3320),
+        future_size!(call,                                      1920),
+        future_size!(prepare,                                   1870),
+        future_size!(SignatureContext::check,                    900),
+        future_size!(SignatureContext::v2_check,                 290),
+        future_size!(SignatureContext::v2_check_presigned_url,   140),
+        future_size!(SignatureContext::v2_check_header_auth,     170),
+        future_size!(SignatureContext::v4_check,                 780),
+        future_size!(SignatureContext::v4_check_post_signature,  600),
+        future_size!(SignatureContext::v4_check_presigned_url,   555),
+        future_size!(SignatureContext::v4_check_header_auth,     665),
     ];
 
     println!("{sizes:#?}");

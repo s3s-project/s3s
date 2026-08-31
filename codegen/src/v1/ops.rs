@@ -173,9 +173,9 @@ pub fn is_op_output(name: &str, ops: &Operations) -> bool {
 /// variants; per-operation differences between them are emitted inline with
 /// mutually exclusive `#[cfg(feature = "minio")]` / `#[cfg(not(feature = "minio"))]`
 /// gates instead of generating two files and merging them textually.
-const OPS_GENERATED_DIR: &str = "crates/s3s/src/ops/generated";
+pub(super) const OPS_GENERATED_DIR: &str = "crates/s3s/src/ops/generated";
 
-fn codegen_file_header() {
+pub(super) fn codegen_file_header() {
     g!("// SPDX-License-Identifier: Apache-2.0");
     g!("// SPDX-FileCopyrightText: 2023-2026 The s3s Authors");
     g!();
@@ -193,6 +193,7 @@ pub fn codegen(ops: &Operations, rust_types_base: &RustTypes, rust_types_minio: 
     codegen_post_object_fork_op(rust_types_minio);
     codegen_http(ops, rust_types_base, rust_types_minio);
     codegen_router(ops, rust_types_minio);
+    crate::v1::oir::codegen_oir(ops);
 
     write_dir_file(OPS_GENERATED_DIR, "mod.rs", || {
         codegen_file_header();
@@ -211,6 +212,7 @@ pub fn codegen(ops: &Operations, rust_types_base: &RustTypes, rust_types_minio: 
             "#![allow(clippy::too_many_lines)]",
             "#![allow(clippy::collapsible_if)]",
             "#![allow(clippy::unnecessary_wraps)]",
+            "#![allow(clippy::unreadable_literal)]",
             "#![deny(clippy::unwrap_used)]",
             "#![deny(clippy::expect_used)]",
             "#![deny(clippy::indexing_slicing)]",
@@ -228,6 +230,7 @@ pub fn codegen(ops: &Operations, rust_types_base: &RustTypes, rust_types_minio: 
         g!("mod header_value;");
         g!("mod post_object;");
         g!("mod router;");
+        g!("mod oir;");
         g!();
 
         for op in ops.values() {
@@ -241,6 +244,7 @@ pub fn codegen(ops: &Operations, rust_types_base: &RustTypes, rust_types_minio: 
         }
         g!("pub use self::post_object::PostObject;");
         g!("pub use self::router::resolve_route;");
+        g!("pub use self::oir::resolve_operation_by_id;");
         g!();
     });
 }
@@ -1150,18 +1154,19 @@ fn codegen_op_http_call(op: &Operation, rust_types: &RustTypes) {
     g!("Ok(resp)");
 
     g!("}}");
+
     g!("}}");
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum PathPattern {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub(super) enum PathPattern {
     Root,
     Bucket,
     Object,
 }
 
 impl PathPattern {
-    fn parse(part: &str) -> Self {
+    pub(super) fn parse(part: &str) -> Self {
         let path = match part.split_once('?') {
             None => part,
             Some((p, _)) => p,
@@ -1193,7 +1198,7 @@ impl PathPattern {
         qs
     }
 
-    fn x_id_value(part: &str) -> Option<String> {
+    pub(super) fn x_id_value(part: &str) -> Option<String> {
         let (_, q) = part.split_once('?')?;
         let qs: Vec<(String, String)> = serde_urlencoded::from_str(q).unwrap();
         qs.into_iter()

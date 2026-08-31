@@ -123,6 +123,7 @@
 #![allow(clippy::too_many_lines)]
 #![allow(clippy::collapsible_if)]
 #![allow(clippy::unnecessary_wraps)]
+#![allow(clippy::unreadable_literal)]
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
 #![deny(clippy::indexing_slicing)]
@@ -206,6 +207,7 @@ mod list_objects;
 mod list_objects_v2;
 mod list_parts;
 mod listen_bucket_notification;
+mod oir;
 mod post_object;
 mod put_bucket_abac;
 mod put_bucket_accelerate_configuration;
@@ -323,6 +325,7 @@ pub use self::list_objects_v2::ListObjectsV2;
 pub use self::list_parts::ListParts;
 #[cfg(feature = "minio")]
 pub use self::listen_bucket_notification::ListenBucketNotification;
+pub use self::oir::resolve_operation_by_id;
 pub use self::post_object::PostObject;
 pub use self::put_bucket_abac::PutBucketAbac;
 pub use self::put_bucket_accelerate_configuration::PutBucketAccelerateConfiguration;

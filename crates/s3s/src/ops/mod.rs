@@ -30,6 +30,9 @@ mod head_error_tests;
 mod route_skip_validation_tests;
 
 #[cfg(test)]
+mod route_oir_tests;
+
+#[cfg(test)]
 mod route_bench;
 
 #[cfg(test)]
@@ -37,12 +40,13 @@ mod route_fixture_check;
 
 use crate::access::{S3Access, S3AccessContext};
 use crate::auth::{Credentials, S3Auth};
-use crate::config::S3ConfigProvider;
+use crate::config::{S3Config, S3ConfigProvider};
 use crate::error::*;
 use crate::header;
 use crate::host::{S3Host, VirtualHost};
 use crate::http::Body;
 use crate::http::OrderedQs;
+use crate::http::QsLookup;
 use crate::http::{self, BodySizeLimitExceeded};
 use crate::http::{Request, Response};
 use crate::path::{ParseS3PathError, S3Path};
@@ -91,9 +95,7 @@ pub trait Operation: Send + Sync + 'static {
     /// (e.g. `PutObject`, `UploadPart`). These bodies are not bounded by
     /// [`S3Config::xml_max_body_size`]; see
     /// [`S3Config::put_object_max_size`].
-    fn has_streaming_body(&self) -> bool {
-        false
-    }
+    fn has_streaming_body(&self) -> bool;
 
     async fn call(&self, ccx: &CallContext<'_>, req: &mut Request) -> S3Result<Response>;
 }
@@ -525,6 +527,7 @@ fn classify_request_path(
     ccx: &CallContext<'_>,
     vh_bucket: Option<&str>,
     custom_route_hit: bool,
+    config: &S3Config,
 ) -> S3Result<Option<S3Path>> {
     if custom_route_hit {
         return Ok(None);
@@ -532,7 +535,7 @@ fn classify_request_path(
 
     let default_validation = &const { AwsNameValidation::new() };
     let validation = ccx.validation.unwrap_or(default_validation);
-    let normalize_path = ccx.config.snapshot().normalize_forward_slash_path;
+    let normalize_path = config.normalize_forward_slash_path;
 
     let path = crate::path::parse_virtual_hosted_style_with_validation_and_normalization(
         vh_bucket,
@@ -645,9 +648,9 @@ fn post_object_max_file_size(policy: Option<&PostPolicy>, config_max: u64) -> u6
 }
 
 async fn resolve_post_object(
-    ccx: &CallContext<'_>,
     bucket: &str,
     multipart: &mut crate::http::Multipart,
+    config: &S3Config,
 ) -> S3Result<(crate::stream::DynByteStream, Option<PostPolicy>)> {
     debug!(?multipart);
 
@@ -656,7 +659,7 @@ async fn resolve_post_object(
     multipart.substitute_key_filename();
 
     let policy = parse_post_policy(multipart)?;
-    let max_file_size = post_object_max_file_size(policy.as_ref(), ccx.config.snapshot().post_object_max_file_size);
+    let max_file_size = post_object_max_file_size(policy.as_ref(), config.post_object_max_file_size);
 
     // Prepare the file stream for the operation: forwarded as a
     // stream when the exact length is known, aggregated otherwise.
@@ -798,8 +801,62 @@ fn apply_credentials(req: &mut Request, credentials: Option<CredentialsExt>, vh_
     Ok(())
 }
 
+/// Resolves the client-declared operation intent from the `x-id` query
+/// parameter (signed under `SigV4` and sent by official SDKs). The former
+/// `x-s3s-operation-id` header extension was removed: it was a redundant,
+/// unsigned carrier with no confirmed benefit, and checking for a present
+/// header costs ~12 ns/op in the hot path.
+///
+/// The lookup is partitioned by (HTTP method, path shape) and each partition
+/// resolves the declared name through a generated `match` over the official
+/// operation names. The declaration is authoritative: required query
+/// strings/headers and query tags are validated by the operation's
+/// `deserialize_http` step rather than here.
+///
+/// Returns `Ok(None)` when no signal is present or the feature is disabled
+/// (the caller falls back to the full router); `Ok(Some(op))` when the
+/// declared operation is resolved; `Err` when the declaration is invalid or
+/// does not match the request shape. Errors must be deferred until after
+/// signature verification (see [`prepare`]).
+///
+/// `config` is the caller's request-level snapshot (taken once in
+/// [`prepare`]); passing it avoids a second ~10 ns `snapshot()` per request.
+fn resolve_oir(req: &Request, config: &S3Config) -> S3Result<Option<&'static dyn Operation>> {
+    if !config.operation_id_routing {
+        return Ok(None);
+    }
+
+    // `x-id` query parameter: duplicate keys are invalid (fail-closed).
+    let signal = match req.s3ext.qs.as_ref().map(|qs| qs.lookup("x-id")) {
+        Some(QsLookup::Duplicate) => return Err(invalid_request!("duplicate x-id")),
+        Some(QsLookup::Single(v)) => Some(v),
+        _ => None,
+    };
+    let Some(signal) = signal else {
+        return Ok(None);
+    };
+
+    let s3_path = req.s3ext.s3_path.as_ref().expect("path classified before OIR");
+    let Some(op) = generated::resolve_operation_by_id(req.method.as_str(), s3_path, signal) else {
+        // The lookup is partitioned by (method, path shape), so a miss covers
+        // both an unknown id and a known id that does not match the request
+        // shape; both are InvalidRequest.
+        return Err(s3_error!(
+            InvalidRequest,
+            "operation id {signal} is unknown or does not match this request"
+        ));
+    };
+
+    Ok(Some(op))
+}
+
 #[tracing::instrument(level = "debug", skip_all, err)]
 async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> {
+    // Take one config snapshot for the whole request: `snapshot()` costs
+    // ~10 ns (an `Arc` clone), and routing/body handling below read several
+    // config fields. A single snapshot also keeps the request internally
+    // consistent.
+    let config = ccx.config.snapshot();
     let mut content_length;
 
     inject_host_header(req);
@@ -825,7 +882,7 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
     // Matched routes skip path classification; unmatched requests run the
     // legacy combined parse+validate here, preserving error codes/ordering.
     let vh_bucket = vh.as_ref().and_then(VirtualHost::bucket);
-    req.s3ext.s3_path = classify_request_path(&decoded_uri_path, ccx, vh_bucket, custom_route_hit)?;
+    req.s3ext.s3_path = classify_request_path(&decoded_uri_path, ccx, vh_bucket, custom_route_hit, &config)?;
 
     req.s3ext.qs = extract_qs(&req.uri)?;
     content_length = extract_content_length(req)?;
@@ -839,13 +896,31 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
     // multipart POST requests are skipped (conservatively treated as having a
     // payload) because their routing depends on state parsed during signature
     // verification.
+    // OIR operation resolution from client-declared intent: the `x-id`
+    // query parameter (signed under SigV4, sent by official SDKs) is the sole
+    // signal. On success the confirmed operation is cached and reused below,
+    // so `resolve_route` does not run on the OIR path. On a declaration
+    // error (duplicate / unknown / not matching) only a one-byte error kind
+    // is kept, deferred until after signature verification so that
+    // authentication errors take precedence, mirroring the tolerant
+    // full-router resolve below. Custom routes and multipart POST requests
+    // are skipped (their routing depends on other state).
+    let mut oir_error: Option<S3Error> = None;
     let resolved_op = if custom_route_hit || is_multipart_post(req) {
         None
     } else {
-        req.s3ext
-            .s3_path
-            .as_ref()
-            .and_then(|s3_path| generated::resolve_route(req, s3_path, req.s3ext.qs.as_ref()).ok())
+        match resolve_oir(req, &config) {
+            Ok(Some(op)) => Some(op),
+            Ok(None) => req
+                .s3ext
+                .s3_path
+                .as_ref()
+                .and_then(|s3_path| generated::resolve_route(req, s3_path, req.s3ext.qs.as_ref()).ok()),
+            Err(err) => {
+                oir_error = Some(err);
+                None
+            }
+        }
     };
     let request_has_payload = resolved_op.as_ref().is_none_or(|op| op.has_request_payload());
     let content_length_for_signature = signature_content_length(req, content_length, request_has_payload);
@@ -853,6 +928,11 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
 
     if custom_route_hit {
         return Ok(Prepare::CustomRoute);
+    }
+
+    // Deferred OIR errors surface only after authentication succeeded.
+    if let Some(err) = oir_error {
+        return Err(err);
     }
 
     let op = if let Some(op) = resolved_op {
@@ -866,7 +946,7 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                 match s3_path {
                     S3Path::Root => return Err(unknown_operation()),
                     S3Path::Bucket { bucket } => {
-                        let (stream, policy) = resolve_post_object(ccx, bucket, multipart).await?;
+                        let (stream, policy) = resolve_post_object(bucket, multipart, &config).await?;
                         req.s3ext.post_object_stream = Some(stream);
                         req.s3ext.post_policy = policy;
                         break 'resolve &PostObject as &'static dyn Operation;
@@ -900,7 +980,6 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
 
     debug!(op = %op.name(), ?s3_path, "checked access");
 
-    let config = ccx.config.snapshot();
     if op.needs_full_body() {
         extract_full_body(content_length, &mut req.body, config.xml_max_body_size).await?;
     } else if op.has_streaming_body() {
