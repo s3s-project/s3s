@@ -7,3 +7,9 @@
 //!
 //! This crate is intentionally opt-in while the HTTP/3 ecosystem and API are
 //! still evolving.
+
+mod body;
+mod server;
+
+pub use quinn::Endpoint;
+pub use server::{DEFAULT_SHUTDOWN_TIMEOUT, serve};
