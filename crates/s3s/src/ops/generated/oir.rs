@@ -100,6 +100,8 @@ pub fn resolve_operation_by_id(method: &str, s3_path: &S3Path, name: &str) -> Op
             "ListObjectVersions" => Some(&ListObjectVersions as &'static dyn crate::ops::Operation),
             "ListObjects" => Some(&ListObjects as &'static dyn crate::ops::Operation),
             "ListObjectsV2" => Some(&ListObjectsV2 as &'static dyn crate::ops::Operation),
+            #[cfg(feature = "minio")]
+            "ListenBucketNotification" => Some(&ListenBucketNotification as &'static dyn crate::ops::Operation),
             _ => None,
         },
         ("GET", S3Path::Object { .. }) => match name {
@@ -272,6 +274,8 @@ mod oir_lookup_tests {
         ("GET", "Bucket", "ListObjectVersions"),
         ("GET", "Bucket", "ListObjects"),
         ("GET", "Bucket", "ListObjectsV2"),
+        #[cfg(feature = "minio")]
+        ("GET", "Bucket", "ListenBucketNotification"),
         ("GET", "Object", "GetObject"),
         ("GET", "Object", "GetObjectAcl"),
         ("GET", "Object", "GetObjectAnnotation"),

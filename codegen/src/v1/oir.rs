@@ -11,13 +11,14 @@ use scoped_writer::g;
 use std::collections::BTreeMap;
 
 /// Emits the OIR operation lookup: `resolve_operation_by_id` backed by
-/// per-`(HTTP method, path shape)` dispatch over the official operation names
-/// (the `x-id` query value).
+/// per-`(HTTP method, path shape)` dispatch over the operation names (the
+/// `x-id` query value).
 ///
-/// Only official-model operations are included: `PostObject` is synthetic and
-/// `MinIO`-only operations do not participate in OIR routing. Each
-/// partition is a `match` over the full operation names, so a hit is returned
-/// only when the name equals a registered operation name.
+/// The synthetic `PostObject` is excluded; MinIO-only operations participate
+/// (a client may send `x-id` uniformly) and their references are emitted
+/// under `#[cfg(feature = "minio")]`. Each partition is a `match` over the
+/// full operation names, so a hit is returned only when the name equals a
+/// registered operation name.
 ///
 /// The lookup properties are re-checked by the generated tests in
 /// `oir_lookup_tests`.
@@ -53,13 +54,22 @@ pub(super) fn codegen_oir(ops: &Operations) {
                 PathPattern::Bucket => "S3Path::Bucket { .. }",
                 PathPattern::Object => "S3Path::Object { .. }",
             };
+            // A single-name MinIO-only bucket gates the whole arm; in a
+            // mixed bucket only the MinIO-only arms are gated.
+            let arm_minio = bucket.names.len() == 1 && bucket.names[0].1;
+            if arm_minio {
+                g!("#[cfg(feature = \"minio\")]");
+            }
             g!("        (\"{}\", {path_pattern}) => {{", bucket.method);
             if bucket.names.len() == 1 {
-                let name = &bucket.names[0];
+                let (name, _) = &bucket.names[0];
                 g!("            (name == \"{name}\").then_some(&{name} as &'static dyn crate::ops::Operation)");
             } else {
                 g!("            match name {{");
-                for name in &bucket.names {
+                for (name, is_minio) in &bucket.names {
+                    if *is_minio {
+                        g!("                #[cfg(feature = \"minio\")]");
+                    }
                     g!("                \"{name}\" => Some(&{name} as &'static dyn crate::ops::Operation),");
                 }
                 g!("                _ => None,");
@@ -80,16 +90,17 @@ pub(super) fn codegen_oir(ops: &Operations) {
 struct OirBucket {
     method: String,
     path: PathPattern,
-    /// Registered operation names in this bucket, sorted.
-    names: Vec<String>,
+    /// (operation name, whether MinIO-only) pairs, sorted.
+    names: Vec<(String, bool)>,
 }
 
 /// Collects the OIR buckets (names grouped by (method, path shape)).
-/// Excludes `PostObject` (synthetic) and `MinIO`-only operations.
+/// Excludes the synthetic `PostObject`; MinIO-only operations participate
+/// (with their `is_minio` flag) and are emitted under `#[cfg(feature = "minio")]`.
 fn collect_oir_buckets(ops: &Operations) -> Vec<OirBucket> {
-    let mut groups: BTreeMap<(String, PathPattern), Vec<String>> = BTreeMap::new();
+    let mut groups: BTreeMap<(String, PathPattern), Vec<(String, bool)>> = BTreeMap::new();
     for op in ops.values() {
-        if op.name == "PostObject" || op.is_minio {
+        if op.name == "PostObject" {
             continue;
         }
         // The official `x-id` query value must equal the operation name so
@@ -101,7 +112,7 @@ fn collect_oir_buckets(ops: &Operations) -> Vec<OirBucket> {
         groups
             .entry((op.http_method.clone(), path))
             .or_default()
-            .push(op.name.clone());
+            .push((op.name.clone(), op.is_minio));
     }
 
     groups
@@ -144,7 +155,10 @@ fn codegen_oir_lookup_tests(buckets: &[OirBucket]) {
             PathPattern::Bucket => "Bucket",
             PathPattern::Object => "Object",
         };
-        for name in &bucket.names {
+        for (name, is_minio) in &bucket.names {
+            if *is_minio {
+                g!("        #[cfg(feature = \"minio\")]");
+            }
             g!("        (\"{}\", \"{kind}\", \"{name}\"),", bucket.method);
         }
     }

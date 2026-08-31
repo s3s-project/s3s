@@ -163,3 +163,21 @@ async fn no_signal_uses_normal_routing() {
     let mut req = build_request("GET", "/bucket/key", &[]);
     expect_op(&parts, &mut req, "GetObject").await;
 }
+
+#[tokio::test]
+#[cfg(feature = "minio")]
+async fn minio_only_operation_resolves_via_x_id() {
+    // MinIO-only operations participate in OIR: a client that sends `x-id`
+    // uniformly must not have its minio-only requests rejected.
+    let parts = ctx();
+    let mut req = build_request("GET", "/bucket?events=s3:ObjectCreated:*&x-id=ListenBucketNotification", &[]);
+    expect_op(&parts, &mut req, "ListenBucketNotification").await;
+}
+
+#[tokio::test]
+#[cfg(feature = "minio")]
+async fn minio_only_operation_without_x_id_routes_normally() {
+    let parts = ctx();
+    let mut req = build_request("GET", "/bucket?events=s3:ObjectCreated:*", &[]);
+    expect_op(&parts, &mut req, "ListenBucketNotification").await;
+}
