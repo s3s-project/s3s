@@ -43,6 +43,16 @@ enum Patch {
 pub fn run() {
     let base = inner_run(None);
     let minio = inner_run(Some(Patch::Minio));
+    // Sanity: the base operation set must be a subset of the union, and the
+    // `is_minio` flag must exactly mark the operations that only exist in the
+    // MinIO model variant.
+    let base_names: std::collections::BTreeSet<_> = base.ops.keys().collect();
+    let minio_names: std::collections::BTreeSet<_> = minio.ops.keys().collect();
+    assert!(base_names.is_subset(&minio_names), "base ops must be a subset of minio ops");
+    let minio_only: std::collections::BTreeSet<_> = minio_names.difference(&base_names).copied().collect();
+    let flagged: std::collections::BTreeSet<_> = minio.ops.iter().filter(|(_, op)| op.is_minio).map(|(name, _)| name).collect();
+    assert_eq!(flagged, minio_only, "is_minio flag must mark exactly the minio-only operations");
+
     // ops 以 union（minio 全集）模型单次生成，base/minio 差异在 codegen 内内联门控。
     ops::codegen(&minio.ops, &base.rust_types, &minio.rust_types);
     postprocess();

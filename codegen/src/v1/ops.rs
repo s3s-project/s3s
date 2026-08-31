@@ -253,6 +253,22 @@ fn op_input_differs(op: &Operation, rust_types_base: &RustTypes, rust_types_mini
     else {
         panic!("op input must be a struct");
     };
+
+    // The gate granularity only covers `deserialize_http` /
+    // `deserialize_http_multipart`. The serialize path depends on the output
+    // struct, so a divergence there would need new gate kinds — fail loudly
+    // instead of silently dropping the MinIO side.
+    let (rust::Type::Struct(base_out), rust::Type::Struct(minio_out)) =
+        (&rust_types_base[op.output.as_str()], &rust_types_minio[op.output.as_str()])
+    else {
+        panic!("op output must be a struct");
+    };
+    assert_eq!(
+        base_out.fields, minio_out.fields,
+        "output struct of {} differs between base and minio; extend the gate granularity",
+        op.name
+    );
+
     base.fields != minio.fields
 }
 
