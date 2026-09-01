@@ -255,13 +255,6 @@ fn extract_qs(req_uri: &Uri) -> S3Result<Option<OrderedQs>> {
     }
 }
 
-fn check_query_pattern(qs: &OrderedQs, name: &str, val: &str) -> bool {
-    match qs.get_unique(name) {
-        Some(v) => v == val,
-        None => false,
-    }
-}
-
 fn extract_mime(headers: &HeaderMap) -> Option<Mime> {
     let content_type = http::get_unique_header_str(headers, crate::header::CONTENT_TYPE.as_str())?;
 

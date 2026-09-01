@@ -8,6 +8,449 @@ use crate::error::*;
 use crate::http;
 use crate::path::S3Path;
 
+fn resolve_head_bucket(_req: &http::Request, _qs: Option<&http::OrderedQs>) -> S3Result<&'static dyn crate::ops::Operation> {
+    Ok(&HeadBucket as &'static dyn crate::ops::Operation)
+}
+
+fn resolve_head_object(_req: &http::Request, _qs: Option<&http::OrderedQs>) -> S3Result<&'static dyn crate::ops::Operation> {
+    Ok(&HeadObject as &'static dyn crate::ops::Operation)
+}
+
+fn resolve_get_root(_req: &http::Request, qs: Option<&http::OrderedQs>) -> S3Result<&'static dyn crate::ops::Operation> {
+    if let Some(qs) = qs
+        && qs.get_unique("x-id") == Some("ListDirectoryBuckets")
+    {
+        return Ok(&ListDirectoryBuckets as &'static dyn crate::ops::Operation);
+    }
+    Ok(&ListBuckets as &'static dyn crate::ops::Operation)
+}
+
+#[allow(clippy::indexing_slicing)]
+fn resolve_get_bucket(_req: &http::Request, qs: Option<&http::OrderedQs>) -> S3Result<&'static dyn crate::ops::Operation> {
+    const A_KEY_ID: u64 = 1 << 33;
+    const KEEP_XOR: u64 = 0x3C00000F; // v0 & A_KEY_ID != 0
+    const KEEP_BASE: u64 = 0x1FFFFFFF0;
+    static GROUP_OPS: [&'static dyn crate::ops::Operation; 33] = [
+        &GetBucketAnalyticsConfiguration,
+        &GetBucketIntelligentTieringConfiguration,
+        &GetBucketInventoryConfiguration,
+        &GetBucketMetricsConfiguration,
+        &CreateSession,
+        &GetBucketAbac,
+        &GetBucketAccelerateConfiguration,
+        &GetBucketAcl,
+        &GetBucketCors,
+        &GetBucketEncryption,
+        &GetBucketLifecycleConfiguration,
+        &GetBucketLocation,
+        &GetBucketLogging,
+        &GetBucketMetadataConfiguration,
+        &GetBucketMetadataTableConfiguration,
+        &GetBucketNotificationConfiguration,
+        &GetBucketOwnershipControls,
+        &GetBucketPolicy,
+        &GetBucketPolicyStatus,
+        &GetBucketReplication,
+        &GetBucketRequestPayment,
+        &GetBucketTagging,
+        &GetBucketVersioning,
+        &GetBucketWebsite,
+        &GetObjectLockConfiguration,
+        &GetPublicAccessBlock,
+        &ListBucketAnalyticsConfigurations,
+        &ListBucketIntelligentTieringConfigurations,
+        &ListBucketInventoryConfigurations,
+        &ListBucketMetricsConfigurations,
+        &ListMultipartUploads,
+        &ListObjectVersions,
+        &ListObjectsV2,
+    ];
+    #[cfg(feature = "minio")]
+    {
+        if let Some(qs) = qs
+            && qs.has("events")
+        {
+            return Ok(&ListenBucketNotification as &'static dyn crate::ops::Operation);
+        }
+    }
+    let mut v_key: u64 = 0;
+    let mut v_pat: u64 = 0;
+    if let Some(qs) = qs {
+        for (k, _v) in qs.as_ref() {
+            match k.as_str() {
+                "abac" => v_key |= 1 << 5,
+                "accelerate" => v_key |= 1 << 6,
+                "acl" => v_key |= 1 << 7,
+                "analytics" => v_key |= 1 | 1 << 26,
+                "cors" => v_key |= 1 << 8,
+                "encryption" => v_key |= 1 << 9,
+                "id" => v_key |= A_KEY_ID,
+                "intelligent-tiering" => v_key |= 1 << 1 | 1 << 27,
+                "inventory" => v_key |= 1 << 2 | 1 << 28,
+                "lifecycle" => v_key |= 1 << 10,
+                "location" => v_key |= 1 << 11,
+                "logging" => v_key |= 1 << 12,
+                "metadataConfiguration" => v_key |= 1 << 13,
+                "metadataTable" => v_key |= 1 << 14,
+                "metrics" => v_key |= 1 << 3 | 1 << 29,
+                "notification" => v_key |= 1 << 15,
+                "object-lock" => v_key |= 1 << 24,
+                "ownershipControls" => v_key |= 1 << 16,
+                "policy" => v_key |= 1 << 17,
+                "policyStatus" => v_key |= 1 << 18,
+                "publicAccessBlock" => v_key |= 1 << 25,
+                "replication" => v_key |= 1 << 19,
+                "requestPayment" => v_key |= 1 << 20,
+                "session" => v_key |= 1 << 4,
+                "tagging" => v_key |= 1 << 21,
+                "uploads" => v_key |= 1 << 30,
+                "versioning" => v_key |= 1 << 22,
+                "versions" => v_key |= 1 << 31,
+                "website" => v_key |= 1 << 23,
+                _ => {}
+            }
+        }
+        if qs.get_unique("list-type") == Some("2") {
+            v_pat |= 1 << 32;
+        }
+    }
+    let v0 = v_key | v_pat;
+    let sel = u64::from(v0 & A_KEY_ID != 0).wrapping_neg();
+    let v1 = KEEP_XOR & sel ^ KEEP_BASE;
+    let act = v0 & v1;
+    if act != 0 {
+        Ok(GROUP_OPS[(act.trailing_zeros()) as usize])
+    } else {
+        Ok(&ListObjects as &'static dyn crate::ops::Operation)
+    }
+}
+
+#[allow(clippy::indexing_slicing)]
+fn resolve_get_object(_req: &http::Request, qs: Option<&http::OrderedQs>) -> S3Result<&'static dyn crate::ops::Operation> {
+    const A_KEY_ANNOTATIONNAME: u16 = 1 << 9;
+    const KEEP_XOR: u16 = 0x81; // v0 & A_KEY_ANNOTATIONNAME != 0
+    const KEEP_BASE: u16 = 0x1FE;
+    static GROUP_OPS: [&'static dyn crate::ops::Operation; 9] = [
+        &GetObjectAnnotation,
+        &GetObjectAttributes,
+        &GetObjectAcl,
+        &GetObjectLegalHold,
+        &GetObjectRetention,
+        &GetObjectTagging,
+        &GetObjectTorrent,
+        &ListObjectAnnotations,
+        &ListParts,
+    ];
+    let mut v_key: u16 = 0;
+    if let Some(qs) = qs {
+        for (k, _v) in qs.as_ref() {
+            match k.as_str() {
+                "acl" => v_key |= 1 << 2,
+                "annotation" => v_key |= 1 | 1 << 7,
+                "annotationName" => v_key |= A_KEY_ANNOTATIONNAME,
+                "attributes" => v_key |= 1 << 1,
+                "legal-hold" => v_key |= 1 << 3,
+                "retention" => v_key |= 1 << 4,
+                "tagging" => v_key |= 1 << 5,
+                "torrent" => v_key |= 1 << 6,
+                "uploadId" => v_key |= 1 << 8,
+                _ => {}
+            }
+        }
+    }
+    let v0 = v_key;
+    let sel = u16::from(v0 & A_KEY_ANNOTATIONNAME != 0).wrapping_neg();
+    let v1 = KEEP_XOR & sel ^ KEEP_BASE;
+    let act = v0 & v1;
+    if act != 0 {
+        Ok(GROUP_OPS[(act.trailing_zeros()) as usize])
+    } else {
+        Ok(&GetObject as &'static dyn crate::ops::Operation)
+    }
+}
+
+#[allow(clippy::indexing_slicing)]
+fn resolve_post_bucket(req: &http::Request, qs: Option<&http::OrderedQs>) -> S3Result<&'static dyn crate::ops::Operation> {
+    const A_HDR_X_AMZ_REQUEST_ROUTE: u8 = 1 << 4;
+    const A_HDR_X_AMZ_REQUEST_TOKEN: u8 = 1 << 5;
+    const KEEP_XOR: u8 = 0x8; // v0 & (A_HDR_X_AMZ_REQUEST_ROUTE | A_HDR_X_AMZ_REQUEST_TOKEN) == (A_HDR_X_AMZ_REQUEST_ROUTE | A_HDR_X_AMZ_REQUEST_TOKEN)
+    const KEEP_BASE: u8 = 0x7;
+    static GROUP_OPS: [&'static dyn crate::ops::Operation; 4] = [
+        &CreateBucketMetadataConfiguration,
+        &CreateBucketMetadataTableConfiguration,
+        &DeleteObjects,
+        &WriteGetObjectResponse,
+    ];
+    let mut v_key: u8 = 0;
+    let mut v_hdr: u8 = 0;
+    if req.headers.contains_key("x-amz-request-route") {
+        v_hdr |= 1 << 3 | A_HDR_X_AMZ_REQUEST_ROUTE;
+    }
+    if req.headers.contains_key("x-amz-request-token") {
+        v_hdr |= 1 << 3 | A_HDR_X_AMZ_REQUEST_TOKEN;
+    }
+    if let Some(qs) = qs {
+        for (k, _v) in qs.as_ref() {
+            match k.as_str() {
+                "delete" => v_key |= 1 << 2,
+                "metadataConfiguration" => v_key |= 1,
+                "metadataTable" => v_key |= 1 << 1,
+                _ => {}
+            }
+        }
+    }
+    let v0 = v_key | v_hdr;
+    let sel = u8::from(
+        v0 & (A_HDR_X_AMZ_REQUEST_ROUTE | A_HDR_X_AMZ_REQUEST_TOKEN) == (A_HDR_X_AMZ_REQUEST_ROUTE | A_HDR_X_AMZ_REQUEST_TOKEN),
+    )
+    .wrapping_neg();
+    let v1 = KEEP_XOR & sel ^ KEEP_BASE;
+    let act = v0 & v1;
+    if act != 0 {
+        Ok(GROUP_OPS[(act.trailing_zeros()) as usize])
+    } else {
+        Err(crate::ops::unknown_operation())
+    }
+}
+
+#[allow(clippy::indexing_slicing)]
+fn resolve_post_object(_req: &http::Request, qs: Option<&http::OrderedQs>) -> S3Result<&'static dyn crate::ops::Operation> {
+    const A_KEY_SELECT: u8 = 1 << 4;
+    const A_PAT_SELECT_TYPE_2: u8 = 1 << 5;
+    const KEEP_XOR: u8 = 0x1; // v0 & (A_KEY_SELECT | A_PAT_SELECT_TYPE_2) == (A_KEY_SELECT | A_PAT_SELECT_TYPE_2)
+    const KEEP_BASE: u8 = 0xE;
+    static GROUP_OPS: [&'static dyn crate::ops::Operation; 4] = [
+        &SelectObjectContent,
+        &CreateMultipartUpload,
+        &RestoreObject,
+        &CompleteMultipartUpload,
+    ];
+    let mut v_key: u8 = 0;
+    let mut v_pat: u8 = 0;
+    if let Some(qs) = qs {
+        for (k, _v) in qs.as_ref() {
+            match k.as_str() {
+                "restore" => v_key |= 1 << 2,
+                "select" => v_key |= 1 | A_KEY_SELECT,
+                "uploadId" => v_key |= 1 << 3,
+                "uploads" => v_key |= 1 << 1,
+                _ => {}
+            }
+        }
+        if qs.get_unique("select-type") == Some("2") {
+            v_pat |= 1 | A_PAT_SELECT_TYPE_2;
+        }
+    }
+    let v0 = v_key | v_pat;
+    let sel = u8::from(v0 & (A_KEY_SELECT | A_PAT_SELECT_TYPE_2) == (A_KEY_SELECT | A_PAT_SELECT_TYPE_2)).wrapping_neg();
+    let v1 = KEEP_XOR & sel ^ KEEP_BASE;
+    let act = v0 & v1;
+    if act != 0 {
+        Ok(GROUP_OPS[(act.trailing_zeros()) as usize])
+    } else {
+        Err(crate::ops::unknown_operation())
+    }
+}
+
+#[allow(clippy::indexing_slicing)]
+fn resolve_put_bucket(_req: &http::Request, qs: Option<&http::OrderedQs>) -> S3Result<&'static dyn crate::ops::Operation> {
+    static GROUP_OPS: [&'static dyn crate::ops::Operation; 24] = [
+        &PutBucketAnalyticsConfiguration,
+        &PutBucketIntelligentTieringConfiguration,
+        &PutBucketInventoryConfiguration,
+        &PutBucketMetricsConfiguration,
+        &PutBucketAbac,
+        &PutBucketAccelerateConfiguration,
+        &PutBucketAcl,
+        &PutBucketCors,
+        &PutBucketEncryption,
+        &PutBucketLifecycleConfiguration,
+        &PutBucketLogging,
+        &PutBucketNotificationConfiguration,
+        &PutBucketOwnershipControls,
+        &PutBucketPolicy,
+        &PutBucketReplication,
+        &PutBucketRequestPayment,
+        &PutBucketTagging,
+        &PutBucketVersioning,
+        &PutBucketWebsite,
+        &PutObjectLockConfiguration,
+        &PutPublicAccessBlock,
+        &UpdateBucketMetadataAnnotationTableConfiguration,
+        &UpdateBucketMetadataInventoryTableConfiguration,
+        &UpdateBucketMetadataJournalTableConfiguration,
+    ];
+    let mut v_key: u32 = 0;
+    if let Some(qs) = qs {
+        for (k, _v) in qs.as_ref() {
+            match k.as_str() {
+                "abac" => v_key |= 1 << 4,
+                "accelerate" => v_key |= 1 << 5,
+                "acl" => v_key |= 1 << 6,
+                "analytics" => v_key |= 1,
+                "cors" => v_key |= 1 << 7,
+                "encryption" => v_key |= 1 << 8,
+                "intelligent-tiering" => v_key |= 1 << 1,
+                "inventory" => v_key |= 1 << 2,
+                "lifecycle" => v_key |= 1 << 9,
+                "logging" => v_key |= 1 << 10,
+                "metadataAnnotationTable" => v_key |= 1 << 21,
+                "metadataInventoryTable" => v_key |= 1 << 22,
+                "metadataJournalTable" => v_key |= 1 << 23,
+                "metrics" => v_key |= 1 << 3,
+                "notification" => v_key |= 1 << 11,
+                "object-lock" => v_key |= 1 << 19,
+                "ownershipControls" => v_key |= 1 << 12,
+                "policy" => v_key |= 1 << 13,
+                "publicAccessBlock" => v_key |= 1 << 20,
+                "replication" => v_key |= 1 << 14,
+                "requestPayment" => v_key |= 1 << 15,
+                "tagging" => v_key |= 1 << 16,
+                "versioning" => v_key |= 1 << 17,
+                "website" => v_key |= 1 << 18,
+                _ => {}
+            }
+        }
+    }
+    let v0 = v_key;
+    let act = v0 & (u32::MAX >> (32 - 24));
+    if act != 0 {
+        Ok(GROUP_OPS[(act.trailing_zeros()) as usize])
+    } else {
+        Ok(&CreateBucket as &'static dyn crate::ops::Operation)
+    }
+}
+
+#[allow(clippy::indexing_slicing)]
+fn resolve_put_object(req: &http::Request, qs: Option<&http::OrderedQs>) -> S3Result<&'static dyn crate::ops::Operation> {
+    const A_KEY_PARTNUMBER: u16 = 1 << 10;
+    const A_KEY_UPLOADID: u16 = 1 << 11;
+    const A_HDR_X_AMZ_COPY_SOURCE: u16 = 1 << 12;
+    const KEEP_XOR: u16 = 0x180; // v0 & (A_KEY_PARTNUMBER | A_KEY_UPLOADID) == (A_KEY_PARTNUMBER | A_KEY_UPLOADID)
+    const KEEP_BASE: u16 = 0x27F;
+    const KEEP_XOR_1: u16 = 0x80; // v0 & A_HDR_X_AMZ_COPY_SOURCE != 0
+    const KEEP_BASE_1: u16 = 0x37F;
+    static GROUP_OPS: [&'static dyn crate::ops::Operation; 10] = [
+        &PutObjectAnnotation,
+        &RenameObject,
+        &PutObjectAcl,
+        &PutObjectLegalHold,
+        &PutObjectRetention,
+        &PutObjectTagging,
+        &UpdateObjectEncryption,
+        &UploadPartCopy,
+        &UploadPart,
+        &CopyObject,
+    ];
+    let mut v_key: u16 = 0;
+    let mut v_hdr: u16 = 0;
+    if req.headers.contains_key("x-amz-copy-source") {
+        v_hdr |= 1 << 7 | 1 << 9 | A_HDR_X_AMZ_COPY_SOURCE;
+    }
+    if let Some(qs) = qs {
+        for (k, _v) in qs.as_ref() {
+            match k.as_str() {
+                "acl" => v_key |= 1 << 2,
+                "annotation" => v_key |= 1,
+                "encryption" => v_key |= 1 << 6,
+                "legal-hold" => v_key |= 1 << 3,
+                "partNumber" => v_key |= 1 << 7 | 1 << 8 | A_KEY_PARTNUMBER,
+                "renameObject" => v_key |= 1 << 1,
+                "retention" => v_key |= 1 << 4,
+                "tagging" => v_key |= 1 << 5,
+                "uploadId" => v_key |= 1 << 7 | 1 << 8 | A_KEY_UPLOADID,
+                _ => {}
+            }
+        }
+    }
+    let v0 = v_key | v_hdr;
+    let sel = u16::from(v0 & (A_KEY_PARTNUMBER | A_KEY_UPLOADID) == (A_KEY_PARTNUMBER | A_KEY_UPLOADID)).wrapping_neg();
+    let sel_1 = u16::from(v0 & A_HDR_X_AMZ_COPY_SOURCE != 0).wrapping_neg();
+    let v1 = KEEP_XOR & sel ^ KEEP_BASE;
+    let v2 = KEEP_XOR_1 & sel_1 ^ KEEP_BASE_1;
+    let act = v0 & v1 & v2;
+    if act != 0 {
+        Ok(GROUP_OPS[(act.trailing_zeros()) as usize])
+    } else {
+        Ok(&PutObject as &'static dyn crate::ops::Operation)
+    }
+}
+
+#[allow(clippy::indexing_slicing)]
+fn resolve_delete_bucket(_req: &http::Request, qs: Option<&http::OrderedQs>) -> S3Result<&'static dyn crate::ops::Operation> {
+    static GROUP_OPS: [&'static dyn crate::ops::Operation; 15] = [
+        &DeleteBucketAnalyticsConfiguration,
+        &DeleteBucketIntelligentTieringConfiguration,
+        &DeleteBucketInventoryConfiguration,
+        &DeleteBucketMetricsConfiguration,
+        &DeleteBucketCors,
+        &DeleteBucketEncryption,
+        &DeleteBucketLifecycle,
+        &DeleteBucketMetadataConfiguration,
+        &DeleteBucketMetadataTableConfiguration,
+        &DeleteBucketOwnershipControls,
+        &DeleteBucketPolicy,
+        &DeleteBucketReplication,
+        &DeleteBucketTagging,
+        &DeleteBucketWebsite,
+        &DeletePublicAccessBlock,
+    ];
+    let mut v_key: u16 = 0;
+    if let Some(qs) = qs {
+        for (k, _v) in qs.as_ref() {
+            match k.as_str() {
+                "analytics" => v_key |= 1,
+                "cors" => v_key |= 1 << 4,
+                "encryption" => v_key |= 1 << 5,
+                "intelligent-tiering" => v_key |= 1 << 1,
+                "inventory" => v_key |= 1 << 2,
+                "lifecycle" => v_key |= 1 << 6,
+                "metadataConfiguration" => v_key |= 1 << 7,
+                "metadataTable" => v_key |= 1 << 8,
+                "metrics" => v_key |= 1 << 3,
+                "ownershipControls" => v_key |= 1 << 9,
+                "policy" => v_key |= 1 << 10,
+                "publicAccessBlock" => v_key |= 1 << 14,
+                "replication" => v_key |= 1 << 11,
+                "tagging" => v_key |= 1 << 12,
+                "website" => v_key |= 1 << 13,
+                _ => {}
+            }
+        }
+    }
+    let v0 = v_key;
+    let act = v0 & (u16::MAX >> (16 - 15));
+    if act != 0 {
+        Ok(GROUP_OPS[(act.trailing_zeros()) as usize])
+    } else {
+        Ok(&DeleteBucket as &'static dyn crate::ops::Operation)
+    }
+}
+
+#[allow(clippy::indexing_slicing)]
+fn resolve_delete_object(_req: &http::Request, qs: Option<&http::OrderedQs>) -> S3Result<&'static dyn crate::ops::Operation> {
+    static GROUP_OPS: [&'static dyn crate::ops::Operation; 3] =
+        [&DeleteObjectAnnotation, &DeleteObjectTagging, &AbortMultipartUpload];
+    let mut v_key: u8 = 0;
+    if let Some(qs) = qs {
+        for (k, _v) in qs.as_ref() {
+            match k.as_str() {
+                "annotation" => v_key |= 1,
+                "tagging" => v_key |= 1 << 1,
+                "uploadId" => v_key |= 1 << 2,
+                _ => {}
+            }
+        }
+    }
+    let v0 = v_key;
+    let act = v0 & (u8::MAX >> (8 - 3));
+    if act != 0 {
+        Ok(GROUP_OPS[(act.trailing_zeros()) as usize])
+    } else {
+        Ok(&DeleteObject as &'static dyn crate::ops::Operation)
+    }
+}
+
 pub fn resolve_route(
     req: &http::Request,
     s3_path: &S3Path,
@@ -16,390 +459,28 @@ pub fn resolve_route(
     match req.method {
         hyper::Method::HEAD => match s3_path {
             S3Path::Root => Err(crate::ops::unknown_operation()),
-            S3Path::Bucket { .. } => Ok(&HeadBucket as &'static dyn crate::ops::Operation),
-            S3Path::Object { .. } => Ok(&HeadObject as &'static dyn crate::ops::Operation),
+            S3Path::Bucket { .. } => resolve_head_bucket(req, qs),
+            S3Path::Object { .. } => resolve_head_object(req, qs),
         },
         hyper::Method::GET => match s3_path {
-            S3Path::Root => {
-                if let Some(qs) = qs {
-                    if crate::ops::check_query_pattern(qs, "x-id", "ListDirectoryBuckets") {
-                        return Ok(&ListDirectoryBuckets as &'static dyn crate::ops::Operation);
-                    }
-                }
-                Ok(&ListBuckets as &'static dyn crate::ops::Operation)
-            }
-            S3Path::Bucket { .. } => {
-                if let Some(qs) = qs {
-                    if qs.has("analytics") && qs.has("id") {
-                        return Ok(&GetBucketAnalyticsConfiguration as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("intelligent-tiering") && qs.has("id") {
-                        return Ok(&GetBucketIntelligentTieringConfiguration as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("inventory") && qs.has("id") {
-                        return Ok(&GetBucketInventoryConfiguration as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("metrics") && qs.has("id") {
-                        return Ok(&GetBucketMetricsConfiguration as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("session") {
-                        return Ok(&CreateSession as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("abac") {
-                        return Ok(&GetBucketAbac as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("accelerate") {
-                        return Ok(&GetBucketAccelerateConfiguration as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("acl") {
-                        return Ok(&GetBucketAcl as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("cors") {
-                        return Ok(&GetBucketCors as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("encryption") {
-                        return Ok(&GetBucketEncryption as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("lifecycle") {
-                        return Ok(&GetBucketLifecycleConfiguration as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("location") {
-                        return Ok(&GetBucketLocation as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("logging") {
-                        return Ok(&GetBucketLogging as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("metadataConfiguration") {
-                        return Ok(&GetBucketMetadataConfiguration as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("metadataTable") {
-                        return Ok(&GetBucketMetadataTableConfiguration as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("notification") {
-                        return Ok(&GetBucketNotificationConfiguration as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("ownershipControls") {
-                        return Ok(&GetBucketOwnershipControls as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("policy") {
-                        return Ok(&GetBucketPolicy as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("policyStatus") {
-                        return Ok(&GetBucketPolicyStatus as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("replication") {
-                        return Ok(&GetBucketReplication as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("requestPayment") {
-                        return Ok(&GetBucketRequestPayment as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("tagging") {
-                        return Ok(&GetBucketTagging as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("versioning") {
-                        return Ok(&GetBucketVersioning as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("website") {
-                        return Ok(&GetBucketWebsite as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("object-lock") {
-                        return Ok(&GetObjectLockConfiguration as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("publicAccessBlock") {
-                        return Ok(&GetPublicAccessBlock as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("analytics") {
-                        return Ok(&ListBucketAnalyticsConfigurations as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("intelligent-tiering") {
-                        return Ok(&ListBucketIntelligentTieringConfigurations as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("inventory") {
-                        return Ok(&ListBucketInventoryConfigurations as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("metrics") {
-                        return Ok(&ListBucketMetricsConfigurations as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("uploads") {
-                        return Ok(&ListMultipartUploads as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("versions") {
-                        return Ok(&ListObjectVersions as &'static dyn crate::ops::Operation);
-                    }
-                    #[cfg(feature = "minio")]
-                    if qs.has("events") {
-                        return Ok(&ListenBucketNotification as &'static dyn crate::ops::Operation);
-                    }
-                    if crate::ops::check_query_pattern(qs, "list-type", "2") {
-                        return Ok(&ListObjectsV2 as &'static dyn crate::ops::Operation);
-                    }
-                }
-                Ok(&ListObjects as &'static dyn crate::ops::Operation)
-            }
-            S3Path::Object { .. } => {
-                if let Some(qs) = qs {
-                    if qs.has("annotation") && qs.has("annotationName") {
-                        return Ok(&GetObjectAnnotation as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("attributes") {
-                        return Ok(&GetObjectAttributes as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("acl") {
-                        return Ok(&GetObjectAcl as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("legal-hold") {
-                        return Ok(&GetObjectLegalHold as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("retention") {
-                        return Ok(&GetObjectRetention as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("tagging") {
-                        return Ok(&GetObjectTagging as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("torrent") {
-                        return Ok(&GetObjectTorrent as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("annotation") {
-                        return Ok(&ListObjectAnnotations as &'static dyn crate::ops::Operation);
-                    }
-                }
-                if let Some(qs) = qs
-                    && qs.has("uploadId")
-                {
-                    return Ok(&ListParts as &'static dyn crate::ops::Operation);
-                }
-                Ok(&GetObject as &'static dyn crate::ops::Operation)
-            }
+            S3Path::Root => resolve_get_root(req, qs),
+            S3Path::Bucket { .. } => resolve_get_bucket(req, qs),
+            S3Path::Object { .. } => resolve_get_object(req, qs),
         },
         hyper::Method::POST => match s3_path {
             S3Path::Root => Err(crate::ops::unknown_operation()),
-            S3Path::Bucket { .. } => {
-                if let Some(qs) = qs {
-                    if qs.has("metadataConfiguration") {
-                        return Ok(&CreateBucketMetadataConfiguration as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("metadataTable") {
-                        return Ok(&CreateBucketMetadataTableConfiguration as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("delete") {
-                        return Ok(&DeleteObjects as &'static dyn crate::ops::Operation);
-                    }
-                }
-                if req.headers.contains_key("x-amz-request-route") && req.headers.contains_key("x-amz-request-token") {
-                    return Ok(&WriteGetObjectResponse as &'static dyn crate::ops::Operation);
-                }
-                Err(crate::ops::unknown_operation())
-            }
-            S3Path::Object { .. } => {
-                if let Some(qs) = qs {
-                    if qs.has("select") && crate::ops::check_query_pattern(qs, "select-type", "2") {
-                        return Ok(&SelectObjectContent as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("uploads") {
-                        return Ok(&CreateMultipartUpload as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("restore") {
-                        return Ok(&RestoreObject as &'static dyn crate::ops::Operation);
-                    }
-                }
-                if let Some(qs) = qs
-                    && qs.has("uploadId")
-                {
-                    return Ok(&CompleteMultipartUpload as &'static dyn crate::ops::Operation);
-                }
-                Err(crate::ops::unknown_operation())
-            }
+            S3Path::Bucket { .. } => resolve_post_bucket(req, qs),
+            S3Path::Object { .. } => resolve_post_object(req, qs),
         },
         hyper::Method::PUT => match s3_path {
             S3Path::Root => Err(crate::ops::unknown_operation()),
-            S3Path::Bucket { .. } => {
-                if let Some(qs) = qs {
-                    if qs.has("analytics") {
-                        return Ok(&PutBucketAnalyticsConfiguration as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("intelligent-tiering") {
-                        return Ok(&PutBucketIntelligentTieringConfiguration as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("inventory") {
-                        return Ok(&PutBucketInventoryConfiguration as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("metrics") {
-                        return Ok(&PutBucketMetricsConfiguration as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("abac") {
-                        return Ok(&PutBucketAbac as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("accelerate") {
-                        return Ok(&PutBucketAccelerateConfiguration as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("acl") {
-                        return Ok(&PutBucketAcl as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("cors") {
-                        return Ok(&PutBucketCors as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("encryption") {
-                        return Ok(&PutBucketEncryption as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("lifecycle") {
-                        return Ok(&PutBucketLifecycleConfiguration as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("logging") {
-                        return Ok(&PutBucketLogging as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("notification") {
-                        return Ok(&PutBucketNotificationConfiguration as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("ownershipControls") {
-                        return Ok(&PutBucketOwnershipControls as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("policy") {
-                        return Ok(&PutBucketPolicy as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("replication") {
-                        return Ok(&PutBucketReplication as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("requestPayment") {
-                        return Ok(&PutBucketRequestPayment as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("tagging") {
-                        return Ok(&PutBucketTagging as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("versioning") {
-                        return Ok(&PutBucketVersioning as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("website") {
-                        return Ok(&PutBucketWebsite as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("object-lock") {
-                        return Ok(&PutObjectLockConfiguration as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("publicAccessBlock") {
-                        return Ok(&PutPublicAccessBlock as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("metadataAnnotationTable") {
-                        return Ok(&UpdateBucketMetadataAnnotationTableConfiguration as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("metadataInventoryTable") {
-                        return Ok(&UpdateBucketMetadataInventoryTableConfiguration as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("metadataJournalTable") {
-                        return Ok(&UpdateBucketMetadataJournalTableConfiguration as &'static dyn crate::ops::Operation);
-                    }
-                }
-                Ok(&CreateBucket as &'static dyn crate::ops::Operation)
-            }
-            S3Path::Object { .. } => {
-                if let Some(qs) = qs {
-                    if qs.has("annotation") {
-                        return Ok(&PutObjectAnnotation as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("renameObject") {
-                        return Ok(&RenameObject as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("acl") {
-                        return Ok(&PutObjectAcl as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("legal-hold") {
-                        return Ok(&PutObjectLegalHold as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("retention") {
-                        return Ok(&PutObjectRetention as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("tagging") {
-                        return Ok(&PutObjectTagging as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("encryption") {
-                        return Ok(&UpdateObjectEncryption as &'static dyn crate::ops::Operation);
-                    }
-                }
-                if let Some(qs) = qs
-                    && qs.has("partNumber")
-                    && qs.has("uploadId")
-                    && req.headers.contains_key("x-amz-copy-source")
-                {
-                    return Ok(&UploadPartCopy as &'static dyn crate::ops::Operation);
-                }
-                if let Some(qs) = qs
-                    && qs.has("partNumber")
-                    && qs.has("uploadId")
-                {
-                    return Ok(&UploadPart as &'static dyn crate::ops::Operation);
-                }
-                if req.headers.contains_key("x-amz-copy-source") {
-                    return Ok(&CopyObject as &'static dyn crate::ops::Operation);
-                }
-                Ok(&PutObject as &'static dyn crate::ops::Operation)
-            }
+            S3Path::Bucket { .. } => resolve_put_bucket(req, qs),
+            S3Path::Object { .. } => resolve_put_object(req, qs),
         },
         hyper::Method::DELETE => match s3_path {
             S3Path::Root => Err(crate::ops::unknown_operation()),
-            S3Path::Bucket { .. } => {
-                if let Some(qs) = qs {
-                    if qs.has("analytics") {
-                        return Ok(&DeleteBucketAnalyticsConfiguration as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("intelligent-tiering") {
-                        return Ok(&DeleteBucketIntelligentTieringConfiguration as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("inventory") {
-                        return Ok(&DeleteBucketInventoryConfiguration as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("metrics") {
-                        return Ok(&DeleteBucketMetricsConfiguration as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("cors") {
-                        return Ok(&DeleteBucketCors as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("encryption") {
-                        return Ok(&DeleteBucketEncryption as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("lifecycle") {
-                        return Ok(&DeleteBucketLifecycle as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("metadataConfiguration") {
-                        return Ok(&DeleteBucketMetadataConfiguration as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("metadataTable") {
-                        return Ok(&DeleteBucketMetadataTableConfiguration as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("ownershipControls") {
-                        return Ok(&DeleteBucketOwnershipControls as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("policy") {
-                        return Ok(&DeleteBucketPolicy as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("replication") {
-                        return Ok(&DeleteBucketReplication as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("tagging") {
-                        return Ok(&DeleteBucketTagging as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("website") {
-                        return Ok(&DeleteBucketWebsite as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("publicAccessBlock") {
-                        return Ok(&DeletePublicAccessBlock as &'static dyn crate::ops::Operation);
-                    }
-                }
-                Ok(&DeleteBucket as &'static dyn crate::ops::Operation)
-            }
-            S3Path::Object { .. } => {
-                if let Some(qs) = qs {
-                    if qs.has("annotation") {
-                        return Ok(&DeleteObjectAnnotation as &'static dyn crate::ops::Operation);
-                    }
-                    if qs.has("tagging") {
-                        return Ok(&DeleteObjectTagging as &'static dyn crate::ops::Operation);
-                    }
-                }
-                if let Some(qs) = qs
-                    && qs.has("uploadId")
-                {
-                    return Ok(&AbortMultipartUpload as &'static dyn crate::ops::Operation);
-                }
-                Ok(&DeleteObject as &'static dyn crate::ops::Operation)
-            }
+            S3Path::Bucket { .. } => resolve_delete_bucket(req, qs),
+            S3Path::Object { .. } => resolve_delete_object(req, qs),
         },
         _ => Err(crate::ops::unknown_operation()),
     }
