@@ -10,7 +10,6 @@ use super::{headers, o, write_dir_file};
 
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::fmt::Write as _;
 use std::format as f;
 use std::ops::Not;
 
@@ -1208,13 +1207,13 @@ impl PathPattern {
     }
 }
 
-struct Route<'a> {
-    op: &'a Operation,
-    query_tag: Option<String>,
-    query_patterns: Vec<(String, String)>,
-    x_id: Option<String>,
-    required_headers: Vec<&'a str>,
-    required_query_strings: Vec<&'a str>,
+pub(super) struct Route<'a> {
+    pub(super) op: &'a Operation,
+    pub(super) query_tag: Option<String>,
+    pub(super) query_patterns: Vec<(String, String)>,
+    pub(super) x_id: Option<String>,
+    pub(super) required_headers: Vec<&'a str>,
+    pub(super) required_query_strings: Vec<&'a str>,
 }
 
 fn collect_routes<'a>(ops: &'a Operations, rust_types: &'a RustTypes) -> HashMap<String, HashMap<PathPattern, Vec<Route<'a>>>> {
@@ -1361,19 +1360,23 @@ fn codegen_router_inner(ops: &Operations, rust_types: &RustTypes) {
         assert!(methods.contains(&method.as_str()));
     }
 
+    // Top-level group resolvers (stable order: method x path shape) so
+    // `resolve_route` stays a thin dispatcher.
+    for &method in &methods {
+        for pattern in [PathPattern::Root, PathPattern::Bucket, PathPattern::Object] {
+            let Some(group) = routes[method].get(&pattern) else { continue };
+            let group_snake = group_snake_name(pattern);
+            let group_name = format!("resolve_{}_{}", method.to_lowercase(), group_snake);
+            crate::v1::fvr::codegen_fvr_group(&group_name, group);
+            g!("");
+        }
+    }
+
     g!("pub fn resolve_route(\
         req: &http::Request, \
         s3_path: &S3Path, \
         qs: Option<&http::OrderedQs>)\
          -> S3Result<&'static dyn crate::ops::Operation> {{");
-
-    let succ = |route: &Route, return_: bool| {
-        if return_ {
-            g!("return Ok(&{} as &'static dyn crate::ops::Operation);", route.op.name);
-        } else {
-            g!("Ok(&{} as &'static dyn crate::ops::Operation)", route.op.name);
-        }
-    };
 
     g!("match req.method {{");
     for &method in &methods {
@@ -1390,192 +1393,26 @@ fn codegen_router_inner(ops: &Operations, rust_types: &RustTypes) {
             match routes[method].get(&pattern) {
                 None => g!("Err(crate::ops::unknown_operation())"),
                 Some(group) => {
-                    // NOTE: To debug the routing order, uncomment the lines below.
-                    // {
-                    //     println!("{method} {pattern:?}");
-                    //     println!();
-                    //     for route in group {
-                    //         println!(
-                    //             "{:<80} qt={:<30} qp={:<30}, qs={:?}, hs={:?}",
-                    //             route.op.name,
-                    //             f!("{:?}", route.query_tag.as_deref()),
-                    //             f!("{:?}", route.query_patterns),
-                    //             route.required_query_strings,
-                    //             route.required_headers
-                    //         );
-                    //         println!("{}", route.op.http_uri);
-                    //         println!();
-                    //     }
-                    //     println!("\n\n\n");
-                    // }
-
                     assert!(group.is_empty().not());
-                    if group.len() == 1 {
-                        let route = &group[0];
-                        assert!(route.query_tag.is_none());
-                        assert_eq!(route.required_headers, Vec::<&str>::new());
-                        assert_eq!(route.required_query_strings, Vec::<&str>::new());
-                        succ(route, false);
-                    } else {
-                        let is_final_op = |route: &Route| {
-                            route.required_headers.is_empty()
-                                && route.required_query_strings.is_empty()
-                                && route.query_patterns.is_empty()
-                                && route.query_tag.is_none()
-                        };
-                        let final_count = group.iter().filter(|r| is_final_op(r)).count();
-                        // When multiple final ops exist, they must be disambiguated by x-id
-                        if final_count > 1 {
-                            assert!(group.iter().filter(|r| is_final_op(r)).all(|r| r.x_id.is_some()));
-                        }
-                        let fallback_op_name = group.iter().find(|r| is_final_op(r)).map(|r| r.op.name.as_str());
-
-                        // Count how many routes share each query tag, so that
-                        // shared tags can be disambiguated by required query
-                        // members while single-op tags keep the plain check.
-                        let tag_counts: HashMap<&str, usize> = {
-                            let mut counts: HashMap<&str, usize> = default();
-                            for r in group {
-                                if let Some(tag) = r.query_tag.as_deref() {
-                                    *counts.entry(tag).or_insert(0) += 1;
-                                }
-                            }
-                            counts
-                        };
-
-                        g!("if let Some(qs) = qs {{");
-                        for route in group {
-                            let has_query_tag = route.query_tag.is_some();
-                            let has_query_patterns = route.query_patterns.is_empty().not();
-
-                            // MinIO-only operations are compiled only with the feature; their
-                            // route branches are gated inline instead of duplicating the router.
-                            if route.op.is_minio {
-                                g!("#[cfg(feature = \"minio\")]");
-                            }
-
-                            let qp = route.query_patterns.as_slice();
-
-                            if has_query_tag {
-                                let tag = route.query_tag.as_deref().unwrap();
-                                assert!(tag.as_bytes().iter().all(|&x| x == b'-' || x.is_ascii_alphabetic()), "{tag}");
-                            }
-                            if has_query_patterns {
-                                assert!(qp.len() <= 1);
-                            }
-
-                            match (has_query_tag, has_query_patterns) {
-                                (true, true) => {
-                                    assert_eq!(route.op.name, "SelectObjectContent");
-
-                                    let tag = route.query_tag.as_deref().unwrap();
-                                    let (n, v) = qp.first().unwrap();
-
-                                    g!("if qs.has(\"{tag}\") && crate::ops::check_query_pattern(qs, \"{n}\",\"{v}\") {{");
-                                    succ(route, true);
-                                    g!("}}");
-                                }
-                                (true, false) => {
-                                    let tag = route.query_tag.as_deref().unwrap();
-
-                                    // Operations sharing a query tag are disambiguated by the
-                                    // presence of a required query member (e.g. `id` for the
-                                    // analytics/metrics groups, `annotationName` for the object
-                                    // annotation operations). The route carrying the required
-                                    // member is sorted first and matches only when it is present;
-                                    // the remaining route matches on the bare tag. Single-op tags
-                                    // keep the plain tag check.
-                                    if tag_counts.get(tag).copied().unwrap_or(0) > 1
-                                        && let Some(required) = route.required_query_strings.first()
-                                    {
-                                        g!("if qs.has(\"{tag}\") && qs.has(\"{required}\") {{");
-                                        succ(route, true);
-                                        g!("}}");
-                                    } else {
-                                        g!("if qs.has(\"{tag}\") {{");
-                                        succ(route, true);
-                                        g!("}}");
-                                    }
-                                }
-                                (false, true) => {
-                                    let (n, v) = qp.first().unwrap();
-                                    g!("if crate::ops::check_query_pattern(qs, \"{n}\",\"{v}\") {{");
-                                    succ(route, true);
-                                    g!("}}");
-                                }
-                                (false, false) => {
-                                    // When multiple final ops exist, use x-id to disambiguate non-fallback routes
-                                    if final_count > 1 && Some(route.op.name.as_str()) != fallback_op_name {
-                                        let x_id = route.x_id.as_deref().unwrap();
-                                        g!("if crate::ops::check_query_pattern(qs, \"x-id\",\"{x_id}\") {{");
-                                        succ(route, true);
-                                        g!("}}");
-                                    }
-                                }
-                            }
-                        }
-                        g!("}}");
-
-                        for route in group {
-                            let has_query_tag = route.query_tag.is_some();
-                            let has_query_patterns = route.query_patterns.is_empty().not();
-
-                            if has_query_tag || has_query_patterns {
-                                continue;
-                            }
-
-                            let qs = route.required_query_strings.as_slice();
-                            let hs = route.required_headers.as_slice();
-                            assert!(qs.len() <= 2, "qs = {qs:?}");
-                            assert!(hs.len() <= 2, "hs = {hs:?}");
-
-                            if qs.is_empty() && hs.is_empty() {
-                                continue;
-                            }
-
-                            let mut cond: String = default();
-                            for q in qs {
-                                if cond.is_empty().not() {
-                                    cond.push_str(" && ");
-                                }
-                                //cond.push_str(&f!("qs.has(\"{q}\")"));
-                                write!(cond, "qs.has(\"{q}\")").unwrap();
-                            }
-                            for h in hs {
-                                if cond.is_empty().not() {
-                                    cond.push_str(" && ");
-                                }
-                                write!(cond, "req.headers.contains_key(\"{h}\")").unwrap();
-                            }
-
-                            if qs.is_empty().not() {
-                                g!("if let Some(qs) = qs");
-                                g!("    && {cond} {{");
-                                succ(route, true);
-                                g!("}}");
-                            } else {
-                                g!("if {cond} {{");
-                                succ(route, true);
-                                g!("}}");
-                            }
-                        }
-
-                        if final_count >= 1 {
-                            let route = group.iter().find(|r| is_final_op(r)).unwrap();
-                            succ(route, false);
-                        } else {
-                            g!("Err(crate::ops::unknown_operation())");
-                        }
-                    }
+                    let group_snake = group_snake_name(pattern);
+                    let group_name = format!("resolve_{}_{}", method.to_lowercase(), group_snake);
+                    g!("{group_name}(req, qs)");
                 }
             }
             g!("}}");
         }
-
         g!("}}");
     }
     g!("_ => Err(crate::ops::unknown_operation())");
     g!("}}");
 
     g!("}}");
+}
+
+fn group_snake_name(pattern: PathPattern) -> &'static str {
+    match pattern {
+        PathPattern::Root => "root",
+        PathPattern::Bucket => "bucket",
+        PathPattern::Object => "object",
+    }
 }

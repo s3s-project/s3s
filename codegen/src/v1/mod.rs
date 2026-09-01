@@ -8,6 +8,7 @@ mod utils;
 mod access;
 mod dto;
 mod error;
+mod fvr;
 mod headers;
 mod minio;
 mod oir;
