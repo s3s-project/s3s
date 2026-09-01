@@ -922,7 +922,18 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
             }
         }
     };
-    let request_has_payload = resolved_op.as_ref().is_none_or(|op| op.has_request_payload());
+    let request_has_payload = if custom_route_hit {
+        // Custom routes have no modeled operation to declare whether they
+        // consume a payload; the `x-amz-content-sha256` header is
+        // authoritative instead. The empty-string hash marks a bodyless
+        // request — `mc admin` sends bodyless PUTs (e.g. `set-user-status`)
+        // without `Content-Length`, and treating them as payload-bearing here
+        // would make signature verification demand a `Content-Length` (411).
+        http::get_unique_header_str(&req.headers, header::X_AMZ_CONTENT_SHA256.as_str())
+            != Some(s3s_sigv4::EMPTY_STRING_SHA256_HASH)
+    } else {
+        resolved_op.as_ref().is_none_or(|op| op.has_request_payload())
+    };
     let content_length_for_signature = signature_content_length(req, content_length, request_has_payload);
     content_length = verify_signature(req, ccx, vh_bucket, vh_region.as_deref(), content_length_for_signature).await?;
 

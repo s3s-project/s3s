@@ -353,3 +353,82 @@ async fn valid_path_on_route_miss_resolves_operation_normally() {
         Prepare::CustomRoute => panic!("missed route must not claim S3 traffic"),
     }
 }
+
+/// Builds a correctly signed `SigV4` header-auth request with an empty body,
+/// mirroring `mc admin` bodyless PUTs (e.g. `set-user-status`): the
+/// `x-amz-content-sha256` header carries the empty-string hash and no
+/// `Content-Length` is sent.
+fn signed_empty_body_request(method: Method, path: &str) -> Request {
+    let now = time::OffsetDateTime::now_utc();
+    let date_fmt = time::macros::format_description!("[year][month][day]T[hour][minute][second]Z");
+    let scope_fmt = time::macros::format_description!("[year][month][day]");
+    let date = now.format(&date_fmt).expect("format");
+    let scope_date = now.format(&scope_fmt).expect("format");
+    let region = "us-east-1";
+    let host = "localhost";
+
+    let amz_date = AmzDate::parse(date.as_str()).expect("valid date");
+
+    let signed_headers = [
+        ("host", host),
+        ("x-amz-content-sha256", s3s_sigv4::EMPTY_STRING_SHA256_HASH),
+        ("x-amz-date", date.as_str()),
+    ];
+
+    let canonical_request = s3s_sigv4::create_canonical_request(
+        method.as_str(),
+        path,
+        &[] as &[(&str, &str)],
+        signed_headers,
+        s3s_sigv4::Payload::SingleChunk(s3s_sigv4::EMPTY_STRING_SHA256_HASH),
+    );
+    let string_to_sign = s3s_sigv4::create_string_to_sign(&canonical_request, &amz_date, region, "s3");
+    let signature =
+        s3s_sigv4::calculate_signature(&string_to_sign, "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", &amz_date, region, "s3");
+
+    let authorization = format!(
+        "AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/{scope_date}/{region}/s3/aws4_request, \
+         SignedHeaders=host;x-amz-content-sha256;x-amz-date, \
+         Signature={}",
+        signature.as_str()
+    );
+
+    let mut builder = hyper::Request::builder()
+        .method(method)
+        .uri(format!("http://{host}{path}"))
+        .header(crate::header::HOST, host)
+        .header("x-amz-date", hyper::header::HeaderValue::from_str(date.as_str()).unwrap())
+        .header(
+            "x-amz-content-sha256",
+            hyper::header::HeaderValue::from_static(s3s_sigv4::EMPTY_STRING_SHA256_HASH),
+        );
+    builder = builder.header("authorization", authorization);
+    Request::from(builder.body(Body::empty()).unwrap())
+}
+
+#[tokio::test]
+async fn signed_bodyless_custom_route_request_needs_no_content_length() {
+    // `mc admin` bodyless PUTs (e.g. set-user-status) carry the empty-string
+    // payload hash and no `Content-Length`. A matched custom route must not
+    // demand a `Content-Length` for these: the empty hash declares the
+    // request has no payload, so signature verification passes and the
+    // request reaches the route.
+    let parts = ctx();
+    let route = MatchAllRoute::new();
+    let ccx = ccx(&parts, true, false, Some(&route));
+
+    let mut req = signed_empty_body_request(Method::PUT, "/minio/admin/v3/set-user-status");
+    let ans = prepare(&mut req, &ccx)
+        .await
+        .unwrap_or_else(|e| panic!("bodyless custom route request: unexpected {e:?}"));
+    assert!(matches!(ans, Prepare::CustomRoute));
+
+    // The empty body must survive signature verification intact: the route
+    // handler reads it back as zero bytes.
+    let mut req = signed_empty_body_request(Method::PUT, "/minio/admin/v3/set-user-status");
+    let resp = crate::ops::call(&mut req, &ccx)
+        .await
+        .expect("route handles bodyless request");
+    assert_eq!(resp.status, hyper::StatusCode::OK);
+    assert_eq!(route.call_count(), 1);
+}
