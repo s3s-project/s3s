@@ -31,6 +31,7 @@ quinn = { version = "0.11.11", default-features = false, features = [
 s3s = { path = "../s3s" }
 
 [dev-dependencies]
-rcgen = "0.14.10"
 s3s-fs = { path = "../s3s-fs" }
+s3s-sigv4 = { path = "../s3s-sigv4" }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
+rcgen = "0.14.10"

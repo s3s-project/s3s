@@ -5,16 +5,70 @@ use bytes::{Buf, Bytes};
 use h3::client::RequestStream;
 use http::{HeaderMap, Method, Request, Response, StatusCode};
 use quinn::rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
+
+use s3s::auth::SimpleAuth;
+use s3s::config::{S3Config, StaticConfigProvider};
+use s3s::host::SingleDomain;
 use s3s::service::S3ServiceBuilder;
 use s3s_fs::FileSystem;
 
 use std::error::Error;
+use std::fs;
+use std::path::Path;
 use std::sync::Arc;
 
 type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
 type ClientStream = RequestStream<h3_quinn::BidiStream<Bytes>, Bytes>;
 type Client = h3::client::SendRequest<h3_quinn::OpenStreams, Bytes>;
 type ResponseData = (Response<()>, Vec<u8>, Option<HeaderMap>);
+
+const TEST_ACCESS_KEY: &str = "AKIAHTTP3TEST";
+const TEST_SECRET_KEY: &str = "http3-test-secret";
+const TEST_AMZ_DATE: &str = "20130524T000000Z";
+const TEST_REGION: &str = "us-east-1";
+
+fn signed_request(method: Method, uri: &str, content_length: Option<usize>) -> TestResult<Request<()>> {
+    let uri: http::Uri = uri.parse()?;
+    let authority = uri
+        .authority()
+        .ok_or_else(|| std::io::Error::other("signed URI has no authority"))?
+        .as_str();
+
+    let amz_date = s3s_sigv4::AmzDate::parse(TEST_AMZ_DATE)?;
+    let canonical_request = s3s_sigv4::create_canonical_request(
+        method.as_str(),
+        uri.path(),
+        &[] as &[(&str, &str)],
+        [
+            ("host", authority),
+            ("x-amz-content-sha256", "UNSIGNED-PAYLOAD"),
+            ("x-amz-date", TEST_AMZ_DATE),
+        ],
+        s3s_sigv4::Payload::Unsigned,
+    );
+
+    let string_to_sign = s3s_sigv4::create_string_to_sign(&canonical_request, &amz_date, TEST_REGION, "s3");
+    let signature = s3s_sigv4::calculate_signature(&string_to_sign, TEST_SECRET_KEY, &amz_date, TEST_REGION, "s3");
+
+    let authorization = format!(
+        "AWS4-HMAC-SHA256 Credential={TEST_ACCESS_KEY}/{}/{TEST_REGION}/s3/aws4_request, \
+           SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature={signature}",
+        amz_date.fmt_date(),
+    );
+
+    let mut builder = Request::builder()
+        .method(method)
+        .uri(uri)
+        .header("authorization", authorization)
+        .header("x-amz-content-sha256", "UNSIGNED-PAYLOAD")
+        .header("x-amz-date", TEST_AMZ_DATE);
+
+    if let Some(length) = content_length {
+        builder = builder.header("content-length", length);
+    }
+
+    Ok(builder.body(())?)
+}
 
 fn server_endpoint() -> TestResult<(s3s_http3::Endpoint, CertificateDer<'static>)> {
     let certificate = rcgen::generate_simple_self_signed(vec!["localhost".to_owned()])?;
@@ -413,6 +467,18 @@ async fn concurrent_gets(client: &Client) -> TestResult {
     Ok(())
 }
 
+struct CleanupGuard<'a> {
+    path: &'a Path,
+}
+
+impl Drop for CleanupGuard<'_> {
+    fn drop(&mut self) {
+        if self.path.exists() {
+            let _ = fs::remove_dir_all(self.path);
+        }
+    }
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn serves_put_and_get_over_http3() -> TestResult {
     let root = std::env::temp_dir().join(format!("s3s-http3-{}", std::process::id()));
@@ -420,7 +486,8 @@ async fn serves_put_and_get_over_http3() -> TestResult {
     if root.exists() {
         std::fs::remove_dir_all(&root)?;
     }
-    std::fs::create_dir_all(&root)?;
+    fs::create_dir_all(&root)?;
+    let _guard = CleanupGuard { path: root.as_path() };
 
     let filesystem = FileSystem::new(&root).map_err(|error| std::io::Error::other(format!("{error:?}")))?;
     let mut service_builder = S3ServiceBuilder::new(filesystem);
@@ -457,6 +524,90 @@ async fn serves_put_and_get_over_http3() -> TestResult {
     driver.abort();
     let _ = driver.await;
 
-    std::fs::remove_dir_all(root)?;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn preserves_sigv4_authority_over_http3() -> TestResult {
+    let root = std::env::temp_dir().join(format!("s3s-http3-sigv4-{}", std::process::id()));
+
+    if root.exists() {
+        fs::remove_dir_all(&root)?;
+    }
+    fs::create_dir_all(&root)?;
+    let _guard = CleanupGuard { path: root.as_path() };
+
+    let filesystem = FileSystem::new(&root).map_err(|error| std::io::Error::other(format!("{error:?}")))?;
+
+    let mut config = S3Config::default();
+    config.presigned_url_max_skew_time_secs = u32::MAX;
+
+    let mut builder = S3ServiceBuilder::new(filesystem);
+    builder.set_host(SingleDomain::new("localhost")?);
+    builder.set_auth(SimpleAuth::from_single(TEST_ACCESS_KEY, TEST_SECRET_KEY));
+    builder.set_config(Arc::new(StaticConfigProvider::new(Arc::new(config))));
+    let service = builder.build();
+
+    let (endpoint, certificate) = server_endpoint()?;
+    let server_address = endpoint.local_addr()?;
+
+    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
+    let server_task = tokio::spawn(s3s_http3::serve(endpoint, service, async move {
+        let _ = shutdown_rx.await;
+    }));
+
+    let client_endpoint = client_endpoint(certificate)?;
+    let connection = client_endpoint.connect(server_address, "localhost")?.await?;
+
+    let (mut h3_connection, mut send_request) = h3::client::builder().build(h3_quinn::Connection::new(connection)).await?;
+
+    let driver = tokio::spawn(async move {
+        let _ = std::future::poll_fn(|cx| h3_connection.poll_close(cx)).await;
+    });
+
+    let (response, body, trailers) = send(
+        &mut send_request,
+        signed_request(Method::PUT, "http://localhost/bucket", Some(0))?,
+        std::iter::empty::<Bytes>(),
+    )
+    .await?;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(body.is_empty());
+    assert!(trailers.is_none());
+    assert_no_hop_by_hop_headers(&response);
+
+    let object = Bytes::from_static(b"authority body");
+
+    let (response, body, trailers) = send(
+        &mut send_request,
+        signed_request(Method::PUT, "http://localhost/bucket/key", Some(object.len()))?,
+        std::iter::once(object),
+    )
+    .await?;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(body.is_empty());
+    assert!(trailers.is_none());
+    assert_no_hop_by_hop_headers(&response);
+
+    let request = signed_request(Method::GET, "http://bucket.localhost/key", Some(0))?;
+    assert!(!request.headers().contains_key(http::header::HOST));
+
+    let (response, body, trailers) = send(&mut send_request, request, std::iter::empty::<Bytes>()).await?;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(body, b"authority body");
+    assert!(trailers.is_none());
+    assert_no_hop_by_hop_headers(&response);
+
+    let _ = shutdown_tx.send(());
+    drop(send_request);
+    server_task.await?;
+
+    client_endpoint.close(0u32.into(), b"test complete");
+    driver.abort();
+    let _ = driver.await;
+
     Ok(())
 }
