@@ -3,7 +3,7 @@
 
 use bytes::{Buf, Bytes};
 use h3::client::RequestStream;
-use http::{HeaderMap, Method, Request, Response, StatusCode};
+use http::{HeaderMap, HeaderValue, Method, Request, Response, StatusCode};
 use quinn::rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 
 use s3s::auth::SimpleAuth;
@@ -27,7 +27,13 @@ const TEST_SECRET_KEY: &str = "http3-test-secret";
 const TEST_AMZ_DATE: &str = "20130524T000000Z";
 const TEST_REGION: &str = "us-east-1";
 
-fn signed_request(method: Method, uri: &str, content_length: Option<usize>) -> TestResult<Request<()>> {
+fn signed_request(
+    method: Method,
+    uri: &str,
+    content_length: Option<usize>,
+    content_sha256: &str,
+    payload: s3s_sigv4::Payload<'_>,
+) -> TestResult<Request<()>> {
     let uri: http::Uri = uri.parse()?;
     let authority = uri
         .authority()
@@ -41,10 +47,10 @@ fn signed_request(method: Method, uri: &str, content_length: Option<usize>) -> T
         &[] as &[(&str, &str)],
         [
             ("host", authority),
-            ("x-amz-content-sha256", "UNSIGNED-PAYLOAD"),
+            ("x-amz-content-sha256", content_sha256),
             ("x-amz-date", TEST_AMZ_DATE),
         ],
-        s3s_sigv4::Payload::Unsigned,
+        payload,
     );
 
     let string_to_sign = s3s_sigv4::create_string_to_sign(&canonical_request, &amz_date, TEST_REGION, "s3");
@@ -60,7 +66,7 @@ fn signed_request(method: Method, uri: &str, content_length: Option<usize>) -> T
         .method(method)
         .uri(uri)
         .header("authorization", authorization)
-        .header("x-amz-content-sha256", "UNSIGNED-PAYLOAD")
+        .header("x-amz-content-sha256", content_sha256)
         .header("x-amz-date", TEST_AMZ_DATE);
 
     if let Some(length) = content_length {
@@ -68,6 +74,31 @@ fn signed_request(method: Method, uri: &str, content_length: Option<usize>) -> T
     }
 
     Ok(builder.body(())?)
+}
+
+fn crc32c_base64(data: &[u8]) -> TestResult<String> {
+    let mut hasher = s3s::checksum::ChecksumHasher {
+        crc32c: Some(s3s::crypto::Crc32c::default()),
+        ..Default::default()
+    };
+
+    hasher.update(data);
+
+    Ok(hasher
+        .finalize()
+        .checksum_crc32c
+        .ok_or_else(|| std::io::Error::other("CRC32C was not computed"))?)
+}
+
+fn unsigned_aws_chunked_body(data: &[u8], checksum: &str) -> Bytes {
+    let mut body = Vec::new();
+
+    body.extend_from_slice(format!("{:x}\r\n", data.len()).as_bytes());
+    body.extend_from_slice(data);
+    body.extend_from_slice(b"\r\n0\r\n\r\n");
+    body.extend_from_slice(format!("x-amz-checksum-crc32c:{checksum}\r\n").as_bytes());
+
+    body.into()
 }
 
 fn server_endpoint() -> TestResult<(s3s_http3::Endpoint, CertificateDer<'static>)> {
@@ -467,6 +498,49 @@ async fn concurrent_gets(client: &Client) -> TestResult {
     Ok(())
 }
 
+async fn streaming_checksum_put(client: &mut Client) -> TestResult {
+    let data = Bytes::from_static(b"streamed checksum");
+    let checksum = crc32c_base64(&data)?;
+    let encoded_body = unsigned_aws_chunked_body(&data, &checksum);
+
+    let mut request = signed_request(
+        Method::PUT,
+        "http://localhost/bucket/checksum",
+        Some(encoded_body.len()),
+        "STREAMING-UNSIGNED-PAYLOAD-TRAILER",
+        s3s_sigv4::Payload::UnsignedMultipleChunksWithTrailer,
+    )?;
+
+    request
+        .headers_mut()
+        .insert("content-encoding", HeaderValue::from_static("aws-chunked"));
+    request
+        .headers_mut()
+        .insert("x-amz-decoded-content-length", HeaderValue::from_str(&data.len().to_string())?);
+    request
+        .headers_mut()
+        .insert("x-amz-trailer", HeaderValue::from_static("x-amz-checksum-crc32c"));
+    request
+        .headers_mut()
+        .insert("x-amz-checksum-algorithm", HeaderValue::from_static("CRC32C"));
+
+    let (response, body, trailers) = send(client, request, std::iter::once(encoded_body)).await?;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(body.is_empty());
+    assert!(trailers.is_none());
+    assert_eq!(
+        response
+            .headers()
+            .get("x-amz-checksum-crc32c")
+            .and_then(|value| value.to_str().ok()),
+        Some(checksum.as_str()),
+    );
+    assert_no_hop_by_hop_headers(&response);
+
+    Ok(())
+}
+
 struct CleanupGuard<'a> {
     path: &'a Path,
 }
@@ -567,7 +641,13 @@ async fn preserves_sigv4_authority_over_http3() -> TestResult {
 
     let (response, body, trailers) = send(
         &mut send_request,
-        signed_request(Method::PUT, "http://localhost/bucket", Some(0))?,
+        signed_request(
+            Method::PUT,
+            "http://localhost/bucket",
+            Some(0),
+            "UNSIGNED-PAYLOAD",
+            s3s_sigv4::Payload::Unsigned,
+        )?,
         std::iter::empty::<Bytes>(),
     )
     .await?;
@@ -581,7 +661,13 @@ async fn preserves_sigv4_authority_over_http3() -> TestResult {
 
     let (response, body, trailers) = send(
         &mut send_request,
-        signed_request(Method::PUT, "http://localhost/bucket/key", Some(object.len()))?,
+        signed_request(
+            Method::PUT,
+            "http://localhost/bucket/key",
+            Some(object.len()),
+            "UNSIGNED-PAYLOAD",
+            s3s_sigv4::Payload::Unsigned,
+        )?,
         std::iter::once(object),
     )
     .await?;
@@ -591,7 +677,13 @@ async fn preserves_sigv4_authority_over_http3() -> TestResult {
     assert!(trailers.is_none());
     assert_no_hop_by_hop_headers(&response);
 
-    let request = signed_request(Method::GET, "http://bucket.localhost/key", Some(0))?;
+    let request = signed_request(
+        Method::GET,
+        "http://bucket.localhost/key",
+        Some(0),
+        "UNSIGNED-PAYLOAD",
+        s3s_sigv4::Payload::Unsigned,
+    )?;
     assert!(!request.headers().contains_key(http::header::HOST));
 
     let (response, body, trailers) = send(&mut send_request, request, std::iter::empty::<Bytes>()).await?;
@@ -600,6 +692,8 @@ async fn preserves_sigv4_authority_over_http3() -> TestResult {
     assert_eq!(body, b"authority body");
     assert!(trailers.is_none());
     assert_no_hop_by_hop_headers(&response);
+
+    streaming_checksum_put(&mut send_request).await?;
 
     let _ = shutdown_tx.send(());
     drop(send_request);
