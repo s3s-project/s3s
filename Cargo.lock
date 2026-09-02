@@ -3510,6 +3510,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "s3s-multipart"
+version = "0.16.0-alpha.1"
+
+[[package]]
 name = "s3s-policy"
 version = "0.15.0"
 dependencies = [
