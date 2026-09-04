@@ -541,6 +541,81 @@ async fn streaming_checksum_put(client: &mut Client) -> TestResult {
     Ok(())
 }
 
+async fn streaming_truncated_put(client: &mut Client) -> TestResult {
+    // Missing the CRLF after the declared chunk data.
+    let truncated_body = Bytes::from_static(b"3\r\nabc");
+
+    let mut request = signed_request(
+        Method::PUT,
+        "http://localhost/bucket/truncated",
+        Some(truncated_body.len()),
+        "STREAMING-UNSIGNED-PAYLOAD-TRAILER",
+        s3s_sigv4::Payload::UnsignedMultipleChunksWithTrailer,
+    )?;
+
+    request
+        .headers_mut()
+        .insert("content-encoding", HeaderValue::from_static("aws-chunked"));
+    request
+        .headers_mut()
+        .insert("x-amz-decoded-content-length", HeaderValue::from_static("3"));
+    request
+        .headers_mut()
+        .insert("x-amz-trailer", HeaderValue::from_static("x-amz-checksum-crc32c"));
+    request
+        .headers_mut()
+        .insert("x-amz-checksum-algorithm", HeaderValue::from_static("CRC32C"));
+
+    let (response, body, trailers) =
+        tokio::time::timeout(std::time::Duration::from_secs(2), send(client, request, std::iter::once(truncated_body))).await??;
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert!(trailers.is_none());
+    assert!(
+        String::from_utf8(body)?.contains("<Code>IncompleteBody</Code>"),
+        "expected IncompleteBody response",
+    );
+    assert_no_hop_by_hop_headers(&response);
+
+    Ok(())
+}
+
+async fn request_stream_reset(client: &mut Client) -> TestResult {
+    let mut stream = client
+        .send_request(
+            Request::builder()
+                .method(Method::PUT)
+                .uri("http://localhost/bucket/reset")
+                .body(())?,
+        )
+        .await?;
+
+    // Reset the client-to-server request direction before sending a body.
+    stream.stop_stream(h3::error::Code::H3_REQUEST_CANCELLED);
+    drop(stream);
+
+    // Confirm the connection remains usable.
+    let (response, body, trailers) = tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        send(
+            client,
+            Request::builder()
+                .method(Method::GET)
+                .uri("http://localhost/bucket/key")
+                .body(())?,
+            std::iter::empty::<Bytes>(),
+        ),
+    )
+    .await??;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(body, b"hello world");
+    assert!(trailers.is_none());
+    assert_no_hop_by_hop_headers(&response);
+
+    Ok(())
+}
+
 struct CleanupGuard<'a> {
     path: &'a Path,
 }
@@ -572,7 +647,7 @@ async fn serves_put_and_get_over_http3() -> TestResult {
     let server_address = endpoint.local_addr()?;
 
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
-    let server_task = tokio::spawn(s3s_http3::serve(endpoint, service, async move {
+    let mut server_task = tokio::spawn(s3s_http3::serve(endpoint, service, async move {
         let _ = shutdown_rx.await;
     }));
 
@@ -586,13 +661,60 @@ async fn serves_put_and_get_over_http3() -> TestResult {
     });
 
     object_operations(&mut send_request).await?;
+    request_stream_reset(&mut send_request).await?;
     large_object(&mut send_request).await?;
     multipart_upload(&mut send_request).await?;
     concurrent_gets(&send_request).await?;
 
+    // graceful shutdown test
+    let mut active_stream = send_request
+        .send_request(
+            Request::builder()
+                .method(Method::PUT)
+                .uri("http://localhost/bucket/draining")
+                .header("content-length", 3)
+                .body(())?,
+        )
+        .await?;
+    active_stream.send_data(Bytes::from_static(b"ab")).await?;
+
+    // force the server to accept the active stream before shutdown.
+    let (probe_response, probe_body, probe_trailers) = send(
+        &mut send_request,
+        Request::builder()
+            .method(Method::GET)
+            .uri("http://localhost/bucket/key")
+            .body(())?,
+        std::iter::empty::<Bytes>(),
+    )
+    .await?;
+
+    assert_eq!(probe_response.status(), StatusCode::OK);
+    assert_eq!(probe_body, b"hello world");
+    assert!(probe_trailers.is_none());
+
     let _ = shutdown_tx.send(());
+
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_millis(100), &mut server_task)
+            .await
+            .is_err(),
+        "server stopped before the active request drained",
+    );
+
+    active_stream.send_data(Bytes::from_static(b"c")).await?;
+    active_stream.finish().await?;
+
+    let (response, body, trailers) =
+        tokio::time::timeout(std::time::Duration::from_secs(2), receive_response(active_stream)).await??;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(body.is_empty());
+    assert!(trailers.is_none());
+    assert_no_hop_by_hop_headers(&response);
+
     drop(send_request);
-    server_task.await?;
+    tokio::time::timeout(std::time::Duration::from_secs(2), &mut server_task).await??;
 
     client_endpoint.close(0u32.into(), b"test complete");
     driver.abort();
@@ -694,6 +816,7 @@ async fn preserves_sigv4_authority_over_http3() -> TestResult {
     assert_no_hop_by_hop_headers(&response);
 
     streaming_checksum_put(&mut send_request).await?;
+    streaming_truncated_put(&mut send_request).await?;
 
     let _ = shutdown_tx.send(());
     drop(send_request);

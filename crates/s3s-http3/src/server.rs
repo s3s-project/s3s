@@ -98,19 +98,32 @@ async fn handle_connection(
 ) -> Result<(), h3::error::ConnectionError> {
     let c = h3_quinn::Connection::new(connection);
     let mut connection = h3::server::builder().build(c).await?;
+    let mut requests: JoinSet<()> = JoinSet::new();
 
     loop {
         tokio::select! {
             result = connection.accept() => match result? {
                 Some(resolver) => {
-                    tokio::spawn(handle_request(resolver, service.clone()));
+                    requests.spawn(handle_request(resolver, service.clone()));
                 }
                 None => return Ok(()),
+            },
+            joined = requests.join_next(), if !requests.is_empty() => {
+                if let Some(Err(error)) = joined {
+                    error!(?error, "HTTP/3 request task failed");
+                }
             },
             () = cancellation.cancelled() => {
                 connection.shutdown(0).await?;
 
+                while let Some(result) = requests.join_next().await {
+                    if let Err(error) = result {
+                        error!(?error, "HTTP/3 request task failed while draining");
+                    }
+                }
+
                 while connection.accept().await?.is_some() {}
+
                 return Ok(());
             }
         }
@@ -185,6 +198,10 @@ async fn send_response(mut stream: SendStream, response: HttpResponse) {
             }
             None => break,
         }
+    }
+
+    if let Err(error) = stream.finish().await {
+        error!(?error, "failed to finish HTTP/3 response stream");
     }
 }
 
