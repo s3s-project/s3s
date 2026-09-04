@@ -1,0 +1,37 @@
+[package]
+name = "s3s-http3"
+version = "0.15.0"
+description = "Experimental HTTP/3 transport for s3s"
+readme = "../../README.md"
+keywords = ["s3", "http3", "quic"]
+categories = ["web-programming::http-server"]
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+bytes.workspace = true
+http.workspace = true
+http-body.workspace = true
+tokio = { workspace = true, features = ["macros", "rt", "sync", "time"] }
+tokio-util.workspace = true
+tower.workspace = true
+tracing.workspace = true
+h3 = { version = "0.0.8", features = ["tracing"] }
+h3-quinn = { version = "0.0.10", features = ["tracing"] }
+quinn = { version = "0.11.11", default-features = false, features = [
+  "futures-io",
+  "runtime-tokio",
+  "rustls-ring",
+] }
+s3s = { path = "../s3s" }
+
+[dev-dependencies]
+s3s-fs = { path = "../s3s-fs" }
+s3s-sigv4 = { path = "../s3s-sigv4" }
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+rcgen = "0.14.10"
