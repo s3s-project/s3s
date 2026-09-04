@@ -118,7 +118,8 @@ s3s-proxy \
     --host          localhost       \
     --port          8014            \
     --domain        localhost:8014  \
-    --endpoint-url  http://localhost:9000 > "$TARGET_DIR/s3s-proxy.log" 2>&1 &
+    --endpoint-url  http://localhost:9000 \
+    --enable-minio-route > "$TARGET_DIR/s3s-proxy.log" 2>&1 &
 S3S_PROXY_PID=$!
 
 wait_for_proxy

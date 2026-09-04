@@ -127,6 +127,7 @@ pub trait S3ConfigProvider: Send + Sync + 'static {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 #[non_exhaustive]
+#[allow(clippy::struct_excessive_bools)]
 pub struct S3Config {
     /// Maximum size for XML body payloads in bytes.
     ///
@@ -287,6 +288,20 @@ pub struct S3Config {
     ///
     /// Default: true
     pub normalize_content_length: bool,
+
+    /// Whether client-declared operation intent (OIR) routing is enabled.
+    ///
+    /// When enabled (default), s3s honors the `x-id` query parameter (signed
+    /// under `SigV4` and sent by official AWS SDKs) to select the S3
+    /// operation directly, skipping the ambiguous full-router probing. The
+    /// declared operation is confirmed against the request shape; unknown or
+    /// non-matching declarations are rejected with `InvalidRequest`.
+    ///
+    /// Set to `false` to disable the OIR fast path entirely (requests fall
+    /// back to the normal routing logic).
+    ///
+    /// Default: true
+    pub operation_id_routing: bool,
 }
 
 impl Default for S3Config {
@@ -307,6 +322,7 @@ impl Default for S3Config {
             presigned_url_max_expires_secs: DEFAULT_PRESIGNED_URL_MAX_EXPIRES_SECS,
             normalize_forward_slash_path: false,
             normalize_content_length: true,
+            operation_id_routing: true,
         }
     }
 }
@@ -430,6 +446,7 @@ mod tests {
         assert_eq!(config.sig_v4_allowed_services, ["s3", "sts"]);
         assert_eq!(config.presigned_url_max_expires_secs, DEFAULT_PRESIGNED_URL_MAX_EXPIRES_SECS);
         assert!(!config.enable_sig_v2);
+        assert!(config.operation_id_routing);
     }
 
     #[test]
@@ -529,6 +546,7 @@ mod tests {
             presigned_url_max_expires_secs: 86_400,
             normalize_forward_slash_path: false,
             normalize_content_length: true,
+            operation_id_routing: true,
         };
 
         let json = serde_json::to_string(&config).expect("serialize failed");

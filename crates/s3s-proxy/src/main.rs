@@ -19,6 +19,9 @@ use tracing::info;
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::server::conn::auto::Builder as ConnBuilder;
 
+mod admin_route;
+mod proxy_service;
+
 #[derive(Debug, Parser)]
 struct Opt {
     #[clap(long, default_value = "localhost")]
@@ -39,6 +42,14 @@ struct Opt {
     /// opt-in when testing clients that require `SigV2`.
     #[clap(long)]
     enable_sig_v2: bool,
+
+    /// Forward `MinIO` admin, health, and metrics endpoints (`/minio/admin/*`,
+    /// `/minio/health/*`, and `/minio/v2/metrics/*`) to the backend.
+    ///
+    /// Disabled by default; only meaningful when the backend is a `MinIO`
+    /// server.
+    #[clap(long)]
+    enable_minio_route: bool,
 }
 
 fn setup_tracing() {
@@ -85,6 +96,20 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     #[cfg(not(feature = "minio"))]
     let proxy = s3s_aws::Proxy::builder(client).build();
 
+    // HTTP client shared by the MinIO passthrough layers. The admin route
+    // (inside the S3 service) and the health/metrics passthrough (in the
+    // proxy service) both forward to the backend through it.
+    let minio_client = if opt.enable_minio_route {
+        Some(
+            reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(5))
+                .connect_timeout(std::time::Duration::from_secs(5))
+                .build()?,
+        )
+    } else {
+        None
+    };
+
     // Setup S3 service
     let service = {
         let mut b = S3ServiceBuilder::new(proxy);
@@ -102,12 +127,31 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
             b.set_config(Arc::new(StaticConfigProvider::new(Arc::new(config))));
         }
 
+        // Forward MinIO admin API requests to the backend through a custom
+        // route. Admin requests are SigV4-protected and pass the S3 signature
+        // verification, so routing them through the S3 service reuses its
+        // authentication: unsigned admin requests are denied before they
+        // reach the backend.
+        if let Some(client) = &minio_client {
+            b.set_route(admin_route::MinioAdminRoute::new(reqwest::Url::parse(&opt.endpoint_url)?, client.clone()));
+        }
+
         // Enable parsing virtual-hosted-style requests
         if let Some(domain) = opt.domain {
             b.set_host(SingleDomain::new(&domain)?);
         }
 
         b.build()
+    };
+
+    // Wrap in the proxy service, optionally forwarding MinIO health/metrics
+    // endpoints to the backend at the HTTP layer, bypassing the S3 service so
+    // its signature verification never rejects the Bearer token the prometheus
+    // endpoints require.
+    let service = if let Some(client) = minio_client {
+        proxy_service::ProxyService::with_minio_health(service, reqwest::Url::parse(&opt.endpoint_url)?, client)
+    } else {
+        proxy_service::ProxyService::new(service)
     };
 
     // Run server
