@@ -42,7 +42,7 @@ struct Item {
     /// equal to `key` for other items)
     sub_key: String,
     /// tree-sitter node kind of the body node
-    kind: &'static str,
+    kind: String,
 }
 
 fn parse(text: &str) -> Tree {
@@ -100,10 +100,10 @@ fn collect_items(
     let mut prev_end: Option<usize> = None;
     let mut cursor = parent.walk();
     for child in parent.children(&mut cursor) {
-        let kind = child.kind();
-        if is_prefix(kind) {
+        let kind = child.kind().to_string();
+        if is_prefix(kind.as_str()) {
             pending.get_or_insert(child.start_position().row);
-        } else if is_body(kind) {
+        } else if is_body(kind.as_str()) {
             let start_row = child.start_position().row;
             let start = if items.is_empty() && !first_absorbs_prefix {
                 start_row
