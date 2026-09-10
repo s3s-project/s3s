@@ -95,12 +95,10 @@ pub trait S3ConfigProvider: Send + Sync + 'static {
 /// Contains configurable parameters for the S3 service with sensible defaults.
 /// The configuration is immutable after creation.
 ///
-/// Streaming uploads such as `PUT Object` and `UploadPart` are not capped by
-/// default. When [`S3Config::put_object_max_size`] is unset, the
-/// [`S3`](crate::S3) implementation is responsible for enforcing object-size
-/// limits for those streams. Set it only when the adapter should enforce an
-/// opt-in deployment hardening limit before handing the stream to the
-/// implementation.
+/// Streaming uploads such as `PUT Object` and `UploadPart` have a default
+/// 5 GiB limit per request. When [`S3Config::put_object_max_size`] is unset,
+/// the [`S3`](crate::S3) implementation is responsible for enforcing
+/// object-size limits for those streams.
 ///
 /// Use with [`StaticConfigProvider`] or [`HotReloadConfigProvider`].
 ///
@@ -150,6 +148,15 @@ pub struct S3Config {
     /// such as `PUT Object` and `UploadPart` before passing them to the
     /// [`S3`](crate::S3) implementation. For aws-chunked requests, signature
     /// verification installs the decoded stream before this limit is applied.
+    /// Known payload lengths above the limit are rejected with
+    /// [`crate::S3ErrorCode::EntityTooLarge`] before operation dispatch. Bodies
+    /// that exceed the limit while being read return [`crate::BodySizeLimitExceeded`];
+    /// implementations should map this error to `EntityTooLarge`.
+    ///
+    /// The limit applies independently to each request, including each
+    /// `UploadPart`, not to the combined multipart object size. Enforcement
+    /// does not depend on [`S3Config::normalize_content_length`].
+    ///
     /// When unset, `s3s` does not impose a streaming object-size limit and the
     /// implementation must enforce any deployment-specific cap.
     ///
@@ -274,8 +281,8 @@ pub struct S3Config {
     ///
     /// When enabled (default), a `Content-Length` is inserted before the
     /// [`S3`](crate::S3) implementation observes the request if the body
-    /// length is known: the `x-amz-decoded-content-length` value for
-    /// aws-chunked uploads, or an exact remaining length (e.g. an empty
+    /// length is known: the decoded length established by the aws-chunked
+    /// verifier, or an exact remaining length (e.g. an empty
     /// body without `Content-Length`, which is empty by definition per
     /// RFC 9112 §6.3). This lets storage implementations obtain the object
     /// size up front instead of treating `None` as ambiguous. The inserted

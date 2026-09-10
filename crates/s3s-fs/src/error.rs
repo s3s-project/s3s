@@ -45,6 +45,10 @@ impl From<Error> for S3Error {
     fn from(e: Error) -> Self {
         let source = e.source;
 
+        if source.is::<s3s::BodySizeLimitExceeded>() {
+            return S3Error::with_source(S3ErrorCode::EntityTooLarge, source);
+        }
+
         // Stream-verification errors from `s3s` (payload checksum, chunk
         // signature, decoded length) carry a precise `S3` error code; map them
         // so clients get `BadDigest` / `IncompleteBody` / `SignatureDoesNotMatch`
@@ -91,6 +95,20 @@ macro_rules! try_ {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn maps_body_size_limit_errors_to_entity_too_large() {
+        let mut body = s3s::Body::from(bytes::Bytes::from_static(b"hello"));
+        body.set_limit(Some(4));
+        let source = futures::StreamExt::next(&mut body)
+            .await
+            .unwrap()
+            .expect_err("body should exceed the limit");
+        assert!(source.is::<s3s::BodySizeLimitExceeded>());
+        let s3err: S3Error = Error::new(source).into();
+        assert_eq!(s3err.code(), &S3ErrorCode::EntityTooLarge);
+        assert_eq!(s3err.status_code(), Some(hyper::StatusCode::BAD_REQUEST));
+    }
 
     #[test]
     fn maps_upload_stream_errors_to_s3_error_codes() {

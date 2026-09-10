@@ -335,6 +335,35 @@ async fn extract_full_body(content_length: Option<u64>, body: &mut Body, max_bod
     Ok(bytes)
 }
 
+fn prepare_streaming_body(req: &mut Request, config: &S3Config) -> S3Result {
+    // Signature verification has already replaced aws-chunked bodies and
+    // their Content-Length with the decoded payload length, when present.
+    // An unrelated decoded-length header must not override an ordinary body.
+    let content_length = extract_content_length(req)?;
+    let known_length = content_length.or_else(|| req.body.remaining_length().exact().map(|x| x as u64));
+    if let (Some(size), Some(limit)) = (known_length, config.put_object_max_size)
+        && size > limit
+    {
+        return Err(s3_error!(EntityTooLarge, "Request body exceeds the configured maximum object size."));
+    }
+    req.body.set_limit(config.put_object_max_size);
+    // Backfill a known request-body length so that the `S3`
+    // implementation never sees an ambiguous missing `Content-Length`.
+    // Use the transformed body's length (aws-chunked uploads), or an
+    // exact remaining length (e.g. an empty body without
+    // `Content-Length`, which is empty by definition per RFC 9112 §6.3).
+    // Unknown-length bodies (chunked transfer-encoding without
+    // aws-chunked) stay untouched.
+    if config.normalize_content_length
+        && content_length.is_none()
+        && let Some(known) = known_length
+    {
+        req.headers
+            .insert(hyper::header::CONTENT_LENGTH, hyper::header::HeaderValue::from(known));
+    }
+    Ok(())
+}
+
 fn reject_custom_route_body_too_large(content_length: Option<u64>, max_body_size: Option<u64>) -> S3Result {
     let Some(max_body_size) = max_body_size else {
         return Ok(());
@@ -987,23 +1016,7 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
     if op.needs_full_body() {
         extract_full_body(content_length, &mut req.body, config.xml_max_body_size).await?;
     } else if op.has_streaming_body() {
-        req.body.set_limit(config.put_object_max_size);
-        // Backfill a known request-body length so that the `S3`
-        // implementation never sees an ambiguous missing `Content-Length`.
-        // The `x-amz-decoded-content-length` value wins (aws-chunked uploads),
-        // otherwise an exact remaining length (e.g. an empty body without
-        // `Content-Length`, which is empty by definition per RFC 9112 §6.3).
-        // Unknown-length bodies (chunked transfer-encoding without
-        // aws-chunked) stay untouched.
-        if config.normalize_content_length && content_length.is_none() {
-            let known = extract_decoded_content_length(&req.headers)?
-                .map(|x| x as u64)
-                .or_else(|| req.body.remaining_length().exact().map(|x| x as u64));
-            if let Some(known) = known {
-                req.headers
-                    .insert(hyper::header::CONTENT_LENGTH, hyper::header::HeaderValue::from(known));
-            }
-        }
+        prepare_streaming_body(req, &config)?;
     }
 
     Ok(Prepare::S3(op))

@@ -319,12 +319,22 @@ impl fmt::Debug for Body {
 }
 
 /// Error returned when body size exceeds the limit.
+///
+/// When a streaming upload exceeds [`crate::config::S3Config::put_object_max_size`]
+/// while being read, implementations can downcast this error and return
+/// [`crate::S3ErrorCode::EntityTooLarge`].
 #[derive(Debug, Clone, thiserror::Error)]
 #[error("body size {size} exceeds limit {limit}")]
 pub struct BodySizeLimitExceeded {
-    /// The actual body size.
+    /// The size in bytes checked against the limit.
+    ///
+    /// For streaming reads, this is the current data frame's size, not the
+    /// total request size. For an already buffered body, it is the body size.
     pub size: usize,
-    /// The maximum allowed size.
+    /// The byte allowance at the failing check.
+    ///
+    /// For streaming reads, this is the remaining allowance after previously
+    /// yielded frames, not the original configured limit.
     pub limit: usize,
 }
 

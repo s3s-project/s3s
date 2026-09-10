@@ -1642,7 +1642,6 @@ mod put_object_max_size_tests {
 
     use crate::auth::{SecretKey, SimpleAuth};
     use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
-    use crate::dto::StreamingBlob;
     use crate::error::StdError;
     use crate::s3_trait::S3;
     use bytes::Bytes;
@@ -1724,17 +1723,14 @@ mod put_object_max_size_tests {
         Ok(Bytes::from(collected))
     }
 
-    async fn expect_limit_error(blob: StreamingBlob) -> StdError {
-        let err = collect_stream(blob)
-            .await
-            .expect_err("stream should fail once the object-size limit is exceeded");
-        assert!(err.to_string().contains("exceeds limit"), "limit error should be clear, got: {err}");
-        err
-    }
-
-    fn signed_aws_chunked_put_request(chunk_data: &Bytes, access_key: &str, secret_key: &SecretKey) -> Request {
+    fn signed_aws_chunked_request(chunk_data: &Bytes, access_key: &str, secret_key: &SecretKey, upload_part: bool) -> Request {
         let method = Method::PUT;
         let uri_path = "/test-bucket/test-key";
+        let query: &[(&str, &str)] = if upload_part {
+            &[("partNumber", "1"), ("uploadId", "test-upload")]
+        } else {
+            &[]
+        };
         let amz_date = s3s_sigv4::AmzDate::parse("20130524T000000Z").unwrap();
         let decoded_content_length = chunk_data.len().to_string();
         let headers_for_signing = [
@@ -1746,7 +1742,7 @@ mod put_object_max_size_tests {
         let canonical_request = s3s_sigv4::create_canonical_request(
             method.as_str(),
             uri_path,
-            &[] as &[(&str, &str)],
+            query,
             headers_for_signing,
             s3s_sigv4::Payload::MultipleChunks,
         );
@@ -1783,7 +1779,10 @@ mod put_object_max_size_tests {
         Request::from(
             hyper::Request::builder()
                 .method(method)
-                .uri("https://s3.amazonaws.com/test-bucket/test-key")
+                .uri(format!(
+                    "https://s3.amazonaws.com{uri_path}?{}",
+                    serde_urlencoded::to_string(query).unwrap()
+                ))
                 .header(crate::header::HOST, "s3.amazonaws.com")
                 .header(hyper::header::CONTENT_LENGTH, streaming_body.len())
                 .header("content-encoding", "aws-chunked")
@@ -1816,35 +1815,191 @@ mod put_object_max_size_tests {
     }
 
     #[tokio::test]
-    async fn rejects_oversized_plain_put_at_read_time() {
+    async fn rejects_oversized_plain_put_before_dispatch() {
         let s3: Arc<dyn S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
         let config = test_config(Some(4));
         let ccx = test_context(&s3, &config, None);
         let mut req = plain_put_request(Bytes::from_static(b"hello"));
 
-        let Prepare::S3(op) = super::prepare(&mut req, &ccx).await.expect("prepare should succeed") else {
-            panic!("plain PUT should resolve to an S3 operation");
-        };
-        assert_eq!(op.name(), "PutObject");
-
-        let input = generated::PutObject::deserialize_http(&mut req).expect("deserialize should succeed");
-        expect_limit_error(input.body.expect("put object input should carry a body")).await;
+        assert_oversized_before_dispatch(&mut req, &ccx).await;
     }
 
     #[tokio::test]
-    async fn rejects_oversized_upload_part_at_read_time() {
+    async fn rejects_oversized_upload_part_before_dispatch() {
         let s3: Arc<dyn S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
         let config = test_config(Some(4));
         let ccx = test_context(&s3, &config, None);
         let mut req = upload_part_request(Bytes::from_static(b"hello"));
 
-        let Prepare::S3(op) = super::prepare(&mut req, &ccx).await.expect("prepare should succeed") else {
-            panic!("upload part should resolve to an S3 operation");
-        };
-        assert_eq!(op.name(), "UploadPart");
+        assert_oversized_before_dispatch(&mut req, &ccx).await;
+    }
 
-        let input = generated::UploadPart::deserialize_http(&mut req).expect("deserialize should succeed");
-        expect_limit_error(input.body.expect("upload part input should carry a body")).await;
+    async fn assert_oversized_before_dispatch(req: &mut Request, ccx: &CallContext<'_>) {
+        // The declared length alone must suffice; reading the body is a failure.
+        let stream = futures::stream::poll_fn(|_| -> std::task::Poll<Option<Result<http_body::Frame<Bytes>, StdError>>> {
+            panic!("oversized request body must not be polled");
+        });
+        req.body = Body::http_body(http_body_util::StreamBody::new(stream));
+        let response = super::call(req, ccx).await.expect("size error should serialize");
+        assert_eq!(response.status, StatusCode::BAD_REQUEST);
+        let body = response.body.bytes().expect("error response should be buffered");
+        let body = std::str::from_utf8(&body).unwrap();
+        assert!(body.contains("<Code>EntityTooLarge</Code>"), "unexpected error response: {body}");
+    }
+
+    #[tokio::test]
+    async fn rejects_oversized_write_get_object_response_before_dispatch() {
+        let s3: Arc<dyn S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+        let config = test_config(Some(4));
+        let ccx = test_context(&s3, &config, None);
+        let mut req = Request::from(
+            hyper::Request::builder()
+                .method(Method::POST)
+                .uri("http://localhost/test-bucket")
+                .header(crate::header::HOST, "localhost")
+                .header("x-amz-request-route", "test-route")
+                .header("x-amz-request-token", "test-token")
+                .header(hyper::header::CONTENT_LENGTH, 5)
+                .body(Body::empty())
+                .unwrap(),
+        );
+        assert_oversized_before_dispatch(&mut req, &ccx).await;
+    }
+
+    #[tokio::test]
+    async fn exact_body_length_is_enforced_without_header_normalization() {
+        let s3: Arc<dyn S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+        for normalize_content_length in [false, true] {
+            let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(S3Config {
+                put_object_max_size: Some(4),
+                normalize_content_length,
+                ..Default::default()
+            })));
+            let ccx = test_context(&s3, &config, None);
+            for mut req in [
+                plain_put_request(Bytes::from_static(b"hello")),
+                upload_part_request(Bytes::from_static(b"hello")),
+            ] {
+                req.headers.remove(hyper::header::CONTENT_LENGTH);
+                let err = super::prepare(&mut req, &ccx)
+                    .await
+                    .err()
+                    .expect("known oversized body must fail");
+                assert_eq!(err.code(), &S3ErrorCode::EntityTooLarge);
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn plain_uploads_ignore_unrelated_decoded_length_headers() {
+        let s3: Arc<dyn S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+        let config = test_config(Some(4));
+        let ccx = test_context(&s3, &config, None);
+        for has_content_length in [false, true] {
+            for decoded_length in ["1", "999"] {
+                let mut req = plain_put_request(Bytes::from_static(b"data"));
+                if !has_content_length {
+                    req.headers.remove(hyper::header::CONTENT_LENGTH);
+                }
+                req.headers.insert(
+                    crate::header::X_AMZ_DECODED_CONTENT_LENGTH,
+                    hyper::header::HeaderValue::from_static(decoded_length),
+                );
+                super::prepare(&mut req, &ccx)
+                    .await
+                    .expect("unrelated decoded length must not reject a valid body");
+                let input = generated::PutObject::deserialize_http(&mut req).unwrap();
+                assert_eq!(input.content_length, Some(4));
+                assert_eq!(collect_stream(input.body.unwrap()).await.unwrap(), Bytes::from_static(b"data"));
+            }
+        }
+
+        let mut req = plain_put_request(Bytes::from_static(b"hello"));
+        req.headers
+            .insert(crate::header::X_AMZ_DECODED_CONTENT_LENGTH, hyper::header::HeaderValue::from_static("1"));
+        assert_oversized_before_dispatch(&mut req, &ccx).await;
+    }
+
+    #[tokio::test]
+    async fn exact_limit_and_empty_uploads_are_accepted() {
+        let s3: Arc<dyn S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+        for expected in [Bytes::new(), Bytes::from_static(b"hello")] {
+            let config = test_config(Some(expected.len() as u64));
+            let ccx = test_context(&s3, &config, None);
+            for mut req in [plain_put_request(expected.clone()), upload_part_request(expected.clone())] {
+                super::prepare(&mut req, &ccx)
+                    .await
+                    .expect("exact-limit upload should be accepted");
+                assert_eq!(collect_stream(req.body).await.unwrap(), expected);
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn unknown_and_underdeclared_uploads_keep_the_read_time_limit() {
+        let s3: Arc<dyn S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+        let config = test_config(Some(4));
+        let ccx = test_context(&s3, &config, None);
+        for declared_length in [None, Some(4)] {
+            for mut req in [plain_put_request(Bytes::new()), upload_part_request(Bytes::new())] {
+                req.headers.remove(hyper::header::CONTENT_LENGTH);
+                if let Some(length) = declared_length {
+                    req.headers
+                        .insert(hyper::header::CONTENT_LENGTH, hyper::header::HeaderValue::from(length));
+                } else {
+                    req.headers
+                        .insert(hyper::header::TRANSFER_ENCODING, hyper::header::HeaderValue::from_static("chunked"));
+                }
+                let mut chunks = std::collections::VecDeque::from([Bytes::from_static(b"he"), Bytes::from_static(b"llo")]);
+                let mut pending = false;
+                let stream = futures::stream::poll_fn(move |cx| {
+                    pending = !pending;
+                    if pending {
+                        cx.waker().wake_by_ref();
+                        return std::task::Poll::Pending;
+                    }
+                    std::task::Poll::Ready(
+                        chunks
+                            .pop_front()
+                            .map(|chunk| Ok::<_, StdError>(http_body::Frame::data(chunk))),
+                    )
+                });
+                req.body = Body::http_body(http_body_util::StreamBody::new(stream));
+                super::prepare(&mut req, &ccx)
+                    .await
+                    .expect("unknown or underdeclared stream must retain read-time enforcement");
+                assert_eq!(req.body.next().await.unwrap().unwrap(), Bytes::from_static(b"he"));
+                let err = req
+                    .body
+                    .next()
+                    .await
+                    .unwrap()
+                    .expect_err("second chunk exceeds the remaining allowance");
+                let err = err
+                    .downcast_ref::<crate::BodySizeLimitExceeded>()
+                    .expect("limit error must retain its type");
+                assert_eq!(err.size, 3);
+                assert_eq!(err.limit, 2);
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn upload_parts_do_not_share_a_cumulative_limit() {
+        let s3: Arc<dyn S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+        let config = test_config(Some(4));
+        let ccx = test_context(&s3, &config, None);
+        for part_number in [1, 2] {
+            let mut req = upload_part_request(Bytes::from_static(b"data"));
+            req.uri = format!("http://localhost/test-bucket/test-key?partNumber={part_number}&uploadId=test-upload")
+                .parse()
+                .unwrap();
+            super::prepare(&mut req, &ccx)
+                .await
+                .expect("each part should receive its own limit");
+            let input = generated::UploadPart::deserialize_http(&mut req).unwrap();
+            assert_eq!(collect_stream(input.body.unwrap()).await.unwrap(), Bytes::from_static(b"data"));
+        }
     }
 
     #[tokio::test]
@@ -1967,45 +2122,70 @@ mod put_object_max_size_tests {
     }
 
     #[tokio::test]
-    async fn aws_chunked_put_limit_applies_after_decoding() {
+    async fn aws_chunked_limit_uses_decoded_length() {
         let s3: Arc<dyn S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
         let access_key = "AKIAIOSFODNN7EXAMPLE";
         let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
         let auth = SimpleAuth::from_single(access_key, secret_key.clone());
-
-        let config = test_config(Some(5));
-        let ccx = test_context(&s3, &config, Some(&auth));
         let decoded = Bytes::from_static(b"hello");
-        let mut req = signed_aws_chunked_put_request(&decoded, access_key, &secret_key);
 
-        let Prepare::S3(op) = super::prepare(&mut req, &ccx)
-            .await
-            .expect("prepare should decode before limiting")
-        else {
-            panic!("aws-chunked PUT should resolve to an S3 operation");
-        };
-        assert_eq!(op.name(), "PutObject");
+        for upload_part in [false, true] {
+            for has_content_length in [false, true] {
+                for normalize_content_length in [false, true] {
+                    for limit in [4, 5] {
+                        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(S3Config {
+                            put_object_max_size: Some(limit),
+                            normalize_content_length,
+                            presigned_url_max_skew_time_secs: u32::MAX,
+                            ..Default::default()
+                        })));
+                        let ccx = test_context(&s3, &config, Some(&auth));
+                        let mut req = signed_aws_chunked_request(&decoded, access_key, &secret_key, upload_part);
+                        assert!(extract_content_length(&req).unwrap().unwrap() > limit);
+                        if !has_content_length {
+                            req.headers.remove(hyper::header::CONTENT_LENGTH);
+                            req.headers
+                                .insert(hyper::header::TRANSFER_ENCODING, hyper::header::HeaderValue::from_static("chunked"));
+                        }
+                        if limit < decoded.len() as u64 {
+                            assert_oversized_before_dispatch(&mut req, &ccx).await;
+                            continue;
+                        }
+                        let Prepare::S3(op) = super::prepare(&mut req, &ccx)
+                            .await
+                            .expect("decoded body at the limit should pass")
+                        else {
+                            panic!("upload should resolve to an S3 operation");
+                        };
+                        assert_eq!(op.name(), if upload_part { "UploadPart" } else { "PutObject" });
+                        let (length, body) = if upload_part {
+                            let input = generated::UploadPart::deserialize_http(&mut req).unwrap();
+                            (input.content_length, input.body.unwrap())
+                        } else {
+                            let input = generated::PutObject::deserialize_http(&mut req).unwrap();
+                            (input.content_length, input.body.unwrap())
+                        };
+                        assert_eq!(length, (has_content_length || normalize_content_length).then_some(5));
+                        assert_eq!(collect_stream(body).await.unwrap(), decoded);
+                    }
+                }
+            }
+        }
+    }
 
-        let input = generated::PutObject::deserialize_http(&mut req).expect("deserialize should succeed");
-        let body = input.body.expect("put object input should carry a body");
-        let collected = collect_stream(body)
-            .await
-            .expect("decoded stream at limit should be readable");
-        assert_eq!(collected, decoded);
-
+    #[tokio::test]
+    async fn authentication_errors_take_precedence_over_upload_size() {
+        let s3: Arc<dyn S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+        let access_key = "AKIAIOSFODNN7EXAMPLE";
+        let auth = SimpleAuth::from_single(access_key, "correct-secret");
         let config = test_config(Some(4));
         let ccx = test_context(&s3, &config, Some(&auth));
-        let mut req = signed_aws_chunked_put_request(&decoded, access_key, &secret_key);
-        let Prepare::S3(op) = super::prepare(&mut req, &ccx)
+        let mut req = signed_aws_chunked_request(&Bytes::from_static(b"hello"), access_key, &"wrong-secret".into(), false);
+        let err = super::prepare(&mut req, &ccx)
             .await
-            .expect("prepare should still finish before read-time limit")
-        else {
-            panic!("aws-chunked PUT should resolve to an S3 operation");
-        };
-        assert_eq!(op.name(), "PutObject");
-
-        let input = generated::PutObject::deserialize_http(&mut req).expect("deserialize should succeed");
-        expect_limit_error(input.body.expect("put object input should carry a body")).await;
+            .err()
+            .expect("bad signature should be rejected");
+        assert_eq!(err.code(), &S3ErrorCode::SignatureDoesNotMatch);
     }
 }
 
@@ -4084,10 +4264,9 @@ mod bodyless_content_length_tests {
     }
 
     #[tokio::test]
-    async fn decoded_content_length_takes_priority_over_exact_length() {
-        // aws-chunked uploads express the object size via
-        // `x-amz-decoded-content-length`; when present it must win over the
-        // exact remaining length of the (empty) body.
+    async fn ordinary_signed_put_ignores_unrelated_decoded_content_length() {
+        // This request signs an ordinary empty payload, not an aws-chunked
+        // stream. An unrelated header must not change its known payload length.
         let recording = Arc::new(ContentLengthRecordingS3 {
             received: Mutex::new(None),
         });
@@ -4104,8 +4283,8 @@ mod bodyless_content_length_tests {
         assert_eq!(response.status, StatusCode::OK);
 
         let (input_len, header_len) = recording.received.lock().unwrap().take().expect("put_object was called");
-        assert_eq!(input_len, Some(5), "decoded content length must take priority");
-        assert_eq!(header_len, Some(5));
+        assert_eq!(input_len, Some(0), "ordinary payload length must remain authoritative");
+        assert_eq!(header_len, Some(0));
     }
 
     #[tokio::test]
