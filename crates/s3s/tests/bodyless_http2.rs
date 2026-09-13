@@ -56,8 +56,8 @@ struct Http2Harness {
     observations: mpsc::UnboundedReceiver<RequestObservation>,
     dispatch: mpsc::UnboundedSender<()>,
     get_object_calls: Arc<AtomicUsize>,
-    client_driver: JoinHandle<()>,
-    server_connection: JoinHandle<()>,
+    client_driver: JoinHandle<Result<(), String>>,
+    server_connection: JoinHandle<Result<(), String>>,
 }
 
 impl Http2Harness {
@@ -112,7 +112,7 @@ impl Http2Harness {
             hyper::server::conn::http2::Builder::new(TokioExecutor::new())
                 .serve_connection(TokioIo::new(stream), service)
                 .await
-                .expect("HTTP/2 test server should complete without a connection error");
+                .map_err(|err| format!("HTTP/2 test server connection error: {err}"))
         });
 
         let stream = TcpStream::connect(address).await.expect("test client should connect");
@@ -120,7 +120,7 @@ impl Http2Harness {
         let client_driver = tokio::spawn(async move {
             connection
                 .await
-                .expect("HTTP/2 test client should complete without a connection error");
+                .map_err(|err| format!("HTTP/2 test client connection error: {err}"))
         });
 
         Self {
@@ -173,12 +173,25 @@ impl Http2Harness {
     fn get_object_calls(&self) -> usize {
         self.get_object_calls.load(Ordering::SeqCst)
     }
-}
 
-impl Drop for Http2Harness {
-    fn drop(&mut self) {
-        self.client_driver.abort();
-        self.server_connection.abort();
+    /// Closes the client side of the connection, then asserts that both connection
+    /// drivers finished without an error. Panics in spawned tasks do not fail the
+    /// test, so the connection results must be awaited here to be asserted at all.
+    ///
+    /// Call this only after every response has been drained: a stream still in
+    /// flight keeps the client connection open and this future would block. The
+    /// panic path needs no explicit teardown because dropping the `#[tokio::test]`
+    /// runtime cancels both tasks.
+    async fn shutdown(self) {
+        drop(self.client);
+        self.client_driver
+            .await
+            .expect("HTTP/2 test client driver task should not panic")
+            .expect("HTTP/2 test client should complete without a connection error");
+        self.server_connection
+            .await
+            .expect("HTTP/2 test server task should not panic")
+            .expect("HTTP/2 test server should complete without a connection error");
     }
 }
 
@@ -256,6 +269,7 @@ async fn bodyless_sigv4_requests_succeed_over_real_http2_without_content_length(
     }
 
     assert_eq!(harness.get_object_calls(), 2);
+    harness.shutdown().await;
 }
 
 #[tokio::test]
@@ -278,4 +292,5 @@ async fn unexpected_request_body_does_not_poison_http2_connection() {
         StatusCode::OK
     );
     assert_eq!(harness.get_object_calls(), calls_before_follow_up + 1);
+    harness.shutdown().await;
 }
