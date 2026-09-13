@@ -1,6 +1,6 @@
 [package]
 name = "s3s-rfc2047"
-version = "0.16.0-alpha.1"
+version = "0.16.0"
 description = "RFC 2047 MIME encoded-word encoding and decoding"
 readme = "../../README.md"
 keywords = ["rfc2047", "mime", "encoding", "header"]
