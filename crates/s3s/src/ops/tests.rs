@@ -4799,6 +4799,29 @@ mod bodyless_content_length_tests {
         );
     }
 
+    /// The allowlist contract is lowercase, exact names, so a mixed-case entry deliberately does
+    /// not match. Request header names are lowercase, and the field documentation states the
+    /// requirement; this test pins the behavior so it is not "fixed" into case-insensitive
+    /// matching by accident.
+    #[tokio::test]
+    async fn allowlist_entry_is_matched_case_sensitively() {
+        const URI: &str = "http://localhost/test-bucket/test-key.txt";
+        let test_s3 = Arc::new(TestS3::default());
+        let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
+        let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
+        let config = test_config_with_allowlist(&["X-Amz-Copy-Source"]);
+        let ccx = test_context(&s3, &config, &auth);
+
+        let mut req = copy_source_request(Method::PUT, Version::HTTP_11, URI, false);
+        let response = super::call(&mut req, &ccx).await.expect("ops::call serializes errors");
+        assert_eq!(
+            response.status,
+            StatusCode::FORBIDDEN,
+            "a non-lowercase allowlist entry must not exempt the header"
+        );
+        assert_eq!(test_s3.copy_object.load(Ordering::SeqCst), 0, "the request must not be routed");
+    }
+
     #[tokio::test]
     async fn presigned_url_is_rejected_when_the_path_is_disabled() {
         let test_s3 = Arc::new(TestS3::default());

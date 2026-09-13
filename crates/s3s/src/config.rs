@@ -339,8 +339,10 @@ pub struct S3Config {
     /// unsigned one can change what the request does.
     ///
     /// Add an entry only when a client cannot sign the header, for example one
-    /// stamped by an intermediary. Entries are exact, lowercase header names; no
-    /// prefix matching is performed.
+    /// stamped by an intermediary, such as `"x-amz-cf-id"`. Entries are exact,
+    /// lowercase header names; no prefix matching is performed, and matching is
+    /// case-sensitive, so an entry copied from documentation in another casing
+    /// does not take effect.
     ///
     /// Default: empty (no `x-amz-*` header may be unsigned)
     #[serde(skip_serializing_if = "Vec::is_empty")]
