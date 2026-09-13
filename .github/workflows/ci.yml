@@ -137,10 +137,22 @@ jobs:
       - run: just install s3s-proxy
       - run: ./scripts/e2e-mint.sh
       - run: ./scripts/report-mint.py /tmp/mint/log.json
+      # The mint console output only shows one failure per suite and the raw
+      # /tmp/mint/log.json is what report-mint.py reads, so both are collected
+      # even when the gate fails.
+      - name: Collect mint logs
+        if: always()
+        run: |
+          mkdir -p target
+          cp /tmp/mint/log.json target/mint.log.json 2>/dev/null || true
       - uses: actions/upload-artifact@v7
+        if: always()
         with:
           name: mint-proxy-minio.logs
-          path: ./target/s3s-proxy.log
+          path: |
+            ./target/s3s-proxy.log
+            ./target/mint.log
+            ./target/mint.log.json
 
   e2e-fs:
     name: e2e (s3s-e2e, s3s-fs)
