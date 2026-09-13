@@ -1,0 +1,354 @@
+repo_dir := justfile_directory() + "/../../.."
+bench_dir := repo_dir + "/target/http3-bench"
+bench_justfile := justfile_directory() + "/justfile"
+
+h2_url := "https://localhost:8015"
+h3_url := "https://localhost:8443"
+
+bench-build:
+    cargo build --manifest-path "{{ repo_dir }}/Cargo.toml" --release -p s3s-http3 --example h2-tls
+    cargo build --manifest-path "{{ repo_dir }}/Cargo.toml" --release -p s3s-http3 --example server
+
+[positional-arguments]
+bench-prepare size_mib="1":
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    size_mib="$1"
+    [[ "$size_mib" =~ ^[1-9][0-9]{0,3}$ && "$size_mib" -le 1024 ]] || {
+        echo "size_mib must be an integer from 1 to 1024" >&2; exit 2;
+    }
+    mkdir -p "{{ bench_dir }}/h2" "{{ bench_dir }}/h3"
+
+    [[ -s "{{ bench_dir }}/object-4k" ]] ||
+        head -c 4096 /dev/urandom > "{{ bench_dir }}/object-4k"
+
+    payload="{{ bench_dir }}/object-${size_mib}m"
+    bytes=$((size_mib * 1048576))
+    if [[ ! -e "$payload" ]]; then
+        available=$(df -Pm "{{ bench_dir }}" | awk 'NR == 2 {print $4}')
+        ((available >= size_mib + 1024)) || { echo "insufficient space (reserving 1 GiB)" >&2; exit 1; }
+        temporary=$(mktemp "{{ bench_dir }}/payload-XXXXXX")
+        trap 'rm -f -- "$temporary"' EXIT
+        head -c "$bytes" /dev/urandom > "$temporary"
+        mv -n -- "$temporary" "$payload"
+    fi
+    [[ $(stat -c %s "$payload") == "$bytes" ]] || {
+        echo "unexpected fixture size: $payload (left unchanged)" >&2; exit 1;
+    }
+
+    if [[ ! -s "{{ bench_dir }}/cert.pem" || ! -s "{{ bench_dir }}/key.pem" ]]; then
+        openssl req -x509 -newkey rsa:2048 -nodes \
+            -keyout "{{ bench_dir }}/key.pem" \
+            -out "{{ bench_dir }}/cert.pem" \
+            -days 7 \
+            -subj '/CN=localhost' \
+            -addext 'subjectAltName=DNS:localhost'
+    fi
+
+bench-up: bench-build bench-prepare
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    h2_pid="{{ bench_dir }}/h2.pid"
+    h3_pid="{{ bench_dir }}/h3.pid"
+
+    for pid_file in "$h2_pid" "$h3_pid"; do
+        if [[ -s "$pid_file" ]] && kill -0 "$(<"$pid_file")" 2>/dev/null; then
+            echo "benchmark server is already running: $pid_file"
+            exit 1
+        fi
+        rm -f "$pid_file"
+    done
+
+    setsid --wait env \
+        S3S_HTTP2_ROOT="{{ bench_dir }}/h2" \
+        S3S_HTTP2_BIND=127.0.0.1:8015 \
+        S3S_HTTP2_CERT="{{ bench_dir }}/cert.pem" \
+        S3S_HTTP2_KEY="{{ bench_dir }}/key.pem" \
+        "{{ repo_dir }}/target/release/examples/h2-tls" \
+        > "{{ bench_dir }}/h2.log" 2>&1 < /dev/null &
+    echo "$!" > "$h2_pid"
+
+    setsid --wait env -u S3S_HTTP3_ACCESS_KEY -u S3S_HTTP3_SECRET_KEY \
+        S3S_HTTP3_ROOT="{{ bench_dir }}/h3" \
+        S3S_HTTP3_BIND=127.0.0.1:8443 \
+        S3S_HTTP3_CERT="{{ bench_dir }}/cert.pem" \
+        S3S_HTTP3_KEY="{{ bench_dir }}/key.pem" \
+        "{{ repo_dir }}/target/release/examples/server" \
+        > "{{ bench_dir }}/h3.log" 2>&1 < /dev/null &
+    echo "$!" > "$h3_pid"
+
+    for _ in {1..50}; do
+        curl --http2 -k \
+            --resolve localhost:8015:127.0.0.1 \
+            -sS -o /dev/null \
+            "{{ h2_url }}" 2>/dev/null && break
+        sleep 0.1
+    done
+
+    for _ in {1..50}; do
+        curl --http3-only -k \
+            --resolve localhost:8443:127.0.0.1 \
+            -sS -o /dev/null \
+            "{{ h3_url }}" 2>/dev/null && break
+        sleep 0.1
+    done
+
+    curl --http2 -k \
+        --resolve localhost:8015:127.0.0.1 \
+        -sS -o /dev/null \
+        "{{ h2_url }}"
+
+    curl --http3-only -k \
+        --resolve localhost:8443:127.0.0.1 \
+        -sS -o /dev/null \
+        "{{ h3_url }}"
+
+[positional-arguments]
+bench-seed size_mib="1":
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    size_mib="$1"
+    just --justfile "{{ bench_justfile }}" bench-prepare "$size_mib"
+    h2=(--http2 -k --noproxy '*' --connect-timeout 10 --max-time 120 --resolve localhost:8015:127.0.0.1)
+    h3=(--http3-only -k --noproxy '*' --connect-timeout 10 --max-time 120 --resolve localhost:8443:127.0.0.1)
+
+    put_bucket() {
+        local url="$1"
+        shift
+
+        local status
+        status="$(curl --silent --show-error "$@" \
+            -X PUT -o /dev/null -w '%{http_code}' \
+            "$url/bench")"
+
+        case "$status" in
+            2*|409) ;;
+            *) echo "bucket creation failed: HTTP $status" >&2; return 1 ;;
+        esac
+    }
+
+    put_bucket "{{ h2_url }}" "${h2[@]}"
+    put_bucket "{{ h3_url }}" "${h3[@]}"
+
+    for size in 4k "${size_mib}m"; do
+        curl --fail --silent --show-error "${h2[@]}" \
+            --header 'Expect:' \
+            --upload-file "{{ bench_dir }}/object-$size" \
+            "{{ h2_url }}/bench/object-$size"
+
+        curl --fail --silent --show-error "${h3[@]}" \
+            --header 'Expect:' \
+            --upload-file "{{ bench_dir }}/object-$size" \
+            "{{ h3_url }}/bench/object-$size"
+    done
+
+bench-latency:
+    hyperfine --shell=none --warmup 5 --runs 30 \
+        --export-json "{{ bench_dir }}/latency.json" \
+        -n HTTP/2 \
+        'curl --http2 -k --resolve localhost:8015:127.0.0.1 -fsS -o /dev/null https://localhost:8015/bench/object-4k' \
+        -n HTTP/3 \
+        'curl --http3-only -k --resolve localhost:8443:127.0.0.1 -fsS -o /dev/null https://localhost:8443/bench/object-4k'
+
+[positional-arguments]
+bench-throughput n="200" c="16" method="GET" size_mib="1":
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    n="$1"; c="$2"; method="${3^^}"; size_mib="$4"
+    for value in "$n" "$c" "$size_mib"; do
+        [[ "$value" =~ ^[1-9][0-9]{0,5}$ ]] || { echo "counts and size must be positive integers" >&2; exit 2; }
+    done
+    ((n <= 100000 && c <= 1024 && size_mib <= 1024)) || { echo "n/c/size exceed supported limits" >&2; exit 2; }
+    [[ "$method" == GET || "$method" == PUT ]] || { echo "method must be GET or PUT" >&2; exit 2; }
+    mkdir -p "{{ bench_dir }}"
+    active=$((c < n ? c : n))
+    required=$((3 * size_mib + 1024))
+    [[ "$method" != PUT ]] || required=$((required + (2 * n + active) * size_mib))
+    available=$(df -Pm "{{ bench_dir }}" | awk 'NR == 2 {print $4}')
+    ((available >= required)) || { echo "need up to $required MiB free, including a 1 GiB reserve" >&2; exit 1; }
+
+    just --justfile "{{ bench_justfile }}" bench-seed "$size_mib"
+    result_dir=$(mktemp -d "{{ bench_dir }}/${method}-${size_mib}m-${n}-${c}-XXXXXX")
+    prefix="${result_dir##*/}"
+    md5sum "{{ bench_dir }}/object-${size_mib}m" > "$result_dir/payload.md5"
+    read -r digest _ < "$result_dir/payload.md5"
+
+    cleanup_uploads() {
+        [[ "$method" == PUT ]] || return 0
+        local protocol port i
+        local -a flags
+        for protocol in h2 h3; do
+            if [[ "$protocol" == h2 ]]; then port=8015; flags=(--http2); else port=8443; flags=(--http3-only); fi
+            for ((i = 0; i < n; i++)); do
+                printf 'url = "https://localhost:%s/bench/put-%s-%s"\noutput = "/dev/null"\n' "$port" "$prefix" "$i"
+            done | curl -q -kfsS --fail-early --noproxy '*' "${flags[@]}" \
+                --resolve "localhost:$port:127.0.0.1" --request DELETE \
+                --connect-timeout 10 --max-time 30 --parallel --parallel-max 8 --parallel-max-host 1 --config - || return 1
+        done
+        echo "Removed generated PUT objects for $prefix; fixtures and results retained."
+    }
+    trap 'status=$?; if ! cleanup_uploads; then echo "PUT cleanup failed for $prefix" >&2; status=1; fi; exit "$status"' EXIT
+
+    echo "$method: $n x $size_mib MiB, concurrency $active, one connection; results: $result_dir"
+    printf -v h2_command '%q ' just --justfile "{{ bench_justfile }}" _bench-run h2 "$n" "$c" "$method" "$size_mib" "$prefix" "$result_dir"
+    printf -v h3_command '%q ' just --justfile "{{ bench_justfile }}" _bench-run h3 "$n" "$c" "$method" "$size_mib" "$prefix" "$result_dir"
+    hyperfine --shell=none --warmup 1 --runs 5 --show-output \
+        --export-json "$result_dir/timing.json" -n HTTP/2 "$h2_command" -n HTTP/3 "$h3_command"
+
+    if [[ "$method" == PUT ]]; then
+        for protocol in h2 h3; do
+            if [[ "$protocol" == h2 ]]; then port=8015; flags=(--http2); else port=8443; flags=(--http3-only); fi
+            curl -q -kfsS --noproxy '*' "${flags[@]}" --resolve "localhost:$port:127.0.0.1" \
+                --connect-timeout 10 --max-time 120 "https://localhost:$port/bench/put-$prefix-0" \
+                | md5sum > "$result_dir/$protocol-readback.md5"
+            read -r actual _ < "$result_dir/$protocol-readback.md5"
+            [[ "$actual" == "$digest" ]] || { echo "$protocol PUT readback mismatch" >&2; exit 1; }
+        done
+        echo "PUT readback checks passed for both protocols."
+    fi
+
+[positional-arguments]
+_bench-run protocol n c method size_mib prefix result_dir:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    log=$(mktemp "$7/requests-$1-XXXXXX.log")
+    if ! just --justfile "{{ bench_justfile }}" bench-load "$1" "$2" "$3" 127.0.0.1 "$4" "$5" "$6" > "$log" 2> "$log.stderr"; then
+        echo "load failed; see $log.stderr" >&2
+        exit 1
+    fi
+    read -r digest _ < "$7/payload.md5"
+    awk -v version="${1#h}" -v n="$2" -v method="$4" -v bytes="$(($5 * 1048576))" -v digest="$digest" '
+        NF != (method == "PUT" ? 5 : 4) || $1 != "http=" version || $3 != "status=200" || $4 != "bytes=" bytes {bad=1}
+        method == "PUT" && $5 != "etag=\"" digest "\"" {bad=1}
+        {connections[$2]=1}
+        END {
+            if (bad || NR != n || length(connections) != 1) {
+                print "unexpected count, protocol, connection, status, bytes or ETag: " FILENAME > "/dev/stderr"
+                exit 1
+            }
+        }
+    ' "$log"
+
+bench-stats pid:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    while kill -0 "{{ pid }}" 2>/dev/null; do
+        ps -p "{{ pid }}" -o pid=,comm=,etime=,%cpu=,%mem=
+        sleep 1
+    done
+
+bench-down:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    for pid_file in "{{ bench_dir }}/h2.pid" "{{ bench_dir }}/h3.pid"; do
+        [[ -s "$pid_file" ]] || continue
+
+        pid="$(<"$pid_file")"
+        if ! kill -0 "$pid" 2>/dev/null; then
+            rm -f "$pid_file"
+            continue
+        fi
+
+        command_name="$(ps -p "$pid" -o comm= | tr -d '[:space:]')"
+        case "$command_name" in
+            h2-tls|server) ;;
+            *)
+                echo "refusing to stop unexpected process $pid ($command_name)"
+                continue
+                ;;
+        esac
+
+        kill -INT "$pid" 2>/dev/null || true
+        sleep 1
+        kill -TERM "$pid" 2>/dev/null || true
+        rm -f "$pid_file"
+    done
+
+[positional-arguments]
+bench-load protocol n="10000" c="64" address="127.0.0.1" method="GET" size_mib="1" prefix="manual":
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    protocol="$1"; n="$2"; c="$3"; address="$4"; method="${5^^}"; size_mib="$6"; prefix="$7"
+    for value in "$n" "$c" "$size_mib"; do
+        [[ "$value" =~ ^[1-9][0-9]{0,5}$ ]] || { echo "counts and size must be positive integers" >&2; exit 2; }
+    done
+    ((n <= 100000 && c <= 1024 && size_mib <= 1024)) || { echo "n/c/size exceed supported limits" >&2; exit 2; }
+    [[ "$prefix" =~ ^[A-Za-z0-9_-]{1,80}$ ]] || { echo "invalid PUT prefix" >&2; exit 2; }
+    case "$protocol" in
+        h2) port=8015; flags=(--http2) ;;
+        h3) port=8443; flags=(--http3-only) ;;
+        *) echo "protocol must be h2 or h3" >&2; exit 2 ;;
+    esac
+
+    payload="{{ bench_dir }}/object-${size_mib}m"
+    write_out='http=%{http_version} conn=%{conn_id} status=%{http_code} bytes=%{size_download}\n'
+    case "$method" in
+        GET) ;;
+        PUT)
+            [[ -f "$payload" && $(stat -c %s "$payload") == "$((size_mib * 1048576))" ]] || {
+                echo "missing/wrong-sized payload; run bench-prepare $size_mib" >&2; exit 1;
+            }
+            write_out='http=%{http_version} conn=%{conn_id} status=%{http_code} bytes=%{size_upload} etag=%header{etag}\n'
+            ;;
+        *) echo "method must be GET or PUT" >&2; exit 2 ;;
+    esac
+    for ((i = 0; i < n; i++)); do
+        if [[ "$method" == PUT ]]; then
+            printf 'url = "https://localhost:%s/bench/put-%s-%s"\nupload-file = "%s"\noutput = "/dev/null"\n' "$port" "$prefix" "$i" "$payload"
+        else
+            printf 'url = "https://localhost:%s/bench/object-%sm"\noutput = "/dev/null"\n' "$port" "$size_mib"
+        fi
+    done | curl -q -kfsS --fail-early --noproxy '*' "${flags[@]}" \
+        --resolve "localhost:$port:$address" --header 'Expect:' \
+        --connect-timeout 10 --max-time 120 \
+        --parallel --parallel-max "$c" --parallel-max-host 1 \
+        --write-out "$write_out" \
+        --config -
+
+# Starts/stops the servers and covers both methods with a small correctness check.
+bench-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just --justfile "{{ bench_justfile }}" bench-up
+    trap 'just --justfile "{{ bench_justfile }}" bench-down' EXIT
+    just --justfile "{{ bench_justfile }}" bench-throughput 2 2 GET 1
+    just --justfile "{{ bench_justfile }}" bench-throughput 2 2 PUT 1
+
+# Bounded larger-object matrix: GET/PUT, 16/64 MiB, sequential/concurrent.
+[positional-arguments]
+bench-large n="8" c="8":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    n="$1"; c="$2"
+    just --justfile "{{ bench_justfile }}" bench-up
+    trap 'just --justfile "{{ bench_justfile }}" bench-down' EXIT
+    concurrency=(1)
+    [[ "$c" == 1 ]] || concurrency+=("$c")
+    for size_mib in 16 64; do
+        for active in "${concurrency[@]}"; do
+            for method in GET PUT; do
+                just --justfile "{{ bench_justfile }}" bench-throughput "$n" "$active" "$method" "$size_mib"
+            done
+        done
+    done
+
+bench-http3:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    just --justfile "{{ bench_justfile }}" bench-up
+    trap 'just --justfile "{{ bench_justfile }}" bench-down || true' EXIT
+
+    just --justfile "{{ bench_justfile }}" bench-seed
+    just --justfile "{{ bench_justfile }}" bench-latency
+
+    for concurrency in 1 16 64; do
+        just --justfile "{{ bench_justfile }}" bench-throughput 200 "$concurrency"
+    done
