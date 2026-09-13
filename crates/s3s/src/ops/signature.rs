@@ -78,6 +78,59 @@ fn extract_authorization_v4(hs: &HeaderMap) -> S3Result<Option<AuthorizationV4<'
     }
 }
 
+/// Rejects `x-amz-*` request headers that are present but absent from `SignedHeaders` /
+/// `X-Amz-SignedHeaders`.
+///
+/// `collect_signed_headers` builds the canonical request from the header names the client declared,
+/// so a header outside that list is never verified. Routing and input parsing still read the
+/// arriving headers, which lets the holder of a signed request (for example a presigned `PUT` URL
+/// handed to an untrusted uploader) change what the request does: adding `x-amz-copy-source` turns
+/// the upload into a copy.
+///
+/// The signed-header list is client-supplied and not lowercased, so comparisons are
+/// case-insensitive; [`HeaderName`] is already lowercase. Headers listed in
+/// [`S3Config::unsigned_amz_header_allowlist`] are exempt.
+fn reject_unsigned_amz_headers(config: &S3Config, hs: &HeaderMap, signed_names: &[&str]) -> S3Result<()> {
+    /// Headers that may be sent unsigned because they belong to the request envelope rather than
+    /// being unsigned routing inputs. They are read only after the signature is verified, and none
+    /// of them can change what the request does:
+    ///
+    /// - `x-amz-content-sha256` selects the payload mode (`UNSIGNED-PAYLOAD`, single-chunk hash,
+    ///   streaming, trailer) or is consumed as the payload hash, which must match the body. AWS
+    ///   clients add it after presigning.
+    /// - `x-amz-decoded-content-length` frames the aws-chunked body; it is read as
+    ///   `SignatureContext::decoded_content_length` after this check and cannot alter which
+    ///   operation runs or what it copies.
+    /// - `x-amz-trailer` only declares that trailing headers follow. The payload mode comes from
+    ///   the already-verified `x-amz-content-sha256`, and the trailer signature covers the trailer
+    ///   values themselves.
+    /// - `x-amz-checksum-algorithm` names the algorithm for that trailer, whose value is likewise
+    ///   covered by the trailer signature.
+    ///
+    /// This list is not configurable; every other `x-amz-*` header is covered by
+    /// `S3Config::unsigned_amz_header_allowlist`.
+    const ENVELOPE_HEADERS: &[&str] = &[
+        "x-amz-content-sha256",
+        "x-amz-decoded-content-length",
+        "x-amz-trailer",
+        "x-amz-checksum-algorithm",
+    ];
+
+    for name in hs.keys() {
+        let name = name.as_str();
+        if !name.starts_with("x-amz-")
+            || ENVELOPE_HEADERS.contains(&name)
+            || config.unsigned_amz_header_allowlist.iter().any(|allow| allow == name)
+        {
+            continue;
+        }
+        if !signed_names.iter().any(|signed| signed.eq_ignore_ascii_case(name)) {
+            return Err(s3_error!(AccessDenied, "There were headers present in the request which were not signed"));
+        }
+    }
+    Ok(())
+}
+
 fn extract_amz_date(hs: &HeaderMap) -> S3Result<Option<AmzDate>> {
     let Some(val) = http::get_unique_header_str(hs, crate::header::X_AMZ_DATE.as_str()) else {
         return Ok(None);
@@ -325,6 +378,38 @@ impl<'a> SignatureContext<'a> {
         Ok(())
     }
 
+    /// Rejects presigned URL requests when `allow_presigned_url` is off.
+    ///
+    /// A presigned request is recognized by its query signature — `X-Amz-Signature`
+    /// (`SigV4`) or `Signature` (`SigV2`). When disabled, such a request is rejected with
+    /// `AccessDenied` (fail-closed) rather than being treated as anonymous or retried as
+    /// header authentication.
+    fn ensure_presigned_url_enabled(&self) -> S3Result<()> {
+        let config = self.config.snapshot();
+        if !config.allow_presigned_url {
+            return Err(s3_error!(
+                AccessDenied,
+                "Presigned URL authentication is disabled by server configuration"
+            ));
+        }
+        Ok(())
+    }
+
+    /// Rejects `POST` form signature requests when `allow_post_signature` is off.
+    ///
+    /// Only signed forms are affected: a form without a signature is an anonymous request that the
+    /// configured access policy decides on, exactly as before.
+    fn ensure_post_signature_enabled(&self) -> S3Result<()> {
+        let config = self.config.snapshot();
+        if !config.allow_post_signature {
+            return Err(s3_error!(
+                AccessDenied,
+                "POST signature authentication is disabled by server configuration"
+            ));
+        }
+        Ok(())
+    }
+
     pub async fn check(&mut self) -> S3Result<Option<CredentialsExt>> {
         if self.req_method == Method::POST
             && let Some(ref mime) = self.mime
@@ -372,12 +457,18 @@ impl<'a> SignatureContext<'a> {
 
         debug!(?multipart);
 
+        // Only signed forms are gated. A form without a signature stays an anonymous request, so
+        // the switch is applied here — after the form is parsed, and only for the two signed
+        // variants — rather than at the `POST` + `multipart/form-data` dispatch, which would also
+        // reject anonymous forms.
         if multipart.find_field_value("x-amz-signature").is_some() {
+            self.ensure_post_signature_enabled()?;
             debug!("checking post signature v4");
             return Ok(Some(self.v4_check_post_signature(multipart).await?));
         }
 
         if multipart.find_field_value("signature").is_some() {
+            self.ensure_post_signature_enabled()?;
             debug!("checking post signature v2");
             return Ok(Some(self.v2_check_post_signature(multipart).await?));
         }
@@ -393,6 +484,9 @@ impl<'a> SignatureContext<'a> {
             && qs.has("X-Amz-Signature")
         {
             debug!("checking presigned url");
+            if let Err(error) = self.ensure_presigned_url_enabled() {
+                return Some(Err(error));
+            }
             return Some(self.v4_check_presigned_url().await);
         }
 
@@ -571,6 +665,7 @@ impl<'a> SignatureContext<'a> {
 
         let expected_signature = Signature::from_hex(presigned_url.signature).ok_or_else(|| s3_error!(SignatureDoesNotMatch))?;
         let headers = collect_signed_headers(self.hs, &presigned_url.signed_headers, |name| self.signed_host_fallback(name))?;
+        reject_unsigned_amz_headers(&config, self.hs, &presigned_url.signed_headers)?;
 
         let method = &self.req_method;
         let amz_date = &presigned_url.amz_date;
@@ -699,6 +794,7 @@ impl<'a> SignatureContext<'a> {
         };
 
         let headers = collect_signed_headers(self.hs, &authorization.signed_headers, |name| self.signed_host_fallback(name))?;
+        reject_unsigned_amz_headers(&config, self.hs, &authorization.signed_headers)?;
 
         let verifier = SignatureVerificationContext {
             expected_signature,
@@ -789,6 +885,9 @@ impl<'a> SignatureContext<'a> {
             && qs.has("Signature")
         {
             debug!("checking presigned url");
+            if let Err(error) = self.ensure_presigned_url_enabled() {
+                return Some(Err(error));
+            }
             return Some(self.v2_check_presigned_url().await);
         }
 
@@ -1625,6 +1724,49 @@ file content\r\n\
             .expect("v2 header auth must be detected")
             .expect_err("a stale date must be rejected");
         assert_eq!(err.code(), &S3ErrorCode::RequestTimeTooSkewed);
+    }
+
+    /// Locks in the reason `SigV2` needs no unsigned-header check: every arriving `x-amz-*` header
+    /// enters the string to sign, so appending one breaks the signature. This property holds before
+    /// the `SigV4` fix and must keep holding after it.
+    #[tokio::test]
+    async fn sig_v2_rejects_an_appended_unsigned_amz_header() {
+        use crate::auth::SimpleAuth;
+
+        let access_key = "AKIAIOSFODNN7EXAMPLE";
+        let secret_key: crate::auth::SecretKey = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".into();
+        let auth = SimpleAuth::from_single(access_key, secret_key.clone());
+
+        let date = fmt_rfc1123(time::OffsetDateTime::now_utc());
+        let signature = sig_v2_header_auth_signature(&secret_key, &date);
+        let authorization = format!("AWS {access_key}:{signature}");
+        let config = sig_v2_test_config(true);
+
+        // Control: the signed request passes, so the fixtures are valid.
+        let headers = headers_from_slice(&[("authorization", &authorization), ("date", &date)]);
+        let method = Method::GET;
+        let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+        let mut body = Body::empty();
+        let mut cx = sig_v2_test_context(&config, Some(&auth), &method, &uri, &mut body, None, &headers, None);
+        cx.v2_check()
+            .await
+            .expect("v2 header auth must be detected")
+            .expect("the signed request must pass");
+
+        // The same signed request with one appended `x-amz-*` header must fail verification.
+        let headers = headers_from_slice(&[
+            ("authorization", &authorization),
+            ("date", &date),
+            ("x-amz-copy-source", "/source-bucket/source-key"),
+        ]);
+        let mut body = Body::empty();
+        let mut cx = sig_v2_test_context(&config, Some(&auth), &method, &uri, &mut body, None, &headers, None);
+        let err = cx
+            .v2_check()
+            .await
+            .expect("v2 header auth must be detected")
+            .expect_err("an appended x-amz-* header must break the SigV2 signature");
+        assert_eq!(err.code(), &S3ErrorCode::SignatureDoesNotMatch);
     }
 
     #[tokio::test]

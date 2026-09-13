@@ -309,6 +309,42 @@ pub struct S3Config {
     ///
     /// Default: true
     pub operation_id_routing: bool,
+
+    /// Whether presigned URL (query) authentication is accepted.
+    ///
+    /// When disabled, a request that carries a presigned signature — `X-Amz-Signature`
+    /// (`SigV4`) or `Signature` (`SigV2`) in the query — is rejected with
+    /// `AccessDenied` instead of being verified. Header authentication and `POST`
+    /// signature authentication are unaffected.
+    ///
+    /// Default: true
+    pub allow_presigned_url: bool,
+
+    /// Whether `POST` form (`POST` policy) signature authentication is accepted.
+    ///
+    /// When disabled, a `POST` request with `multipart/form-data` that carries a signature
+    /// — `x-amz-signature` (`SigV4`) or `signature` (`SigV2`) — is rejected with
+    /// `AccessDenied`. A form without a signature is unaffected: it remains an anonymous
+    /// request for the configured access policy to decide on.
+    ///
+    /// Presigned URLs and header authentication are unaffected.
+    ///
+    /// Default: true
+    pub allow_post_signature: bool,
+    /// `x-amz-*` request headers that may be presented unsigned on a `SigV4` request.
+    ///
+    /// `SigV4` binds a request to the header set named in `SignedHeaders` /
+    /// `X-Amz-SignedHeaders`. An `x-amz-*` header outside that set is rejected with
+    /// `AccessDenied`, because routing and input parsing read those headers and an
+    /// unsigned one can change what the request does.
+    ///
+    /// Add an entry only when a client cannot sign the header, for example one
+    /// stamped by an intermediary. Entries are exact, lowercase header names; no
+    /// prefix matching is performed.
+    ///
+    /// Default: empty (no `x-amz-*` header may be unsigned)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unsigned_amz_header_allowlist: Vec<String>,
 }
 
 impl Default for S3Config {
@@ -330,6 +366,9 @@ impl Default for S3Config {
             normalize_forward_slash_path: false,
             normalize_content_length: true,
             operation_id_routing: true,
+            allow_presigned_url: true,
+            allow_post_signature: true,
+            unsigned_amz_header_allowlist: Vec::new(),
         }
     }
 }
@@ -554,12 +593,34 @@ mod tests {
             normalize_forward_slash_path: false,
             normalize_content_length: true,
             operation_id_routing: true,
+            allow_presigned_url: true,
+            allow_post_signature: true,
+            unsigned_amz_header_allowlist: vec!["x-amz-cf-id".to_owned()],
         };
 
         let json = serde_json::to_string(&config).expect("serialize failed");
         let deserialized: S3Config = serde_json::from_str(&json).expect("deserialize failed");
 
         assert_eq!(config, deserialized);
+    }
+
+    #[test]
+    fn test_serde_omits_default_unsigned_amz_header_allowlist() {
+        let json = serde_json::to_value(S3Config::default()).expect("serialize failed");
+        assert!(json.get("unsigned_amz_header_allowlist").is_none());
+    }
+
+    #[test]
+    fn test_serde_unsigned_amz_header_allowlist_defaults_to_empty() {
+        let config: S3Config = serde_json::from_str("{}").expect("deserialize failed");
+        assert!(config.unsigned_amz_header_allowlist.is_empty());
+    }
+
+    #[test]
+    fn test_serde_unsigned_amz_header_allowlist_is_configurable() {
+        let config: S3Config =
+            serde_json::from_str(r#"{"unsigned_amz_header_allowlist":["x-amz-cf-id"]}"#).expect("deserialize failed");
+        assert_eq!(config.unsigned_amz_header_allowlist, ["x-amz-cf-id"]);
     }
 
     #[test]
@@ -598,6 +659,43 @@ mod tests {
     fn test_serde_omits_unset_expected_region() {
         let json = serde_json::to_value(S3Config::default()).expect("serialize failed");
         assert!(json.get("expected_region").is_none());
+    }
+
+    #[test]
+    fn test_allow_presigned_url_defaults_to_true() {
+        assert!(S3Config::default().allow_presigned_url);
+        let config: S3Config = serde_json::from_str("{}").expect("deserialize failed");
+        assert!(config.allow_presigned_url, "a missing field must keep presigned URLs enabled");
+    }
+
+    #[test]
+    fn test_allow_post_signature_defaults_to_true() {
+        assert!(S3Config::default().allow_post_signature);
+        let config: S3Config = serde_json::from_str("{}").expect("deserialize failed");
+        assert!(config.allow_post_signature, "a missing field must keep POST signatures enabled");
+    }
+
+    #[test]
+    fn test_allow_post_signature_can_be_disabled_and_round_trips() {
+        let config: S3Config = serde_json::from_str(r#"{"allow_post_signature":false}"#).expect("deserialize failed");
+        assert!(!config.allow_post_signature);
+
+        let encoded = serde_json::to_value(&config).expect("serialize failed");
+        assert_eq!(encoded.get("allow_post_signature"), Some(&serde_json::json!(false)));
+        let decoded: S3Config = serde_json::from_value(encoded).expect("deserialize failed");
+        assert_eq!(config, decoded);
+    }
+
+    #[test]
+    fn test_allow_presigned_url_can_be_disabled_and_round_trips() {
+        let json = r#"{"allow_presigned_url":false}"#;
+        let config: S3Config = serde_json::from_str(json).expect("deserialize failed");
+        assert!(!config.allow_presigned_url);
+
+        let encoded = serde_json::to_value(&config).expect("serialize failed");
+        assert_eq!(encoded.get("allow_presigned_url"), Some(&serde_json::json!(false)));
+        let decoded: S3Config = serde_json::from_value(encoded).expect("deserialize failed");
+        assert_eq!(config, decoded);
     }
 
     #[test]
