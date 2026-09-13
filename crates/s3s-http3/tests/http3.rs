@@ -349,16 +349,21 @@ async fn object_operations(client: &mut Client) -> TestResult {
 }
 
 /// RFC 9114 §4.2 forbids connection-specific fields in HTTP/3; `TE` is the only
-/// exception and may only carry `trailers`.
+/// exception and may only carry the `trailers` member.
 async fn connection_specific_fields(client: &mut Client) -> TestResult {
-    for (name, value) in [
-        ("connection", "keep-alive"),
-        ("transfer-encoding", "chunked"),
-        ("upgrade", "h2c"),
-        ("keep-alive", "timeout=5"),
-        ("proxy-connection", "keep-alive"),
-        ("te", "trailers, deflate"),
-    ] {
+    let rejected: [(&str, HeaderValue); 7] = [
+        ("connection", HeaderValue::from_static("keep-alive")),
+        ("transfer-encoding", HeaderValue::from_static("chunked")),
+        ("upgrade", HeaderValue::from_static("h2c")),
+        ("keep-alive", HeaderValue::from_static("timeout=5")),
+        ("proxy-connection", HeaderValue::from_static("keep-alive")),
+        // Other members stay rejected: the only allowed value is `trailers`.
+        ("te", HeaderValue::from_static("trailers, deflate")),
+        // Not a valid token, and never equal to `trailers`.
+        ("te", HeaderValue::from_bytes(b"trailers\xff")?),
+    ];
+
+    for (name, value) in rejected {
         let request = Request::builder()
             .method(Method::GET)
             .uri("http://localhost/bucket/key")
@@ -382,18 +387,22 @@ async fn connection_specific_fields(client: &mut Client) -> TestResult {
         );
     }
 
-    // `TE: trailers` is the one connection-specific field HTTP/3 permits.
-    let request = Request::builder()
-        .method(Method::GET)
-        .uri("http://localhost/bucket/key")
-        .header("te", "trailers")
-        .body(())?;
+    // `TE: trailers` is the one connection-specific field HTTP/3 permits. The
+    // ABNF literal is case-insensitive (RFC 5234 §2.3) and surrounding field
+    // whitespace is excluded before the value is evaluated (RFC 9110 §5.5).
+    for value in ["trailers", "Trailers", "TRAILERS", "trailers ", "\ttrailers\t"] {
+        let request = Request::builder()
+            .method(Method::GET)
+            .uri("http://localhost/bucket/key")
+            .header("te", value)
+            .body(())?;
 
-    let (response, body, trailers) = send(client, request, std::iter::empty::<Bytes>()).await?;
+        let (response, body, trailers) = send(client, request, std::iter::empty::<Bytes>()).await?;
 
-    assert_eq!(response.status(), StatusCode::OK, "te: trailers must be accepted");
-    assert_eq!(body, b"hello world");
-    assert!(trailers.is_none());
+        assert_eq!(response.status(), StatusCode::OK, "te: {value:?} must be accepted");
+        assert_eq!(body, b"hello world", "te: {value:?}");
+        assert!(trailers.is_none(), "te: {value:?}");
+    }
 
     Ok(())
 }

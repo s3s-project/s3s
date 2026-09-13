@@ -230,8 +230,11 @@ async fn send_response(mut stream: SendStream, response: HttpResponse) {
 ///
 /// HTTP/3 carries connection-specific metadata in frames rather than fields, so
 /// a request containing these fields is malformed. `TE` is the only exception,
-/// and only when every value is `trailers`. The h2 crate applies the same rule
-/// to HTTP/2; h3 does not validate them, so the check lives here.
+/// and only with the value `trailers`. Whitespace surrounding a field value is
+/// excluded before the value is evaluated (RFC 9110 §5.5) and the ABNF literal
+/// is case-insensitive (RFC 5234 §2.3), so those spellings are accepted as well.
+/// The h2 crate applies the same field list to HTTP/2, but compares `TE` byte
+/// for byte, so it rejects them.
 fn disallowed_request_field(headers: &HeaderMap) -> Option<&'static str> {
     for name in ["connection", "transfer-encoding", "upgrade", "keep-alive", "proxy-connection"] {
         if headers.contains_key(name) {
@@ -239,11 +242,32 @@ fn disallowed_request_field(headers: &HeaderMap) -> Option<&'static str> {
         }
     }
 
-    if headers.get_all(header::TE).iter().any(|value| value != "trailers") {
+    if headers
+        .get_all(header::TE)
+        .iter()
+        .any(|value| !trim_ows(value.as_bytes()).eq_ignore_ascii_case(b"trailers"))
+    {
         return Some("te");
     }
 
     None
+}
+
+/// Removes the optional whitespace (SP / HTAB) around a field value, which
+/// RFC 9110 §5.5 requires before the value is evaluated. Other whitespace
+/// characters are left in place: CR, LF, and NUL make a field value invalid
+/// rather than equivalent.
+fn trim_ows(value: &[u8]) -> &[u8] {
+    let start = value
+        .iter()
+        .position(|byte| !matches!(*byte, b' ' | b'\t'))
+        .unwrap_or(value.len());
+    let end = value
+        .iter()
+        .rposition(|byte| !matches!(*byte, b' ' | b'\t'))
+        .map_or(start, |index| index + 1);
+
+    value.get(start..end).unwrap_or_default()
 }
 
 fn strip_hop_by_hop_headers(headers: &mut HeaderMap) {
