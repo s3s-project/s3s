@@ -31,7 +31,9 @@ type SendStream = RequestStream<h3_quinn::SendStream<Bytes>, Bytes>;
 /// The endpoint must already be configured with TLS 1.3 and the `h3` ALPN
 /// protocol. The shutdown future stops new connections, sends GOAWAY, and
 /// waits for clients to finish reading responses and close their connections.
-/// Connections still open after [`DEFAULT_SHUTDOWN_TIMEOUT`] are forcibly closed.
+/// Connections still open after [`DEFAULT_SHUTDOWN_TIMEOUT`] are forcibly closed,
+/// so a client that keeps its connection open makes the shutdown wait for the
+/// whole timeout before `serve` returns.
 pub async fn serve<F>(endpoint: Endpoint, service: S3Service, shutdown: F)
 where
     F: Future<Output = ()>,
@@ -141,7 +143,18 @@ async fn handle_request(resolver: Resolver, service: S3Service) {
         }
     };
 
-    let (send_stream, recv_stream) = stream.split();
+    let (mut send_stream, recv_stream) = stream.split();
+
+    // RFC 9114 §4.2: connection-specific fields are forbidden in HTTP/3, and
+    // `TE` may only carry "trailers". The h2 crate treats the same fields as
+    // malformed for HTTP/2, while h3 forwards them unchecked, so validate here
+    // before the request reaches the S3 service.
+    if let Some(field) = disallowed_request_field(request.headers()) {
+        debug!(%field, "rejected an HTTP/3 request carrying a connection-specific field");
+        send_stream.stop_stream(Code::H3_MESSAGE_ERROR);
+        return;
+    }
+
     let content_length = request
         .headers()
         .get(http::header::CONTENT_LENGTH)
@@ -155,7 +168,6 @@ async fn handle_request(resolver: Resolver, service: S3Service) {
         Ok(response) => send_response(send_stream, response).await,
         Err(error) => {
             error!(?error, "S3 service failed for HTTP/3 request");
-            let mut send_stream = send_stream;
             send_stream.stop_stream(Code::H3_INTERNAL_ERROR);
         }
     }
@@ -212,6 +224,26 @@ async fn send_response(mut stream: SendStream, response: HttpResponse) {
     if let Err(error) = stream.finish().await {
         error!(?error, "failed to finish HTTP/3 response stream");
     }
+}
+
+/// Returns the first field that RFC 9114 §4.2 forbids in an HTTP/3 request.
+///
+/// HTTP/3 carries connection-specific metadata in frames rather than fields, so
+/// a request containing these fields is malformed. `TE` is the only exception,
+/// and only when every value is `trailers`. The h2 crate applies the same rule
+/// to HTTP/2; h3 does not validate them, so the check lives here.
+fn disallowed_request_field(headers: &HeaderMap) -> Option<&'static str> {
+    for name in ["connection", "transfer-encoding", "upgrade", "keep-alive", "proxy-connection"] {
+        if headers.contains_key(name) {
+            return Some(name);
+        }
+    }
+
+    if headers.get_all(header::TE).iter().any(|value| value != "trailers") {
+        return Some("te");
+    }
+
+    None
 }
 
 fn strip_hop_by_hop_headers(headers: &mut HeaderMap) {

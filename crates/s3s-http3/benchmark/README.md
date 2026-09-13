@@ -77,5 +77,4 @@ just --justfile crates/s3s-http3/benchmark/justfile bench-load h3 8 8 127.0.0.1 
 
 `bench-load` does not seed data, apply the runner's disk budget, or clean up
 uploads. Its PUT mode overwrites `bench/put-PREFIX-INDEX` keys; use a unique
-prefix and handle cleanup when calling it directly. Use `rtk proxy just` when
-capturing its full records, since compressed output can omit records.
+prefix and handle cleanup when calling it directly.
