@@ -343,7 +343,7 @@ pub struct S3Config {
     /// prefix matching is performed.
     ///
     /// Default: empty (no `x-amz-*` header may be unsigned)
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub unsigned_amz_header_allowlist: Vec<String>,
 }
 
