@@ -1,6 +1,6 @@
 [package]
 name = "s3s-http3"
-version = "0.15.0"
+version = "0.16.0-alpha.1"
 description = "Experimental HTTP/3 transport for s3s"
 readme = "../../README.md"
 keywords = ["s3", "http3", "quic"]
