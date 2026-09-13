@@ -82,6 +82,7 @@ axum.workspace = true
 clap.workspace = true
 criterion.workspace = true
 futures = { workspace = true, features = ["executor", "std"] }
+h2.workspace = true
 hyper-util = { workspace = true, features = ["server-auto", "server-graceful", "http1", "http2", "tokio"] }
 mimalloc.workspace = true
 minstant.workspace = true
