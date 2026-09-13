@@ -86,6 +86,10 @@ Then you can explore it with your favorite S3 client!
 
 ### Run E2E tests
 
+MinIO-backed E2E tests start a MinIO container. MinIO no longer publishes
+Docker images, so the last public build is pinned to MinIO's Quay registry in
+[`scripts/minio.env`](./scripts/minio.env).
+
 Install `s3s-proxy`
 
 ```bash
