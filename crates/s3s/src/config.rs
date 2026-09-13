@@ -613,7 +613,7 @@ mod tests {
     #[test]
     fn test_serde_unsigned_amz_header_allowlist_defaults_to_empty() {
         let config: S3Config = serde_json::from_str("{}").expect("deserialize failed");
-        assert!(config.unsigned_amz_header_allowlist.is_empty());
+        assert_eq!(config.unsigned_amz_header_allowlist, [] as [String; 0]);
     }
 
     #[test]
