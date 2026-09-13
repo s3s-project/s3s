@@ -348,6 +348,65 @@ async fn object_operations(client: &mut Client) -> TestResult {
     Ok(())
 }
 
+/// RFC 9114 §4.2 forbids connection-specific fields in HTTP/3; `TE` is the only
+/// exception and may only carry the `trailers` member.
+async fn connection_specific_fields(client: &mut Client) -> TestResult {
+    let rejected: [(&str, HeaderValue); 7] = [
+        ("connection", HeaderValue::from_static("keep-alive")),
+        ("transfer-encoding", HeaderValue::from_static("chunked")),
+        ("upgrade", HeaderValue::from_static("h2c")),
+        ("keep-alive", HeaderValue::from_static("timeout=5")),
+        ("proxy-connection", HeaderValue::from_static("keep-alive")),
+        // Other members stay rejected: the only allowed value is `trailers`.
+        ("te", HeaderValue::from_static("trailers, deflate")),
+        // Not a valid token, and never equal to `trailers`.
+        ("te", HeaderValue::from_bytes(b"trailers\xff")?),
+    ];
+
+    for (name, value) in rejected {
+        let request = Request::builder()
+            .method(Method::GET)
+            .uri("http://localhost/bucket/key")
+            .header(name, value)
+            .body(())?;
+
+        // Read the response without finishing the request: the rejection must
+        // arrive as a malformed-message stream error, not as a response.
+        let mut stream = client.send_request(request).await?;
+        let error = stream
+            .recv_response()
+            .await
+            .expect_err("a malformed request must not be answered");
+
+        assert!(
+            matches!(
+                &error,
+                h3::error::StreamError::RemoteTerminate { code, .. } if *code == h3::error::Code::H3_MESSAGE_ERROR
+            ),
+            "{name}: unexpected rejection: {error:?}",
+        );
+    }
+
+    // `TE: trailers` is the one connection-specific field HTTP/3 permits. The
+    // ABNF literal is case-insensitive (RFC 5234 §2.3) and surrounding field
+    // whitespace is excluded before the value is evaluated (RFC 9110 §5.5).
+    for value in ["trailers", "Trailers", "TRAILERS", "trailers ", "\ttrailers\t"] {
+        let request = Request::builder()
+            .method(Method::GET)
+            .uri("http://localhost/bucket/key")
+            .header("te", value)
+            .body(())?;
+
+        let (response, body, trailers) = send(client, request, std::iter::empty::<Bytes>()).await?;
+
+        assert_eq!(response.status(), StatusCode::OK, "te: {value:?} must be accepted");
+        assert_eq!(body, b"hello world", "te: {value:?}");
+        assert!(trailers.is_none(), "te: {value:?}");
+    }
+
+    Ok(())
+}
+
 async fn large_object(client: &mut Client) -> TestResult {
     const CHUNK_COUNT: usize = 16;
     const CHUNK_SIZE: usize = 64 * 1024;
@@ -636,6 +695,11 @@ async fn content_length_mismatch(client: &mut Client) -> TestResult {
         )
         .await?;
 
+        // Rejecting the upload races with the client's own sends: the client
+        // either reads the S3 error response or observes the request stream
+        // being reset. Both mean the request was rejected, so the assertions
+        // below pin what must not happen instead: the object must not be stored
+        // and the connection must stay usable.
         match result {
             Ok((response, body, trailers)) => {
                 // s3s-fs maps the transport body error to an S3 InternalError.
@@ -720,6 +784,7 @@ async fn serves_put_and_get_over_http3() -> TestResult {
     });
 
     object_operations(&mut send_request).await?;
+    connection_specific_fields(&mut send_request).await?;
     request_stream_reset(&mut send_request).await?;
     content_length_mismatch(&mut send_request).await?;
     large_object(&mut send_request).await?;

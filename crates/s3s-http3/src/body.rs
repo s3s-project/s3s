@@ -137,6 +137,12 @@ impl HttpBody for Body {
 
 impl Drop for Body {
     fn drop(&mut self) {
+        // The service may answer before reading the whole request body (auth
+        // failures, operations without a payload). Dropping an unread receive
+        // stream makes quinn send STOP_SENDING, which aborts the client's upload
+        // mid-flight, so drain the remaining data instead. Note that the
+        // Content-Length check in `poll_frame` only covers bodies that are
+        // actually polled; drained data is read without validating it.
         if matches!(self.state, State::Done) {
             return;
         }
