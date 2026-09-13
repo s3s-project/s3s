@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
-ROOT_DIR="$(pwd)"
+ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 TARGET_DIR="$ROOT_DIR/target"
 S3TESTS_DIR="/tmp/s3-tests"
 CONF_PATH="/tmp/s3tests.conf"
@@ -11,6 +11,7 @@ MINIO_DIR="/tmp/s3s-s3tests-minio"
 S3S_PROXY_PID=""
 
 . "$ROOT_DIR/scripts/source-s3tests-ref.sh"
+. "$ROOT_DIR/scripts/minio.env"
 
 mkdir -p "$TARGET_DIR"
 mkdir -p "$REPORT_DIR"
@@ -102,7 +103,7 @@ if ! MINIO_CONTAINER_ID=$(docker run -d \
     -e "MINIO_DOMAIN=localhost:9000" \
     -e "MINIO_HTTP_TRACE=1" \
     -v "$MINIO_DIR":/data \
-    minio/minio:latest server /data --console-address ":9001"); then
+    "$MINIO_IMAGE_REF" server /data --console-address ":9001"); then
     echo "failed to start minio container"
     exit 1
 fi

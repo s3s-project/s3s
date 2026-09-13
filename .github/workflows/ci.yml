@@ -130,7 +130,10 @@ jobs:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
       - run: docker pull minio/mint:edge
-      - run: docker pull minio/minio:latest
+      - name: Pull pinned MinIO image
+        run: |
+          . scripts/minio.env
+          docker pull "$MINIO_IMAGE_REF"
       - run: just install s3s-proxy
       - run: ./scripts/e2e-mint.sh
       - run: ./scripts/report-mint.py /tmp/mint/log.json
@@ -181,7 +184,10 @@ jobs:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
       - run: uv sync
-      - run: docker pull minio/minio:latest
+      - name: Pull pinned MinIO image
+        run: |
+          . scripts/minio.env
+          docker pull "$MINIO_IMAGE_REF"
       - run: ./scripts/e2e-boto3-minio.sh
 
   e2e-rclone-fs:
@@ -214,7 +220,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
-      - run: docker pull minio/minio:latest
+      - name: Pull pinned MinIO image
+        run: |
+          . scripts/minio.env
+          docker pull "$MINIO_IMAGE_REF"
       - run: just install s3s-e2e
       - run: ./scripts/e2e-minio.sh
 
@@ -247,7 +256,10 @@ jobs:
         with:
           path: /tmp/s3-tests/.venv
           key: s3tests-venv-${{ runner.os }}-py${{ steps.python-version.outputs.version }}-${{ steps.s3tests-hash.outputs.hash }}
-      - run: docker pull minio/minio:latest
+      - name: Pull pinned MinIO image
+        run: |
+          . scripts/minio.env
+          docker pull "$MINIO_IMAGE_REF"
       - run: just install s3s-proxy
       - run: ./scripts/e2e-s3tests.sh
       - uses: actions/upload-artifact@v7
