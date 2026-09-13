@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
-ROOT_DIR="$(pwd)"
+ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 TARGET_DIR="$ROOT_DIR/target"
 S3TESTS_DIR="/tmp/s3-tests"
 CONF_PATH="/tmp/s3tests.conf"
