@@ -87,8 +87,9 @@ Then you can explore it with your favorite S3 client!
 ### Run E2E tests
 
 MinIO-backed E2E tests start a MinIO container. MinIO stopped publishing free
-community images and removed the `minio/minio` Docker Hub repository, so the
-last public build is pinned to MinIO's Quay registry in
+community images and removed the `minio/minio` Docker Hub repository, so s3s
+builds the last upstream state from source and publishes it to
+`ghcr.io/s3s-project/minio`; the pinned digest lives in
 [`scripts/minio.env`](./scripts/minio.env).
 
 Install `s3s-proxy`
