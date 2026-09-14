@@ -721,6 +721,18 @@ impl<'a> SignatureContext<'a> {
     pub async fn v4_check_header_auth(&mut self) -> S3Result<CredentialsExt> {
         let authorization: AuthorizationV4<'_> =
             extract_authorization_v4(self.hs)?.ok_or_else(|| s3_error!(MissingSecurityHeader))?;
+
+        // The parser accepts any algorithm token, but the string to sign is
+        // always built as AWS4-HMAC-SHA256. Reject other tokens, as the
+        // presigned and POST paths already do, so a request is never verified
+        // under an algorithm it did not claim.
+        if authorization.algorithm != "AWS4-HMAC-SHA256" {
+            return Err(s3_error!(
+                NotImplemented,
+                "Authorization algorithm other than AWS4-HMAC-SHA256 is not implemented"
+            ));
+        }
+
         let region = authorization.credential.aws_region;
         let service = authorization.credential.aws_service;
         let config = self.config.snapshot();
@@ -2619,6 +2631,56 @@ file content\r\n\
             .await
             .expect_err("header signature for another region should be rejected");
         assert_eq!(err.code(), &S3ErrorCode::AuthorizationHeaderMalformed);
+    }
+
+    #[tokio::test]
+    async fn v4_header_auth_rejects_unsupported_algorithm() {
+        use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
+        use std::sync::Arc;
+
+        let access_key = "AKIAIOSFODNN7EXAMPLE";
+        let auth = crate::ops::tests::NeverGetSecretKeyAuth;
+        let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(S3Config::default())));
+
+        for algorithm in ["OTHER", "aws4-hmac-sha256", "AWS4-ECDSA-P256-SHA256"] {
+            let authorization = format!(
+                "{algorithm} Credential={access_key}/20130524/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            );
+            let headers = headers_from_slice(&[
+                ("authorization", authorization.as_str()),
+                ("host", "s3.amazonaws.com"),
+                ("x-amz-content-sha256", "UNSIGNED-PAYLOAD"),
+                ("x-amz-date", "20130524T000000Z"),
+            ]);
+            let method = Method::GET;
+            let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+            let mut body = Body::empty();
+            let mut cx = SignatureContext {
+                auth: Some(&auth),
+                config: &config,
+                req_version: ::http::Version::HTTP_11,
+                req_method: &method,
+                req_uri: &uri,
+                req_body: &mut body,
+                qs: None,
+                hs: &headers,
+                decoded_uri_path: "/test.txt",
+                raw_uri_path: "/test.txt",
+                vh_bucket: None,
+                content_length: Some(0),
+                mime: None,
+                decoded_content_length: None,
+                transformed_body: None,
+                multipart: None,
+                trailing_headers: None,
+            };
+
+            let err = cx
+                .v4_check_header_auth()
+                .await
+                .expect_err("header auth with a non-SigV4 algorithm token should be rejected");
+            assert_eq!(err.code(), &S3ErrorCode::NotImplemented, "algorithm {algorithm}");
+        }
     }
 
     #[tokio::test]
