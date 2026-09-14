@@ -7,7 +7,179 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-[Unreleased]: https://github.com/s3s-project/s3s/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/s3s-project/s3s/compare/v0.16.0...HEAD
+
+## [v0.16.0] - 2026-09-14
+
+[v0.16.0]: https://github.com/s3s-project/s3s/compare/v0.15.0...v0.16.0
+
+MSRV of this minor version: 1.96.0
+
+### s3s
+
+**Migration**: v0.16.0 changes several defaults and adds migration notes. The new behaviour is the one to adopt; where applicable, items name the option that restores the previous behaviour.
++ SigV2 requests are rejected unless `S3Config::enable_sig_v2 = true`.
++ Streaming uploads are capped at 5 GiB per request; `S3Config::put_object_max_size = None` removes the cap.
++ Known `Content-Length` values are backfilled for streaming uploads; `S3Config::normalize_content_length = false` keeps the previous strict semantics.
++ Routing uses the signed `x-id` query parameter as a fast path; `S3Config::operation_id_routing = false` disables it.
++ `s3s::dto` gains fields and `Expires` is a raw string now: rustc reports each construction site.
++ A header a client cannot sign can be exempted through `S3Config::unsigned_amz_header_allowlist`.
+
+**BREAKING**: previously accepted requests are now rejected or handled differently:
++ Require `x-amz-*` headers to be covered by the SigV4 signature, and add auth path switches ([#818](https://github.com/s3s-project/s3s/pull/818))
++ Resolve routes via feature-vector routing (FVR) ([#800](https://github.com/s3s-project/s3s/pull/800)) (fixes [#683](https://github.com/s3s-project/s3s/issues/683))
++ Operation-id routing via the signed x-id query parameter ([#798](https://github.com/s3s-project/s3s/pull/798)) (fixes [#795](https://github.com/s3s-project/s3s/issues/795))
++ Strip XML bodies from bodyless status and HEAD error responses ([#779](https://github.com/s3s-project/s3s/pull/779))
++ Always include a default Message in error responses ([#778](https://github.com/s3s-project/s3s/pull/778))
++ Reject control characters in XML responses ([#774](https://github.com/s3s-project/s3s/pull/774))
++ Verify aws-chunked output against the declared decoded length ([#772](https://github.com/s3s-project/s3s/pull/772))
++ Enforce clock-skew freshness for `SigV2` header auth ([#771](https://github.com/s3s-project/s3s/pull/771))
++ Default `put_object_max_size` to 5 GiB ([#766](https://github.com/s3s-project/s3s/pull/766))
++ Ignore explicit ports when matching virtual-hosted base domains ([#764](https://github.com/s3s-project/s3s/pull/764)) (fixes [#438](https://github.com/s3s-project/s3s/issues/438))
++ Backfill known Content-Length for streaming uploads ([#760](https://github.com/s3s-project/s3s/pull/760))
++ Support ListenBucketNotification (MinIO extension) ([#750](https://github.com/s3s-project/s3s/pull/750)) (fixes [#740](https://github.com/s3s-project/s3s/issues/740))
++ Reject unroundtrippable ETag values in the fallback ([#726](https://github.com/s3s-project/s3s/pull/726))
++ Disable SigV2 by default ([#716](https://github.com/s3s-project/s3s/pull/716)) (fixes [#715](https://github.com/s3s-project/s3s/issues/715))
++ Avoid global header sorting for signature verification ([#706](https://github.com/s3s-project/s3s/pull/706)) (fixes [#700](https://github.com/s3s-project/s3s/issues/700))
+
+**Signature & auth:**
++ Reject non-SigV4 algorithm tokens in header auth ([#820](https://github.com/s3s-project/s3s/pull/820))
++ Accept unsigned payload for bodyless requests ([#808](https://github.com/s3s-project/s3s/pull/808))
++ Reject repeated `Host` headers in routing ([#768](https://github.com/s3s-project/s3s/pull/768)) (fixes [#176](https://github.com/s3s-project/s3s/issues/176))
++ Accept missing Content-Length for bodyless SigV4 S3 operations ([#752](https://github.com/s3s-project/s3s/pull/752)) (fixes [#751](https://github.com/s3s-project/s3s/issues/751))
++ Configure allowed SigV4 services ([#725](https://github.com/s3s-project/s3s/pull/725))
+
+**aws-chunked & streaming:**
++ Reject oversized streaming uploads before dispatch ([#812](https://github.com/s3s-project/s3s/pull/812)) (fixes [#811](https://github.com/s3s-project/s3s/issues/811))
++ Move `aws_chunked_stream` to a public submodule of `stream` ([#776](https://github.com/s3s-project/s3s/pull/776))
++ Move `UploadStream` out of the legacy `sig_v4` module ([#767](https://github.com/s3s-project/s3s/pull/767))
++ Add optional streaming object-size limit ([#758](https://github.com/s3s-project/s3s/pull/758))
+
+**Routing & operations:**
++ Clarify multipart POST routing for object paths ([#756](https://github.com/s3s-project/s3s/pull/756))
++ Route custom requests before enforcing S3 name rules ([#723](https://github.com/s3s-project/s3s/pull/723))
++ Split ops::prepare into focused helpers ([#714](https://github.com/s3s-project/s3s/pull/714))
+
+**POST Object:**
++ Substitute ${filename} in the key field of POST uploads ([#746](https://github.com/s3s-project/s3s/pull/746))
+
+**Error handling:**
++ Use perfect hash lookup for S3 error codes ([#753](https://github.com/s3s-project/s3s/pull/753)) (fixes [#749](https://github.com/s3s-project/s3s/issues/749))
+
+**Security:**
++ Confine panics to audited helpers or type guarantees ([#786](https://github.com/s3s-project/s3s/pull/786))
++ Limit custom-route request bodies ([#755](https://github.com/s3s-project/s3s/pull/755)) (fixes [#221](https://github.com/s3s-project/s3s/issues/221))
++ Redact sensitive request debug logs ([#744](https://github.com/s3s-project/s3s/pull/744))
++ Rewrite digit() to reject non-digits safely ([#728](https://github.com/s3s-project/s3s/pull/728))
+
+**XML & DTO:**
++ Accept SelectRequest root alias ([#743](https://github.com/s3s-project/s3s/pull/743))
+
+**S3 model:**
++ Sync remaining documentation and finalize S3 model lock ([#794](https://github.com/s3s-project/s3s/pull/794)) (fixes [#676](https://github.com/s3s-project/s3s/issues/676))
++ **BREAKING**: Change Expires to a raw string to match the S3 model ([#793](https://github.com/s3s-project/s3s/pull/793))
++ **BREAKING**: Add bucket ARN, tags and tag count to S3 model (`Bucket.bucket_arn`, `CreateBucketConfiguration.tags`, `CreateBucketOutput.bucket_arn`, `HeadBucketOutput.bucket_arn`, `HeadObjectOutput.tag_count`) ([#792](https://github.com/s3s-project/s3s/pull/792))
++ **BREAKING**: Add object annotation operations to S3 model (`CopyObjectInput.annotation_directive`, `CopyObjectInput.if_match`, `CopyObjectInput.if_none_match`) ([#791](https://github.com/s3s-project/s3s/pull/791))
++ **BREAKING**: Add UpdateObjectEncryption operation to S3 model (`ServerSideEncryptionRule.blocked_encryption_types`) ([#790](https://github.com/s3s-project/s3s/pull/790))
+
+**Style:**
++ Resolve FIXME regarding allow directive ([#742](https://github.com/s3s-project/s3s/pull/742))
+
+### s3s-sigv2
+
++ Confine panics to audited helper functions ([#780](https://github.com/s3s-project/s3s/pull/780))
++ Enable all-features docs.rs builds ([#765](https://github.com/s3s-project/s3s/pull/765))
++ Migrate SigV2 canonicalization and signing ([#761](https://github.com/s3s-project/s3s/pull/761))
++ Migrate SigV2 pure parsing types ([#737](https://github.com/s3s-project/s3s/pull/737))
++ Add placeholder s3s-sigv2/s3s-sigv4 crates (0.16.0-alpha.1) ([#736](https://github.com/s3s-project/s3s/pull/736))
+
+### s3s-sigv4
+
++ Confine panics to audited helpers or type guarantees ([#781](https://github.com/s3s-project/s3s/pull/781))
++ **BREAKING**: Validate the `Authorization` signature segment eagerly ([#769](https://github.com/s3s-project/s3s/pull/769))
++ Migrate SigV4 canonicalization and signing ([#762](https://github.com/s3s-project/s3s/pull/762))
++ Migrate SigV4 pure parsing types ([#739](https://github.com/s3s-project/s3s/pull/739))
+
+### s3s-rfc2047
+
++ Extract the RFC 2047 codec into a standalone crate ([#787](https://github.com/s3s-project/s3s/pull/787))
+
+### s3s-http3
+
++ **BREAKING**: Reject connection-specific request fields ([#817](https://github.com/s3s-project/s3s/pull/817))
++ Implement experimental HTTP/3 over QUIC ([#757](https://github.com/s3s-project/s3s/pull/757)) (fixes [#748](https://github.com/s3s-project/s3s/issues/748))
+
+This crate is experimental and is not published to crates.io.
+
+### s3s-multipart
+
++ Initialize empty crate ([#805](https://github.com/s3s-project/s3s/pull/805))
+
+This crate is under development and is not published to crates.io.
+
+### s3s-aws
+
++ Tolerate MinIO uppercase booleans in response XML ([#783](https://github.com/s3s-project/s3s/pull/783))
+
+### s3s-fs
+
+**BREAKING**: body-verification failures return 4xx codes instead of a generic 500:
++ Map stream-verification errors to S3 error codes ([#777](https://github.com/s3s-project/s3s/pull/777))
+
+**Testing:**
++ Migrate integration tests to the s3s-test harness ([#784](https://github.com/s3s-project/s3s/pull/784)) (fixes [#394](https://github.com/s3s-project/s3s/issues/394))
+
+### s3s-proxy
+
++ **BREAKING**: Forward the MinIO admin API to the backend via a custom route ([#799](https://github.com/s3s-project/s3s/pull/799))
++ Forward MinIO health and metrics endpoints to the backend ([#797](https://github.com/s3s-project/s3s/pull/797))
+
+### s3s-test
+
++ Publicize the harness library mode and complete tests and docs ([#782](https://github.com/s3s-project/s3s/pull/782))
+
+### codegen
+
++ Generate ops once and split into per-operation files ([#796](https://github.com/s3s-project/s3s/pull/796))
++ Merge generated/_minio pairs into single cfg-gated files ([#789](https://github.com/s3s-project/s3s/pull/789))
++ Generate access/error/proxy once ([#788](https://github.com/s3s-project/s3s/pull/788))
+
+### Fuzz
+
++ Fix gh token, cargo-fuzz install, and gnu fuzz target ([#733](https://github.com/s3s-project/s3s/pull/733))
++ Add PR fmt/lint gate ([#731](https://github.com/s3s-project/s3s/pull/731))
++ Add syntax-parser fuzz target ([#730](https://github.com/s3s-project/s3s/pull/730))
++ Add aws-chunked stream fuzz target ([#727](https://github.com/s3s-project/s3s/pull/727))
++ Add cargo-fuzz workspace, XML request-body coverage, and weekly CI ([#724](https://github.com/s3s-project/s3s/pull/724)) (fixes [#86](https://github.com/s3s-project/s3s/issues/86), [#85](https://github.com/s3s-project/s3s/issues/85))
+
+### Testing
+
++ Cover bodyless requests over real HTTP/2 ([#813](https://github.com/s3s-project/s3s/pull/813))
++ Compare legacy multipart parser against multer ([#806](https://github.com/s3s-project/s3s/pull/806))
++ Cover If-Match forwarding for conditional delete ([#722](https://github.com/s3s-project/s3s/pull/722))
+
+### Documentation
+
++ Declare the checksum-trailer verification contract ([#775](https://github.com/s3s-project/s3s/pull/775))
++ Document the response-side memory surface ([#773](https://github.com/s3s-project/s3s/pull/773))
++ Warn that services without auth are fully open ([#759](https://github.com/s3s-project/s3s/pull/759))
+
+### CI
+
++ Pull the MinIO image from s3s's own build ([#816](https://github.com/s3s-project/s3s/pull/816)) (fixes [#814](https://github.com/s3s-project/s3s/issues/814))
++ Pin the MinIO image to MinIO's Quay registry ([#815](https://github.com/s3s-project/s3s/pull/815))
++ Enforce a per-function gate instead of group counters ([#785](https://github.com/s3s-project/s3s/pull/785))
++ Add cargo-chef dependency-layer and BuildKit cache ([#754](https://github.com/s3s-project/s3s/pull/754))
++ Split MSRV into a standalone test-only rust-msrv job ([#729](https://github.com/s3s-project/s3s/pull/729))
++ Revert "ci: temporarily pin nightly to 2026-08-20 to dodge rustc #161495" ([#720](https://github.com/s3s-project/s3s/pull/720))
+
+### Dependencies
+
++ Bump the dependencies group with 2 updates ([#819](https://github.com/s3s-project/s3s/pull/819))
++ Bump actions/download-artifact in the dependencies group ([#802](https://github.com/s3s-project/s3s/pull/802))
++ Update dependencies to fix yanked chacha20 0.10.1 ([#738](https://github.com/s3s-project/s3s/pull/738))
++ Upgrade quick-xml to 0.42 to fix attribute round-trip ([#735](https://github.com/s3s-project/s3s/pull/735))
++ Bump the dependencies group ([#713](https://github.com/s3s-project/s3s/pull/713), [#801](https://github.com/s3s-project/s3s/pull/801), [#807](https://github.com/s3s-project/s3s/pull/807))
 
 ## [v0.15.0] - 2026-08-25
 

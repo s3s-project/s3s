@@ -1,6 +1,6 @@
 [package]
 name = "s3s-multipart"
-version = "0.16.0-alpha.1"
+version = "0.17.0-alpha.1"
 description = "Async streaming parser for multipart/form-data"
 readme = "../../README.md"
 keywords = ["multipart", "form-data", "parser", "streaming"]
@@ -9,6 +9,7 @@ edition.workspace = true
 repository.workspace = true
 license.workspace = true
 rust-version.workspace = true
+publish = false
 
 [package.metadata.docs.rs]
 all-features = true
