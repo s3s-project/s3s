@@ -44,6 +44,18 @@ impl From<HttpError> for StdError {
     }
 }
 
+impl core::fmt::Display for HttpError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl core::error::Error for HttpError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.0.source()
+    }
+}
+
 /// Trailing headers handle (newtype)
 ///
 /// This handle lets you take streaming-trailer headers after the
