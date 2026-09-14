@@ -61,3 +61,7 @@ length limits, rate limiting, and back pressure; services may be exposed to the 
   selected by `cfg_if!` — verify both feature variants.
 - Prefer `` [`path::Type`] `` intra-doc links; `[`Type`](path::Type)` triggers
   `rustdoc::redundant_explicit_links`, bare `[Type]` triggers clippy `doc_markdown`.
+
+## AI contributions
+
+AI assistance is welcome under the org-wide [AI Contribution Policy](https://github.com/s3s-project/.github/blob/main/AI_POLICY.md). Summary: any tools allowed; a human reviews, understands, and owns every change; prefer `Assisted-by: <tool>:<model>` trailers for substantive use; prefer tooling with AI co-author injection disabled; never add `Signed-off-by` on a human's behalf; disclose in the PR template.
