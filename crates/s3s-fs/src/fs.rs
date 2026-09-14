@@ -76,6 +76,14 @@ fn clean_old_tmp_files(root: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
+pub(crate) async fn remove_file_if_exists(path: &Path) -> Result<()> {
+    match fs::remove_file(path).await {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(err.into()),
+    }
+}
+
 impl FileSystem {
     pub fn new(root: impl AsRef<Path>) -> Result<Self> {
         let root = env::current_dir()?.join(root).canonicalize()?;
@@ -172,8 +180,11 @@ impl FileSystem {
     /// remove metadata from fs
     pub(crate) fn delete_metadata(&self, bucket: &str, key: &str, upload_id: Option<Uuid>) -> Result<()> {
         let path = self.get_metadata_path(bucket, key, upload_id)?;
-        std::fs::remove_file(path)?;
-        Ok(())
+        match std::fs::remove_file(path) {
+            Ok(()) => Ok(()),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(err) => Err(err.into()),
+        }
     }
 
     pub(crate) async fn load_internal_info(&self, bucket: &str, key: &str) -> Result<Option<InternalInfo>> {
@@ -223,10 +234,7 @@ impl FileSystem {
 
     pub(crate) async fn delete_upload_part_info(&self, upload_id: Uuid, part_number: PartNumber) -> Result<()> {
         let path = self.get_upload_part_info_path(upload_id, part_number)?;
-        if path.exists() {
-            fs::remove_file(&path).await?;
-        }
-        Ok(())
+        remove_file_if_exists(&path).await
     }
 
     /// get md5 sum
@@ -278,10 +286,7 @@ impl FileSystem {
 
     pub(crate) async fn delete_upload_id(&self, upload_id: &Uuid) -> Result<()> {
         let upload_info_path = self.get_upload_info_path(upload_id)?;
-        if upload_info_path.exists() {
-            fs::remove_file(&upload_info_path).await?;
-        }
-        Ok(())
+        remove_file_if_exists(&upload_info_path).await
     }
 
     /// Write to the filesystem atomically.
@@ -336,5 +341,65 @@ impl Drop for FileWriter<'_> {
         if self.clean_tmp {
             let _ = std::fs::remove_file(&self.tmp_path);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::sync::{Arc, Barrier};
+
+    struct TestRoot(PathBuf);
+
+    impl Drop for TestRoot {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn concurrent_upload_part_info_deletion_is_idempotent() -> Result<()> {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .max_blocking_threads(1)
+            .build()?;
+
+        runtime.block_on(async {
+            let root = env::temp_dir().join(format!("s3s-fs-part-info-cleanup-{}", Uuid::new_v4()));
+            std::fs::create_dir_all(&root)?;
+            let _root = TestRoot(root.clone());
+            let file_system = FileSystem::new(&root)?;
+            let upload_id = Uuid::new_v4();
+            let part_number = 1;
+            file_system
+                .save_upload_part_info(upload_id, part_number, &InternalInfo::default())
+                .await?;
+
+            // Occupy the sole blocking worker so both deletions reach `remove_file` before either runs.
+            let barrier = Arc::new(Barrier::new(2));
+            let worker_barrier = Arc::clone(&barrier);
+            let blocker = tokio::task::spawn_blocking(move || {
+                worker_barrier.wait();
+                worker_barrier.wait();
+            });
+            barrier.wait();
+
+            let first = file_system.delete_upload_part_info(upload_id, part_number);
+            let second = file_system.delete_upload_part_info(upload_id, part_number);
+            tokio::pin!(first);
+            tokio::pin!(second);
+            let first_pending = futures::poll!(first.as_mut()).is_pending();
+            let second_pending = futures::poll!(second.as_mut()).is_pending();
+            barrier.wait();
+
+            assert!(first_pending, "first deletion completed before reaching the blocking worker");
+            assert!(second_pending, "second deletion completed before reaching the blocking worker");
+            let first_result = first.await;
+            let second_result = second.await;
+            blocker.await.expect("blocking worker should finish");
+            first_result?;
+            second_result
+        })
     }
 }

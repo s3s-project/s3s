@@ -23,10 +23,43 @@ pub fn register(tcx: &mut TestContext) {
     case!(tcx, FsServer, Object, test_single_object_get_range);
     case!(tcx, FsServer, Object, test_content_encoding_preservation);
     case!(tcx, FsServer, Object, test_put_object_atomic_write);
+    case!(tcx, FsServer, Object, test_put_object_checksum_failure_preserves_existing_object);
     case!(tcx, FsServer, Object, test_head_object_no_such_key);
     case!(tcx, FsServer, Object, test_head_object_directory_prefix_returns_no_such_key);
     case!(tcx, FsServer, Object, test_head_object_no_such_bucket);
     case!(tcx, FsServer, Object, test_head_object_etag_and_checksum);
+}
+
+fn assert_no_temp_files() -> Result<()> {
+    let entries: Vec<_> = fs::read_dir(FS_ROOT)?
+        .filter_map(Result::ok)
+        .filter(|e| {
+            let name = e.file_name();
+            let name = name.to_str().unwrap_or("");
+            name.starts_with(".tmp.") && name.ends_with(".internal.part")
+        })
+        .collect();
+    assert!(entries.is_empty(), "Leftover temp files found: {entries:?}");
+    Ok(())
+}
+
+async fn assert_object_state(
+    client: &aws_sdk_s3::Client,
+    bucket: &str,
+    key: &str,
+    expected_etag: &str,
+    expected_content_type: &str,
+    expected_content: &[u8],
+) -> Result<()> {
+    let head = client.head_object().bucket(bucket).key(key).send().await?;
+    assert_eq!(head.e_tag(), Some(expected_etag));
+    assert_eq!(head.content_type(), Some(expected_content_type));
+
+    let get = client.get_object().bucket(bucket).key(key).send().await?;
+    let body = get.body.collect().await?.into_bytes();
+    assert_eq!(body.as_ref(), expected_content);
+
+    Ok(())
 }
 
 impl Object {
@@ -242,18 +275,67 @@ impl Object {
         assert_eq!(body.len(), content.len(), "Content length mismatch");
         assert_eq!(body.as_ref(), content.as_bytes(), "Content mismatch");
 
-        // Verify no temp files remain in the FS root
-        let entries: Vec<_> = fs::read_dir(FS_ROOT)?
-            .filter_map(Result::ok)
-            .filter(|e| {
-                let name = e.file_name();
-                let name = name.to_str().unwrap_or("");
-                name.starts_with(".tmp.") && name.ends_with(".internal.part")
-            })
-            .collect();
-        assert!(entries.is_empty(), "Leftover temp files found: {entries:?}");
+        assert_no_temp_files()?;
 
         // Cleanup
+        delete_object(c, bucket, key).await?;
+        delete_bucket(c, bucket).await?;
+
+        Ok(())
+    }
+
+    async fn test_put_object_checksum_failure_preserves_existing_object(self: Arc<Self>) -> Result<()> {
+        let c = &self.s3;
+        let bucket = format!("test-put-csum-{}", Uuid::new_v4());
+        let bucket = bucket.as_str();
+        let key = "checksum-atomicity.txt";
+        let original_content = b"original object body";
+        let replacement_content = b"replacement object body";
+        let invalid_md5 = base64_simd::STANDARD.encode_to_string([0_u8; 16]);
+        let invalid_sha256 = base64_simd::STANDARD.encode_to_string([0_u8; 32]);
+
+        create_bucket(c, bucket).await?;
+        c.put_object()
+            .bucket(bucket)
+            .key(key)
+            .content_type("text/plain")
+            .body(ByteStream::from_static(original_content))
+            .send()
+            .await?;
+
+        let original_head = c.head_object().bucket(bucket).key(key).send().await?;
+        let original_etag = original_head.e_tag().expect("initial object should have an ETag").to_owned();
+
+        let err = c
+            .put_object()
+            .bucket(bucket)
+            .key(key)
+            .content_type("application/octet-stream")
+            .content_md5(invalid_md5)
+            .body(ByteStream::from_static(replacement_content))
+            .send()
+            .await
+            .expect_err("an incorrect Content-MD5 should reject the replacement");
+        let service_err = err.into_service_error();
+        assert_eq!(service_err.code(), Some("BadDigest"));
+        assert_object_state(c, bucket, key, &original_etag, "text/plain", original_content).await?;
+
+        let err = c
+            .put_object()
+            .bucket(bucket)
+            .key(key)
+            .content_type("application/octet-stream")
+            .checksum_sha256(invalid_sha256)
+            .body(ByteStream::from_static(replacement_content))
+            .send()
+            .await
+            .expect_err("an incorrect checksum should reject the replacement");
+        let service_err = err.into_service_error();
+        assert_eq!(service_err.code(), Some("BadDigest"));
+
+        assert_object_state(c, bucket, key, &original_etag, "text/plain", original_content).await?;
+        assert_no_temp_files()?;
+
         delete_object(c, bucket, key).await?;
         delete_bucket(c, bucket).await?;
 

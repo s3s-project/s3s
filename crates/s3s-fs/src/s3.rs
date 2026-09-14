@@ -3,6 +3,7 @@
 
 use crate::fs::FileSystem;
 use crate::fs::InternalInfo;
+use crate::fs::remove_file_if_exists;
 use crate::utils::*;
 
 use s3s::S3;
@@ -31,7 +32,7 @@ use tokio_util::io::ReaderStream;
 use futures::TryStreamExt;
 use numeric_cast::NumericCast;
 use stdx::default::default;
-use tracing::debug;
+use tracing::{debug, warn};
 use uuid::Uuid;
 
 fn normalize_path(path: &Path, delimiter: &str) -> Option<String> {
@@ -905,9 +906,7 @@ impl S3 for FileSystem {
             md5_hash.update(bytes.as_ref());
             checksum.update(bytes.as_ref());
         });
-
         let size = copy_bytes(stream, file_writer.writer()).await?;
-        file_writer.done().await?;
 
         let md5_sum = hex(md5_hash.finalize());
 
@@ -993,6 +992,8 @@ impl S3 for FileSystem {
         if checksum.checksum_xxhash128 != input.checksum_xxhash128 {
             return Err(s3_error!(BadDigest, "checksum_xxhash128 mismatch"));
         }
+
+        file_writer.done().await?;
 
         debug!(path = %object_path.display(), ?size, %md5_sum, ?checksum, "write file");
 
@@ -1135,7 +1136,6 @@ impl S3 for FileSystem {
 
         let mut file_writer = self.prepare_file_write(&file_path).await?;
         let size = copy_bytes(stream, file_writer.writer()).await?;
-        file_writer.done().await?;
 
         let md5_sum = hex(md5_hash.finalize());
 
@@ -1181,6 +1181,8 @@ impl S3 for FileSystem {
         if let Some(field) = checksum_mismatch(&checksum, &expected_checksum) {
             return Err(s3_error!(BadDigest, "{} mismatch", field));
         }
+
+        file_writer.done().await?;
 
         let mut info: InternalInfo = default();
         crate::checksum::save_e_tag(&mut info, &md5_sum);
@@ -1456,13 +1458,6 @@ impl S3 for FileSystem {
             }
         }
 
-        self.delete_upload_id(&upload_id).await?;
-
-        if let Some(attrs) = &upload_attrs {
-            self.save_object_attributes(&bucket, &key, attrs, None).await?;
-            let _ = self.delete_metadata(&bucket, &key, Some(upload_id));
-        }
-
         let expected_checksum = s3s::dto::Checksum {
             checksum_crc32,
             checksum_crc32c,
@@ -1489,6 +1484,7 @@ impl S3 for FileSystem {
         let total_parts_cnt = i32::try_from(parts_count).expect("total number of parts must be <= 10000.");
 
         let mut part_md5_hashes: Vec<[u8; 16]> = Vec::new();
+        let mut completed_parts = Vec::with_capacity(parts_count);
         let mut buf = vec![0u8; 65536];
 
         for part in multipart_upload.parts.into_iter().flatten() {
@@ -1530,10 +1526,8 @@ impl S3 for FileSystem {
             }
 
             debug!(from = %part_path.display(), tmp = %file_writer.tmp_path().display(), to = %file_writer.dest_path().display(), ?size, "write file");
-            try_!(fs::remove_file(&part_path).await);
-            self.delete_upload_part_info(upload_id, part_number).await?;
+            completed_parts.push((part_number, part_path));
         }
-        file_writer.done().await?;
 
         // Compute multipart ETag: MD5 of concatenated part MD5 hashes, suffixed with part count
         let mut etag_hash = Md5::new();
@@ -1548,13 +1542,53 @@ impl S3 for FileSystem {
             return Err(s3_error!(BadDigest, "{} mismatch", field));
         }
 
+        file_writer.done().await?;
+
+        if let Some(attrs) = &upload_attrs {
+            self.save_object_attributes(&bucket, &key, attrs, None).await?;
+        }
+
         debug!(?e_tag, path = %object_path.display(), "multipart etag");
 
         {
-            let mut info = self.load_internal_info(&bucket, &key).await?.unwrap_or_default();
+            let mut info: InternalInfo = default();
             crate::checksum::save_e_tag(&mut info, &e_tag);
             crate::checksum::modify_internal_info(&mut info, &checksum);
             self.save_internal_info(&bucket, &key, &info).await?;
+        }
+
+        // The object is committed. Keep the upload ID until residue is removed so an abort can retry
+        // cleanup after a failure, and never turn cleanup failure into an error response.
+        let mut cleanup_failed = false;
+        if let Err(err) = self.delete_metadata(&bucket, &key, Some(upload_id)) {
+            cleanup_failed = true;
+            warn!(%upload_id, error = ?err, "failed to delete completed multipart upload metadata");
+        }
+        for (part_number, part_path) in completed_parts {
+            if let Err(err) = remove_file_if_exists(&part_path).await {
+                cleanup_failed = true;
+                warn!(
+                    %upload_id,
+                    part_number,
+                    path = %part_path.display(),
+                    error = ?err,
+                    "failed to delete completed multipart upload part"
+                );
+            }
+            if let Err(err) = self.delete_upload_part_info(upload_id, part_number).await {
+                cleanup_failed = true;
+                warn!(
+                    %upload_id,
+                    part_number,
+                    error = ?err,
+                    "failed to delete completed multipart upload part metadata"
+                );
+            }
+        }
+        if cleanup_failed {
+            warn!(%upload_id, "retaining completed multipart upload ID because cleanup left residue");
+        } else if let Err(err) = self.delete_upload_id(&upload_id).await {
+            warn!(%upload_id, error = ?err, "failed to retire completed multipart upload");
         }
 
         let output = CompleteMultipartUploadOutput {
@@ -1600,22 +1634,18 @@ impl S3 for FileSystem {
             return Err(s3_error!(AccessDenied));
         }
 
-        let _ = self.delete_metadata(&bucket, &key, Some(upload_id));
+        self.delete_metadata(&bucket, &key, Some(upload_id))?;
 
         let prefix = format!(".upload_id-{upload_id}");
         let info_prefix = format!(".upload_part_info-{upload_id}");
         let mut iter = try_!(fs::read_dir(&self.root).await);
         while let Some(entry) = try_!(iter.next_entry().await) {
-            let file_type = try_!(entry.file_type().await);
-            if file_type.is_file().not() {
-                continue;
-            }
-
             let file_name = entry.file_name();
             let Some(name) = file_name.to_str() else { continue };
 
             if name.starts_with(&prefix) || name.starts_with(&info_prefix) {
-                try_!(fs::remove_file(entry.path()).await);
+                let path = entry.path();
+                remove_file_if_exists(&path).await?;
             }
         }
 
