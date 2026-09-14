@@ -17,7 +17,7 @@ MSRV of this minor version: 1.96.0
 
 ### s3s
 
-**Migration**: v0.16.0 changes four defaults. The new behaviour is the one to adopt; each item also names the option that restores the previous behaviour.
+**Migration**: v0.16.0 changes several defaults and adds migration notes. The new behaviour is the one to adopt; where applicable, items name the option that restores the previous behaviour.
 + SigV2 requests are rejected unless `S3Config::enable_sig_v2 = true`.
 + Streaming uploads are capped at 5 GiB per request; `S3Config::put_object_max_size = None` removes the cap.
 + Known `Content-Length` values are backfilled for streaming uploads; `S3Config::normalize_content_length = false` keeps the previous strict semantics.
