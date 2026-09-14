@@ -64,4 +64,5 @@ length limits, rate limiting, and back pressure; services may be exposed to the 
 
 ## AI contributions
 
-AI assistance is welcome under the org-wide [AI Contribution Policy](https://github.com/s3s-project/.github/blob/main/AI_POLICY.md). Summary: any tools allowed; a human reviews, understands, and owns every change; prefer `Assisted-by: <tool>:<model>` trailers for substantive use; prefer tooling with AI co-author injection disabled; never add `Signed-off-by` on a human's behalf; disclose in the PR template.
+AI assistance is welcome under the org-wide [AI Contribution Policy](https://github.com/s3s-project/.github/blob/main/AI_POLICY.md).
+Summary: any tools allowed; a human reviews, understands, and owns every change; prefer `Assisted-by: <tool>:<model>` trailers for substantive use; prefer tooling with AI co-author injection disabled; never add `Signed-off-by` on a human's behalf; disclose in the PR template.
