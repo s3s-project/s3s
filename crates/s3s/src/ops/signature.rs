@@ -13,6 +13,7 @@ use crate::auth::SecretKey;
 use crate::auth::signature::Signature;
 use crate::config::{S3Config, S3ConfigProvider};
 use crate::error::*;
+use crate::header::X_AMZ_CONTENT_SHA256;
 use crate::http::{self, OrderedQs};
 use crate::http::{Body, Multipart, MultipartLimits};
 use crate::post_policy::PostPolicy;
@@ -91,35 +92,12 @@ fn extract_authorization_v4(hs: &HeaderMap) -> S3Result<Option<AuthorizationV4<'
 /// case-insensitive; [`HeaderName`] is already lowercase. Headers listed in
 /// [`S3Config::unsigned_amz_header_allowlist`] are exempt.
 fn reject_unsigned_amz_headers(config: &S3Config, hs: &HeaderMap, signed_names: &[&str]) -> S3Result<()> {
-    /// Headers that may be sent unsigned because they belong to the request envelope rather than
-    /// being unsigned routing inputs. They are read only after the signature is verified, and none
-    /// of them can change what the request does:
-    ///
-    /// - `x-amz-content-sha256` selects the payload mode (`UNSIGNED-PAYLOAD`, single-chunk hash,
-    ///   streaming, trailer) or is consumed as the payload hash, which must match the body. AWS
-    ///   clients add it after presigning.
-    /// - `x-amz-decoded-content-length` frames the aws-chunked body; it is read as
-    ///   `SignatureContext::decoded_content_length` after this check and cannot alter which
-    ///   operation runs or what it copies.
-    /// - `x-amz-trailer` only declares that trailing headers follow. The payload mode comes from
-    ///   the already-verified `x-amz-content-sha256`, and the trailer signature covers the trailer
-    ///   values themselves.
-    /// - `x-amz-checksum-algorithm` names the algorithm for that trailer, whose value is likewise
-    ///   covered by the trailer signature.
-    ///
-    /// This list is not configurable; every other `x-amz-*` header is covered by
-    /// `S3Config::unsigned_amz_header_allowlist`.
-    const ENVELOPE_HEADERS: &[&str] = &[
-        "x-amz-content-sha256",
-        "x-amz-decoded-content-length",
-        "x-amz-trailer",
-        "x-amz-checksum-algorithm",
-    ];
-
+    // S3 treats x-amz-content-sha256 as the request's payload-hash input rather than ordinary request metadata.
+    // Every other exception belongs in the configurable `S3Config::unsigned_amz_header_allowlist`.
     for name in hs.keys() {
         let name = name.as_str();
         if !name.starts_with("x-amz-")
-            || ENVELOPE_HEADERS.contains(&name)
+            || name == X_AMZ_CONTENT_SHA256.as_str()
             || config.unsigned_amz_header_allowlist.iter().any(|allow| allow == name)
         {
             continue;
