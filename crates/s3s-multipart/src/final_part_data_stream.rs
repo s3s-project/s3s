@@ -220,9 +220,8 @@ where
                             self.state = DataState::Done;
                             return Poll::Ready(Ok(()));
                         }
-                        // An empty chunk is not trailing content either; the loop
-                        // polls the stream again.
-                        Some(Ok(chunk)) if chunk.is_empty() => {}
+                        // An empty chunk is not trailing content either, and
+                        // `poll_stream` never hands one out.
                         Some(Ok(_)) => return Poll::Ready(Err(Error::StreamPartNotLast)),
                         Some(Err(err)) => return Poll::Ready(Err(err)),
                     }

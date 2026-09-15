@@ -251,9 +251,9 @@ where
                 self.state = State::Done;
                 Poll::Ready(Ok(()))
             }
-            // A chunk that carries no bytes is not trailing content: leave the
-            // state alone so the caller polls this step again.
-            Some(Ok(chunk)) if chunk.is_empty() => Poll::Ready(Ok(())),
+            // A chunk that carries no bytes is not trailing content, and
+            // `poll_stream` never hands one out, so whatever arrives here is
+            // content after the closing delimiter.
             Some(Ok(_)) => Poll::Ready(Err(Error::StreamPartNotLast)),
             Some(Err(err)) => Poll::Ready(Err(err)),
         }
