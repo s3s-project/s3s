@@ -21,14 +21,14 @@ use crate::part_data_stream::PartDataStream;
 /// for the next one.
 pub struct Part<'m, S>
 where
-    S: Stream<Item = Result<Bytes, Error>> + Send + Sync + Unpin,
+    S: Stream<Item = Result<Bytes, Error>> + Send + Unpin,
 {
     mp: &'m mut Multipart<S>,
 }
 
 impl<S> fmt::Debug for Part<'_, S>
 where
-    S: Stream<Item = Result<Bytes, Error>> + Send + Sync + Unpin,
+    S: Stream<Item = Result<Bytes, Error>> + Send + Unpin,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Part").finish_non_exhaustive()
@@ -37,7 +37,7 @@ where
 
 impl<'m, S> Part<'m, S>
 where
-    S: Stream<Item = Result<Bytes, Error>> + Send + Sync + Unpin,
+    S: Stream<Item = Result<Bytes, Error>> + Send + Unpin,
 {
     pub(super) fn new(mp: &'m mut Multipart<S>) -> Self {
         Part { mp }
@@ -65,8 +65,8 @@ where
     /// buffer for the duration of the call. `None` marks the end of the
     /// header block; the part is then positioned at the start of its data.
     ///
-    /// Parts with more than 32 headers are accepted; headers beyond the
-    /// first 32 are ignored.
+    /// Parts carrying more than three header fields are accepted; fields beyond
+    /// the first three are ignored, as RFC 7578 section 4.8 asks of a receiver.
     ///
     /// # Errors
     ///
@@ -227,7 +227,7 @@ mod tests {
 
     fn drain_headers_async<S>(part: &mut Part<'_, S>) -> Vec<(String, Vec<u8>)>
     where
-        S: Stream<Item = Result<Bytes, Error>> + Send + Sync + Unpin,
+        S: Stream<Item = Result<Bytes, Error>> + Send + Unpin,
     {
         block_on(async {
             let mut headers = Vec::new();
@@ -240,7 +240,7 @@ mod tests {
 
     fn drain_headers_poll<S>(part: &mut Part<'_, S>, cx: &mut Context<'_>) -> (Vec<(String, Vec<u8>)>, usize)
     where
-        S: Stream<Item = Result<Bytes, Error>> + Send + Sync + Unpin,
+        S: Stream<Item = Result<Bytes, Error>> + Send + Unpin,
     {
         let mut headers = Vec::new();
         let mut pending = 0;

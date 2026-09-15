@@ -20,9 +20,14 @@ use memchr::memmem;
 /// The parser owns the underlying stream and yields one [`Part`] at a time.
 /// At most one `Part` is active at any moment; the borrow checker enforces
 /// this property at compile time.
+///
+/// The stream has to be `Send + Unpin`, but not `Sync`: the parser only ever
+/// polls it through `&mut`, so it never needs shared access, and requiring
+/// `Sync` would turn away streams that can be moved between threads but not
+/// shared between them.
 pub struct Multipart<S>
 where
-    S: Stream<Item = Result<Bytes, Error>> + Send + Sync + Unpin,
+    S: Stream<Item = Result<Bytes, Error>> + Send + Unpin,
 {
     /// `None` only after [`Multipart::take_data_stream`] handed the buffer to a
     /// [`PartDataStream`], which also moves the state to `StreamTaken`. Both
@@ -42,7 +47,7 @@ where
 
 impl<S> Multipart<S>
 where
-    S: Stream<Item = Result<Bytes, Error>> + Send + Sync + Unpin,
+    S: Stream<Item = Result<Bytes, Error>> + Send + Unpin,
 {
     /// Constructs a parser.
     ///
@@ -131,15 +136,17 @@ where
     /// after the state moved on cannot re-run the search (which would look for
     /// the *next* boundary and silently skip the part in between).
     fn poll_advance_first_boundary(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Error>> {
-        let pattern = self.first_boundary.clone();
-        let poll = {
-            let buffer = match self.buffer_mut() {
-                Ok(buffer) => buffer,
-                Err(err) => return Poll::Ready(Err(err)),
-            };
-            buffer.poll_read_to(&pattern, cx)
+        // Borrow the fields instead of cloning `first_boundary` into a local:
+        // the needle is a `Box<[u8]>`, so a clone would allocate on every poll
+        // of this step. Destructuring splits the borrows, which `buffer_mut()`
+        // (a `&mut self` borrow) cannot do for us.
+        let Self {
+            buffer, first_boundary, ..
+        } = self;
+        let Some(buffer) = buffer.as_mut() else {
+            return Poll::Ready(Err(Error::StreamAlreadyTaken));
         };
-        ready!(poll?);
+        ready!(buffer.poll_read_to(first_boundary, cx)?);
         self.state = State::ReadingBoundary;
         Poll::Ready(Ok(()))
     }
@@ -436,7 +443,7 @@ mod tests {
 
     async fn drain_part<S>(part: &mut Part<'_, S>) -> (Vec<(Vec<u8>, Vec<u8>)>, Vec<u8>)
     where
-        S: Stream<Item = Result<Bytes, Error>> + Send + Sync + Unpin,
+        S: Stream<Item = Result<Bytes, Error>> + Send + Unpin,
     {
         let mut headers = Vec::new();
         while let Some(header) = part.next_header().await.unwrap() {
@@ -1036,7 +1043,7 @@ mod coverage_tests {
     /// Consumes a parser through the async API, propagating every error.
     async fn drain_all<S>(mp: &mut Multipart<S>) -> Result<Vec<(Vec<(String, Vec<u8>)>, Vec<u8>)>, Error>
     where
-        S: Stream<Item = Result<Bytes, Error>> + Send + Sync + Unpin,
+        S: Stream<Item = Result<Bytes, Error>> + Send + Unpin,
     {
         let mut parts = Vec::new();
         while let Some(mut part) = mp.next_part().await? {
@@ -1059,7 +1066,7 @@ mod coverage_tests {
     /// The same walk through the poll API.
     fn drain_all_poll<S>(mp: &mut Multipart<S>, cx: &mut Context<'_>) -> Vec<ParsedPart>
     where
-        S: Stream<Item = Result<Bytes, Error>> + Send + Sync + Unpin,
+        S: Stream<Item = Result<Bytes, Error>> + Send + Unpin,
     {
         let mut parts = Vec::new();
         loop {
@@ -1076,7 +1083,7 @@ mod coverage_tests {
 
     fn drain_part_poll<S>(part: &mut Part<'_, S>, cx: &mut Context<'_>) -> ParsedPart
     where
-        S: Stream<Item = Result<Bytes, Error>> + Send + Sync + Unpin,
+        S: Stream<Item = Result<Bytes, Error>> + Send + Unpin,
     {
         let mut headers = Vec::new();
         loop {
@@ -1234,6 +1241,38 @@ mod coverage_tests {
         let _stream = part.take_data_stream().unwrap();
 
         assert!(matches!(mp.poll_next_part(&mut cx), Poll::Ready(Err(Error::StreamAlreadyTaken))));
+    }
+
+    /// The stream has to be `Send + Unpin`, but not `Sync`: the parser polls it
+    /// through `&mut`, so a stream that cannot be shared must still be accepted.
+    /// A `Cell` is `Send` but not `Sync`, which is the smallest way to put that
+    /// in a type.
+    #[test]
+    fn accepts_a_stream_that_is_send_but_not_sync() {
+        struct SendOnlyStream {
+            _not_sync: std::cell::Cell<u8>,
+            chunks: std::vec::IntoIter<Result<Bytes, Error>>,
+        }
+
+        impl Stream for SendOnlyStream {
+            type Item = Result<Bytes, Error>;
+
+            fn poll_next(mut self: std::pin::Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+                Poll::Ready(self.chunks.next())
+            }
+        }
+
+        let chunks: Vec<Result<Bytes, Error>> =
+            vec![Ok(Bytes::from_static(b"--boundary\r\nX: a\r\n\r\nalpha\r\n--boundary--\r\n"))];
+        let stream = SendOnlyStream {
+            _not_sync: std::cell::Cell::new(0),
+            chunks: chunks.into_iter(),
+        };
+        let boundary = Boundary::new(b"boundary").unwrap();
+        let mut mp = Multipart::new(stream, &boundary, 4096);
+        let parsed = block_on(drain_all(&mut mp)).unwrap();
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].1, b"alpha");
     }
 
     /// F32a: a `Pending` at any byte offset must resume into the same parse.

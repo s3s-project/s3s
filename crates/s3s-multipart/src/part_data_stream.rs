@@ -33,7 +33,7 @@ use crate::final_part_data_stream::FinalPartDataStream;
 /// yields any remaining data and enforces the strict closing trailer.
 pub struct PartDataStream<S>
 where
-    S: Stream<Item = Result<Bytes, Error>> + Send + Sync + Unpin,
+    S: Stream<Item = Result<Bytes, Error>> + Send + Unpin,
 {
     buffer: StreamBuffer<S>,
     delimiter_finder: Box<memmem::Finder<'static>>,
@@ -44,7 +44,7 @@ where
 
 impl<S> PartDataStream<S>
 where
-    S: Stream<Item = Result<Bytes, Error>> + Send + Sync + Unpin,
+    S: Stream<Item = Result<Bytes, Error>> + Send + Unpin,
 {
     /// Constructs the stream from the parser state at the take point.
     pub(super) fn new(buffer: StreamBuffer<S>, delimiter_finder: Box<memmem::Finder<'static>>, multipart_consumed: u64) -> Self {
@@ -159,7 +159,7 @@ where
 
 impl<S> fmt::Debug for PartDataStream<S>
 where
-    S: Stream<Item = Result<Bytes, Error>> + Send + Sync + Unpin,
+    S: Stream<Item = Result<Bytes, Error>> + Send + Unpin,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("PartDataStream")
@@ -171,7 +171,7 @@ where
 
 impl<S> Stream for PartDataStream<S>
 where
-    S: Stream<Item = Result<Bytes, Error>> + Send + Sync + Unpin,
+    S: Stream<Item = Result<Bytes, Error>> + Send + Unpin,
 {
     type Item = Result<Bytes, Error>;
 

@@ -131,7 +131,7 @@ fn parse_header_block_fallback(block: &[u8]) -> Result<HeaderBlock, Error> {
 
 impl<S> Multipart<S>
 where
-    S: Stream<Item = Result<Bytes, Error>> + Send + Sync + Unpin,
+    S: Stream<Item = Result<Bytes, Error>> + Send + Unpin,
 {
     pub(super) fn next_header_inner(&mut self) -> Result<Option<httparse::Header<'_>>, Error> {
         let Some(block) = self.headers.as_mut() else {

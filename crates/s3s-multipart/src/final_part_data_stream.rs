@@ -37,7 +37,7 @@ use crate::delimiter::{DataSearch, search_data};
 /// content length from the multipart byte accounting.
 pub struct FinalPartDataStream<S>
 where
-    S: Stream<Item = Result<Bytes, Error>> + Send + Sync + Unpin,
+    S: Stream<Item = Result<Bytes, Error>> + Send + Unpin,
 {
     buffer: StreamBuffer<S>,
     delimiter_finder: Box<memmem::Finder<'static>>,
@@ -68,7 +68,7 @@ enum DataState {
 
 impl<S> FinalPartDataStream<S>
 where
-    S: Stream<Item = Result<Bytes, Error>> + Send + Sync + Unpin,
+    S: Stream<Item = Result<Bytes, Error>> + Send + Unpin,
 {
     /// Constructs the final stream from the state of a taken part stream.
     ///
@@ -246,7 +246,7 @@ where
 
 impl<S> fmt::Debug for FinalPartDataStream<S>
 where
-    S: Stream<Item = Result<Bytes, Error>> + Send + Sync + Unpin,
+    S: Stream<Item = Result<Bytes, Error>> + Send + Unpin,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("FinalPartDataStream")
@@ -258,7 +258,7 @@ where
 
 impl<S> Stream for FinalPartDataStream<S>
 where
-    S: Stream<Item = Result<Bytes, Error>> + Send + Sync + Unpin,
+    S: Stream<Item = Result<Bytes, Error>> + Send + Unpin,
 {
     type Item = Result<Bytes, Error>;
 

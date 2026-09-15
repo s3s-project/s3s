@@ -16,9 +16,12 @@
 //!   the surplus fields are ignored. RFC 7578 section 4.8 defines exactly
 //!   `Content-Disposition`, `Content-Type` and the deprecated
 //!   `Content-Transfer-Encoding`, requires any other header field to be
-//!   ignored, and a conforming part carries at most those three — so the
-//!   limit is the conforming set itself and can only ever drop fields that a
-//!   conforming part cannot have.
+//!   ignored, and a conforming part carries at most those three — so for a
+//!   conforming part the limit can only ever drop fields that such a part
+//!   cannot have. A part that carries more than three fields *and* puts
+//!   `Content-Disposition` after them loses that field, because the parser
+//!   reads the first three fields and ignores the rest: section 4.8 asks for
+//!   the surplus fields to be ignored, not for the parser to keep looking.
 //! - A preamble before the first boundary and transport padding after a
 //!   boundary line are accepted.
 //! - Field lines are parsed with the strict header grammar: a folded field
