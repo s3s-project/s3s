@@ -640,7 +640,7 @@ impl S3Service {
     /// let http_req: HttpRequest = Request::builder()
     ///     .uri("/")
     ///     .body(Body::empty())
-    ///     .map_err(|e| HttpError::new(Box::new(e)))?;
+    ///     .map_err(|e| HttpError::from_std_error(Box::new(e)))?;
     ///
     /// let response = service.call(http_req).await?;
     /// # Ok(())
@@ -669,7 +669,7 @@ impl S3Service {
         };
         let result = match crate::ops::call(&mut req, &ccx).await {
             Ok(resp) => Ok(HttpResponse::from(resp)),
-            Err(err) => Err(HttpError::new(Box::new(err))),
+            Err(err) => Err(HttpError::from_std_error(Box::new(err))),
         };
 
         let duration = t0.elapsed();
