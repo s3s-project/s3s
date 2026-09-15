@@ -102,8 +102,8 @@ mod tests {
             assert_eq!(parsed.as_bytes(), boundary);
             assert_eq!(parsed.len(), boundary.len());
             assert!(!parsed.is_empty());
-            assert!(!parsed.to_string().is_empty());
-            assert!(!format!("{parsed:?}").is_empty());
+            assert_ne!(parsed.to_string(), "");
+            assert_ne!(format!("{parsed:?}"), "");
         }
     }
 

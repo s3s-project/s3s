@@ -145,8 +145,8 @@ fn preamble_and_transport_padding_are_tolerated() {
 fn empty_parts_are_valid() {
     let form = block_on(parse_all(b"--boundary\r\n\r\n\r\n--boundary--\r\n", 1024)).unwrap();
     assert_eq!(form.parts.len(), 1);
-    assert!(form.parts[0].headers.is_empty());
-    assert!(form.parts[0].data.is_empty());
+    assert_eq!(form.parts[0].headers.len(), 0);
+    assert_eq!(form.parts[0].data, b"");
 }
 
 #[test]

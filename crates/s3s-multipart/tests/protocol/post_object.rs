@@ -101,7 +101,7 @@ fn zero_length_file_is_accepted() {
         1024,
     ))
     .unwrap();
-    assert!(data.is_empty());
+    assert_eq!(data, b"");
 }
 
 /// `into_final` may be called before the taken stream is drained. Whatever the

@@ -516,12 +516,12 @@ mod tests {
             let mut mp = parser(b"--boundary\r\n\r\n\r\n--boundary\r\nX: y\r\n\r\n\r\n--boundary--\r\n");
             let mut part = mp.next_part().await.unwrap().unwrap();
             let (headers, data) = drain_part(&mut part).await;
-            assert!(headers.is_empty());
-            assert!(data.is_empty());
+            assert_eq!(headers.len(), 0);
+            assert_eq!(data, b"");
             let mut part = mp.next_part().await.unwrap().unwrap();
             let (headers, data) = drain_part(&mut part).await;
             assert_eq!(headers[0].1, b"y");
-            assert!(data.is_empty());
+            assert_eq!(data, b"");
         });
     }
 

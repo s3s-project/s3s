@@ -47,9 +47,9 @@ fn empty_header_and_empty_body_parts_are_valid() {
     ))
     .unwrap();
     assert_eq!(form.parts.len(), 2);
-    assert!(form.parts[0].headers.is_empty());
-    assert!(form.parts[0].data.is_empty());
-    assert!(form.parts[1].data.is_empty());
+    assert_eq!(form.parts[0].headers.len(), 0);
+    assert_eq!(form.parts[0].data, b"");
+    assert_eq!(form.parts[1].data, b"");
 }
 
 #[test]
