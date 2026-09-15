@@ -88,6 +88,7 @@ mimalloc.workspace = true
 minstant.workspace = true
 multer.workspace = true
 rand.workspace = true
+s3s-multipart = { path = "../s3s-multipart" }
 serde_json.workspace = true
 tokio = { workspace = true, features = ["full"] }
 tokio-rustls.workspace = true
@@ -95,5 +96,5 @@ tokio-util = { workspace = true, features = ["io"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [[bench]]
-name = "multipart_legacy_vs_multer"
+name = "multipart_parsers"
 harness = false
