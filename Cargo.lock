@@ -3929,11 +3929,15 @@ version = "0.17.0-alpha.1"
 dependencies = [
  "arrayvec",
  "bytes",
+ "criterion",
  "futures",
  "futures-core",
  "futures-util",
  "httparse",
  "memchr",
+ "mimalloc",
+ "multer",
+ "rand",
  "thiserror",
 ]
 

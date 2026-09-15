@@ -27,5 +27,21 @@ memchr.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+criterion.workspace = true
 futures = { workspace = true, features = ["executor"] }
 futures-util.workspace = true
+mimalloc.workspace = true
+multer.workspace = true
+rand.workspace = true
+
+[[bench]]
+name = "parse_throughput"
+harness = false
+
+[[bench]]
+name = "take_data_stream"
+harness = false
+
+[[bench]]
+name = "vs_multer"
+harness = false
