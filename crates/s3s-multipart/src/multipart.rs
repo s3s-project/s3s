@@ -43,6 +43,15 @@ where
     pub(super) max_buffer_size: usize,
     pub(super) state: State,
     pub(super) headers: Option<HeaderBlock>,
+    /// A [`Part`] has been handed out and has not reached its data phase yet.
+    ///
+    /// The part borrows the parser, so dropping it is the only way for a caller
+    /// to say "not this one". Without this flag the next [`Multipart::next_part`]
+    /// would hand out the same part again, and a caller that keeps skipping
+    /// parts without reading their headers would loop without making progress.
+    /// While it is set, `next_part` discards the unread header block and skips
+    /// the part's data instead.
+    pub(super) part_handed_out: bool,
 }
 
 impl<S> Multipart<S>
@@ -69,10 +78,16 @@ where
             max_buffer_size,
             state: State::FindingFirstBoundary,
             headers: None,
+            part_handed_out: false,
         }
     }
 
     /// Returns the next part, or `None` after the closing delimiter.
+    ///
+    /// Dropping a [`Part`] without entering its data phase (through
+    /// [`Part::next_data`] or [`Part::take_data_stream`]) skips the rest of
+    /// that part: unread headers are discarded and the part's data is skipped
+    /// lazily, so a caller can leave a part behind and keep going.
     ///
     /// # Errors
     ///
@@ -86,7 +101,17 @@ where
                 State::FindingFirstBoundary => {
                     poll_fn(|cx| self.poll_advance_first_boundary(cx)).await?;
                 }
-                State::ReadingPartHeaders => return Ok(Some(Part::new(self))),
+                State::ReadingPartHeaders => {
+                    if self.part_handed_out {
+                        // The previous part was dropped before its data phase:
+                        // finish the header block and let the loop skip its data.
+                        poll_fn(|cx| self.poll_ensure_headers(cx)).await?;
+                        self.finish_headers();
+                        continue;
+                    }
+                    self.part_handed_out = true;
+                    return Ok(Some(Part::new(self)));
+                }
                 State::ReadingPartData => {
                     poll_fn(|cx| self.poll_skip_part_data(cx)).await?;
                     poll_fn(|cx| self.poll_advance_after_boundary(cx)).await?;
@@ -113,7 +138,16 @@ where
                 State::FindingFirstBoundary => {
                     ready!(self.poll_advance_first_boundary(cx)?);
                 }
-                State::ReadingPartHeaders => return Poll::Ready(Ok(Some(Part::new(self)))),
+                State::ReadingPartHeaders => {
+                    if self.part_handed_out {
+                        // See `Multipart::next_part`: a dropped part is skipped.
+                        ready!(self.poll_ensure_headers(cx)?);
+                        self.finish_headers();
+                        continue;
+                    }
+                    self.part_handed_out = true;
+                    return Poll::Ready(Ok(Some(Part::new(self))));
+                }
                 State::ReadingPartData => {
                     ready!(self.poll_skip_part_data(cx)?);
                     ready!(self.poll_advance_after_boundary(cx)?);
@@ -479,6 +513,57 @@ mod tests {
             assert_eq!(headers[1].0, b"Content-Disposition");
             assert_eq!(data, b"hello");
             assert!(mp.next_part().await.unwrap().is_none());
+        });
+    }
+
+    /// Dropping a `Part` without entering its data phase skips the rest of that
+    /// part. Before the parser tracked that, the next `next_part` handed out the
+    /// same part again, so a caller that skips parts without reading their
+    /// headers looped without ever making progress.
+    #[test]
+    fn dropping_a_part_skips_it() {
+        block_on(async {
+            let body: &[u8] = b"--boundary\r\nX: a\r\n\r\nfirst\r\n--boundary\r\nX: b\r\n\r\nsecond\r\n--boundary--\r\n";
+
+            // No header read at all: the part is skipped, and the loop ends.
+            let mut mp = owned_chunk_parser(vec![body.to_vec()]);
+            let mut visits = 0usize;
+            loop {
+                {
+                    // Dropped at the end of this block, without reading anything.
+                    let Some(part) = mp.next_part().await.unwrap() else { break };
+                    let _ = part;
+                }
+                visits += 1;
+                assert!(visits <= 2, "next_part re-delivered a dropped part");
+            }
+            assert_eq!(visits, 2);
+
+            // One header read before dropping: each part is visited exactly once.
+            let mut mp = owned_chunk_parser(vec![body.to_vec()]);
+            let mut seen = Vec::new();
+            while let Some(mut part) = mp.next_part().await.unwrap() {
+                let header = part.next_header().await.unwrap().unwrap();
+                seen.push(String::from_utf8(header.value.to_vec()).unwrap());
+                assert!(seen.len() <= 2, "next_part re-delivered a partly read part");
+            }
+            assert_eq!(seen, ["a", "b"]);
+        });
+    }
+
+    /// A dropped part whose header block is malformed reports the parse error
+    /// rather than re-delivering the same part: the block cannot be skipped
+    /// without parsing it, so the error is the only honest outcome.
+    #[test]
+    fn dropping_a_part_with_a_malformed_header_block_reports_the_error() {
+        block_on(async {
+            let mut mp = owned_chunk_parser(vec![b"--boundary\r\n\x01\x02bad\r\n\r\nDATA\r\n--boundary--\r\n".to_vec()]);
+            {
+                // Dropped without reading its header block.
+                let part = mp.next_part().await.unwrap().unwrap();
+                let _ = part;
+            }
+            assert!(matches!(mp.next_part().await, Err(Error::InvalidFormat)));
         });
     }
 
