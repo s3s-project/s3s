@@ -441,6 +441,15 @@ mod tests {
         )
     }
 
+    fn owned_chunk_parser(chunks: Vec<Vec<u8>>) -> Multipart<impl Stream<Item = Result<Bytes, Error>> + Send + Sync> {
+        Multipart::new(
+            stream::iter(chunks.into_iter().map(|c| Ok::<Bytes, std::io::Error>(Bytes::from(c))))
+                .map(|item| item.map_err(Error::stream_read_failed)),
+            &Boundary::new(b"boundary").unwrap(),
+            1024,
+        )
+    }
+
     async fn drain_part<S>(part: &mut Part<'_, S>) -> (Vec<(Vec<u8>, Vec<u8>)>, Vec<u8>)
     where
         S: Stream<Item = Result<Bytes, Error>> + Send + Unpin,
@@ -467,6 +476,42 @@ mod tests {
             assert_eq!(headers[1].0, b"Content-Disposition");
             assert_eq!(data, b"hello");
             assert!(mp.next_part().await.unwrap().is_none());
+        });
+    }
+
+    /// An empty header block is terminated by the blank line that follows the
+    /// boundary line, so the parse must not depend on where the transport split
+    /// the body: the block ends two bytes into the header area no matter which
+    /// chunk those bytes arrive in.
+    #[test]
+    fn empty_header_block_parses_at_every_split_position() {
+        block_on(async {
+            for (body, expected) in [
+                (&b"--boundary\r\n\r\nDATA\r\n--boundary--\r\n"[..], vec![(0usize, &b"DATA"[..])]),
+                (
+                    // Same shape on the second part, reached through the boundary skip.
+                    &b"--boundary\r\nX: y\r\n\r\nA\r\n--boundary\r\n\r\nDATA\r\n--boundary--\r\n"[..],
+                    vec![(1usize, &b"A"[..]), (0usize, &b"DATA"[..])],
+                ),
+            ] {
+                let want: Vec<(usize, Vec<u8>)> = expected.iter().map(|(n, data)| (*n, data.to_vec())).collect();
+                // Every split into two non-empty chunks: this is the shape a
+                // streaming transport produces, and the shape that used to fail
+                // whenever the boundary line ended the first chunk.
+                for split in 1..body.len() {
+                    let mut mp = owned_chunk_parser(vec![body[..split].to_vec(), body[split..].to_vec()]);
+                    let mut seen: Vec<(usize, Vec<u8>)> = Vec::new();
+                    while let Some(mut part) = mp
+                        .next_part()
+                        .await
+                        .unwrap_or_else(|err| panic!("next_part failed at split {split}: {err}"))
+                    {
+                        let (headers, data) = drain_part(&mut part).await;
+                        seen.push((headers.len(), data));
+                    }
+                    assert_eq!(seen, want, "parts at split {split}");
+                }
+            }
         });
     }
 

@@ -182,7 +182,28 @@ where
     }
 
     /// Poll-based header-block reader, driving [`poll_read_until`].
+    ///
+    /// An empty block is the blank line that follows the boundary line, so it
+    /// ends two bytes into the header area. Deciding that needs those bytes in
+    /// `buf`: when the boundary line ends a chunk, `buf` is empty here and the
+    /// `\r\n\r\n` search below would run over a block that cannot contain it.
     pub fn poll_read_header_block(&mut self, max: usize, cx: &mut Context<'_>) -> Poll<Result<usize, Error>> {
+        while self.buf.len() < 2 && !self.eof {
+            // The bytes waited for here belong to the same read; a cursor from a
+            // previous `Pending` is still a valid lower bound, but restarting the
+            // scan over a buffer this short is cheaper than reasoning about it.
+            self.read_until_active = false;
+            match ready!(self.poll_stream(cx)) {
+                Some(Ok(chunk)) => {
+                    if self.buf.len().saturating_add(chunk.len()) > max {
+                        return Poll::Ready(Err(Error::HeaderSizeExceeded { limit: max }));
+                    }
+                    self.buf.extend_from_slice(&chunk);
+                }
+                Some(Err(err)) => return Poll::Ready(Err(err)),
+                None => self.eof = true,
+            }
+        }
         if self.buf.starts_with(b"\r\n") {
             self.read_until_active = false;
             return Poll::Ready(Ok(2));
@@ -223,6 +244,14 @@ mod tests {
         S: Stream<Item = Result<Bytes, Error>> + Unpin,
     {
         std::future::poll_fn(|cx| buf.poll_read_to(needle, cx)).await
+    }
+
+    /// Drives the production [`StreamBuffer::poll_read_header_block`] to completion.
+    async fn read_header_block<S>(buf: &mut StreamBuffer<S>, max: usize) -> Result<usize, Error>
+    where
+        S: Stream<Item = Result<Bytes, Error>> + Unpin,
+    {
+        std::future::poll_fn(|cx| buf.poll_read_header_block(max, cx)).await
     }
 
     #[test]
@@ -426,6 +455,44 @@ mod tests {
             // so the cursor from the first read must not leak into the second.
             let _ = buf.buf.split_to(34);
             assert_eq!(read_until(&mut buf, b"\r\n\r\n", 64).await.unwrap(), 4);
+        });
+    }
+
+    #[test]
+    fn read_header_block_detects_an_empty_block_in_the_next_chunk() {
+        block_on(async {
+            // The body was split right after the boundary line, so the buffer is
+            // empty when the header block is read and the terminating blank line
+            // is still in the stream.
+            let mut buf = buffer(vec![Ok(Bytes::from_static(b"\r\nDATA"))]);
+            assert_eq!(read_header_block(&mut buf, 64).await.unwrap(), 2);
+            assert_eq!(&buf.buf[..], b"\r\nDATA");
+        });
+    }
+
+    #[test]
+    fn read_header_block_detects_an_empty_block_across_chunks() {
+        block_on(async {
+            // Same shape, one byte short: the CRLF of the blank line spans the
+            // chunk boundary.
+            let mut buf = buffer(vec![Ok(Bytes::from_static(b"\r")), Ok(Bytes::from_static(b"\nDATA"))]);
+            assert_eq!(read_header_block(&mut buf, 64).await.unwrap(), 2);
+            assert_eq!(&buf.buf[..], b"\r\nDATA");
+        });
+    }
+
+    #[test]
+    fn read_header_block_limit_still_bounds_the_arriving_chunk() {
+        block_on(async {
+            // Waiting for the first bytes must not bypass the limit: a chunk
+            // that would push the buffer over `max` is rejected before it is
+            // retained, exactly as `poll_read_until` does.
+            let mut buf = buffer(vec![Ok(Bytes::from_static(b"\r\nDATA"))]);
+            assert!(matches!(
+                read_header_block(&mut buf, 4).await,
+                Err(Error::HeaderSizeExceeded { limit: 4 })
+            ));
+            assert!(buf.buf.is_empty());
         });
     }
 }
