@@ -43,6 +43,15 @@ where
     pub(super) max_buffer_size: usize,
     pub(super) state: State,
     pub(super) headers: Option<HeaderBlock>,
+    /// A [`Part`] has been handed out and has not reached its data phase yet.
+    ///
+    /// The part borrows the parser, so dropping it is the only way for a caller
+    /// to say "not this one". Without this flag the next [`Multipart::next_part`]
+    /// would hand out the same part again, and a caller that keeps skipping
+    /// parts without reading their headers would loop without making progress.
+    /// While it is set, `next_part` discards the unread header block and skips
+    /// the part's data instead.
+    pub(super) part_handed_out: bool,
 }
 
 impl<S> Multipart<S>
@@ -51,14 +60,18 @@ where
 {
     /// Constructs a parser.
     ///
-    /// `max_buffer_size` limits the bytes accumulated in the internal buffer
-    /// (part headers and boundary residue). Data chunks yielded by `stream`
-    /// while part data is being streamed are passed through without being
-    /// retained, so they are not charged to this limit — with one exception:
-    /// while a header block is still being read, the limit also bounds the
-    /// arriving chunk (the bytes after the header terminator are retained
-    /// until the header block is consumed), so a single chunk larger than
-    /// `max_buffer_size` is rejected at that point.
+    /// `max_buffer_size` bounds the part header block: a block that ends within
+    /// the limit is accepted, and one that grows past it without a terminator is
+    /// rejected with [`Error::HeaderSizeExceeded`]. The limit is a property of
+    /// the body, not of the delivery — the same bytes parse the same way however
+    /// the transport splits them — so a chunk larger than `max_buffer_size`
+    /// carrying a block that ends within the limit is accepted.
+    ///
+    /// Data chunks yielded by `stream` while part data is being streamed are
+    /// passed through without being retained, so they are not charged to this
+    /// limit. The buffer can still hold one arriving chunk beyond the limit: the
+    /// bytes that follow the header terminator are retained until the header
+    /// block is consumed, so the limit bounds the block, not the peak allocation.
     pub fn new(stream: S, boundary: &Boundary, max_buffer_size: usize) -> Self {
         let first_boundary = make_first_boundary(boundary.as_bytes());
         let delimiter_finder = make_delimiter_finder(boundary.as_bytes());
@@ -69,10 +82,16 @@ where
             max_buffer_size,
             state: State::FindingFirstBoundary,
             headers: None,
+            part_handed_out: false,
         }
     }
 
     /// Returns the next part, or `None` after the closing delimiter.
+    ///
+    /// Dropping a [`Part`] without entering its data phase (through
+    /// [`Part::next_data`] or [`Part::take_data_stream`]) skips the rest of
+    /// that part: unread headers are discarded and the part's data is skipped
+    /// lazily, so a caller can leave a part behind and keep going.
     ///
     /// # Errors
     ///
@@ -86,7 +105,17 @@ where
                 State::FindingFirstBoundary => {
                     poll_fn(|cx| self.poll_advance_first_boundary(cx)).await?;
                 }
-                State::ReadingPartHeaders => return Ok(Some(Part::new(self))),
+                State::ReadingPartHeaders => {
+                    if self.part_handed_out {
+                        // The previous part was dropped before its data phase:
+                        // finish the header block and let the loop skip its data.
+                        poll_fn(|cx| self.poll_ensure_headers(cx)).await?;
+                        self.finish_headers();
+                        continue;
+                    }
+                    self.part_handed_out = true;
+                    return Ok(Some(Part::new(self)));
+                }
                 State::ReadingPartData => {
                     poll_fn(|cx| self.poll_skip_part_data(cx)).await?;
                     poll_fn(|cx| self.poll_advance_after_boundary(cx)).await?;
@@ -113,7 +142,16 @@ where
                 State::FindingFirstBoundary => {
                     ready!(self.poll_advance_first_boundary(cx)?);
                 }
-                State::ReadingPartHeaders => return Poll::Ready(Ok(Some(Part::new(self)))),
+                State::ReadingPartHeaders => {
+                    if self.part_handed_out {
+                        // See `Multipart::next_part`: a dropped part is skipped.
+                        ready!(self.poll_ensure_headers(cx)?);
+                        self.finish_headers();
+                        continue;
+                    }
+                    self.part_handed_out = true;
+                    return Poll::Ready(Ok(Some(Part::new(self))));
+                }
                 State::ReadingPartData => {
                     ready!(self.poll_skip_part_data(cx)?);
                     ready!(self.poll_advance_after_boundary(cx)?);
@@ -213,6 +251,9 @@ where
                 self.state = State::Done;
                 Poll::Ready(Ok(()))
             }
+            // A chunk that carries no bytes is not trailing content, and
+            // `poll_stream` never hands one out, so whatever arrives here is
+            // content after the closing delimiter.
             Some(Ok(_)) => Poll::Ready(Err(Error::StreamPartNotLast)),
             Some(Err(err)) => Poll::Ready(Err(err)),
         }
@@ -441,6 +482,22 @@ mod tests {
         )
     }
 
+    fn owned_chunk_parser_with_max(
+        chunks: Vec<Vec<u8>>,
+        max: usize,
+    ) -> Multipart<impl Stream<Item = Result<Bytes, Error>> + Send + Sync> {
+        Multipart::new(
+            stream::iter(chunks.into_iter().map(|c| Ok::<Bytes, std::io::Error>(Bytes::from(c))))
+                .map(|item| item.map_err(Error::stream_read_failed)),
+            &Boundary::new(b"boundary").unwrap(),
+            max,
+        )
+    }
+
+    fn owned_chunk_parser(chunks: Vec<Vec<u8>>) -> Multipart<impl Stream<Item = Result<Bytes, Error>> + Send + Sync> {
+        owned_chunk_parser_with_max(chunks, 1024)
+    }
+
     async fn drain_part<S>(part: &mut Part<'_, S>) -> (Vec<(Vec<u8>, Vec<u8>)>, Vec<u8>)
     where
         S: Stream<Item = Result<Bytes, Error>> + Send + Unpin,
@@ -467,6 +524,197 @@ mod tests {
             assert_eq!(headers[1].0, b"Content-Disposition");
             assert_eq!(data, b"hello");
             assert!(mp.next_part().await.unwrap().is_none());
+        });
+    }
+
+    /// `max_buffer_size` bounds the header block, not the delivery: a body whose
+    /// block fits within the limit parses the same way at every split, including
+    /// the splits that hand the parser a chunk larger than the limit.
+    #[test]
+    fn a_small_header_block_parses_at_every_split_position() {
+        block_on(async {
+            let mut body = b"--boundary\r\nA: b\r\n\r\n".to_vec();
+            body.extend(std::iter::repeat_n(b'x', 100));
+            body.extend_from_slice(b"\r\n--boundary--\r\n");
+
+            // The block ends six bytes into the header area, well inside the
+            // limit, while the largest chunk here is the whole 136-byte body.
+            for split in 0..=body.len() {
+                let mut mp = owned_chunk_parser_with_max(vec![body[..split].to_vec(), body[split..].to_vec()], 32);
+                let mut part = mp
+                    .next_part()
+                    .await
+                    .unwrap_or_else(|err| panic!("split {split}: {err}"))
+                    .unwrap();
+                let mut headers = 0usize;
+                while part.next_header().await.unwrap().is_some() {
+                    headers += 1;
+                }
+                let mut data = 0usize;
+                while let Some(chunk) = part.next_data().await.unwrap() {
+                    data += chunk.len();
+                }
+                assert_eq!((headers, data), (1, 100), "split {split}");
+                assert!(mp.next_part().await.unwrap().is_none(), "split {split}");
+            }
+        });
+    }
+
+    /// Dropping a `Part` without entering its data phase skips the rest of that
+    /// part. Before the parser tracked that, the next `next_part` handed out the
+    /// same part again, so a caller that skips parts without reading their
+    /// headers looped without ever making progress.
+    #[test]
+    fn dropping_a_part_skips_it() {
+        block_on(async {
+            let body: &[u8] = b"--boundary\r\nX: a\r\n\r\nfirst\r\n--boundary\r\nX: b\r\n\r\nsecond\r\n--boundary--\r\n";
+
+            // No header read at all: the part is skipped, and the loop ends.
+            let mut mp = owned_chunk_parser(vec![body.to_vec()]);
+            let mut visits = 0usize;
+            loop {
+                {
+                    // Dropped at the end of this block, without reading anything.
+                    let Some(part) = mp.next_part().await.unwrap() else { break };
+                    let _ = part;
+                }
+                visits += 1;
+                assert!(visits <= 2, "next_part re-delivered a dropped part");
+            }
+            assert_eq!(visits, 2);
+
+            // One header read before dropping: each part is visited exactly once.
+            let mut mp = owned_chunk_parser(vec![body.to_vec()]);
+            let mut seen = Vec::new();
+            while let Some(mut part) = mp.next_part().await.unwrap() {
+                let header = part.next_header().await.unwrap().unwrap();
+                seen.push(String::from_utf8(header.value.to_vec()).unwrap());
+                assert!(seen.len() <= 2, "next_part re-delivered a partly read part");
+            }
+            assert_eq!(seen, ["a", "b"]);
+        });
+    }
+
+    /// A dropped part whose header block is malformed reports the parse error
+    /// rather than re-delivering the same part: the block cannot be skipped
+    /// without parsing it, so the error is the only honest outcome.
+    #[test]
+    fn dropping_a_part_with_a_malformed_header_block_reports_the_error() {
+        block_on(async {
+            let mut mp = owned_chunk_parser(vec![b"--boundary\r\n\x01\x02bad\r\n\r\nDATA\r\n--boundary--\r\n".to_vec()]);
+            {
+                // Dropped without reading its header block.
+                let part = mp.next_part().await.unwrap().unwrap();
+                let _ = part;
+            }
+            assert!(matches!(mp.next_part().await, Err(Error::InvalidFormat)));
+        });
+    }
+
+    /// An empty header block is terminated by the blank line that follows the
+    /// boundary line, so the parse must not depend on where the transport split
+    /// the body: the block ends two bytes into the header area no matter which
+    /// chunk those bytes arrive in.
+    #[test]
+    fn empty_header_block_parses_at_every_split_position() {
+        block_on(async {
+            for (body, expected) in [
+                (&b"--boundary\r\n\r\nDATA\r\n--boundary--\r\n"[..], vec![(0usize, &b"DATA"[..])]),
+                (
+                    // Same shape on the second part, reached through the boundary skip.
+                    &b"--boundary\r\nX: y\r\n\r\nA\r\n--boundary\r\n\r\nDATA\r\n--boundary--\r\n"[..],
+                    vec![(1usize, &b"A"[..]), (0usize, &b"DATA"[..])],
+                ),
+            ] {
+                let want: Vec<(usize, Vec<u8>)> = expected.iter().map(|(n, data)| (*n, data.to_vec())).collect();
+                // Every split, including the degenerate ones that hand the parser
+                // an empty chunk: this is the shape a streaming transport
+                // produces, and the shape that used to fail whenever the boundary
+                // line ended the first chunk.
+                for split in 0..=body.len() {
+                    let mut mp = owned_chunk_parser(vec![body[..split].to_vec(), body[split..].to_vec()]);
+                    let mut seen: Vec<(usize, Vec<u8>)> = Vec::new();
+                    while let Some(mut part) = mp
+                        .next_part()
+                        .await
+                        .unwrap_or_else(|err| panic!("next_part failed at split {split}: {err}"))
+                    {
+                        let (headers, data) = drain_part(&mut part).await;
+                        seen.push((headers.len(), data));
+                    }
+                    assert_eq!(seen, want, "parts at split {split}");
+                }
+            }
+        });
+    }
+
+    /// A stream may hand out chunks that carry no bytes. They are not content,
+    /// so they must not be mistaken for an epilogue after the closing delimiter.
+    #[test]
+    fn empty_chunks_after_the_closing_delimiter_are_not_an_epilogue() {
+        block_on(async {
+            let mut mp = owned_chunk_parser(vec![b"--boundary\r\n\r\nDATA\r\n--boundary--\r\n".to_vec(), Vec::new(), Vec::new()]);
+            let mut part = mp.next_part().await.unwrap().unwrap();
+            assert!(part.next_header().await.unwrap().is_none());
+            let mut data = Vec::new();
+            while let Some(chunk) = part.next_data().await.unwrap() {
+                data.extend_from_slice(&chunk);
+            }
+            assert_eq!(data, b"DATA");
+            assert!(mp.next_part().await.unwrap().is_none());
+        });
+    }
+
+    /// A stream that never stops answering with empty chunks is not progress:
+    /// the parser must report a stream failure instead of polling it forever,
+    /// whether the run happens while reading the body or while checking for an
+    /// epilogue.
+    #[test]
+    fn an_endless_run_of_empty_chunks_is_a_stream_failure() {
+        struct BodyThenEmptyForever {
+            body: Option<Bytes>,
+        }
+
+        impl Stream for BodyThenEmptyForever {
+            type Item = Result<Bytes, Error>;
+
+            fn poll_next(mut self: std::pin::Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+                match self.body.take() {
+                    Some(body) => Poll::Ready(Some(Ok(body))),
+                    None => Poll::Ready(Some(Ok(Bytes::new()))),
+                }
+            }
+        }
+
+        block_on(async {
+            let mut mp = Multipart::new(
+                BodyThenEmptyForever {
+                    body: Some(Bytes::from_static(b"--boundary\r\n\r\nDATA\r\n--boundary--\r\n")),
+                },
+                &Boundary::new(b"boundary").unwrap(),
+                4096,
+            );
+            let mut part = mp.next_part().await.unwrap().unwrap();
+            assert!(part.next_header().await.unwrap().is_none());
+            let mut data = Vec::new();
+            while let Some(chunk) = part.next_data().await.unwrap() {
+                data.extend_from_slice(&chunk);
+            }
+            assert_eq!(data, b"DATA");
+            assert!(matches!(mp.next_part().await, Err(Error::StreamReadFailed(_))));
+        });
+
+        block_on(async {
+            // The same run while the header block is still incomplete.
+            let mut mp = Multipart::new(
+                BodyThenEmptyForever {
+                    body: Some(Bytes::from_static(b"--boundary\r\nA: b\r\n")),
+                },
+                &Boundary::new(b"boundary").unwrap(),
+                4096,
+            );
+            let mut part = mp.next_part().await.unwrap().unwrap();
+            assert!(matches!(part.next_header().await, Err(Error::StreamReadFailed(_))));
         });
     }
 

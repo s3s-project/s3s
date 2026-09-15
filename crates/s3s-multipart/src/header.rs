@@ -159,6 +159,9 @@ where
             let _ = self.buffer_mut().map(|buf| buf.buf.split_to(block.data_start));
             self.state = State::ReadingPartData;
         }
+        // The part is in its data phase now, so it is no longer "handed out and
+        // waiting": dropping it from here on cannot rewind the parser.
+        self.part_handed_out = false;
     }
 
     pub(super) fn poll_ensure_headers(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Error>> {
