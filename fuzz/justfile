@@ -16,6 +16,10 @@ ci-check:
     RUSTFLAGS="${RUSTFLAGS:-} --cfg fuzzing" cargo +nightly clippy --workspace --all-targets -- -D warnings
 
 # Run a fuzz target (requires cargo-fuzz; uses nightly + ASan).
+#
+# ARGS are passed to cargo-fuzz verbatim, so pass libFuzzer flags after `--`,
+# and include `-timeout=25`: a target that hangs is then reported as an artifact
+# instead of a stuck run. `ci-run` always passes it.
 fuzz name *ARGS:
     #!/bin/bash -e
     mkdir -p "corpus/{{name}}"
@@ -32,7 +36,8 @@ gen-corpus *ARGS:
 
 # CI entry: compact the accumulated corpus (keep only coverage-increasing
 # inputs), re-seed, then fuzz for the full time budget. FEATURES is the
-# optional cargo-fuzz feature flag (e.g. "--features minio").
+# optional cargo-fuzz feature flag (e.g. "--features minio"). The per-input
+# timeout turns a hang into an artifact the job can upload.
 ci-run target FEATURES="" BUDGET="1800":
     #!/bin/bash -e
     mkdir -p "corpus/{{target}}" "merged/{{target}}"
@@ -44,4 +49,4 @@ ci-run target FEATURES="" BUDGET="1800":
         rm -rf "corpus/{{target}}"
         mv "merged/{{target}}" "corpus/{{target}}"
     fi
-    cargo +nightly fuzz run {{target}} {{FEATURES}} --target x86_64-unknown-linux-gnu -- -max_total_time={{BUDGET}} -print_final_stats=1
+    cargo +nightly fuzz run {{target}} {{FEATURES}} --target x86_64-unknown-linux-gnu -- -max_total_time={{BUDGET}} -timeout=25 -print_final_stats=1
