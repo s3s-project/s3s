@@ -4,6 +4,10 @@
 .idea
 __pycache__/
 
+# cargo-mutants output (written wherever a run is started from)
+mutants.out/
+mutants.out.old/
+
 # cargo-fuzz runtime state (seeds live in fuzz/seeds/, committed)
 /fuzz/target/
 /fuzz/corpus/

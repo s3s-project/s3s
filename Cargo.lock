@@ -3926,6 +3926,16 @@ dependencies = [
 [[package]]
 name = "s3s-multipart"
 version = "0.17.0-alpha.1"
+dependencies = [
+ "arrayvec",
+ "bytes",
+ "futures",
+ "futures-core",
+ "futures-util",
+ "httparse",
+ "memchr",
+ "thiserror",
+]
 
 [[package]]
 name = "s3s-policy"
