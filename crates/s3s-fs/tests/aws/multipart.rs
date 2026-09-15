@@ -4,13 +4,15 @@
 use crate::case;
 use crate::suite::{DOMAIN_NAME, FS_ROOT, Multipart, REGION, create_bucket, delete_bucket, delete_object, do_multipart_upload};
 
+use std::fs;
+use std::path::Path;
 use std::sync::Arc;
 
 use aws_sdk_s3::primitives::ByteStream;
+use aws_sdk_s3::types::ChecksumAlgorithm;
 use aws_sdk_s3::types::ChecksumMode;
 use aws_sdk_s3::types::CompletedMultipartUpload;
 use aws_sdk_s3::types::CompletedPart;
-use std::fs;
 
 use s3s::auth::SimpleAuth;
 use s3s::host::SingleDomain;
@@ -25,6 +27,7 @@ use aws_sdk_s3::config::Region;
 
 use aws_sdk_s3::error::ProvideErrorMetadata;
 
+use s3s::crypto::{Checksum as _, Crc32};
 use s3s_test::Result;
 use s3s_test::tcx::TestContext;
 use tracing::debug;
@@ -233,8 +236,30 @@ async fn assert_multipart_xxhash_checksums(
     Ok(())
 }
 
+async fn assert_completed_upload_state_removed(client: &Client, bucket: &str, key: &str, upload_id: &str) -> Result<()> {
+    let listed = client
+        .list_parts()
+        .bucket(bucket)
+        .key(key)
+        .upload_id(upload_id)
+        .send()
+        .await?;
+    assert_eq!(listed.parts(), []);
+
+    let upload_residue: Vec<_> = fs::read_dir(FS_ROOT)?
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_name().to_string_lossy().contains(upload_id))
+        .collect();
+    assert!(upload_residue.is_empty(), "completed upload state remains: {upload_residue:?}");
+
+    Ok(())
+}
+
 pub fn register(tcx: &mut TestContext) {
     case!(tcx, FsServer, Multipart, test_multipart);
+    case!(tcx, FsServer, Multipart, test_upload_part_checksum_failure_preserves_existing_part);
+    case!(tcx, FsServer, Multipart, test_complete_checksum_failure_preserves_object_and_upload);
+    case!(tcx, FsServer, Multipart, test_abort_cleanup_failure_preserves_upload_id);
     case!(tcx, FsServer, Multipart, test_multipart_xxhash_checksums);
     case!(tcx, FsServer, Multipart, test_multipart_checksum_type_composite_not_implemented);
     case!(tcx, FsServer, Multipart, test_multipart_etag_format);
@@ -314,6 +339,252 @@ impl Multipart {
             delete_object(c, bucket, key).await?;
             delete_bucket(c, bucket).await?;
         }
+
+        Ok(())
+    }
+
+    async fn test_upload_part_checksum_failure_preserves_existing_part(self: Arc<Self>) -> Result<()> {
+        let c = &self.s3;
+        let bucket = format!("test-part-csum-{}", Uuid::new_v4());
+        let bucket = bucket.as_str();
+        let key = "upload-part-checksum-atomicity.txt";
+        let original_content = b"original part body";
+        let replacement_content = b"replacement part body";
+        let invalid_sha256 = base64_simd::STANDARD.encode_to_string([0_u8; 32]);
+
+        create_bucket(c, bucket).await?;
+        let upload_id = c
+            .create_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .send()
+            .await?
+            .upload_id
+            .expect("create_multipart_upload should return an upload ID");
+
+        let original_part = c
+            .upload_part()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(upload_id.as_str())
+            .part_number(1)
+            .body(ByteStream::from_static(original_content))
+            .send()
+            .await?;
+        let original_etag = original_part.e_tag().expect("upload_part should return an ETag").to_owned();
+
+        let err = c
+            .upload_part()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(upload_id.as_str())
+            .part_number(1)
+            .checksum_sha256(invalid_sha256)
+            .body(ByteStream::from_static(replacement_content))
+            .send()
+            .await
+            .expect_err("an incorrect checksum should reject the replacement part");
+        let service_err = err.into_service_error();
+        assert_eq!(service_err.code(), Some("BadDigest"));
+
+        let listed = c
+            .list_parts()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(upload_id.as_str())
+            .send()
+            .await?;
+        let parts = listed.parts();
+        assert_eq!(parts.len(), 1);
+        assert_eq!(parts[0].e_tag(), Some(original_etag.as_str()));
+        assert_eq!(
+            parts[0].size(),
+            Some(i64::try_from(original_content.len()).expect("part size should fit in i64"))
+        );
+
+        let completed_part = CompletedPart::builder().e_tag(original_etag).part_number(1).build();
+        let completed_upload = CompletedMultipartUpload::builder()
+            .set_parts(Some(vec![completed_part]))
+            .build();
+        c.complete_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(upload_id.as_str())
+            .multipart_upload(completed_upload)
+            .send()
+            .await?;
+
+        let get = c.get_object().bucket(bucket).key(key).send().await?;
+        let body = get.body.collect().await?.into_bytes();
+        assert_eq!(body.as_ref(), original_content);
+
+        delete_object(c, bucket, key).await?;
+        delete_bucket(c, bucket).await?;
+
+        Ok(())
+    }
+
+    async fn test_complete_checksum_failure_preserves_object_and_upload(self: Arc<Self>) -> Result<()> {
+        let c = &self.s3;
+        let bucket = format!("test-complete-csum-{}", Uuid::new_v4());
+        let bucket = bucket.as_str();
+        let key = "complete-checksum-atomicity.txt";
+        let (original_content, replacement_content) = (b"original object body", b"replacement multipart body");
+        let original_crc32 = base64_simd::STANDARD.encode_to_string(Crc32::checksum(original_content));
+        let invalid_sha256 = base64_simd::STANDARD.encode_to_string([0_u8; 32]);
+
+        create_bucket(c, bucket).await?;
+        c.put_object()
+            .bucket(bucket)
+            .key(key)
+            .content_type("text/plain")
+            .checksum_crc32(original_crc32)
+            .body(ByteStream::from_static(original_content))
+            .send()
+            .await?;
+        let original_head = c.head_object().bucket(bucket).key(key).send().await?;
+        let original_etag = original_head.e_tag().expect("initial object should have an ETag").to_owned();
+
+        let upload_id = c
+            .create_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .content_type("application/octet-stream")
+            .checksum_algorithm(ChecksumAlgorithm::Sha256)
+            .send()
+            .await?
+            .upload_id
+            .expect("create_multipart_upload should return an upload ID");
+        let uploaded_part = c
+            .upload_part()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(upload_id.as_str())
+            .part_number(1)
+            .body(ByteStream::from_static(replacement_content))
+            .send()
+            .await?;
+        let part_etag = uploaded_part.e_tag().expect("upload_part should return an ETag").to_owned();
+
+        let completed_part = CompletedPart::builder().e_tag(part_etag.clone()).part_number(1).build();
+        let completed_upload = CompletedMultipartUpload::builder()
+            .set_parts(Some(vec![completed_part]))
+            .build();
+        let err = c
+            .complete_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(upload_id.as_str())
+            .multipart_upload(completed_upload)
+            .checksum_sha256(invalid_sha256)
+            .send()
+            .await
+            .expect_err("an incorrect checksum should reject multipart completion");
+        let service_err = err.into_service_error();
+        assert_eq!(service_err.code(), Some("BadDigest"));
+
+        let head = c.head_object().bucket(bucket).key(key).send().await?;
+        assert_eq!(head.e_tag(), Some(original_etag.as_str()));
+        assert_eq!(head.content_type(), Some("text/plain"));
+
+        let get = c.get_object().bucket(bucket).key(key).send().await?;
+        let body = get.body.collect().await?.into_bytes();
+        assert_eq!(body.as_ref(), original_content);
+
+        let listed = c
+            .list_parts()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(upload_id.as_str())
+            .send()
+            .await?;
+        let parts = listed.parts();
+        assert_eq!(parts.len(), 1);
+        assert_eq!(parts[0].e_tag(), Some(part_etag.as_str()));
+
+        let completed_part = CompletedPart::builder().e_tag(part_etag).part_number(1).build();
+        let completed_upload = CompletedMultipartUpload::builder()
+            .set_parts(Some(vec![completed_part]))
+            .build();
+        c.complete_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(upload_id.as_str())
+            .multipart_upload(completed_upload)
+            .send()
+            .await?;
+
+        let head = c
+            .head_object()
+            .bucket(bucket)
+            .key(key)
+            .checksum_mode(ChecksumMode::Enabled)
+            .send()
+            .await?;
+        assert_eq!(head.content_type(), Some("application/octet-stream"));
+        assert!(head.checksum_sha256().is_some());
+        assert!(head.checksum_crc32().is_none());
+
+        let get = c.get_object().bucket(bucket).key(key).send().await?;
+        let body = get.body.collect().await?.into_bytes();
+        assert_eq!(body.as_ref(), replacement_content);
+
+        assert_completed_upload_state_removed(c, bucket, key, upload_id.as_str()).await?;
+
+        delete_object(c, bucket, key).await?;
+        delete_bucket(c, bucket).await?;
+
+        Ok(())
+    }
+
+    async fn test_abort_cleanup_failure_preserves_upload_id(self: Arc<Self>) -> Result<()> {
+        let c = &self.s3;
+        let bucket = format!("test-abort-cleanup-{}", Uuid::new_v4());
+        let bucket = bucket.as_str();
+        let key = "abort-cleanup-retry.txt";
+
+        create_bucket(c, bucket).await?;
+        let upload_id = c
+            .create_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .send()
+            .await?
+            .upload_id
+            .expect("create_multipart_upload should return an upload ID");
+
+        let encode = |s: &str| base64_simd::URL_SAFE_NO_PAD.encode_to_string(s);
+        let upload_metadata_path = Path::new(FS_ROOT).join(format!(
+            ".bucket-{}.object-{}.upload-{upload_id}.metadata.json",
+            encode(bucket),
+            encode(key)
+        ));
+        fs::remove_file(&upload_metadata_path)?;
+        fs::create_dir(&upload_metadata_path)?;
+
+        let err = c
+            .abort_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(upload_id.as_str())
+            .send()
+            .await
+            .expect_err("metadata cleanup failure should reject abort");
+        assert_eq!(err.into_service_error().code(), Some("InternalError"));
+
+        let upload_info_path = Path::new(FS_ROOT).join(format!(".upload-{upload_id}.json"));
+        assert!(upload_info_path.exists(), "failed abort must retain the upload ID");
+
+        fs::remove_dir(upload_metadata_path)?;
+        c.abort_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(upload_id.as_str())
+            .send()
+            .await?;
+        assert!(!upload_info_path.exists());
+
+        delete_bucket(c, bucket).await?;
 
         Ok(())
     }
@@ -1078,8 +1349,8 @@ impl Multipart {
 
         // Test 3: CompleteMultipartUpload with If-Match and correct ETag should succeed
         debug!("Test 3: CompleteMultipartUpload with If-Match and correct ETag");
+        let new_content = b"updated via conditional multipart";
         {
-            let new_content = b"updated via conditional multipart";
             let (upload_id, upload_parts) = do_multipart_upload(c, bucket, key, new_content).await?;
             let upload = CompletedMultipartUpload::builder().set_parts(Some(upload_parts)).build();
 
@@ -1099,11 +1370,11 @@ impl Multipart {
             }
         }
 
-        // Verify the object was updated (use head_object to avoid body checksum issues
-        // since complete_multipart_upload doesn't update internal checksum info)
+        // Verify the object was updated.
         {
-            let result = c.head_object().bucket(bucket).key(key).send().await?;
-            assert!(result.content_length().is_some());
+            let result = c.get_object().bucket(bucket).key(key).send().await?;
+            let body = result.body.collect().await?.into_bytes();
+            assert_eq!(body.as_ref(), new_content);
             debug!("✓ Verified object exists after conditional multipart upload");
         }
 
