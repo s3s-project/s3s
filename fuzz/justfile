@@ -10,10 +10,18 @@ fmt:
 lint:
     RUSTFLAGS="${RUSTFLAGS:-} --cfg fuzzing" cargo +nightly clippy --workspace --all-targets -- -D warnings
 
-# CI gate: formatting check + clippy, fails fast before fuzzing.
+# CI gate: formatting check + clippy, fails fast before fuzzing. The committed
+# seeds are checked too: a seed whose outcome no longer matches what it was
+# added for is a corpus bug, not a fuzzing result.
 ci-check:
     cargo fmt --all -- --check
     RUSTFLAGS="${RUSTFLAGS:-} --cfg fuzzing" cargo +nightly clippy --workspace --all-targets -- -D warnings
+    just check-seeds
+
+# Check the committed multipart_parser seeds against the outcome each one is
+# committed for (see bin/check_seeds.rs), so the corpus cannot rot silently.
+check-seeds:
+    cargo +nightly run --quiet --bin check_seeds -- seeds/multipart_parser
 
 # Run a fuzz target (requires cargo-fuzz; uses nightly + ASan).
 #

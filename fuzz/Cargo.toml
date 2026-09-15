@@ -52,6 +52,13 @@ test = false
 bench = false
 doc = false
 
+[[bin]]
+name = "check_seeds"
+path = "bin/check_seeds.rs"
+test = false
+bench = false
+doc = false
+
 # Standalone workspace: intentionally outside the main s3s workspace.
 # Requires nightly (libFuzzer + sanitizer instrumentation); the main
 # workspace MSRV does not apply here.
