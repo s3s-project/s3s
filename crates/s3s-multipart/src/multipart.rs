@@ -536,6 +536,59 @@ mod tests {
         });
     }
 
+    /// A stream that never stops answering with empty chunks is not progress:
+    /// the parser must report a stream failure instead of polling it forever,
+    /// whether the run happens while reading the body or while checking for an
+    /// epilogue.
+    #[test]
+    fn an_endless_run_of_empty_chunks_is_a_stream_failure() {
+        struct BodyThenEmptyForever {
+            body: Option<Bytes>,
+        }
+
+        impl Stream for BodyThenEmptyForever {
+            type Item = Result<Bytes, Error>;
+
+            fn poll_next(mut self: std::pin::Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+                match self.body.take() {
+                    Some(body) => Poll::Ready(Some(Ok(body))),
+                    None => Poll::Ready(Some(Ok(Bytes::new()))),
+                }
+            }
+        }
+
+        block_on(async {
+            let mut mp = Multipart::new(
+                BodyThenEmptyForever {
+                    body: Some(Bytes::from_static(b"--boundary\r\n\r\nDATA\r\n--boundary--\r\n")),
+                },
+                &Boundary::new(b"boundary").unwrap(),
+                4096,
+            );
+            let mut part = mp.next_part().await.unwrap().unwrap();
+            assert!(part.next_header().await.unwrap().is_none());
+            let mut data = Vec::new();
+            while let Some(chunk) = part.next_data().await.unwrap() {
+                data.extend_from_slice(&chunk);
+            }
+            assert_eq!(data, b"DATA");
+            assert!(matches!(mp.next_part().await, Err(Error::StreamReadFailed(_))));
+        });
+
+        block_on(async {
+            // The same run while the header block is still incomplete.
+            let mut mp = Multipart::new(
+                BodyThenEmptyForever {
+                    body: Some(Bytes::from_static(b"--boundary\r\nA: b\r\n")),
+                },
+                &Boundary::new(b"boundary").unwrap(),
+                4096,
+            );
+            let mut part = mp.next_part().await.unwrap().unwrap();
+            assert!(matches!(part.next_header().await, Err(Error::StreamReadFailed(_))));
+        });
+    }
+
     #[test]
     fn skips_unread_part_data_when_dropped() {
         block_on(async {
