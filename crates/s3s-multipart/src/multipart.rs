@@ -526,8 +526,11 @@ mod tests {
         block_on(async {
             let mut mp = owned_chunk_parser(vec![b"--boundary\r\n\r\nDATA\r\n--boundary--\r\n".to_vec(), Vec::new(), Vec::new()]);
             let mut part = mp.next_part().await.unwrap().unwrap();
-            let (headers, data) = drain_part(&mut part).await;
-            assert!(headers.is_empty());
+            assert!(part.next_header().await.unwrap().is_none());
+            let mut data = Vec::new();
+            while let Some(chunk) = part.next_data().await.unwrap() {
+                data.extend_from_slice(&chunk);
+            }
             assert_eq!(data, b"DATA");
             assert!(mp.next_part().await.unwrap().is_none());
         });
