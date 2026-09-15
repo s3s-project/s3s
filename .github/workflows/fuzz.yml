@@ -8,6 +8,11 @@ on:
     paths:
       - 'fuzz/**'
       - '.github/workflows/fuzz.yml'
+      # The fuzz workspace depends on the in-repo crates by path, and those
+      # crates depend on each other (s3s pulls in s3s-rfc2047, s3s-sigv2,
+      # s3s-sigv4, s3s-multipart), so any crate can break a target without
+      # touching fuzz/.
+      - 'crates/**'
   schedule:
     - cron: '0 0 * * 0' # weekly at 00:00 UTC on Sunday
   workflow_dispatch:
@@ -105,11 +110,20 @@ jobs:
 
       - name: Fuzz for 30 minutes
         run: |
-          # default / minio codegen variants alternate by day-of-year parity.
-          if [ $(( $(date +%j) % 2 )) -eq 0 ]; then
-            just ci-run xml_bodies "--features minio"
+          # One target per week in rotation, so every target is exercised
+          # instead of only the first one. The s3s-backed targets alternate
+          # between the default and the minio codegen variant by day-of-year
+          # parity; multipart_parser does not use s3s, so it has no variant.
+          targets=(xml_bodies aws_chunked syntax_parsers multipart_parser)
+          week=$(( $(date +%s) / 604800 ))
+          target=${targets[$(( week % ${#targets[@]} ))]}
+          echo "fuzzing $target"
+          if [ "$target" = multipart_parser ]; then
+            just ci-run "$target"
+          elif [ $(( $(date +%j) % 2 )) -eq 0 ]; then
+            just ci-run "$target" "--features minio"
           else
-            just ci-run xml_bodies
+            just ci-run "$target"
           fi
         working-directory: fuzz
 

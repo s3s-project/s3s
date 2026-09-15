@@ -12,6 +12,7 @@ bytes = "1"
 futures = "0.3"
 libfuzzer-sys = "0.4"
 s3s = { path = "../crates/s3s" }
+s3s-multipart = { path = "../crates/s3s-multipart" }
 
 [features]
 minio = ["s3s/minio"]
@@ -38,8 +39,22 @@ bench = false
 doc = false
 
 [[bin]]
+name = "multipart_parser"
+path = "fuzz_targets/multipart_parser.rs"
+test = false
+bench = false
+doc = false
+
+[[bin]]
 name = "gen_corpus"
 path = "bin/gen_corpus.rs"
+test = false
+bench = false
+doc = false
+
+[[bin]]
+name = "check_seeds"
+path = "bin/check_seeds.rs"
 test = false
 bench = false
 doc = false
