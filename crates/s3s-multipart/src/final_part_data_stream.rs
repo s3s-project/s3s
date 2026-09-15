@@ -220,6 +220,9 @@ where
                             self.state = DataState::Done;
                             return Poll::Ready(Ok(()));
                         }
+                        // An empty chunk is not trailing content either; the loop
+                        // polls the stream again.
+                        Some(Ok(chunk)) if chunk.is_empty() => {}
                         Some(Ok(_)) => return Poll::Ready(Err(Error::StreamPartNotLast)),
                         Some(Err(err)) => return Poll::Ready(Err(err)),
                     }
@@ -486,6 +489,23 @@ mod tests {
                 TaskPoll::Ready(Some(Ok(bytes))) if bytes.as_ref() == b"hello"
             ));
             assert!(matches!(ds.poll_next_unpin(cx), TaskPoll::Ready(Some(Err(Error::StreamPartNotLast)))));
+            assert!(matches!(ds.poll_next_unpin(cx), TaskPoll::Ready(None)));
+        });
+    }
+
+    /// A stream may hand out chunks that carry no bytes. They are not content, so
+    /// the strict ending must poll past them instead of rejecting the part.
+    #[test]
+    fn empty_chunks_after_the_trailer_are_not_an_epilogue() {
+        with_cx(|cx| {
+            let mut ds = final_with_buffer(
+                vec![
+                    Ok(Bytes::from_static(b"")),
+                    Ok(Bytes::from_static(b"")),
+                    Ok(Bytes::from_static(b"")),
+                ],
+                DataState::Eof,
+            );
             assert!(matches!(ds.poll_next_unpin(cx), TaskPoll::Ready(None)));
         });
     }

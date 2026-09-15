@@ -213,6 +213,9 @@ where
                 self.state = State::Done;
                 Poll::Ready(Ok(()))
             }
+            // A chunk that carries no bytes is not trailing content: leave the
+            // state alone so the caller polls this step again.
+            Some(Ok(chunk)) if chunk.is_empty() => Poll::Ready(Ok(())),
             Some(Ok(_)) => Poll::Ready(Err(Error::StreamPartNotLast)),
             Some(Err(err)) => Poll::Ready(Err(err)),
         }
@@ -495,10 +498,11 @@ mod tests {
                 ),
             ] {
                 let want: Vec<(usize, Vec<u8>)> = expected.iter().map(|(n, data)| (*n, data.to_vec())).collect();
-                // Every split into two non-empty chunks: this is the shape a
-                // streaming transport produces, and the shape that used to fail
-                // whenever the boundary line ended the first chunk.
-                for split in 1..body.len() {
+                // Every split, including the degenerate ones that hand the parser
+                // an empty chunk: this is the shape a streaming transport
+                // produces, and the shape that used to fail whenever the boundary
+                // line ended the first chunk.
+                for split in 0..=body.len() {
                     let mut mp = owned_chunk_parser(vec![body[..split].to_vec(), body[split..].to_vec()]);
                     let mut seen: Vec<(usize, Vec<u8>)> = Vec::new();
                     while let Some(mut part) = mp
@@ -512,6 +516,20 @@ mod tests {
                     assert_eq!(seen, want, "parts at split {split}");
                 }
             }
+        });
+    }
+
+    /// A stream may hand out chunks that carry no bytes. They are not content,
+    /// so they must not be mistaken for an epilogue after the closing delimiter.
+    #[test]
+    fn empty_chunks_after_the_closing_delimiter_are_not_an_epilogue() {
+        block_on(async {
+            let mut mp = owned_chunk_parser(vec![b"--boundary\r\n\r\nDATA\r\n--boundary--\r\n".to_vec(), Vec::new(), Vec::new()]);
+            let mut part = mp.next_part().await.unwrap().unwrap();
+            let (headers, data) = drain_part(&mut part).await;
+            assert!(headers.is_empty());
+            assert_eq!(data, b"DATA");
+            assert!(mp.next_part().await.unwrap().is_none());
         });
     }
 
