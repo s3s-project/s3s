@@ -495,4 +495,28 @@ mod tests {
             assert!(buf.buf.is_empty());
         });
     }
+
+    #[test]
+    fn read_header_block_decides_an_empty_block_without_pulling() {
+        block_on(async {
+            // The two buffered bytes are already enough to decide, so the reader
+            // must not touch the stream: a chunk it never had to read must not
+            // turn into a limit error.
+            let mut buf = buffer(vec![Ok(Bytes::from_static(b"XYZ"))]);
+            buf.buf.extend_from_slice(b"\r\n");
+            assert_eq!(read_header_block(&mut buf, 4).await.unwrap(), 2);
+            assert_eq!(&buf.buf[..], b"\r\n");
+        });
+    }
+
+    #[test]
+    fn read_header_block_accepts_a_chunk_of_exactly_max_bytes() {
+        block_on(async {
+            // `poll_read_until` accepts a block of exactly `max` bytes, and
+            // waiting for the deciding bytes keeps that edge.
+            let mut buf = buffer(vec![Ok(Bytes::from_static(b"\r\nDA"))]);
+            assert_eq!(read_header_block(&mut buf, 4).await.unwrap(), 2);
+            assert_eq!(&buf.buf[..], b"\r\nDA");
+        });
+    }
 }
