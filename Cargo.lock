@@ -3764,6 +3764,7 @@ dependencies = [
  "quick-xml 0.42.0",
  "rand",
  "regex",
+ "s3s-multipart",
  "s3s-rfc2047",
  "s3s-sigv2",
  "s3s-sigv4",
@@ -3929,11 +3930,15 @@ version = "0.17.0-alpha.1"
 dependencies = [
  "arrayvec",
  "bytes",
+ "criterion",
  "futures",
  "futures-core",
  "futures-util",
  "httparse",
  "memchr",
+ "mimalloc",
+ "multer",
+ "rand",
  "thiserror",
 ]
 
