@@ -27,20 +27,27 @@ pub type HttpResponse<B = Body> = http::Response<B>;
 
 /// An error that indicates a failure of an HTTP request.
 /// Passing this error to `hyper` will cause it to abort the connection.
+///
+/// It implements [`std::error::Error`] and delegates [`Display`](core::fmt::Display)
+/// to the wrapped error, so it can be logged, boxed, and propagated with `?`.
 #[derive(Debug)]
 pub struct HttpError(StdError);
 
 impl HttpError {
-    /// Creates a new `HttpError` from the given error.
+    /// Creates a new `HttpError` from the given boxed error.
     #[must_use]
-    pub fn new(err: StdError) -> Self {
+    pub fn from_std_error(err: StdError) -> Self {
         Self(err)
     }
-}
 
-impl From<HttpError> for StdError {
-    fn from(val: HttpError) -> Self {
-        val.0
+    /// Unwraps this error into the underlying boxed error, moving the inner box
+    /// out without an extra allocation.
+    ///
+    /// Prefer this over `Into<StdError>`: the standard-library blanket impl boxes
+    /// the [`HttpError`] itself, which costs one additional allocation.
+    #[must_use]
+    pub fn into_std_error(self) -> StdError {
+        self.0
     }
 }
 
@@ -231,21 +238,102 @@ impl<T> S3Response<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::error::Error as _;
 
     // --- HttpError ---
 
     #[test]
     fn http_error_debug() {
-        let err = HttpError::new(Box::new(std::io::Error::other("test")));
+        let err = HttpError::from_std_error(Box::new(std::io::Error::other("test")));
         let dbg = format!("{err:?}");
         assert!(dbg.contains("test"));
     }
 
     #[test]
     fn http_error_into_std_error() {
-        let err = HttpError::new(Box::new(std::io::Error::other("oops")));
-        let std_err: StdError = err.into();
+        // The inherent conversion moves the inner box out: no extra allocation,
+        // and the result is the original error, not a `Box<HttpError>`.
+        let err = HttpError::from_std_error(Box::new(std::io::Error::other("oops")));
+        let std_err: StdError = err.into_std_error();
         assert!(std_err.to_string().contains("oops"));
+        assert!(!std_err.is::<HttpError>(), "the inner box must be moved out as-is");
+    }
+
+    // `HttpError` must satisfy the standard error traits, both for `hyper`/tracing
+    // ergonomics and so that the blanket `Into<Box<dyn Error + Send + Sync>>` resolves.
+    #[test]
+    fn http_error_implements_the_std_error_traits() {
+        fn assert_error<E: std::error::Error + Send + Sync + 'static>() {}
+        assert_error::<HttpError>();
+
+        let err = HttpError::from_std_error(Box::new(std::io::Error::other("oops")));
+        assert_eq!(std::format!("{err}"), "oops");
+    }
+
+    // The blanket impl still provides `Into<StdError>`, but it boxes the
+    // `HttpError` itself; `into_std_error` is the allocation-free path.
+    #[test]
+    fn http_error_blanket_into_boxes_the_http_error() {
+        let boxed: StdError = HttpError::from_std_error(Box::new(std::io::Error::other("oops"))).into();
+        assert!(boxed.is::<HttpError>());
+        assert_eq!(boxed.to_string(), "oops");
+    }
+
+    #[test]
+    fn http_error_preserves_the_source_chain() {
+        // `HttpError` is a transparent wrapper: it must not add a level to the
+        // chain nor hide the inner error's context.
+        #[derive(Debug)]
+        struct Root;
+
+        impl core::fmt::Display for Root {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                f.write_str("root cause")
+            }
+        }
+
+        impl std::error::Error for Root {}
+
+        #[derive(Debug)]
+        struct Context(Root);
+
+        impl core::fmt::Display for Context {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                f.write_str("context")
+            }
+        }
+
+        impl std::error::Error for Context {
+            fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+                Some(&self.0)
+            }
+        }
+
+        fn chain(err: &StdError) -> Vec<String> {
+            let mut levels = vec![err.to_string()];
+            let mut node = err.source();
+            while let Some(e) = node {
+                levels.push(e.to_string());
+                node = e.source();
+            }
+            levels
+        }
+
+        let raw: StdError = Box::new(Context(Root));
+        let wrapped: StdError = HttpError::from_std_error(Box::new(Context(Root))).into_std_error();
+        assert_eq!(chain(&raw), ["context", "root cause"]);
+        assert_eq!(chain(&wrapped), chain(&raw));
+
+        // Same chain seen through the `Error` impl on the wrapper itself.
+        let http = HttpError::from_std_error(Box::new(Context(Root)));
+        assert_eq!(http.to_string(), "context");
+        let mut levels = vec![http.to_string()];
+        let mut node = http.source();
+        while let Some(e) = node {
+            levels.push(e.to_string());
+            node = e.source();
+        }
+        assert_eq!(levels, ["context", "root cause"]);
     }
 
     // --- TrailingHeaders ---
