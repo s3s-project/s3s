@@ -51,13 +51,19 @@
 //!   `into_final` yields a `FinalPartDataStream` that enforces the strict
 //!   closing delimiter and rejects an epilogue, because callers need an
 //!   exact content length.
-//! - The internal buffer limit applies to the bytes accumulated in the
-//!   internal buffer. While a part header block is still being read it also
-//!   bounds the arriving chunk: a chunk that would push the buffer over the
-//!   limit is rejected even when it contains the header terminator, because
-//!   the bytes that follow the terminator are retained until the header block
-//!   is consumed. Data chunks yielded while streaming part data are never
-//!   retained and are not charged to the limit.
+//! - The internal buffer limit bounds the part header block, not the delivery:
+//!   a block that ends within the limit is accepted whichever chunk carried it,
+//!   and one that grows past the limit without a terminator is rejected with
+//!   `HeaderSizeExceeded`. Data chunks yielded while streaming part data are
+//!   never retained and are not charged to the limit, and the parse never
+//!   depends on where the transport split the body. The buffer can still hold
+//!   one arriving chunk beyond the limit, because the bytes that follow the
+//!   terminator are retained until the header block is consumed.
+//! - A chunk that carries no bytes is not progress and is not handed out:
+//!   the parser skips such chunks, yields to the executor after a bounded
+//!   number of them within one poll, and reports a stream failure once a
+//!   consecutive run grows past a fixed bound, so a stream that never sends
+//!   anything cannot keep the parser busy forever.
 
 #![deny(missing_docs)]
 #![deny(clippy::expect_used, clippy::panic, clippy::unreachable, clippy::unwrap_used)]

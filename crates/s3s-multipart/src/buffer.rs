@@ -110,10 +110,13 @@ where
     /// Returns the end offset of the first `needle` occurrence. The caller
     /// owns interpreting the returned offset.
     ///
-    /// `max` limits the accumulated buffer, so it also bounds the arriving
-    /// chunk: a chunk that would push `buf` over `max` is rejected before it
-    /// is searched, even when it contains `needle` (the bytes after the
-    /// needle are retained until the caller consumes the block).
+    /// `max` bounds the block being read, not the way it arrives: the read
+    /// succeeds when the needle ends within `max`, whichever chunk carried it,
+    /// and fails with `HeaderSizeExceeded` once the buffer passes `max` without
+    /// the needle. Bytes that follow the needle are retained until the caller
+    /// consumes the block, so the buffer can hold one arriving chunk beyond
+    /// `max` — that allowance is what keeps the outcome independent of where
+    /// the transport split the body.
     ///
     /// Only bytes at the end of the existing buffer can combine with the next
     /// chunk to form a needle that spans chunk boundaries, so the search
@@ -155,11 +158,11 @@ where
 
             match ready!(self.poll_stream(cx)) {
                 Some(Ok(chunk)) => {
-                    let next_len = self.buf.len().saturating_add(chunk.len());
-                    if next_len > max {
-                        self.read_until_active = false;
-                        return Poll::Ready(Err(Error::HeaderSizeExceeded { limit: max }));
-                    }
+                    // The chunk is searched before it is judged: a block that
+                    // ends within `max` is accepted however large the chunk that
+                    // completed it was. The `buf.len() > max` check above rejects
+                    // a buffer that grows past the limit without the needle, so
+                    // the excess this can retain is one arriving chunk.
                     let old_len = self.buf.len();
                     self.buf.extend_from_slice(&chunk);
                     self.read_until_cursor = old_len.saturating_sub(needle.len().saturating_sub(1));
@@ -233,6 +236,8 @@ where
     /// ends two bytes into the header area. Deciding that needs those bytes in
     /// `buf`: when the boundary line ends a chunk, `buf` is empty here and the
     /// `\r\n\r\n` search below would run over a block that cannot contain it.
+    /// The wait pulls at most two chunks and does not judge their size — the
+    /// search below applies `max` to the block.
     pub fn poll_read_header_block(&mut self, max: usize, cx: &mut Context<'_>) -> Poll<Result<usize, Error>> {
         while self.buf.len() < 2 && !self.eof {
             // The bytes waited for here belong to the same read; a cursor from a
@@ -240,12 +245,7 @@ where
             // scan over a buffer this short is cheaper than reasoning about it.
             self.read_until_active = false;
             match ready!(self.poll_stream(cx)) {
-                Some(Ok(chunk)) => {
-                    if self.buf.len().saturating_add(chunk.len()) > max {
-                        return Poll::Ready(Err(Error::HeaderSizeExceeded { limit: max }));
-                    }
-                    self.buf.extend_from_slice(&chunk);
-                }
+                Some(Ok(chunk)) => self.buf.extend_from_slice(&chunk),
                 Some(Err(err)) => return Poll::Ready(Err(err)),
                 None => self.eof = true,
             }
@@ -498,17 +498,39 @@ mod tests {
     }
 
     #[test]
-    fn read_until_rejects_an_oversized_chunk_before_searching_it() {
+    fn read_until_accepts_a_chunk_that_completes_a_block_within_max() {
         block_on(async {
-            // The limit also bounds the arriving chunk: the chunk that would
-            // complete the header block is rejected before it is searched, so
-            // nothing of it is retained.
+            // The chunk is searched before the limit is applied to it: the block
+            // ends exactly at `max`, so it is accepted although 8 bytes arrived
+            // at once, and the bytes after the needle stay buffered.
             let mut buf = buffer(vec![Ok(Bytes::from_static(b"ab")), Ok(Bytes::from_static(b"\r\n\r\nrest"))]);
+            assert_eq!(read_until(&mut buf, b"\r\n\r\n", 6).await.unwrap(), 6);
+            assert_eq!(&buf.buf[..], b"ab\r\n\r\nrest");
+        });
+    }
+
+    #[test]
+    fn read_until_rejects_a_block_that_ends_beyond_max() {
+        block_on(async {
+            // The needle is there, but the block it terminates does not fit.
+            let mut buf = buffer(vec![Ok(Bytes::from_static(b"ab")), Ok(Bytes::from_static(b"\r\n\r\nrest"))]);
+            assert!(matches!(
+                read_until(&mut buf, b"\r\n\r\n", 5).await,
+                Err(Error::HeaderSizeExceeded { limit: 5 })
+            ));
+        });
+    }
+
+    #[test]
+    fn read_until_rejects_a_buffer_that_grows_past_max_without_the_needle() {
+        block_on(async {
+            // No needle anywhere: the limit stops the search once the buffer
+            // passes it, whatever the chunking.
+            let mut buf = buffer(vec![Ok(Bytes::from_static(b"abcdefgh")), Ok(Bytes::from_static(b"ij"))]);
             assert!(matches!(
                 read_until(&mut buf, b"\r\n\r\n", 6).await,
                 Err(Error::HeaderSizeExceeded { limit: 6 })
             ));
-            assert_eq!(&buf.buf[..], b"ab");
         });
     }
 
@@ -553,17 +575,14 @@ mod tests {
     }
 
     #[test]
-    fn read_header_block_limit_still_bounds_the_arriving_chunk() {
+    fn read_header_block_accepts_an_empty_block_from_an_oversized_chunk() {
         block_on(async {
-            // Waiting for the first bytes must not bypass the limit: a chunk
-            // that would push the buffer over `max` is rejected before it is
-            // retained, exactly as `poll_read_until` does.
+            // The block is two bytes; the rest of the chunk is part data, so a
+            // chunk larger than `max` does not make an empty block too large.
+            // The limit is applied to the block, not to the arrival.
             let mut buf = buffer(vec![Ok(Bytes::from_static(b"\r\nDATA"))]);
-            assert!(matches!(
-                read_header_block(&mut buf, 4).await,
-                Err(Error::HeaderSizeExceeded { limit: 4 })
-            ));
-            assert!(buf.buf.is_empty());
+            assert_eq!(read_header_block(&mut buf, 4).await.unwrap(), 2);
+            assert_eq!(&buf.buf[..], b"\r\nDATA");
         });
     }
 

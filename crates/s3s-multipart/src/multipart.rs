@@ -60,14 +60,18 @@ where
 {
     /// Constructs a parser.
     ///
-    /// `max_buffer_size` limits the bytes accumulated in the internal buffer
-    /// (part headers and boundary residue). Data chunks yielded by `stream`
-    /// while part data is being streamed are passed through without being
-    /// retained, so they are not charged to this limit — with one exception:
-    /// while a header block is still being read, the limit also bounds the
-    /// arriving chunk (the bytes after the header terminator are retained
-    /// until the header block is consumed), so a single chunk larger than
-    /// `max_buffer_size` is rejected at that point.
+    /// `max_buffer_size` bounds the part header block: a block that ends within
+    /// the limit is accepted, and one that grows past it without a terminator is
+    /// rejected with [`Error::HeaderSizeExceeded`]. The limit is a property of
+    /// the body, not of the delivery — the same bytes parse the same way however
+    /// the transport splits them — so a chunk larger than `max_buffer_size`
+    /// carrying a block that ends within the limit is accepted.
+    ///
+    /// Data chunks yielded by `stream` while part data is being streamed are
+    /// passed through without being retained, so they are not charged to this
+    /// limit. The buffer can still hold one arriving chunk beyond the limit: the
+    /// bytes that follow the header terminator are retained until the header
+    /// block is consumed, so the limit bounds the block, not the peak allocation.
     pub fn new(stream: S, boundary: &Boundary, max_buffer_size: usize) -> Self {
         let first_boundary = make_first_boundary(boundary.as_bytes());
         let delimiter_finder = make_delimiter_finder(boundary.as_bytes());
@@ -478,13 +482,20 @@ mod tests {
         )
     }
 
-    fn owned_chunk_parser(chunks: Vec<Vec<u8>>) -> Multipart<impl Stream<Item = Result<Bytes, Error>> + Send + Sync> {
+    fn owned_chunk_parser_with_max(
+        chunks: Vec<Vec<u8>>,
+        max: usize,
+    ) -> Multipart<impl Stream<Item = Result<Bytes, Error>> + Send + Sync> {
         Multipart::new(
             stream::iter(chunks.into_iter().map(|c| Ok::<Bytes, std::io::Error>(Bytes::from(c))))
                 .map(|item| item.map_err(Error::stream_read_failed)),
             &Boundary::new(b"boundary").unwrap(),
-            1024,
+            max,
         )
+    }
+
+    fn owned_chunk_parser(chunks: Vec<Vec<u8>>) -> Multipart<impl Stream<Item = Result<Bytes, Error>> + Send + Sync> {
+        owned_chunk_parser_with_max(chunks, 1024)
     }
 
     async fn drain_part<S>(part: &mut Part<'_, S>) -> (Vec<(Vec<u8>, Vec<u8>)>, Vec<u8>)
@@ -513,6 +524,39 @@ mod tests {
             assert_eq!(headers[1].0, b"Content-Disposition");
             assert_eq!(data, b"hello");
             assert!(mp.next_part().await.unwrap().is_none());
+        });
+    }
+
+    /// `max_buffer_size` bounds the header block, not the delivery: a body whose
+    /// block fits within the limit parses the same way at every split, including
+    /// the splits that hand the parser a chunk larger than the limit.
+    #[test]
+    fn a_small_header_block_parses_at_every_split_position() {
+        block_on(async {
+            let mut body = b"--boundary\r\nA: b\r\n\r\n".to_vec();
+            body.extend(std::iter::repeat_n(b'x', 100));
+            body.extend_from_slice(b"\r\n--boundary--\r\n");
+
+            // The block ends six bytes into the header area, well inside the
+            // limit, while the largest chunk here is the whole 136-byte body.
+            for split in 0..=body.len() {
+                let mut mp = owned_chunk_parser_with_max(vec![body[..split].to_vec(), body[split..].to_vec()], 32);
+                let mut part = mp
+                    .next_part()
+                    .await
+                    .unwrap_or_else(|err| panic!("split {split}: {err}"))
+                    .unwrap();
+                let mut headers = 0usize;
+                while part.next_header().await.unwrap().is_some() {
+                    headers += 1;
+                }
+                let mut data = 0usize;
+                while let Some(chunk) = part.next_data().await.unwrap() {
+                    data += chunk.len();
+                }
+                assert_eq!((headers, data), (1, 100), "split {split}");
+                assert!(mp.next_part().await.unwrap().is_none(), "split {split}");
+            }
         });
     }
 
