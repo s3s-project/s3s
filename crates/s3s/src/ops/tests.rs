@@ -4554,10 +4554,13 @@ mod bodyless_content_length_tests {
         Request::from(builder.body(empty_unknown_length_body()).unwrap())
     }
 
-    /// A genuine `SigV4` presigned PUT URL for `/test-bucket/test-key.txt` with
-    /// `X-Amz-SignedHeaders=host`. The timestamp is "now", because the verifier rejects an
-    /// expired request and a fixed test date goes stale.
+    /// A genuine `SigV4` presigned PUT URL for `/test-bucket/test-key.txt`. The timestamp is
+    /// "now", because the verifier rejects an expired request and a fixed test date goes stale.
     fn presigned_put_uri() -> Uri {
+        presigned_put_uri_with_headers(&[])
+    }
+
+    fn presigned_put_uri_with_headers(extra_headers: &[(&str, &str)]) -> Uri {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .expect("system clock after epoch")
@@ -4573,21 +4576,21 @@ mod bodyless_content_length_tests {
             datetime.second()
         );
         let date_stamp = &amz_date_str[..8];
+        let mut signed_headers = vec![("host", "localhost")];
+        signed_headers.extend(extra_headers.iter().copied());
+        signed_headers.sort_unstable_by_key(|(name, _)| *name);
+        let signed_header_names = signed_headers.iter().map(|(name, _)| *name).collect::<Vec<_>>().join(";");
         let pairs: Vec<(&str, String)> = vec![
             ("X-Amz-Algorithm", "AWS4-HMAC-SHA256".to_owned()),
             ("X-Amz-Credential", format!("{ACCESS_KEY}/{date_stamp}/{REGION}/{SERVICE}/aws4_request")),
             ("X-Amz-Date", amz_date_str.clone()),
             ("X-Amz-Expires", "3600".to_owned()),
-            ("X-Amz-SignedHeaders", "host".to_owned()),
+            ("X-Amz-SignedHeaders", signed_header_names),
         ];
         let pairs_ref: Vec<(&str, &str)> = pairs.iter().map(|(name, value)| (*name, value.as_str())).collect();
         let amz_date = s3s_sigv4::AmzDate::parse(&amz_date_str).expect("valid amz date");
-        let canonical_request = s3s_sigv4::create_presigned_canonical_request(
-            "PUT",
-            "/test-bucket/test-key.txt",
-            &pairs_ref,
-            [("host", "localhost")],
-        );
+        let canonical_request =
+            s3s_sigv4::create_presigned_canonical_request("PUT", "/test-bucket/test-key.txt", &pairs_ref, signed_headers);
         let string_to_sign = s3s_sigv4::create_string_to_sign(&canonical_request, &amz_date, REGION, SERVICE);
         let signature = s3s_sigv4::calculate_signature(&string_to_sign, SECRET_KEY, &amz_date, REGION, SERVICE);
         let mut query = pairs
@@ -4601,7 +4604,7 @@ mod bodyless_content_length_tests {
     }
 
     /// Percent-encode a query value: unreserved bytes pass through, everything else becomes `%XX`.
-    /// Only the credential's `/` separators are affected for these fixed test values.
+    /// Encodes the credential's `/` separators and the signed-header list's `;` separators.
     fn query_encode(value: &str) -> String {
         use std::fmt::Write as _;
 
@@ -4752,26 +4755,141 @@ mod bodyless_content_length_tests {
         let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
         let ccx = test_context(&s3, &config, &auth);
 
-        // The envelope headers stay exempt: AWS clients add them around the signed request and
-        // none of them can change what the request does. A regression here would break SDK
-        // uploads, so the whole list is pinned in one request.
-        let mut req = presigned_request(
-            Version::HTTP_11,
-            presigned_put_uri(),
-            &[
-                ("x-amz-content-sha256", EMPTY_SHA256),
-                ("x-amz-decoded-content-length", "0"),
-                ("x-amz-trailer", "x-amz-checksum-crc32c"),
-                ("x-amz-checksum-algorithm", "CRC32C"),
-            ],
-        );
+        let mut req = presigned_request(Version::HTTP_11, presigned_put_uri(), &[("x-amz-content-sha256", EMPTY_SHA256)]);
         let response = super::call(&mut req, &ccx).await.expect("presigned PUT must be routed");
         assert!(
             response.status.is_success(),
-            "unsigned envelope headers must keep working on a presigned PUT, got {:?}",
+            "x-amz-content-sha256 must keep working outside SignedHeaders on a presigned PUT, got {:?}",
             response.status
         );
         assert_eq!(test_s3.put_object.load(Ordering::SeqCst), 1, "the upload must still be routed");
+    }
+
+    const REQUEST_METADATA_HEADERS: &[(&str, &str)] = &[
+        ("x-amz-decoded-content-length", "0"),
+        ("x-amz-trailer", "x-amz-checksum-sha256"),
+        ("x-amz-checksum-algorithm", "SHA256"),
+    ];
+
+    #[tokio::test]
+    async fn unsigned_request_metadata_is_rejected() {
+        const URI: &str = "http://localhost/test-bucket/test-key.txt";
+        let config = test_config();
+        let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
+        for version in [Version::HTTP_11, Version::HTTP_2] {
+            for &(name, value) in REQUEST_METADATA_HEADERS {
+                let test_s3 = Arc::new(TestS3::default());
+                let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
+                let ccx = test_context(&s3, &config, &auth);
+                let mut req = signed_request(Method::PUT, version, URI, EMPTY_SHA256, &[]);
+                req.headers
+                    .insert(hyper::header::CONTENT_LENGTH, hyper::header::HeaderValue::from_static("0"));
+                req.headers.insert(
+                    hyper::header::HeaderName::from_static(name),
+                    hyper::header::HeaderValue::from_static(value),
+                );
+
+                let response = super::call(&mut req, &ccx)
+                    .await
+                    .expect("header-authenticated PUT must be routed");
+                assert_eq!(response.status, StatusCode::FORBIDDEN, "header auth, {version:?}, {name}");
+                let body = response.body.bytes().expect("error body is buffered");
+                assert!(
+                    std::str::from_utf8(&body)
+                        .expect("error body is UTF-8")
+                        .contains("<Code>AccessDenied</Code>"),
+                    "header auth, {version:?}, {name}: {body:?}"
+                );
+                assert_eq!(test_s3.put_object.load(Ordering::SeqCst), 0, "header auth, {version:?}, {name}");
+
+                let test_s3 = Arc::new(TestS3::default());
+                let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
+                let ccx = test_context(&s3, &config, &auth);
+                let mut req = presigned_request(version, presigned_put_uri(), &[(name, value)]);
+
+                let response = super::call(&mut req, &ccx).await.expect("presigned PUT must be routed");
+                assert_eq!(response.status, StatusCode::FORBIDDEN, "presigned, {version:?}, {name}");
+                let body = response.body.bytes().expect("error body is buffered");
+                assert!(
+                    std::str::from_utf8(&body)
+                        .expect("error body is UTF-8")
+                        .contains("<Code>AccessDenied</Code>"),
+                    "presigned, {version:?}, {name}: {body:?}"
+                );
+                assert_eq!(test_s3.put_object.load(Ordering::SeqCst), 0, "presigned, {version:?}, {name}");
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn signed_request_metadata_is_accepted() {
+        const URI: &str = "http://localhost/test-bucket/test-key.txt";
+        let config = test_config();
+        let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
+        for version in [Version::HTTP_11, Version::HTTP_2] {
+            let test_s3 = Arc::new(TestS3::default());
+            let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
+            let ccx = test_context(&s3, &config, &auth);
+            let mut req = signed_request(Method::PUT, version, URI, EMPTY_SHA256, REQUEST_METADATA_HEADERS);
+            req.headers
+                .insert(hyper::header::CONTENT_LENGTH, hyper::header::HeaderValue::from_static("0"));
+
+            let response = super::call(&mut req, &ccx)
+                .await
+                .expect("header-authenticated PUT must be routed");
+            assert!(
+                response.status.is_success(),
+                "signed request metadata must be accepted with header auth over {version:?}, got {:?}",
+                response.status
+            );
+            assert_eq!(test_s3.put_object.load(Ordering::SeqCst), 1, "header auth, {version:?}");
+
+            let test_s3 = Arc::new(TestS3::default());
+            let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
+            let ccx = test_context(&s3, &config, &auth);
+            let uri = presigned_put_uri_with_headers(REQUEST_METADATA_HEADERS);
+            let mut req = presigned_request(version, uri, REQUEST_METADATA_HEADERS);
+
+            let response = super::call(&mut req, &ccx).await.expect("presigned PUT must be routed");
+            assert!(
+                response.status.is_success(),
+                "signed request metadata must be accepted with a presigned URL over {version:?}, got {:?}",
+                response.status
+            );
+            assert_eq!(test_s3.put_object.load(Ordering::SeqCst), 1, "presigned, {version:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn configured_allowlist_permits_unsigned_request_metadata() {
+        const URI: &str = "http://localhost/test-bucket/test-key.txt";
+        let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
+        for &(name, value) in REQUEST_METADATA_HEADERS {
+            let config = test_config_with_allowlist(&[name]);
+            for version in [Version::HTTP_11, Version::HTTP_2] {
+                let test_s3 = Arc::new(TestS3::default());
+                let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
+                let ccx = test_context(&s3, &config, &auth);
+                let mut req = signed_request(Method::PUT, version, URI, EMPTY_SHA256, &[]);
+                req.headers
+                    .insert(hyper::header::CONTENT_LENGTH, hyper::header::HeaderValue::from_static("0"));
+                req.headers.insert(
+                    hyper::header::HeaderName::from_static(name),
+                    hyper::header::HeaderValue::from_static(value),
+                );
+                let response = super::call(&mut req, &ccx).await.expect("allowlisted PUT must be routed");
+                assert_eq!(response.status, StatusCode::OK, "header auth, {version:?}, {name}");
+                assert_eq!(test_s3.put_object.load(Ordering::SeqCst), 1, "header auth, {version:?}, {name}");
+
+                let test_s3 = Arc::new(TestS3::default());
+                let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
+                let ccx = test_context(&s3, &config, &auth);
+                let mut req = presigned_request(version, presigned_put_uri(), &[(name, value)]);
+                let response = super::call(&mut req, &ccx).await.expect("allowlisted PUT must be routed");
+                assert_eq!(response.status, StatusCode::OK, "presigned, {version:?}, {name}");
+                assert_eq!(test_s3.put_object.load(Ordering::SeqCst), 1, "presigned, {version:?}, {name}");
+            }
+        }
     }
 
     #[tokio::test]

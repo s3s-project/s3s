@@ -33,6 +33,7 @@ fn signed_request(
     content_length: Option<usize>,
     content_sha256: &str,
     payload: s3s_sigv4::Payload<'_>,
+    extra_headers: &[(&str, &str)],
 ) -> TestResult<Request<()>> {
     let uri: http::Uri = uri.parse()?;
     let authority = uri
@@ -41,24 +42,23 @@ fn signed_request(
         .as_str();
 
     let amz_date = s3s_sigv4::AmzDate::parse(TEST_AMZ_DATE)?;
-    let canonical_request = s3s_sigv4::create_canonical_request(
-        method.as_str(),
-        uri.path(),
-        &[] as &[(&str, &str)],
-        [
-            ("host", authority),
-            ("x-amz-content-sha256", content_sha256),
-            ("x-amz-date", TEST_AMZ_DATE),
-        ],
-        payload,
-    );
+    let mut signed_headers = vec![
+        ("host", authority),
+        ("x-amz-content-sha256", content_sha256),
+        ("x-amz-date", TEST_AMZ_DATE),
+    ];
+    signed_headers.extend(extra_headers.iter().copied());
+    signed_headers.sort_unstable_by_key(|(name, _)| *name);
+    let signed_header_names = signed_headers.iter().map(|(name, _)| *name).collect::<Vec<_>>().join(";");
+    let canonical_request =
+        s3s_sigv4::create_canonical_request(method.as_str(), uri.path(), &[] as &[(&str, &str)], signed_headers, payload);
 
     let string_to_sign = s3s_sigv4::create_string_to_sign(&canonical_request, &amz_date, TEST_REGION, "s3");
     let signature = s3s_sigv4::calculate_signature(&string_to_sign, TEST_SECRET_KEY, &amz_date, TEST_REGION, "s3");
 
     let authorization = format!(
         "AWS4-HMAC-SHA256 Credential={TEST_ACCESS_KEY}/{}/{TEST_REGION}/s3/aws4_request, \
-           SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature={signature}",
+           SignedHeaders={signed_header_names}, Signature={signature}",
         amz_date.fmt_date(),
     );
 
@@ -71,6 +71,9 @@ fn signed_request(
 
     if let Some(length) = content_length {
         builder = builder.header("content-length", length);
+    }
+    for &(name, value) in extra_headers {
+        builder = builder.header(name, value);
     }
 
     Ok(builder.body(())?)
@@ -562,6 +565,7 @@ async fn streaming_checksum_put(client: &mut Client) -> TestResult {
     let data = Bytes::from_static(b"streamed checksum");
     let checksum = crc32c_base64(&data)?;
     let encoded_body = unsigned_aws_chunked_body(&data, &checksum);
+    let decoded_content_length = data.len().to_string();
 
     let mut request = signed_request(
         Method::PUT,
@@ -569,20 +573,16 @@ async fn streaming_checksum_put(client: &mut Client) -> TestResult {
         Some(encoded_body.len()),
         "STREAMING-UNSIGNED-PAYLOAD-TRAILER",
         s3s_sigv4::Payload::UnsignedMultipleChunksWithTrailer,
+        &[
+            ("x-amz-decoded-content-length", decoded_content_length.as_str()),
+            ("x-amz-trailer", "x-amz-checksum-crc32c"),
+            ("x-amz-checksum-algorithm", "CRC32C"),
+        ],
     )?;
 
     request
         .headers_mut()
         .insert("content-encoding", HeaderValue::from_static("aws-chunked"));
-    request
-        .headers_mut()
-        .insert("x-amz-decoded-content-length", HeaderValue::from_str(&data.len().to_string())?);
-    request
-        .headers_mut()
-        .insert("x-amz-trailer", HeaderValue::from_static("x-amz-checksum-crc32c"));
-    request
-        .headers_mut()
-        .insert("x-amz-checksum-algorithm", HeaderValue::from_static("CRC32C"));
 
     let (response, body, trailers) = send(client, request, std::iter::once(encoded_body)).await?;
 
@@ -611,20 +611,16 @@ async fn streaming_truncated_put(client: &mut Client) -> TestResult {
         Some(truncated_body.len()),
         "STREAMING-UNSIGNED-PAYLOAD-TRAILER",
         s3s_sigv4::Payload::UnsignedMultipleChunksWithTrailer,
+        &[
+            ("x-amz-decoded-content-length", "3"),
+            ("x-amz-trailer", "x-amz-checksum-crc32c"),
+            ("x-amz-checksum-algorithm", "CRC32C"),
+        ],
     )?;
 
     request
         .headers_mut()
         .insert("content-encoding", HeaderValue::from_static("aws-chunked"));
-    request
-        .headers_mut()
-        .insert("x-amz-decoded-content-length", HeaderValue::from_static("3"));
-    request
-        .headers_mut()
-        .insert("x-amz-trailer", HeaderValue::from_static("x-amz-checksum-crc32c"));
-    request
-        .headers_mut()
-        .insert("x-amz-checksum-algorithm", HeaderValue::from_static("CRC32C"));
 
     let (response, body, trailers) =
         tokio::time::timeout(std::time::Duration::from_secs(2), send(client, request, std::iter::once(truncated_body))).await??;
@@ -902,6 +898,7 @@ async fn preserves_sigv4_authority_over_http3() -> TestResult {
             Some(0),
             "UNSIGNED-PAYLOAD",
             s3s_sigv4::Payload::Unsigned,
+            &[],
         )?,
         std::iter::empty::<Bytes>(),
     )
@@ -922,6 +919,7 @@ async fn preserves_sigv4_authority_over_http3() -> TestResult {
             Some(object.len()),
             "UNSIGNED-PAYLOAD",
             s3s_sigv4::Payload::Unsigned,
+            &[],
         )?,
         std::iter::once(object),
     )
@@ -938,6 +936,7 @@ async fn preserves_sigv4_authority_over_http3() -> TestResult {
         Some(0),
         "UNSIGNED-PAYLOAD",
         s3s_sigv4::Payload::Unsigned,
+        &[],
     )?;
     assert!(!request.headers().contains_key(http::header::HOST));
 
