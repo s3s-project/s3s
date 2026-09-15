@@ -8,10 +8,11 @@ on:
     paths:
       - 'fuzz/**'
       - '.github/workflows/fuzz.yml'
-      # The fuzz workspace depends on these crates by path, so a change here can
-      # break a target without touching fuzz/.
-      - 'crates/s3s/**'
-      - 'crates/s3s-multipart/**'
+      # The fuzz workspace depends on the in-repo crates by path, and those
+      # crates depend on each other (s3s pulls in s3s-rfc2047, s3s-sigv2,
+      # s3s-sigv4, s3s-multipart), so any crate can break a target without
+      # touching fuzz/.
+      - 'crates/**'
   schedule:
     - cron: '0 0 * * 0' # weekly at 00:00 UTC on Sunday
   workflow_dispatch:
