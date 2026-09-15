@@ -233,12 +233,13 @@ pub fn ready_stream(chunks: ChunkCache) -> stream::Iter<ReadyStream> {
     stream::iter(ReadyStream { chunks, index: 0 })
 }
 
-/// A stream that returns `Pending` before every chunk.
+/// A stream that suspends between chunks.
 ///
 /// An always-ready stream lets the parser run from one poll loop, which hides
-/// per-poll work behind the previous chunk's processing. This stream wakes
-/// itself and then yields the next chunk, so every parser step costs exactly
-/// one suspension and one resume.
+/// per-poll work behind the previous chunk's processing. This stream yields the
+/// first chunk on the first poll and suspends before every later one, so a
+/// parse of N chunks pays N - 1 wakeups: it models a body whose chunks keep
+/// arriving, not how the first one does.
 pub struct PendingStream {
     chunks: ChunkCache,
     index: usize,
@@ -267,7 +268,7 @@ impl Stream for PendingStream {
     }
 }
 
-/// A stream that suspends before every chunk.
+/// A stream that suspends between chunks.
 pub fn pending_stream(chunks: ChunkCache) -> PendingStream {
     PendingStream {
         chunks,

@@ -31,10 +31,11 @@
 //!   (differential guard); the unknown-total-length path is checked to produce
 //!   identical output too.
 //!
-//! The `pending` group feeds every chunk from a stream that suspends first, so
-//! each parser step pays one wakeup. An always-ready stream lets a parser run
-//! from a single poll loop, which hides whatever it does per poll behind the
-//! previous chunk's processing.
+//! The `pending` group feeds the chunks from a stream that suspends between
+//! them: the first chunk arrives on the first poll and every later one costs a
+//! wakeup. An always-ready stream lets a parser run from a single poll loop,
+//! which hides whatever it does per poll behind the previous chunk's
+//! processing.
 //!
 //! The two shapes are not equivalent for every parser, and the difference is
 //! not noise. `multer`'s `StreamBuffer::poll_stream` loops until the stream
@@ -202,7 +203,8 @@ mod harness {
     enum Shape {
         /// Chunks are always ready: what a fully buffered body looks like.
         Ready,
-        /// `Pending` before every chunk, then the chunk; a network body.
+        /// Suspends between chunks: the first is ready, every later one costs
+        /// a wakeup. A network body.
         Suspending,
     }
 

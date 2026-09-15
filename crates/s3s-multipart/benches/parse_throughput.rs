@@ -5,10 +5,10 @@
 //! until the header block ends, then `next_data` until the part ends.
 //!
 //! Two series per cell. `ready` feeds every chunk from an always-ready stream,
-//! which is what a buffered body looks like. `pending` suspends the parser
-//! before every chunk, so each step pays one wakeup — that is the shape a
-//! network body has, and it is the only shape in which per-poll work is
-//! visible.
+//! which is what a buffered body looks like. `pending` yields the first chunk
+//! on the first poll and suspends before every later one, so every step but the
+//! first pays a wakeup — that is the shape a network body has, and it is the
+//! only shape in which per-poll work is visible.
 //!
 //! Run with:
 //! ```bash
