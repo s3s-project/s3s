@@ -14,6 +14,7 @@ use crate::host::SingleDomain;
 use crate::protocol::S3Response;
 use crate::route::S3Route;
 use hyper::Version;
+use hyper::header::{HeaderName, HeaderValue};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -538,5 +539,70 @@ pub(crate) fn ccx<'a>(parts: &'a CtxParts, auth: bool, host: bool, route: Option
         access: None,
         route,
         validation: None,
+    }
+}
+
+pub(crate) fn headers_from_slice(slice: &[(&str, &str)]) -> HeaderMap {
+    let mut headers = HeaderMap::new();
+    for &(name, value) in slice {
+        headers.append(
+            HeaderName::from_bytes(name.as_bytes()).expect("valid test header name"),
+            HeaderValue::from_bytes(value.as_bytes()).expect("valid test header value"),
+        );
+    }
+    headers
+}
+
+pub(crate) fn fmt_current_amz_date(dt: time::OffsetDateTime) -> String {
+    format!(
+        "{:04}{:02}{:02}T{:02}{:02}{:02}Z",
+        dt.year(),
+        u8::from(dt.month()),
+        dt.day(),
+        dt.hour(),
+        dt.minute(),
+        dt.second()
+    )
+}
+
+pub(crate) fn sig_v2_test_config(enable_sig_v2: bool) -> Arc<dyn S3ConfigProvider> {
+    use crate::config::{S3Config, StaticConfigProvider};
+
+    let config = S3Config {
+        enable_sig_v2,
+        ..Default::default()
+    };
+    Arc::new(StaticConfigProvider::new(Arc::new(config)))
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn sig_v2_test_context<'a>(
+    config: &'a Arc<dyn S3ConfigProvider>,
+    auth: Option<&'a dyn crate::auth::S3Auth>,
+    method: &'a Method,
+    uri: &'a Uri,
+    body: &'a mut Body,
+    qs: Option<&'a OrderedQs>,
+    hs: &'a HeaderMap,
+    mime: Option<Mime>,
+) -> SignatureContext<'a> {
+    SignatureContext {
+        auth,
+        config,
+        req_version: ::http::Version::HTTP_11,
+        req_method: method,
+        req_uri: uri,
+        req_body: body,
+        qs,
+        hs,
+        decoded_uri_path: "/test.txt",
+        raw_uri_path: "/test.txt",
+        vh_bucket: None,
+        content_length: None,
+        mime,
+        decoded_content_length: None,
+        transformed_body: None,
+        multipart: None,
+        trailing_headers: None,
     }
 }

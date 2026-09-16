@@ -7,21 +7,10 @@ use super::*;
 
 mod extract_decoded_content_length_tests {
     use super::extract_decoded_content_length;
+    use crate::ops::tests::common::headers_from_slice;
     use hyper::HeaderMap;
-    use hyper::header::{HeaderName, HeaderValue};
 
     const HEADER_NAME: &str = "x-amz-decoded-content-length";
-
-    fn headers_from_slice(slice: &[(&str, &str)]) -> HeaderMap {
-        let mut headers = HeaderMap::new();
-        for &(name, value) in slice {
-            headers.append(
-                HeaderName::from_bytes(name.as_bytes()).expect("valid test header name"),
-                HeaderValue::from_bytes(value.as_bytes()).expect("valid test header value"),
-            );
-        }
-        headers
-    }
 
     #[test]
     fn missing_header_returns_none() {
