@@ -53,7 +53,7 @@
 //!
 //! This module lives inside the crate because `resolve_route` and the request
 //! types it takes are crate-private, so an integration test could not call
-//! them. Same rationale as the `route_bench` module.
+//! them. Same rationale as the `benches` module.
 
 use crate::error::S3Result;
 use crate::http::{OrderedQs, Request};
