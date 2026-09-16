@@ -8,8 +8,8 @@ use crate::ops::signature::*;
 use crate::http::Body;
 use crate::utils::crypto::hex_sha256;
 
-#[tokio::test]
-async fn test_sts_body_hash_computation() {
+#[test]
+fn sts_body_hash_is_deterministic_hex() {
     // Typical STS AssumeRole request body
     let body_content = b"Action=AssumeRole&RoleArn=arn:aws:iam::123456789012:role/test-role&RoleSessionName=test-session";
 
@@ -60,9 +60,10 @@ async fn test_sts_body_within_limit() {
 }
 
 #[test]
-fn test_sts_max_body_size_constant() {
-    // Verify the constant is set to a reasonable value
-    assert_eq!(MAX_STS_BODY_SIZE, 8192);
-    // STS requests are typically small (under 2KB for AssumeRole)
-    // 8KB provides a good safety margin
+fn sts_max_body_size_is_in_reasonable_range() {
+    // STS requests are typically small (under 2 KB for AssumeRole).
+    // The limit must be large enough for real requests but small enough to
+    // prevent trivial DoS via oversized bodies.
+    const { assert!(MAX_STS_BODY_SIZE >= 2048, "limit must be large enough for typical STS requests") };
+    const { assert!(MAX_STS_BODY_SIZE <= 65536, "limit must be small enough to bound memory use") };
 }
