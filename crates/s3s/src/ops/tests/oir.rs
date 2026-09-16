@@ -14,40 +14,12 @@
 //! entirely and normal routing applies.
 
 use super::*;
-use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
+use crate::config::{S3Config, StaticConfigProvider};
 use crate::error::S3ErrorCode;
-use crate::s3_trait::S3;
 use hyper::Method;
 use std::sync::Arc;
 
-struct NoopS3;
-
-#[async_trait::async_trait]
-impl S3 for NoopS3 {}
-
-struct CtxParts {
-    s3: Arc<dyn S3>,
-    config: Arc<dyn S3ConfigProvider>,
-}
-
-fn ccx(parts: &CtxParts) -> CallContext<'_> {
-    CallContext {
-        s3: &parts.s3,
-        config: &parts.config,
-        host: None,
-        auth: None,
-        access: None,
-        route: None,
-        validation: None,
-    }
-}
-
-fn ctx() -> CtxParts {
-    CtxParts {
-        s3: Arc::new(NoopS3),
-        config: Arc::new(StaticConfigProvider::default()),
-    }
-}
+use super::common::{CtxParts, NoopS3, ccx, ctx};
 
 fn ctx_with_operation_id_routing(enabled: bool) -> CtxParts {
     let config = S3Config {
@@ -57,6 +29,8 @@ fn ctx_with_operation_id_routing(enabled: bool) -> CtxParts {
     CtxParts {
         s3: Arc::new(NoopS3),
         config: Arc::new(StaticConfigProvider::new(Arc::new(config))),
+        auth: None,
+        host: None,
     }
 }
 
@@ -72,7 +46,7 @@ fn build_request(method: &str, uri_path: &str, headers: &[(&str, &str)]) -> Requ
 }
 
 async fn expect_op(parts: &CtxParts, req: &mut Request, expected: &str) {
-    let ans = prepare(req, &ccx(parts))
+    let ans = prepare(req, &ccx(parts, false, false, None))
         .await
         .unwrap_or_else(|e| panic!("{expected}: unexpected {e:?}"));
     match ans {
@@ -82,7 +56,10 @@ async fn expect_op(parts: &CtxParts, req: &mut Request, expected: &str) {
 }
 
 async fn expect_invalid_request(parts: &CtxParts, req: &mut Request, why: &str) {
-    let err = prepare(req, &ccx(parts)).await.err().expect("expected error");
+    let err = prepare(req, &ccx(parts, false, false, None))
+        .await
+        .err()
+        .expect("expected error");
     assert_eq!(*err.code(), S3ErrorCode::InvalidRequest, "{why}: {err:?}");
 }
 

@@ -15,14 +15,13 @@
 //! cargo test -p s3s --release --lib -- ops::benches::route --ignored --nocapture
 //! ```
 
-use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
+use crate::config::S3Config;
 use crate::http::{OrderedQs, QsLookup, Request};
-use crate::ops::CallContext;
 use crate::ops::generated::resolve_operation_by_id;
 use crate::ops::generated::resolve_route;
 use crate::ops::resolve_oir;
+use crate::ops::tests::common::{ccx, ctx};
 use crate::path::S3Path;
-use crate::s3_trait::S3;
 use minstant::Instant;
 use std::hint::black_box;
 use std::sync::Arc;
@@ -294,35 +293,6 @@ fn oir_cases() -> Vec<OirCase> {
     ]
 }
 
-struct NoopS3;
-
-#[async_trait::async_trait]
-impl S3 for NoopS3 {}
-
-struct CtxParts {
-    s3: Arc<dyn S3>,
-    config: Arc<dyn S3ConfigProvider>,
-}
-
-fn ctx() -> CtxParts {
-    CtxParts {
-        s3: Arc::new(NoopS3),
-        config: Arc::new(StaticConfigProvider::default()),
-    }
-}
-
-fn ccx(parts: &CtxParts) -> CallContext<'_> {
-    CallContext {
-        s3: &parts.s3,
-        config: &parts.config,
-        host: None,
-        auth: None,
-        access: None,
-        route: None,
-        validation: None,
-    }
-}
-
 /// `S3Path` is not `Clone`; rebuild one for the request from a case.
 fn rebuild_s3_path(p: &S3Path) -> S3Path {
     match p {
@@ -340,7 +310,7 @@ fn rebuild_s3_path(p: &S3Path) -> S3Path {
 fn oir_bench() {
     let iters = 20_000_000u64;
     let parts = ctx();
-    let ccx = ccx(&parts);
+    let ccx = ccx(&parts, false, false, None);
     // Fair, peer comparison: FVR shape routing and the OIR fast path are
     // measured on the *identical* request input (the qs includes the `x-id`
     // signal). Columns:
@@ -446,7 +416,7 @@ fn snapshot_bench() {
 
     let iters = 20_000_000u64;
     let parts = ctx();
-    let ccx = ccx(&parts);
+    let ccx = ccx(&parts, false, false, None);
     let cfg: Arc<S3Config> = Arc::new(S3Config::default());
 
     println!("{:<38} {:>10}", "snapshot decomposition", "ns/op");

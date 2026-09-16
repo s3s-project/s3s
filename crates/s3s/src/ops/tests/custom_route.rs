@@ -9,23 +9,16 @@
 //! requests keep the legacy pipeline byte-for-byte, including error ordering.
 
 use super::*;
-use crate::auth::{SecretKey, SimpleAuth};
-use crate::config::{S3ConfigProvider, StaticConfigProvider};
 use crate::error::S3ErrorCode;
-use crate::host::SingleDomain;
 use crate::protocol::S3Response;
 use crate::route::S3Route;
-use crate::s3_trait::S3;
 use hyper::http::Extensions;
 use hyper::{HeaderMap, Method, Uri};
 use s3s_sigv4::AmzDate;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-struct NoopS3;
-
-#[async_trait::async_trait]
-impl S3 for NoopS3 {}
+use super::common::{CtxParts, ccx, ctx_with_auth};
 
 /// Route matching every request; counts `call` invocations.
 struct MatchAllRoute {
@@ -74,43 +67,9 @@ impl S3Route for MatchNoneRoute {
     }
 }
 
-struct CtxParts {
-    s3: Arc<dyn S3>,
-    config: Arc<dyn S3ConfigProvider>,
-    auth: Option<SimpleAuth>,
-    host: Option<SingleDomain>,
-}
-
-fn ccx<'a>(parts: &'a CtxParts, auth: bool, host: bool, route: Option<&'a dyn S3Route>) -> CallContext<'a> {
-    CallContext {
-        s3: &parts.s3,
-        config: &parts.config,
-        host: if host {
-            parts.host.as_ref().map(|h| h as &dyn crate::host::S3Host)
-        } else {
-            None
-        },
-        auth: if auth {
-            parts.auth.as_ref().map(|a| a as &dyn crate::auth::S3Auth)
-        } else {
-            None
-        },
-        access: None,
-        route,
-        validation: None,
-    }
-}
-
+/// Context with the test credentials and host wiring these tests need.
 fn ctx() -> CtxParts {
-    CtxParts {
-        s3: Arc::new(NoopS3),
-        config: Arc::new(StaticConfigProvider::default()),
-        auth: Some(SimpleAuth::from_single(
-            "AKIAIOSFODNN7EXAMPLE",
-            SecretKey::from("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"),
-        )),
-        host: Some(SingleDomain::new("example.com").expect("valid domain")),
-    }
+    ctx_with_auth()
 }
 
 fn get_request(path: &str, host: &str) -> Request {
