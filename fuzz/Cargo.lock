@@ -927,7 +927,7 @@ checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
 
 [[package]]
 name = "s3s"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "arc-swap",
  "arrayvec",
@@ -958,6 +958,7 @@ dependencies = [
  "pin-project-lite",
  "quick-xml",
  "regex",
+ "s3s-rfc2047",
  "s3s-sigv2",
  "s3s-sigv4",
  "serde",
@@ -989,11 +990,32 @@ dependencies = [
  "futures",
  "libfuzzer-sys",
  "s3s",
+ "s3s-multipart",
+]
+
+[[package]]
+name = "s3s-multipart"
+version = "0.17.0-alpha.1"
+dependencies = [
+ "arrayvec",
+ "bytes",
+ "futures-core",
+ "httparse",
+ "memchr",
+ "thiserror",
+]
+
+[[package]]
+name = "s3s-rfc2047"
+version = "0.16.0"
+dependencies = [
+ "base64-simd",
+ "thiserror",
 ]
 
 [[package]]
 name = "s3s-sigv2"
-version = "0.16.0-alpha.1"
+version = "0.16.0"
 dependencies = [
  "base64-simd",
  "hmac",
@@ -1005,7 +1027,7 @@ dependencies = [
 
 [[package]]
 name = "s3s-sigv4"
-version = "0.16.0-alpha.1"
+version = "0.16.0"
 dependencies = [
  "arrayvec",
  "base64-simd",
