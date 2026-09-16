@@ -20,7 +20,8 @@
 
 use crate::ops::*;
 
-mod common;
+// Shared harness. `pub(super)` so `ops/benches/` — outside this subtree — can use it too.
+pub(super) mod common;
 
 // `ops/signature.rs` tests reach this double as `ops::tests::NeverGetSecretKeyAuth`; keep
 // that path working while the fixture itself lives in `common`.

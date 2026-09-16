@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
-//! Fixtures shared by two or more files of [`super`].
+//! Harness shared by the in-crate `ops` tests and micro-benchmarks.
 //!
-//! Only compiled under `cfg(test)`. Items are `pub(crate)` because `ops/signature.rs`
-//! still refers to [`NeverGetSecretKeyAuth`] through `ops::tests`.
+//! Only compiled under `cfg(test)`. Items are `pub(crate)` because they are used from
+//! outside the `tests` subtree: `ops/signature.rs` tests and `ops/benches/`.
 
 use super::*;
 
-use crate::auth::SimpleAuth;
+use crate::auth::{SecretKey, SimpleAuth};
 use crate::config::StaticConfigProvider;
+use crate::host::SingleDomain;
 use crate::protocol::S3Response;
+use crate::route::S3Route;
 use hyper::Version;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -478,5 +480,63 @@ pub(crate) mod post_policy_test_helpers {
                 .body(Body::http_body(stream_body))
                 .unwrap(),
         )
+    }
+}
+
+/// `S3` implementation that does nothing: the tests exercise routing, authentication and
+/// serialization rather than operation bodies.
+pub(crate) struct NoopS3;
+
+#[async_trait::async_trait]
+impl crate::s3_trait::S3 for NoopS3 {}
+
+/// Owned halves of a [`CallContext`] that routing tests build once and borrow.
+pub(crate) struct CtxParts {
+    pub(crate) s3: Arc<dyn crate::s3_trait::S3>,
+    pub(crate) config: Arc<dyn S3ConfigProvider>,
+    pub(crate) auth: Option<SimpleAuth>,
+    pub(crate) host: Option<SingleDomain>,
+}
+
+/// Context without auth, host or route wiring.
+pub(crate) fn ctx() -> CtxParts {
+    CtxParts {
+        s3: Arc::new(NoopS3),
+        config: Arc::new(StaticConfigProvider::default()),
+        auth: None,
+        host: None,
+    }
+}
+
+/// Context with the canonical test credentials and a `SingleDomain` host.
+pub(crate) fn ctx_with_auth() -> CtxParts {
+    CtxParts {
+        auth: Some(SimpleAuth::from_single(
+            "AKIAIOSFODNN7EXAMPLE",
+            SecretKey::from("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"),
+        )),
+        host: Some(SingleDomain::new("example.com").expect("valid domain")),
+        ..ctx()
+    }
+}
+
+/// Borrowed context; `auth` and `host` select whether the owned halves are wired in.
+pub(crate) fn ccx<'a>(parts: &'a CtxParts, auth: bool, host: bool, route: Option<&'a dyn S3Route>) -> CallContext<'a> {
+    CallContext {
+        s3: &parts.s3,
+        config: &parts.config,
+        host: if host {
+            parts.host.as_ref().map(|h| h as &dyn crate::host::S3Host)
+        } else {
+            None
+        },
+        auth: if auth {
+            parts.auth.as_ref().map(|a| a as &dyn crate::auth::S3Auth)
+        } else {
+            None
+        },
+        access: None,
+        route,
+        validation: None,
     }
 }
