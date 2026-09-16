@@ -7,7 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-[Unreleased]: https://github.com/s3s-project/s3s/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/s3s-project/s3s/compare/v0.16.1...HEAD
+
+## [v0.16.1] - 2026-09-16
+
+[v0.16.1]: https://github.com/s3s-project/s3s/compare/v0.16.0...v0.16.1
+
+### s3s
+
+**Migration**: v0.16.1 tightens signature coverage for request-metadata headers. The new behaviour is the one to adopt; the item names the option that restores the previous behaviour.
++ Request-metadata headers (`x-amz-decoded-content-length`, `x-amz-trailer`, `x-amz-checksum-algorithm`) must be covered by the signature; `S3Config::unsigned_amz_header_allowlist` exempts a header again.
+
+**BREAKING**: previously accepted requests are now rejected:
++ Require signatures for request metadata headers ([#830](https://github.com/s3s-project/s3s/pull/830))
+
+### CI
+
++ Remove the s3s dry-run publish step ([#824](https://github.com/s3s-project/s3s/pull/824))
+
+### Dependencies
+
++ Update `rustls` to 0.23.45, fixing [RUSTSEC-2026-0285] (handshake messages accepted across encryption level boundaries) and the failing audit job ([#828](https://github.com/s3s-project/s3s/pull/828))
 
 ## [v0.16.0] - 2026-09-14
 
