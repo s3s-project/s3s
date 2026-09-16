@@ -19,7 +19,7 @@ regex = "1.13.1"
 serde.workspace = true
 serde_json = { workspace = true, features = ["preserve_order"] }
 serde_urlencoded = "0.7.1"
-s3s-model = { version = "0.16.0", path = "../crates/s3s-model" }
+s3s-model = { version = "0.16.1", path = "../crates/s3s-model" }
 http.workspace = true
 phf_codegen.workspace = true
 tree-sitter-rust = "0.24.2"

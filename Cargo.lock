@@ -3723,7 +3723,7 @@ checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
 
 [[package]]
 name = "s3s"
-version = "0.16.0"
+version = "0.16.1"
 dependencies = [
  "arc-swap",
  "arrayvec",
@@ -3793,7 +3793,7 @@ dependencies = [
 
 [[package]]
 name = "s3s-aws"
-version = "0.16.0"
+version = "0.16.1"
 dependencies = [
  "async-trait",
  "aws-sdk-s3",
@@ -3832,7 +3832,7 @@ dependencies = [
 
 [[package]]
 name = "s3s-e2e"
-version = "0.16.0"
+version = "0.16.1"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -3851,7 +3851,7 @@ dependencies = [
 
 [[package]]
 name = "s3s-fs"
-version = "0.16.0"
+version = "0.16.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3915,7 +3915,7 @@ dependencies = [
 
 [[package]]
 name = "s3s-model"
-version = "0.16.0"
+version = "0.16.1"
 dependencies = [
  "anyhow",
  "numeric_cast",
@@ -3929,7 +3929,7 @@ version = "0.17.0-alpha.1"
 
 [[package]]
 name = "s3s-policy"
-version = "0.16.0"
+version = "0.16.1"
 dependencies = [
  "indexmap",
  "serde",
@@ -3939,7 +3939,7 @@ dependencies = [
 
 [[package]]
 name = "s3s-proxy"
-version = "0.16.0"
+version = "0.16.1"
 dependencies = [
  "async-trait",
  "aws-config",
@@ -3959,7 +3959,7 @@ dependencies = [
 
 [[package]]
 name = "s3s-rfc2047"
-version = "0.16.0"
+version = "0.16.1"
 dependencies = [
  "base64-simd",
  "thiserror",
@@ -3967,7 +3967,7 @@ dependencies = [
 
 [[package]]
 name = "s3s-sigv2"
-version = "0.16.0"
+version = "0.16.1"
 dependencies = [
  "base64-simd",
  "hmac 0.13.0",
@@ -3979,7 +3979,7 @@ dependencies = [
 
 [[package]]
 name = "s3s-sigv4"
-version = "0.16.0"
+version = "0.16.1"
 dependencies = [
  "arrayvec",
  "base64-simd",
@@ -3998,7 +3998,7 @@ dependencies = [
 
 [[package]]
 name = "s3s-test"
-version = "0.16.0"
+version = "0.16.1"
 dependencies = [
  "backtrace",
  "clap",

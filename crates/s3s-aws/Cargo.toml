@@ -1,6 +1,6 @@
 [package]
 name = "s3s-aws"
-version = "0.16.0"
+version = "0.16.1"
 description = "S3 service adapter integrated with aws-sdk-s3"
 readme = "../../README.md"
 keywords = ["s3"]
@@ -26,7 +26,7 @@ futures.workspace = true
 http-body = { workspace = true, optional = true }
 hyper.workspace = true
 minio = { workspace = true, optional = true }
-s3s = { version = "0.16.0", path = "../s3s", default-features = false }
+s3s = { version = "0.16.1", path = "../s3s", default-features = false }
 std-next.workspace = true
 sync_wrapper = "1.0.2"
 tracing.workspace = true
