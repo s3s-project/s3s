@@ -3,24 +3,24 @@
 
 //! Route micro-benchmarks.
 //!
-//! Ignored by default; run with:
-//!
-//! ```bash
-//! cargo test -p s3s --release route_bench -- --ignored --nocapture
-//! ```
-//!
 //! Methodology: per form, 1 warm-up round (10⁶ iters) then 5 measured rounds
 //! of 2×10⁷ iterations; the smallest per-iteration mean is reported. Inputs
 //! are pre-built and passed through [`std::hint::black_box`]. The first call
 //! of each case is also asserted against the expected operation, guarding
 //! against silent routing drift.
+//!
+//! Run with (see [`super`] for the shared invocation):
+//!
+//! ```bash
+//! cargo test -p s3s --release --lib -- ops::benches::route --ignored --nocapture
+//! ```
 
-use super::CallContext;
-use super::resolve_oir;
 use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
 use crate::http::{OrderedQs, QsLookup, Request};
+use crate::ops::CallContext;
 use crate::ops::generated::resolve_operation_by_id;
 use crate::ops::generated::resolve_route;
+use crate::ops::resolve_oir;
 use crate::path::S3Path;
 use crate::s3_trait::S3;
 use minstant::Instant;
@@ -155,7 +155,7 @@ fn cases() -> Vec<Case> {
 }
 
 #[test]
-#[ignore = "micro-benchmark; run with: cargo test -p s3s --release route_bench -- --ignored --nocapture"]
+#[ignore = "micro-benchmark; run with: cargo test -p s3s --release --lib -- ops::benches --ignored --nocapture"]
 fn route_bench() {
     let iters = 20_000_000u64;
     println!("{:<52} {:>10}", "case", "ns/op");
@@ -336,7 +336,7 @@ fn rebuild_s3_path(p: &S3Path) -> S3Path {
 }
 
 #[test]
-#[ignore = "micro-benchmark; run with: cargo test -p s3s --release route_bench -- --ignored --nocapture"]
+#[ignore = "micro-benchmark; run with: cargo test -p s3s --release --lib -- ops::benches --ignored --nocapture"]
 fn oir_bench() {
     let iters = 20_000_000u64;
     let parts = ctx();
@@ -437,7 +437,7 @@ fn oir_bench() {
 /// increment, and the heap field read. Isolates why the shared config access
 /// costs ~9-10 ns in the OIR bench.
 #[test]
-#[ignore = "micro-benchmark; run with: cargo test -p s3s --release route_bench -- --ignored --nocapture"]
+#[ignore = "micro-benchmark; run with: cargo test -p s3s --release --lib -- ops::benches --ignored --nocapture"]
 fn snapshot_bench() {
     fn measure(iters: u64, name: &str, mut f: impl FnMut()) {
         let ns = time_ns_per_op(&mut f, iters);

@@ -33,7 +33,7 @@ mod route_skip_validation_tests;
 mod route_oir_tests;
 
 #[cfg(test)]
-mod route_bench;
+mod benches;
 
 #[cfg(test)]
 mod route_fixture_check;
