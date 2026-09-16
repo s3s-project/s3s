@@ -29,6 +29,7 @@ pub(crate) use self::common::NeverGetSecretKeyAuth;
 mod access;
 mod budget;
 mod content_length;
+mod custom_route;
 mod custom_route_body_limit;
 mod decoded_content_length;
 mod error_response;
@@ -36,7 +37,9 @@ mod generated_ops;
 mod host;
 #[cfg(feature = "minio")]
 mod listen_bucket_notification;
+mod oir;
 mod post_object;
 mod put_object_max_size;
+mod routing_fixtures;
 mod signature_coverage;
 mod virtual_hosted_style_hint;

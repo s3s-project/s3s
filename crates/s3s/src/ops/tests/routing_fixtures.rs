@@ -60,7 +60,7 @@ use crate::http::{OrderedQs, Request};
 use crate::path::S3Path;
 use std::sync::OnceLock;
 
-const FIXTURES_JSON: &str = include_str!("route_fixtures.json");
+const FIXTURES_JSON: &str = include_str!("fixtures/route_fixtures.json");
 
 struct Fixture {
     method: String,
@@ -162,7 +162,7 @@ fn route_fixtures_match() {
 
     if capture {
         std::fs::write(
-            concat!(env!("CARGO_MANIFEST_DIR"), "/src/ops/route_fixtures.json"),
+            concat!(env!("CARGO_MANIFEST_DIR"), "/src/ops/tests/fixtures/route_fixtures.json"),
             serde_json::to_string_pretty(raw.as_ref().unwrap()).unwrap(),
         )
         .unwrap();

@@ -21,22 +21,7 @@ mod multipart;
 mod tests;
 
 #[cfg(test)]
-mod bodyless_error_tests;
-
-#[cfg(test)]
-mod head_error_tests;
-
-#[cfg(test)]
-mod route_skip_validation_tests;
-
-#[cfg(test)]
-mod route_oir_tests;
-
-#[cfg(test)]
 mod benches;
-
-#[cfg(test)]
-mod route_fixture_check;
 
 use crate::access::{S3Access, S3AccessContext};
 use crate::auth::{Credentials, S3Auth};
