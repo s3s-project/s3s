@@ -901,6 +901,25 @@ mod tests {
         assert_eq!(aggregate_file_stream(stream).await.unwrap(), "hello");
     }
 
+    /// File content made of CRLF runs and near-miss dash patterns is streamed
+    /// back byte for byte, even when every chunk carries a single byte.
+    #[tokio::test]
+    async fn file_content_with_crlf_runs_is_streamed_exactly() {
+        let file_content = "\r\n too much crlf \r\n--\r\n\r\n\r\n";
+        let body = file_form(&[], file_content);
+        let total_len = body.len() as u64;
+        let mut multipart = transform_multipart(
+            chunks(byte_chunks(&body)),
+            BOUNDARY.as_bytes(),
+            MultipartLimits::default(),
+            Some(total_len),
+        )
+        .await
+        .unwrap();
+        let stream = multipart.take_file_stream().unwrap();
+        assert_eq!(aggregate_file_stream(stream).await.unwrap(), file_content);
+    }
+
     /// A body ending mid-trailer (closing delimiter without the final CRLF)
     /// must surface Incomplete rather than a clean end of stream.
     #[tokio::test]
@@ -941,6 +960,86 @@ mod tests {
             .await
             .unwrap();
         let mut stream = multipart.take_file_stream().unwrap();
+        let bytes = stream.next().await.unwrap().unwrap();
+        assert_eq!(&bytes[..], b"hi");
+        assert!(matches!(stream.next().await, Some(Err(FileStreamError::InvalidTrailer))));
+    }
+
+    /// A form whose fields and file part are all within the limits parses, and
+    /// every part is reported.
+    #[tokio::test]
+    async fn limits_within_bounds() {
+        let field_count = 10;
+        let field_value = "x".repeat(100);
+        let mut body = String::new();
+        for i in 0..field_count {
+            let _ = write!(
+                body,
+                "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"field{i}\"\r\n\r\n{field_value}\r\n"
+            );
+        }
+        let _ = write!(
+            body,
+            "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"test.txt\"\r\nContent-Type: text/plain\r\n\r\nfile content\r\n--{BOUNDARY}--\r\n"
+        );
+
+        let ans = transform_multipart(body_stream(body), BOUNDARY.as_bytes(), MultipartLimits::default(), None)
+            .await
+            .unwrap();
+        assert_eq!(ans.fields().len(), field_count);
+        assert!(ans.file.stream.is_some());
+    }
+
+    /// A file part holding "hi" followed by the given tail, with the stream
+    /// failing after the first chunk.
+    async fn file_stream_then_error(tail: &str) -> FileStream {
+        let items: Vec<Result<Bytes, StdError>> = vec![
+            Ok(Bytes::from(format!(
+                "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"f.txt\"\r\n\r\nhi{tail}"
+            ))),
+            Err(Box::new(io::Error::new(io::ErrorKind::ConnectionReset, "boom"))),
+        ];
+        let mut multipart =
+            transform_multipart(futures::stream::iter(items), BOUNDARY.as_bytes(), MultipartLimits::default(), None)
+                .await
+                .unwrap();
+        multipart.take_file_stream().unwrap()
+    }
+
+    /// A transport error while the closing dashes are read surfaces as an
+    /// underlying error.
+    #[tokio::test]
+    async fn file_stream_underlying_error_while_reading_the_closing_dashes() {
+        let mut stream = file_stream_then_error(&format!("\r\n--{BOUNDARY}")).await;
+        let bytes = stream.next().await.unwrap().unwrap();
+        assert_eq!(&bytes[..], b"hi");
+        assert!(matches!(stream.next().await, Some(Err(FileStreamError::Underlying(_)))));
+    }
+
+    /// The same while the final CRLF after the closing dashes is read.
+    #[tokio::test]
+    async fn file_stream_underlying_error_while_reading_the_final_crlf() {
+        let mut stream = file_stream_then_error(&format!("\r\n--{BOUNDARY}--")).await;
+        let bytes = stream.next().await.unwrap().unwrap();
+        assert_eq!(&bytes[..], b"hi");
+        assert!(matches!(stream.next().await, Some(Err(FileStreamError::Underlying(_)))));
+    }
+
+    /// The same while the end of the multipart stream is checked after a
+    /// complete closing trailer.
+    #[tokio::test]
+    async fn file_stream_underlying_error_while_checking_the_epilogue() {
+        let mut stream = file_stream_then_error(&format!("\r\n--{BOUNDARY}--\r\n")).await;
+        let bytes = stream.next().await.unwrap().unwrap();
+        assert_eq!(&bytes[..], b"hi");
+        assert!(matches!(stream.next().await, Some(Err(FileStreamError::Underlying(_)))));
+    }
+
+    /// Bytes between the closing dashes and the final CRLF are a trailer
+    /// mismatch, not a transport error.
+    #[tokio::test]
+    async fn file_stream_rejects_garbage_after_the_closing_dashes() {
+        let mut stream = file_stream_then_error(&format!("\r\n--{BOUNDARY}--zz\r\n")).await;
         let bytes = stream.next().await.unwrap().unwrap();
         assert_eq!(&bytes[..], b"hi");
         assert!(matches!(stream.next().await, Some(Err(FileStreamError::InvalidTrailer))));
