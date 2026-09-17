@@ -313,7 +313,10 @@ fn bytes_to_string(bytes: &[u8]) -> Result<String, MultipartError> {
 fn map_parser_error(err: ParserError) -> MultipartError {
     match err {
         ParserError::StreamReadFailed(err) => MultipartError::Underlying(err),
-        ParserError::HeaderSizeExceeded { limit } => MultipartError::FieldTooLarge(limit, limit),
+        // The crate reports the limit it exceeded, not the size of the block,
+        // which is only known to be larger than the limit; report the smallest
+        // size that exceeds it instead of an impossible equality.
+        ParserError::HeaderSizeExceeded { limit } => MultipartError::FieldTooLarge(limit.saturating_add(1), limit),
         // `Error` is #[non_exhaustive]; every other variant describes a
         // malformed or prematurely ended body, or a misuse the sequential
         // adapter cannot reach, and keeps the "invalid format" mapping.
@@ -700,7 +703,10 @@ mod tests {
             "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"large_field\"\r\n\r\n{large_value}\r\n--{BOUNDARY}--\r\n"
         );
         let result = transform_multipart(body_stream(body), BOUNDARY.as_bytes(), limits, None).await;
-        assert!(result.is_err());
+        assert!(
+            matches!(result, Err(MultipartError::FieldTooLarge(size, limit)) if size > limit),
+            "{result:?}"
+        );
     }
 
     #[tokio::test]
@@ -833,7 +839,7 @@ mod tests {
             "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{long_name}\"\r\n\r\nx\r\n--{BOUNDARY}--\r\n"
         );
         let result = transform_multipart(body_stream(body), BOUNDARY.as_bytes(), limits, None).await;
-        assert!(matches!(result, Err(MultipartError::FieldTooLarge(64, 64))), "{result:?}");
+        assert!(matches!(result, Err(MultipartError::FieldTooLarge(65, 64))), "{result:?}");
     }
 
     /// A transport error before the file part is reported as Underlying.
