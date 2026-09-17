@@ -451,7 +451,11 @@ impl<'a> SignatureContext<'a> {
                 max_fields_size: config.form_max_fields_size,
                 max_parts: config.form_max_parts,
             };
-            http::transform_multipart(body, boundary.as_str().as_bytes(), limits, self.content_length)
+            // The parser carries its state across the awaits of the POST form
+            // parse. The state is boxed inside `FileStream`; boxing the future
+            // as well keeps the remaining parse frame out of the dispatch
+            // futures that await this check (see the future-size budget test).
+            Box::pin(http::transform_multipart(body, boundary.as_str().as_bytes(), limits, self.content_length))
                 .await
                 .map_err(|e| s3_error!(e, MalformedPOSTRequest))?
         };

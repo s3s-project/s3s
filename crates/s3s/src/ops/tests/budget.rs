@@ -2,6 +2,10 @@
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
 //! Future-size budget for the dispatch path.
+//!
+//! The caps are the sizes measured when the budgets were last tightened,
+//! rounded up to the next multiple of 100, so the guard keeps a margin instead
+//! of matching exactly.
 
 use super::*;
 use crate::service::S3Service;
@@ -18,17 +22,17 @@ fn future_size() {
 
     #[rustfmt::skip]
     let sizes = [
-        future_size!(S3Service::call,                           3320),
-        future_size!(call,                                      1920),
-        future_size!(prepare,                                   1870),
-        future_size!(SignatureContext::check,                    900),
-        future_size!(SignatureContext::v2_check,                 290),
-        future_size!(SignatureContext::v2_check_presigned_url,   140),
-        future_size!(SignatureContext::v2_check_header_auth,     170),
-        future_size!(SignatureContext::v4_check,                 780),
-        future_size!(SignatureContext::v4_check_post_signature,  600),
-        future_size!(SignatureContext::v4_check_presigned_url,   555),
-        future_size!(SignatureContext::v4_check_header_auth,     665),
+        future_size!(S3Service::call,                           3200),
+        future_size!(call,                                      1800),
+        future_size!(prepare,                                   1700),
+        future_size!(SignatureContext::check,                    800),
+        future_size!(SignatureContext::v2_check,                 300),
+        future_size!(SignatureContext::v2_check_presigned_url,   200),
+        future_size!(SignatureContext::v2_check_header_auth,     200),
+        future_size!(SignatureContext::v4_check,                 800),
+        future_size!(SignatureContext::v4_check_post_signature,  500),
+        future_size!(SignatureContext::v4_check_presigned_url,   600),
+        future_size!(SignatureContext::v4_check_header_auth,     700),
     ];
 
     println!("{sizes:#?}");
