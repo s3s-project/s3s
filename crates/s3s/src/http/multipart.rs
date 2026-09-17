@@ -1045,6 +1045,142 @@ mod tests {
         assert!(matches!(stream.next().await, Some(Err(FileStreamError::InvalidTrailer))));
     }
 
+    /// A body that never contains the declared boundary is a format error
+    /// reported by the parser itself.
+    #[tokio::test]
+    async fn body_without_the_declared_boundary_is_rejected() {
+        let body = "no boundary anywhere in this body\r\n";
+        let result = transform_multipart(body_stream(body), BOUNDARY.as_bytes(), MultipartLimits::default(), None).await;
+        assert!(matches!(result, Err(MultipartError::InvalidFormat)), "{result:?}");
+    }
+
+    /// A malformed part header line is a format error too.
+    #[tokio::test]
+    async fn malformed_part_header_is_rejected() {
+        let body = format!("--{BOUNDARY}\r\nContent-Disposition form-data name=\"key\"\r\n\r\nk\r\n--{BOUNDARY}--\r\n");
+        let result = transform_multipart(body_stream(body), BOUNDARY.as_bytes(), MultipartLimits::default(), None).await;
+        assert!(matches!(result, Err(MultipartError::InvalidFormat)), "{result:?}");
+    }
+
+    /// A non-UTF-8 name, filename, Content-Type or field value is a format
+    /// error, matching the previous parser.
+    #[tokio::test]
+    async fn non_utf8_values_are_rejected() {
+        let bad = 0xffu8;
+        let mut cases: Vec<Vec<u8>> = Vec::new();
+
+        let mut body = Vec::new();
+        body.extend_from_slice(format!("--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"").as_bytes());
+        body.push(bad);
+        body.extend_from_slice(format!("\"\r\n\r\nx\r\n--{BOUNDARY}--\r\n").as_bytes());
+        cases.push(body);
+
+        let mut body = Vec::new();
+        body.extend_from_slice(format!("--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"").as_bytes());
+        body.push(bad);
+        body.extend_from_slice(format!("\"\r\n\r\nx\r\n--{BOUNDARY}--\r\n").as_bytes());
+        cases.push(body);
+
+        let mut body = Vec::new();
+        body.extend_from_slice(
+            format!("--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"f.txt\"\r\nContent-Type: ")
+                .as_bytes(),
+        );
+        body.push(bad);
+        body.extend_from_slice(format!("\r\n\r\nx\r\n--{BOUNDARY}--\r\n").as_bytes());
+        cases.push(body);
+
+        let mut body = Vec::new();
+        body.extend_from_slice(format!("--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"key\"\r\n\r\n").as_bytes());
+        body.push(bad);
+        body.extend_from_slice(
+            format!("\r\n--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"f.txt\"\r\n\r\nx\r\n--{BOUNDARY}--\r\n").as_bytes(),
+        );
+        cases.push(body);
+
+        for body in cases {
+            let result = transform_multipart(body_stream(body), BOUNDARY.as_bytes(), MultipartLimits::default(), None).await;
+            assert!(matches!(result, Err(MultipartError::InvalidFormat)), "{result:?}");
+        }
+    }
+
+    /// A Content-Length that cannot cover the bytes already consumed, or that
+    /// leaves no room for the closing trailer, leaves the file length unknown
+    /// instead of underflowing.
+    #[tokio::test]
+    async fn short_total_length_leaves_the_file_length_unknown() {
+        let body = file_form(&[], "hello");
+        let total_len = body.len() as u64;
+
+        let mut multipart =
+            transform_multipart(body_stream(body.clone()), BOUNDARY.as_bytes(), MultipartLimits::default(), Some(1))
+                .await
+                .unwrap();
+        assert_eq!(multipart.take_file_stream().unwrap().content_len(), None);
+
+        let mut first = transform_multipart(
+            body_stream(body.clone()),
+            BOUNDARY.as_bytes(),
+            MultipartLimits::default(),
+            Some(total_len),
+        )
+        .await
+        .unwrap();
+        let stream = first.take_file_stream().unwrap();
+        let consumed = total_len - stream.content_len().unwrap() - (BOUNDARY.len() as u64 + 8);
+
+        let mut second =
+            transform_multipart(body_stream(body), BOUNDARY.as_bytes(), MultipartLimits::default(), Some(consumed + 1))
+                .await
+                .unwrap();
+        assert_eq!(second.take_file_stream().unwrap().content_len(), None);
+    }
+
+    /// A stream that yields one Pending before every item.
+    struct Suspend<S> {
+        inner: S,
+        seen_pending: bool,
+    }
+
+    impl<S: Stream + Unpin> Stream for Suspend<S> {
+        type Item = S::Item;
+
+        fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+            let this = self.get_mut();
+            if !this.seen_pending {
+                this.seen_pending = true;
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
+            }
+            this.seen_pending = false;
+            Pin::new(&mut this.inner).poll_next(cx)
+        }
+    }
+
+    fn suspend<S>(inner: S) -> Suspend<S> {
+        Suspend {
+            inner,
+            seen_pending: false,
+        }
+    }
+
+    /// The file stream forwards a suspension and still yields the whole file.
+    #[tokio::test]
+    async fn file_stream_survives_a_suspending_stream() {
+        let body = file_form(&[], "hello");
+        let total_len = body.len() as u64;
+        let mut multipart = transform_multipart(
+            suspend(chunks(byte_chunks(&body))),
+            BOUNDARY.as_bytes(),
+            MultipartLimits::default(),
+            Some(total_len),
+        )
+        .await
+        .unwrap();
+        let stream = multipart.take_file_stream().unwrap();
+        assert_eq!(aggregate_file_stream(stream).await.unwrap(), "hello");
+    }
+
     /// Without a derived length claim the byte stream reports an unknown
     /// remaining length.
     #[tokio::test]
