@@ -105,21 +105,18 @@ impl Multipart {
     #[must_use]
     pub fn find_field_value<'a>(&'a self, name: &str) -> Option<&'a str> {
         let idx = Self::find_field_index(&self.fields, name)?;
-        Some(self.fields.get(idx)?.1.as_str())
+        self.fields.get(idx).map(|pair| pair.1.as_str())
     }
 
     fn find_field_value_mut<'a>(fields: &'a mut [(String, String)], name: &str) -> Option<&'a mut String> {
         let idx = Self::find_field_index(fields, name)?;
-        Some(&mut fields.get_mut(idx)?.1)
+        fields.get_mut(idx).map(|pair| &mut pair.1)
     }
 
     fn find_field_index(fields: &[(String, String)], name: &str) -> Option<usize> {
         let upper_bound = fields.partition_point(|x| x.0.as_str() <= name);
         let idx = upper_bound.checked_sub(1)?;
-        let pair = fields.get(idx)?;
-        if pair.0.as_str() != name {
-            return None;
-        }
+        fields.get(idx).filter(|pair| pair.0.as_str() == name)?;
         Some(idx)
     }
 
@@ -1201,6 +1198,15 @@ mod tests {
         let text = format!("{stream:?}");
         assert!(text.contains("content_len"), "{text}");
         assert!(text.contains("remaining"), "{text}");
+    }
+
+    /// The chunk-count hint stays open ended: the byte length is reported
+    /// through the byte stream instead.
+    #[tokio::test]
+    async fn file_stream_size_hint_is_open_ended() {
+        let body = file_form(&[], "hello");
+        let stream = parse_file_stream(&body, None).await;
+        assert_eq!(stream.size_hint(), (0, None));
     }
 
     #[test]
