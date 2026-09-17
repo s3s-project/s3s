@@ -333,14 +333,6 @@ pub enum FileStreamError {
     /// IO error
     #[error("FileStreamError: Underlying: {0}")]
     Underlying(#[source] StdError),
-    /// Boundary buffer too large.
-    ///
-    /// Retained for API compatibility: the previous parser bounded its
-    /// boundary-matching buffer by hand, while the crate keeps the residue
-    /// bounded by the boundary length, so this is never produced.
-    #[allow(dead_code)]
-    #[error("FileStreamError: BoundaryBufferTooLarge: size {0} exceeds limit {1}")]
-    BoundaryBufferTooLarge(usize, usize),
     /// Bytes after the file do not match the canonical closing delimiter
     /// (e.g., the file is not the last part or an epilogue exists)
     #[error("FileStreamError: InvalidTrailer")]
