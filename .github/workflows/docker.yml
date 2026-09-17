@@ -9,6 +9,12 @@ on:
     - cron: '0 0 * * 0'
   workflow_dispatch:
 
+# Serialize runs that build the same ref: published tags are mutable, so two
+# runs racing on the edge tag would leave whichever finishes last on the tag.
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   REGISTRY_IMAGE: ghcr.io/${{ github.repository_owner }}/s3s
 
@@ -28,7 +34,7 @@ jobs:
           paths_ignore: '["*.md"]'
           # Don't skip scheduled or tag-based builds
           skip_after_successful_duplicate: ${{ github.event_name == 'workflow_dispatch' }}
-  
+
   build:
     needs: skip-check
     if: needs.skip-check.outputs.should_skip != 'true'
@@ -49,8 +55,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # For scheduled builds, checkout main branch; otherwise use the triggering ref
-          ref: ${{ github.event_name == 'schedule' && 'main' || github.ref }}
+          # Scheduled and manual runs build main; tag pushes build the tag.
+          # Manual runs therefore cannot move edge to a maintenance branch.
+          ref: ${{ github.event_name != 'push' && 'main' || github.ref }}
       - name: Prepare
         run: |
           platform=${{ matrix.platform }}
@@ -128,17 +135,82 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
+      # latest and the major tag (0) must only move forward: pre-releases never
+      # move them, and a stable tag only moves them when it is the highest stable
+      # tag in the repository, so a patch release cut from a maintenance branch
+      # cannot pull latest backwards.
+      - name: Decide whether this tag may move latest
+        id: promote
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "$TAG is a pre-release or not a stable semver tag; latest stays put"
+            echo "latest=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # An infrastructure error must not block the release image: keep latest
+          # where it is (never a wrong promotion) and let the version tags publish.
+          if ! tags=$(git ls-remote --tags --refs "https://github.com/${GITHUB_REPOSITORY}.git" 'v*' \
+            | awk '{print $2}' | sed 's#^refs/tags/##'); then
+            echo "::warning::could not list the repository tags; latest stays put"
+            echo "latest=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          highest=$(printf '%s\n' "$tags" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1 || true)
+          if [[ -n "$highest" && "$TAG" == "$highest" ]]; then
+            echo "$TAG is the highest stable tag; latest moves"
+            echo "latest=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "$TAG is not the highest stable tag (${highest:-none}); latest stays put"
+            echo "latest=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # A tag pushed on the default branch carries the same commit as main, so its
+      # image is the freshest main build. Tags from maintenance branches are not on
+      # main and must not move edge.
+      - name: Check whether this tag is on the default branch
+        id: on_main
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Edge is best effort: if the comparison cannot be made, keep edge where
+          # it is instead of failing the release.
+          if ! status=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${GITHUB_REF_NAME}...main" --jq .status 2>/dev/null); then
+            echo "::warning::could not compare $GITHUB_REF_NAME with main; edge stays put"
+            echo "on_main=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          case "$status" in
+            ahead | identical)
+              echo "$GITHUB_REF_NAME is on main; edge will move"
+              echo "on_main=true" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "$GITHUB_REF_NAME is not on main ($status); edge stays put"
+              echo "on_main=false" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY_IMAGE }}
+          # flavor latest=auto (the default) adds an implicit latest to every
+          # stable semver tag, bypassing the promotion gate above.
+          flavor: |
+            latest=false
           tags: |
-            type=semver,pattern={{version}},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
-            type=semver,pattern={{major}}.{{minor}},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
-            type=semver,pattern={{major}},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
-            type=raw,value=edge,enable=${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+            type=semver,pattern={{version}},enable=${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+            type=semver,pattern={{major}},enable=${{ steps.promote.outputs.latest == 'true' }}
+            type=raw,value=latest,enable=${{ steps.promote.outputs.latest == 'true' }}
+            type=raw,value=edge,enable=${{ github.event_name != 'push' || steps.on_main.outputs.on_main == 'true' }}
 
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests
