@@ -9,10 +9,12 @@ on:
     - cron: '0 0 * * 0'
   workflow_dispatch:
 
-# Serialize runs that build the same ref: published tags are mutable, so two
+# Serialize runs that publish the same tags: published tags are mutable, so two
 # runs racing on the edge tag would leave whichever finishes last on the tag.
+# Non-push runs (schedule, manual) always build main, so they share one group;
+# tag pushes group by tag.
 concurrency:
-  group: docker-${{ github.ref }}
+  group: docker-${{ github.event_name != 'push' && 'refs/heads/main' || github.ref }}
   cancel-in-progress: false
 
 env:
