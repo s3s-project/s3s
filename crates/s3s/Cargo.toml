@@ -41,7 +41,6 @@ hmac.workspace = true
 http.workspace = true
 http-body.workspace = true
 http-body-util.workspace = true
-httparse.workspace = true
 hyper = { workspace = true, features = ["http1", "http2", "server"] }
 itoa.workspace = true
 jiff.workspace = true
@@ -54,6 +53,7 @@ phf.workspace = true
 pin-project-lite.workspace = true
 quick-xml.workspace = true
 regex.workspace = true
+s3s-multipart.workspace = true
 s3s-rfc2047 = { version = "0.16.0", path = "../s3s-rfc2047" }
 s3s-sigv2 = { version = "0.16.0", path = "../s3s-sigv2" }
 s3s-sigv4 = { version = "0.16.0", path = "../s3s-sigv4" }
@@ -80,21 +80,13 @@ zeroize.workspace = true
 [dev-dependencies]
 axum.workspace = true
 clap.workspace = true
-criterion.workspace = true
 futures = { workspace = true, features = ["executor", "std"] }
 h2.workspace = true
 hyper-util = { workspace = true, features = ["server-auto", "server-graceful", "http1", "http2", "tokio"] }
-mimalloc.workspace = true
 minstant.workspace = true
-multer.workspace = true
 rand.workspace = true
-s3s-multipart = { version = "0.17.0-alpha.1", path = "../s3s-multipart" }
 serde_json.workspace = true
 tokio = { workspace = true, features = ["full"] }
 tokio-rustls.workspace = true
 tokio-util = { workspace = true, features = ["io"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
-
-[[bench]]
-name = "multipart_parsers"
-harness = false
