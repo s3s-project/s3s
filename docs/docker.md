@@ -15,9 +15,10 @@ ghcr.io/s3s-project/s3s
 
 ## Available Tags
 
-- **Version tags**: `0.12.0`, `0.12`, `0` (for released versions, generated from git tags like `v0.12.0`)
-- **`latest`**: Latest stable release
-- **`edge`**: Weekly builds from the main branch (updated every Sunday)
+- **Version tags**: `0.16.1`, `0.16` (for released versions, generated from git tags like `v0.16.1`)
+- **`0`**: the highest released `0.x` version (it mirrors `latest` while the project is at major version zero)
+- **`latest`**: latest stable release; it only moves forward. Pre-releases and patch releases from an older maintenance line (when a newer release already exists) do not update it
+- **`edge`**: build of the `main` branch; refreshed by every release tagged on `main` and rebuilt weekly
 
 ## Platforms
 
