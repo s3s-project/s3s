@@ -171,7 +171,6 @@ async fn async_main(reg: impl FnOnce(&mut TestContext), opt: &Options) -> ExitCo
 ///
 /// The exit code is nonzero when any suite fails. Use this function directly
 /// for a custom entry point, or [`main!`](crate::main) for the standard CLI.
-#[must_use]
 pub fn main(reg: impl FnOnce(&mut TestContext), opt: &Options) -> ExitCode {
     setup();
     async_main(reg, opt)
