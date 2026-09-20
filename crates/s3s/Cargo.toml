@@ -46,7 +46,6 @@ jiff.workspace = true
 md-5.workspace = true
 memchr.workspace = true
 mime.workspace = true
-nom.workspace = true
 numeric_cast.workspace = true
 phf.workspace = true
 pin-project-lite.workspace = true
@@ -72,7 +71,6 @@ tokio = { workspace = true, features = ["time"] }
 xxhash-rust = { workspace = true }
 tower.workspace = true
 tracing.workspace = true
-transform-stream.workspace = true
 url.workspace = true
 urlencoding.workspace = true
 zeroize.workspace = true
