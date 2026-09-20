@@ -12,7 +12,9 @@ bytes = "1"
 futures = "0.3"
 libfuzzer-sys = "0.4"
 s3s = { path = "../crates/s3s" }
+s3s-chunked = { path = "../crates/s3s-chunked" }
 s3s-multipart = { path = "../crates/s3s-multipart" }
+s3s-sigv4 = { path = "../crates/s3s-sigv4" }
 
 [features]
 minio = ["s3s/minio"]
@@ -27,6 +29,13 @@ doc = false
 [[bin]]
 name = "aws_chunked"
 path = "fuzz_targets/aws_chunked.rs"
+test = false
+bench = false
+doc = false
+
+[[bin]]
+name = "chunked_parser"
+path = "fuzz_targets/chunked_parser.rs"
 test = false
 bench = false
 doc = false

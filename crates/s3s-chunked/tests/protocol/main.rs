@@ -7,6 +7,7 @@
 mod common;
 
 mod format;
+mod linear;
 mod shapes;
 mod trailer_handle;
 mod types;
