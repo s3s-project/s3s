@@ -52,6 +52,7 @@ phf.workspace = true
 pin-project-lite.workspace = true
 quick-xml.workspace = true
 regex.workspace = true
+s3s-chunked.workspace = true
 s3s-multipart.workspace = true
 s3s-rfc2047.workspace = true
 s3s-sigv2.workspace = true
@@ -84,7 +85,6 @@ h2.workspace = true
 hyper-util = { workspace = true, features = ["server-auto", "server-graceful", "http1", "http2", "tokio"] }
 minstant.workspace = true
 rand.workspace = true
-s3s-chunked.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, features = ["full"] }
 tokio-rustls.workspace = true

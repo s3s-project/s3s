@@ -13,6 +13,9 @@ use http::Method;
 use http::StatusCode;
 use http::Uri;
 
+use s3s_chunked::TrailerHandle;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use stdx::default::default;
 
 /// An S3 HTTP request.
@@ -84,7 +87,12 @@ impl core::error::Error for HttpError {
 /// additionally protect the trailer block with `x-amz-trailer-signature`,
 /// which `s3s` verifies before exposing the handle.
 #[derive(Clone)]
-pub struct TrailingHeaders(pub(crate) std::sync::Arc<std::sync::Mutex<Option<HeaderMap>>>);
+pub struct TrailingHeaders {
+    /// The slot written by the body stream.
+    handle: TrailerHandle,
+    /// Whether the headers were already taken.
+    taken: Arc<AtomicBool>,
+}
 
 impl core::fmt::Debug for TrailingHeaders {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -96,28 +104,41 @@ impl core::fmt::Debug for TrailingHeaders {
 }
 
 impl TrailingHeaders {
+    /// Wraps the handle written by the body stream.
+    pub(crate) fn new(handle: TrailerHandle) -> Self {
+        Self {
+            handle,
+            taken: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
     /// Returns true if trailers have been produced by the body stream.
+    ///
+    /// Once [`Self::take`] has returned the headers, this reports `false`.
     #[must_use]
     pub fn is_ready(&self) -> bool {
-        self.0.lock().is_ok_and(|g| g.is_some())
+        !self.taken.load(Ordering::SeqCst) && self.handle.is_ready()
     }
 
     /// Take the trailing headers if available.
     ///
     /// This is a one-shot operation; subsequent calls will return None.
+    /// Calling it before the headers are ready does not consume them.
     #[must_use]
     pub fn take(&self) -> Option<HeaderMap> {
-        self.0.lock().ok().and_then(|mut g| g.take())
+        let headers = self.handle.take()?;
+        self.taken.store(true, Ordering::SeqCst);
+        Some(headers)
     }
 
     /// Read the trailing headers if available, without taking them.
+    ///
+    /// Returns `None` once the headers have been taken.
     pub fn read<R>(&self, f: impl FnOnce(&HeaderMap) -> R) -> Option<R> {
-        if let Ok(guard) = self.0.lock()
-            && let Some(ref headers) = *guard
-        {
-            return Some(f(headers));
+        if self.taken.load(Ordering::SeqCst) {
+            return None;
         }
-        None
+        self.handle.read(f)
     }
 }
 
@@ -340,7 +361,7 @@ mod tests {
 
     #[test]
     fn trailing_headers_not_ready() {
-        let th = TrailingHeaders(std::sync::Arc::new(std::sync::Mutex::new(None)));
+        let th = TrailingHeaders::new(TrailerHandle::empty());
         assert!(!th.is_ready());
         assert!(th.take().is_none());
         assert!(th.read(|_| ()).is_none());
@@ -350,7 +371,7 @@ mod tests {
     fn trailing_headers_ready() {
         let mut hm = HeaderMap::new();
         hm.insert("x-test", "value".parse().unwrap());
-        let th = TrailingHeaders(std::sync::Arc::new(std::sync::Mutex::new(Some(hm))));
+        let th = TrailingHeaders::new(TrailerHandle::ready(hm));
 
         assert!(th.is_ready());
         let val = th.read(|h| h.get("x-test").unwrap().to_str().unwrap().to_owned());
@@ -361,7 +382,7 @@ mod tests {
     fn trailing_headers_take() {
         let mut hm = HeaderMap::new();
         hm.insert("x-test", "val".parse().unwrap());
-        let th = TrailingHeaders(std::sync::Arc::new(std::sync::Mutex::new(Some(hm))));
+        let th = TrailingHeaders::new(TrailerHandle::ready(hm));
 
         let taken = th.take().unwrap();
         assert_eq!(taken.get("x-test").unwrap(), "val");
@@ -372,8 +393,20 @@ mod tests {
     }
 
     #[test]
+    fn trailing_headers_premature_take_does_not_consume() {
+        let th = TrailingHeaders::new(TrailerHandle::empty());
+
+        // Taking before the body produced the headers returns None and must
+        // not consume them (a later take still sees the value once the body
+        // stream fills the slot).
+        assert!(th.take().is_none());
+        assert!(!th.is_ready());
+        assert!(th.read(|_| ()).is_none());
+    }
+
+    #[test]
     fn trailing_headers_debug() {
-        let th = TrailingHeaders(std::sync::Arc::new(std::sync::Mutex::new(None)));
+        let th = TrailingHeaders::new(TrailerHandle::empty());
         let dbg = format!("{th:?}");
         assert!(dbg.contains("TrailingHeaders"));
         assert!(dbg.contains("ready"));
@@ -383,7 +416,7 @@ mod tests {
     fn trailing_headers_clone() {
         let mut hm = HeaderMap::new();
         hm.insert("x-test", "val".parse().unwrap());
-        let th = TrailingHeaders(std::sync::Arc::new(std::sync::Mutex::new(Some(hm))));
+        let th = TrailingHeaders::new(TrailerHandle::ready(hm));
         let th2 = th.clone();
         // Both point to the same data
         assert!(th.is_ready());
