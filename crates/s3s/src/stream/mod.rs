@@ -16,8 +16,6 @@
 pub mod aws_chunked_stream;
 pub mod upload_stream;
 
-#[cfg(test)]
-mod bench_ab;
 
 use crate::error::StdError;
 
