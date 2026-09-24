@@ -35,6 +35,22 @@ use stdx::default::default;
 use tracing::{debug, warn};
 use uuid::Uuid;
 
+/// Maps a path that no longer exists to `None`, leaving every other error intact.
+///
+/// A listing walks the tree entry by entry, so an object deleted while the walk runs can be gone
+/// by the time the walk reaches it. S3 omits such an object from the listing instead of failing
+/// the request.
+///
+/// The walkers keep the bucket root out of this treatment: a bucket that no longer exists is
+/// reported as `NoSuchBucket`, not as an empty listing.
+fn skip_vanished<T>(result: io::Result<T>) -> io::Result<Option<T>> {
+    match result {
+        Ok(value) => Ok(Some(value)),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(err) => Err(err),
+    }
+}
+
 fn normalize_path(path: &Path, delimiter: &str) -> Option<String> {
     let mut normalized = String::new();
     let mut first = true;
@@ -1664,9 +1680,19 @@ impl FileSystem {
         let prefix_is_empty = prefix.is_empty();
 
         while let Some(dir) = dir_queue.pop_front() {
-            let mut iter = try_!(fs::read_dir(dir).await);
+            let Some(mut iter) = try_!(skip_vanished(fs::read_dir(&dir).await)) else {
+                // The caller checks that the bucket exists before the walk, but the bucket root can
+                // vanish before the walk reaches it. Only directories discovered during the walk
+                // are skipped.
+                if dir.as_path() == bucket_root {
+                    return Err(s3_error!(NoSuchBucket));
+                }
+                continue;
+            };
             while let Some(entry) = try_!(iter.next_entry().await) {
-                let file_type = try_!(entry.file_type().await);
+                let Some(file_type) = try_!(skip_vanished(entry.file_type().await)) else {
+                    continue;
+                };
                 if file_type.is_dir() {
                     dir_queue.push_back(entry.path());
                 } else {
@@ -1680,7 +1706,9 @@ impl FileSystem {
                         continue;
                     }
 
-                    let metadata = try_!(entry.metadata().await);
+                    let Some(metadata) = try_!(skip_vanished(entry.metadata().await)) else {
+                        continue;
+                    };
                     let last_modified = Timestamp::from(try_!(metadata.modified()));
                     let size = metadata.len();
 
@@ -1713,10 +1741,20 @@ impl FileSystem {
         let prefix_is_empty = prefix.is_empty();
 
         while let Some(dir) = dir_queue.pop_front() {
-            let mut iter = try_!(fs::read_dir(dir).await);
+            let Some(mut iter) = try_!(skip_vanished(fs::read_dir(&dir).await)) else {
+                // The caller checks that the bucket exists before the walk, but the bucket root can
+                // vanish before the walk reaches it. Only directories discovered during the walk
+                // are skipped.
+                if dir.as_path() == bucket_root {
+                    return Err(s3_error!(NoSuchBucket));
+                }
+                continue;
+            };
 
             while let Some(entry) = try_!(iter.next_entry().await) {
-                let file_type = try_!(entry.file_type().await);
+                let Some(file_type) = try_!(skip_vanished(entry.file_type().await)) else {
+                    continue;
+                };
                 let entry_path = entry.path();
 
                 // Calculate the key relative to the bucket root
@@ -1753,7 +1791,9 @@ impl FileSystem {
                         }
                     } else {
                         // File is at the current level, include it in objects
-                        let metadata = try_!(entry.metadata().await);
+                        let Some(metadata) = try_!(skip_vanished(entry.metadata().await)) else {
+                            continue;
+                        };
                         let last_modified = Timestamp::from(try_!(metadata.modified()));
                         let size = metadata.len();
 
@@ -1770,5 +1810,79 @@ impl FileSystem {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::env;
+
+    use s3s::S3ErrorCode;
+    use uuid::Uuid;
+
+    struct TestRoot(PathBuf);
+
+    impl Drop for TestRoot {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn listing_tolerates_objects_deleted_while_it_walks() {
+        let root = env::temp_dir().join(format!("s3s-fs-list-race-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let _root = TestRoot(root.clone());
+        let fs = FileSystem::new(&root).unwrap();
+
+        // Enough objects that the walk is still running when the deletions start landing.
+        let bucket_root = root.join("bucket");
+        let dir = bucket_root.join("prefix");
+        std::fs::create_dir_all(&dir).unwrap();
+        let paths: Vec<PathBuf> = (0..1000)
+            .map(|i| {
+                let path = dir.join(format!("{i:05}"));
+                std::fs::write(&path, b"x").unwrap();
+                path
+            })
+            .collect();
+
+        let deleter = tokio::task::spawn_blocking(move || {
+            for path in paths {
+                let _ = std::fs::remove_file(path);
+            }
+        });
+
+        let mut objects = Vec::new();
+        let listed = fs.list_objects_recursive(&bucket_root, "", &mut objects).await;
+        deleter.await.unwrap();
+
+        assert!(listed.is_ok(), "a delete running alongside the walk failed the listing");
+    }
+
+    #[tokio::test]
+    async fn listing_a_vanished_bucket_root_reports_no_such_bucket() {
+        let root = env::temp_dir().join(format!("s3s-fs-list-vanished-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let _root = TestRoot(root.clone());
+        let fs = FileSystem::new(&root).unwrap();
+        let bucket_root = root.join("vanished-bucket");
+
+        let mut objects = Vec::new();
+        let err = fs
+            .list_objects_recursive(&bucket_root, "", &mut objects)
+            .await
+            .expect_err("a vanished bucket root must not be listed as empty");
+        assert_eq!(err.code(), &S3ErrorCode::NoSuchBucket);
+
+        let mut objects = Vec::new();
+        let mut common_prefixes = std::collections::BTreeSet::new();
+        let err = fs
+            .list_objects_with_delimiter(&bucket_root, "", "/", &mut objects, &mut common_prefixes)
+            .await
+            .expect_err("a vanished bucket root must not be listed as empty");
+        assert_eq!(err.code(), &S3ErrorCode::NoSuchBucket);
     }
 }
