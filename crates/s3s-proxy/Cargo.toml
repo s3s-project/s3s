@@ -1,6 +1,6 @@
 [package]
 name = "s3s-proxy"
-version = "0.16.0"
+version = "0.17.0"
 description = "S3 Proxy"
 readme = "../../README.md"
 keywords = ["s3"]
@@ -32,8 +32,8 @@ hyper-util = { workspace = true, features = [
 ] }
 minio = { workspace = true, optional = true }
 reqwest.workspace = true
-s3s = { version = "0.16.0", path = "../s3s" }
-s3s-aws = { version = "0.16.0", path = "../s3s-aws" }
+s3s = { version = "0.17.0", path = "../s3s" }
+s3s-aws = { version = "0.17.0", path = "../s3s-aws" }
 tokio = { workspace = true, features = ["full"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true

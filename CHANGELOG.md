@@ -7,7 +7,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-[Unreleased]: https://github.com/s3s-project/s3s/compare/v0.16.1...HEAD
+[Unreleased]: https://github.com/s3s-project/s3s/compare/v0.17.0...HEAD
+
+## [v0.17.0] - 2026-09-24
+
+[v0.17.0]: https://github.com/s3s-project/s3s/compare/v0.16.1...v0.17.0
+
+MSRV of this minor version: 1.96.0
+
+### s3s
+
+**Migration**: v0.17.0 replaces the POST Object form parser with the `s3s-multipart` crate, which accepts forms the previous parser rejected and rejects trailing content it silently dropped, and removes two `HttpError` helpers. The new behaviour is the one to adopt; no option restores the previous parsing behaviour.
++ A part may carry more header fields than the parser reads, and the surplus fields are ignored.
++ `Content-Disposition` is parsed tolerantly: parameter names are case-insensitive, the parameter order is free, unknown parameters are ignored, and quoted and token values are both accepted.
++ A preamble before the first boundary is accepted, and the boundary must be 1 to 70 characters as RFC 2046 requires.
++ A part without a usable `Content-Disposition` name fails immediately with `MalformedPOSTRequest` instead of re-parsing the accumulated buffer.
++ A chunked POST Object whose `file` part is followed by another part or an epilogue is rejected with `MalformedPOSTRequest` instead of being silently truncated.
++ `HttpError::new` is removed; use `HttpError::from_std_error`. `impl From<HttpError> for StdError` is removed; use `into_std_error()` for the allocation-free path, or rely on the standard blanket impl, which boxes the `HttpError` itself.
+
+**BREAKING**: previously accepted requests are now rejected, and two `HttpError` APIs are removed:
++ Parse multipart with s3s-multipart ([#845](https://github.com/s3s-project/s3s/pull/845)) (fixes [#803](https://github.com/s3s-project/s3s/issues/803))
++ Implement the std error traits for HttpError ([#834](https://github.com/s3s-project/s3s/pull/834))
+
+### s3s-multipart
+
++ Make parsing chunk-independent and always progress ([#836](https://github.com/s3s-project/s3s/pull/836))
++ Benchmark the parser and compare all three multipart parsers ([#832](https://github.com/s3s-project/s3s/pull/832))
++ Implement the streaming multipart/form-data parser ([#831](https://github.com/s3s-project/s3s/pull/831))
+
+This crate joins the published set with this release; it was on the 0.17.0-alpha track before.
+
+### s3s-fs
+
++ Keep listings working while objects are deleted ([#856](https://github.com/s3s-project/s3s/pull/856))
++ Validate checksums before committing writes ([#829](https://github.com/s3s-project/s3s/pull/829))
+
+### s3s-test
+
++ Fix nightly clippy::double-must-use error ([#852](https://github.com/s3s-project/s3s/pull/852))
+
+### Fuzz
+
++ Add a multipart parser fuzz target ([#837](https://github.com/s3s-project/s3s/pull/837))
+
+### Testing
+
++ Move the signature unit tests into ops/tests ([#842](https://github.com/s3s-project/s3s/pull/842))
++ Share one routing harness across ops tests and benches ([#841](https://github.com/s3s-project/s3s/pull/841))
++ Collect the remaining test files under ops/tests ([#840](https://github.com/s3s-project/s3s/pull/840))
++ Split ops/tests.rs into per-subject files ([#839](https://github.com/s3s-project/s3s/pull/839))
++ Collect the ops micro-benchmarks under ops/benches ([#838](https://github.com/s3s-project/s3s/pull/838))
+
+### Documentation
+
++ Record the v0.16.1 maintenance release ([#844](https://github.com/s3s-project/s3s/pull/844))
++ Add AI contribution policy section to AGENTS ([#827](https://github.com/s3s-project/s3s/pull/827)) (fixes [#821](https://github.com/s3s-project/s3s/issues/821))
+
+### CI
+
++ Only promote docker latest and major tags forward ([#846](https://github.com/s3s-project/s3s/pull/846))
+
+### Dependencies
+
++ Bump the dependencies group with 9 updates ([#855](https://github.com/s3s-project/s3s/pull/855))
++ Bump soupsieve from 2.8.4 to 2.9 ([#848](https://github.com/s3s-project/s3s/pull/848))
++ Bump the dependencies group with 2 updates ([#833](https://github.com/s3s-project/s3s/pull/833))
 
 ## [v0.16.1] - 2026-09-16
 
