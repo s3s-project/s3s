@@ -1,6 +1,6 @@
 [package]
 name = "s3s-sigv4"
-version = "0.16.0"
+version = "0.17.0"
 description = "AWS Signature Version 4: parsing, canonicalization, and signing"
 readme = "../../README.md"
 keywords = ["s3", "aws", "signature", "sigv4"]
