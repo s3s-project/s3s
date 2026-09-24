@@ -29,5 +29,6 @@
 mod body;
 mod server;
 
+pub use body::Body as RequestBody;
 pub use quinn::Endpoint;
-pub use server::{DEFAULT_SHUTDOWN_TIMEOUT, serve};
+pub use server::{DEFAULT_SHUTDOWN_TIMEOUT, serve, serve_with};
