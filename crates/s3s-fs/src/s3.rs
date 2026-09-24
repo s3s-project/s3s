@@ -40,6 +40,9 @@ use uuid::Uuid;
 /// A listing walks the tree entry by entry, so an object deleted while the walk runs can be gone
 /// by the time the walk reaches it. S3 omits such an object from the listing instead of failing
 /// the request.
+///
+/// The walkers keep the bucket root out of this treatment: a bucket that no longer exists is
+/// reported as `NoSuchBucket`, not as an empty listing.
 fn skip_vanished<T>(result: io::Result<T>) -> io::Result<Option<T>> {
     match result {
         Ok(value) => Ok(Some(value)),
@@ -1677,7 +1680,13 @@ impl FileSystem {
         let prefix_is_empty = prefix.is_empty();
 
         while let Some(dir) = dir_queue.pop_front() {
-            let Some(mut iter) = try_!(skip_vanished(fs::read_dir(dir).await)) else {
+            let Some(mut iter) = try_!(skip_vanished(fs::read_dir(&dir).await)) else {
+                // The caller checks that the bucket exists before the walk, but the bucket root can
+                // vanish before the walk reaches it. Only directories discovered during the walk
+                // are skipped.
+                if dir.as_path() == bucket_root {
+                    return Err(s3_error!(NoSuchBucket));
+                }
                 continue;
             };
             while let Some(entry) = try_!(iter.next_entry().await) {
@@ -1732,7 +1741,13 @@ impl FileSystem {
         let prefix_is_empty = prefix.is_empty();
 
         while let Some(dir) = dir_queue.pop_front() {
-            let Some(mut iter) = try_!(skip_vanished(fs::read_dir(dir).await)) else {
+            let Some(mut iter) = try_!(skip_vanished(fs::read_dir(&dir).await)) else {
+                // The caller checks that the bucket exists before the walk, but the bucket root can
+                // vanish before the walk reaches it. Only directories discovered during the walk
+                // are skipped.
+                if dir.as_path() == bucket_root {
+                    return Err(s3_error!(NoSuchBucket));
+                }
                 continue;
             };
 
@@ -1804,6 +1819,7 @@ mod tests {
 
     use std::env;
 
+    use s3s::S3ErrorCode;
     use uuid::Uuid;
 
     struct TestRoot(PathBuf);
@@ -1844,5 +1860,29 @@ mod tests {
         deleter.await.unwrap();
 
         assert!(listed.is_ok(), "a delete running alongside the walk failed the listing");
+    }
+
+    #[tokio::test]
+    async fn listing_a_vanished_bucket_root_reports_no_such_bucket() {
+        let root = env::temp_dir().join(format!("s3s-fs-list-vanished-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let _root = TestRoot(root.clone());
+        let fs = FileSystem::new(&root).unwrap();
+        let bucket_root = root.join("vanished-bucket");
+
+        let mut objects = Vec::new();
+        let err = fs
+            .list_objects_recursive(&bucket_root, "", &mut objects)
+            .await
+            .expect_err("a vanished bucket root must not be listed as empty");
+        assert_eq!(err.code(), &S3ErrorCode::NoSuchBucket);
+
+        let mut objects = Vec::new();
+        let mut common_prefixes = std::collections::BTreeSet::new();
+        let err = fs
+            .list_objects_with_delimiter(&bucket_root, "", "/", &mut objects, &mut common_prefixes)
+            .await
+            .expect_err("a vanished bucket root must not be listed as empty");
+        assert_eq!(err.code(), &S3ErrorCode::NoSuchBucket);
     }
 }
