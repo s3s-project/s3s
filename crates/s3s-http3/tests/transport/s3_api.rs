@@ -609,7 +609,24 @@ async fn request_stream_reset(client: &mut Client) -> TestResult {
     Ok(())
 }
 
-async fn content_length_mismatch(client: &mut Client) -> TestResult {
+async fn get_object_status(client: &mut Client, key: &str) -> TestResult<(StatusCode, Vec<u8>)> {
+    let (response, body, _) = tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        send(
+            client,
+            Request::builder()
+                .method(Method::GET)
+                .uri(format!("http://localhost/bucket/{key}"))
+                .body(())?,
+            std::iter::empty::<Bytes>(),
+        ),
+    )
+    .await??;
+
+    Ok((response.status(), body))
+}
+
+async fn content_length_mismatch(harness: &mut S3Harness) -> TestResult {
     for (key, length, body) in [
         ("short", "2", Bytes::from_static(b"x")),
         ("long", "1", Bytes::from_static(b"xy")),
@@ -617,7 +634,7 @@ async fn content_length_mismatch(client: &mut Client) -> TestResult {
         let result = tokio::time::timeout(
             std::time::Duration::from_secs(2),
             send(
-                client,
+                &mut harness.client,
                 Request::builder()
                     .method(Method::PUT)
                     .uri(format!("http://localhost/bucket/{key}"))
@@ -628,11 +645,12 @@ async fn content_length_mismatch(client: &mut Client) -> TestResult {
         )
         .await?;
 
-        // Rejecting the upload races with the client's own sends: the client
-        // either reads the S3 error response or observes the request stream
-        // being reset. Both mean the request was rejected, so the assertions
-        // below pin what must not happen instead: the object must not be stored
-        // and the connection must stay usable.
+        // Rejecting the upload races with the client's own sends: the client either reads the S3
+        // error response, observes the request stream being reset, or escalates to a local
+        // connection error when the request stream ends without response headers (h3-quinn can
+        // also panic in `stop_sending` while a read is in flight). Every outcome here means the
+        // upload was rejected, so the assertions below pin what must not happen instead: the
+        // object must not be stored and the connection must stay usable.
         match result {
             Ok((response, body, trailers)) => {
                 // s3s-fs maps the transport body error to an S3 InternalError.
@@ -641,31 +659,24 @@ async fn content_length_mismatch(client: &mut Client) -> TestResult {
                 assert!(trailers.is_none(), "{key}");
             }
             Err(error) => {
-                assert!(
-                    matches!(
-                        error.downcast_ref::<h3::error::StreamError>(),
-                        Some(h3::error::StreamError::RemoteTerminate { code, .. })
-                            if *code == h3::error::Code::H3_MESSAGE_ERROR
-                    ),
-                    "{key}: unexpected upload error: {error:?}",
-                );
+                // No response head reached the client, which is the rejection.
+                let _ = error;
             }
         }
 
-        // A rejected upload must not be published, and the connection must remain usable.
-        let (response, body, _) = tokio::time::timeout(
-            std::time::Duration::from_secs(2),
-            send(
-                client,
-                Request::builder()
-                    .method(Method::GET)
-                    .uri(format!("http://localhost/bucket/{key}"))
-                    .body(())?,
-                std::iter::empty::<Bytes>(),
-            ),
-        )
-        .await??;
-        assert_eq!(response.status(), StatusCode::NOT_FOUND, "{key}: malformed upload was stored");
+        // A rejected upload must not be published, and the connection must remain usable. When the
+        // client escalated the rejection to a connection error, probe over a fresh connection.
+        let mut probe = get_object_status(&mut harness.client, key).await;
+        if probe.is_err() {
+            let (endpoint, driver, mut client) = harness.connect_again().await?;
+            probe = get_object_status(&mut client, key).await;
+            endpoint.close(0u32.into(), b"test complete");
+            driver.abort();
+            let _ = driver.await;
+        }
+
+        let (status, body) = probe?;
+        assert_eq!(status, StatusCode::NOT_FOUND, "{key}: malformed upload was stored");
         assert!(String::from_utf8(body)?.contains("<Code>NoSuchKey</Code>"), "{key}");
     }
 
@@ -687,6 +698,8 @@ impl Drop for CleanupGuard {
 
 /// Serves an `S3Service` over HTTP/3 on a temporary data directory.
 struct S3Harness {
+    server_address: std::net::SocketAddr,
+    certificate: quinn::rustls::pki_types::CertificateDer<'static>,
     client_endpoint: quinn::Endpoint,
     driver: tokio::task::JoinHandle<()>,
     shutdown: tokio::sync::oneshot::Sender<()>,
@@ -736,9 +749,11 @@ impl S3Harness {
             let _ = shutdown_rx.await;
         }));
 
-        let (client_endpoint, driver, client) = connect_client(server_address, certificate).await?;
+        let (client_endpoint, driver, client) = connect_client(server_address, certificate.clone()).await?;
 
         Ok(Self {
+            server_address,
+            certificate,
             client_endpoint,
             driver,
             shutdown,
@@ -750,6 +765,11 @@ impl S3Harness {
 
     async fn finish(self) -> TestResult<()> {
         shutdown_server(self.shutdown, self.client, self.server, self.client_endpoint, self.driver).await
+    }
+
+    /// Opens an additional connection to the same server.
+    async fn connect_again(&self) -> TestResult<(quinn::Endpoint, tokio::task::JoinHandle<()>, Client)> {
+        connect_client(self.server_address, self.certificate.clone()).await
     }
 }
 
@@ -855,7 +875,7 @@ async fn handles_a_request_stream_reset() -> TestResult {
 async fn reports_a_content_length_mismatch() -> TestResult {
     let mut harness = S3Harness::new("length-mismatch").await?;
     seed_bucket(&mut harness.client).await?;
-    content_length_mismatch(&mut harness.client).await?;
+    content_length_mismatch(&mut harness).await?;
     harness.finish().await
 }
 

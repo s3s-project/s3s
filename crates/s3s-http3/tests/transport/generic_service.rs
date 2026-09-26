@@ -3,7 +3,7 @@
 
 //! Behaviour of the generic Tower service entry point.
 
-use bytes::Bytes;
+use bytes::{Buf, Bytes};
 use http::{HeaderMap, HeaderValue, Method, Request, Response, StatusCode};
 use quinn::rustls::pki_types::CertificateDer;
 
@@ -55,15 +55,7 @@ async fn serves_generic_tower_service_and_passes_remote_address() -> TestResult 
     assert!(trailers.is_none());
     assert_eq!(*remote_rx.borrow(), Some(expected_remote));
 
-    let _ = shutdown_tx.send(());
-    drop(send_request);
-    server_task.await?;
-
-    client_endpoint.close(0u32.into(), b"test complete");
-    driver.abort();
-    let _ = driver.await;
-
-    Ok(())
+    shutdown_server(shutdown_tx, send_request, server_task, client_endpoint, driver).await
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -111,15 +103,7 @@ async fn generic_service_errors_reset_stream() -> TestResult {
         "unexpected HTTP/3 error: {error:?}",
     );
 
-    let _ = shutdown_tx.send(());
-    drop(send_request);
-    server_task.await?;
-
-    client_endpoint.close(0u32.into(), b"test complete");
-    driver.abort();
-    let _ = driver.await;
-
-    Ok(())
+    shutdown_server(shutdown_tx, send_request, server_task, client_endpoint, driver).await
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -171,15 +155,7 @@ async fn streams_generic_response_data_and_trailers() -> TestResult {
         Some(HeaderValue::from_static("complete")),
     );
 
-    let _ = shutdown_tx.send(());
-    drop(send_request);
-    server_task.await?;
-
-    client_endpoint.close(0u32.into(), b"test complete");
-    driver.abort();
-    let _ = driver.await;
-
-    Ok(())
+    shutdown_server(shutdown_tx, send_request, server_task, client_endpoint, driver).await
 }
 
 struct GenericHarness {
@@ -316,22 +292,24 @@ async fn response_body_error_resets_the_stream() -> TestResult {
     let mut stream = harness.client.send_request(request).await?;
     stream.finish().await?;
 
-    // The server writes the head and one data frame before the body error resets the stream,
-    // but the reset can reach the client first, so accept both orderings.
+    // The server writes the head and one data frame before the body error resets the stream.
+    // A reset discards data that was not acknowledged yet, so the client may see the data frame,
+    // or only the reset; the terminal error is the invariant, and any data that does arrive must
+    // be the frame the service sent.
     match stream.recv_response().await {
         Ok(response) => {
             assert_eq!(response.status(), StatusCode::OK);
 
-            let mut saw_data = false;
+            let mut received = Vec::new();
             let error = loop {
                 match stream.recv_data().await {
-                    Ok(Some(_)) => saw_data = true,
+                    Ok(Some(mut chunk)) => received.extend_from_slice(chunk.copy_to_bytes(chunk.remaining()).as_ref()),
                     Ok(None) => return Err(std::io::Error::other("the stream ended without an error").into()),
                     Err(error) => break error,
                 }
             };
 
-            assert!(saw_data, "the client must receive the partial body before the reset");
+            assert!(received.is_empty() || received == b"partial", "unexpected body data: {received:?}");
             assert!(is_internal_error(&error), "unexpected HTTP/3 error: {error:?}");
         }
         Err(error) => {
