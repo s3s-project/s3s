@@ -231,7 +231,7 @@ where
     B::Error: std::fmt::Debug + Send + 'static,
 {
     let (parts, body) = response.into_parts();
-    let mut body = Box::pin(body);
+    let mut body = std::pin::pin!(body);
     let mut headers = parts.headers;
 
     strip_hop_by_hop_headers(&mut headers);
