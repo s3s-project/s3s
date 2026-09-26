@@ -4,20 +4,21 @@
 use bytes::Bytes;
 use h3::error::Code;
 use h3::server::{RequestResolver, RequestStream};
-use http::{HeaderMap, HeaderName, Response, Version, header};
+use http::{HeaderMap, HeaderName, Request, Response, Version, header};
 use http_body::Body as HttpBody;
 use quinn::{Endpoint, Incoming, VarInt};
-use s3s::HttpResponse;
 use s3s::service::S3Service;
 
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
+use tower::{Service, ServiceExt};
 use tracing::{debug, error, warn};
 
 use std::future::Future;
-use std::pin::Pin;
+use std::net::SocketAddr;
 use std::time::Duration;
 
+use crate::RequestBody;
 use crate::body::Body;
 
 /// Maximum time allowed for HTTP/3 connections to drain and close during shutdown.
@@ -26,16 +27,32 @@ pub const DEFAULT_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(10);
 type Resolver = RequestResolver<h3_quinn::Connection, Bytes>;
 type SendStream = RequestStream<h3_quinn::SendStream<Bytes>, Bytes>;
 
-/// Serves an [`S3Service`] on a configured QUIC [`Endpoint`].
+/// Serves HTTP/3 requests on a configured QUIC [`Endpoint`].
 ///
 /// The endpoint must already be configured with TLS 1.3 and the `h3` ALPN
-/// protocol. The shutdown future stops new connections, sends GOAWAY, and
-/// waits for clients to finish reading responses and close their connections.
-/// Connections still open after [`DEFAULT_SHUTDOWN_TIMEOUT`] are forcibly closed,
-/// so a client that keeps its connection open makes the shutdown wait for the
-/// whole timeout before `serve` returns.
-pub async fn serve<F>(endpoint: Endpoint, service: S3Service, shutdown: F)
+/// protocol. After each QUIC handshake, `make_service` is called with the
+/// peer's [`SocketAddr`] and its result is used for that connection. The
+/// service is cloned for concurrently handled requests on the connection.
+///
+/// Requests are passed to the service with a streaming [`RequestBody`].
+/// Response data and trailers are streamed to the client without buffering;
+/// HTTP/3-forbidden hop-by-hop headers are removed from responses.
+///
+/// The service is checked for readiness before each request. Service errors
+/// and response-body errors terminate the affected HTTP/3 stream with an
+/// internal error.
+///
+/// When `shutdown` resolves, the server stops accepting connections, asks
+/// active connections to shut down, and waits for them to drain. Connections
+/// that remain open after [`DEFAULT_SHUTDOWN_TIMEOUT`] are forcibly closed.
+pub async fn serve_with<M, S, B, E, F>(endpoint: Endpoint, make_service: M, shutdown: F)
 where
+    M: Fn(SocketAddr) -> S + Clone + Send + 'static,
+    S: Service<Request<RequestBody>, Response = Response<B>, Error = E> + Clone + Send + 'static,
+    S::Future: Send + 'static,
+    B: HttpBody<Data = Bytes> + Send + 'static,
+    B::Error: std::fmt::Debug + Send + 'static,
+    E: std::fmt::Debug + Send + 'static,
     F: Future<Output = ()>,
 {
     let cancellation = CancellationToken::new();
@@ -46,7 +63,7 @@ where
         tokio::select! {
             incoming = endpoint.accept() => {
                 let Some(incoming) = incoming else { break };
-                connections.spawn(handle_incoming(incoming, service.clone(), cancellation.child_token()));
+                connections.spawn(handle_incoming(incoming, make_service.clone(), cancellation.child_token()));
             }
             joined = connections.join_next(), if !connections.is_empty() => {
                 if let Some(Err(error)) = joined {
@@ -73,7 +90,30 @@ where
     endpoint.close(VarInt::from_u32(0), b"server shutdown");
 }
 
-async fn handle_incoming(incoming: Incoming, service: S3Service, cancellation: CancellationToken) {
+/// Serves an [`S3Service`] on a configured QUIC [`Endpoint`].
+///
+/// The endpoint must already be configured with TLS 1.3 and the `h3` ALPN
+/// protocol. The shutdown future stops new connections, sends GOAWAY, and
+/// waits for clients to finish reading responses and close their connections.
+/// Connections still open after [`DEFAULT_SHUTDOWN_TIMEOUT`] are forcibly closed,
+/// so a client that keeps its connection open makes the shutdown wait for the
+/// whole timeout before `serve` returns.
+pub async fn serve<F>(endpoint: Endpoint, service: S3Service, shutdown: F)
+where
+    F: Future<Output = ()>,
+{
+    serve_with(endpoint, move |_| service.clone(), shutdown).await;
+}
+
+async fn handle_incoming<M, S, B, E>(incoming: Incoming, make_service: M, cancellation: CancellationToken)
+where
+    M: Fn(SocketAddr) -> S + Clone + Send + 'static,
+    S: Service<Request<RequestBody>, Response = Response<B>, Error = E> + Clone + Send + 'static,
+    S::Future: Send + 'static,
+    B: HttpBody<Data = Bytes> + Send + 'static,
+    B::Error: std::fmt::Debug + Send + 'static,
+    E: std::fmt::Debug + Send + 'static,
+{
     let connection = tokio::select! {
         result = incoming => match result {
             Ok(connection) => connection,
@@ -87,16 +127,23 @@ async fn handle_incoming(incoming: Incoming, service: S3Service, cancellation: C
 
     let remote = connection.remote_address();
 
-    if let Err(error) = handle_connection(connection, service, cancellation).await {
+    if let Err(error) = handle_connection(connection, make_service(remote), cancellation).await {
         debug!(%remote, ?error, "HTTP/3 connection closed with an error");
     }
 }
 
-async fn handle_connection(
+async fn handle_connection<S, B, E>(
     quic: quinn::Connection,
-    service: S3Service,
+    service: S,
     cancellation: CancellationToken,
-) -> Result<(), h3::error::ConnectionError> {
+) -> Result<(), h3::error::ConnectionError>
+where
+    S: Service<Request<RequestBody>, Response = Response<B>, Error = E> + Clone + Send + 'static,
+    S::Future: Send + 'static,
+    B: HttpBody<Data = Bytes> + Send + 'static,
+    B::Error: std::fmt::Debug + Send + 'static,
+    E: std::fmt::Debug + Send + 'static,
+{
     let c = h3_quinn::Connection::new(quic.clone());
     let mut connection = h3::server::builder().build(c).await?;
     let mut requests: JoinSet<()> = JoinSet::new();
@@ -134,7 +181,14 @@ async fn handle_connection(
     Ok(())
 }
 
-async fn handle_request(resolver: Resolver, service: S3Service) {
+async fn handle_request<S, B, E>(resolver: Resolver, service: S)
+where
+    S: Service<Request<RequestBody>, Response = Response<B>, Error = E> + Clone + Send + 'static,
+    S::Future: Send + 'static,
+    B: HttpBody<Data = Bytes> + Send + 'static,
+    B::Error: std::fmt::Debug + Send + 'static,
+    E: std::fmt::Debug + Send + 'static,
+{
     let (request, stream) = match resolver.resolve_request().await {
         Ok(request) => request,
         Err(error) => {
@@ -162,9 +216,7 @@ async fn handle_request(resolver: Resolver, service: S3Service) {
         .and_then(|value| value.parse().ok());
     let request = request.map(|()| Body::new(recv_stream, content_length));
 
-    let mut service = service;
-
-    match tower::Service::call(&mut service, request).await {
+    match service.oneshot(request).await {
         Ok(response) => send_response(send_stream, response).await,
         Err(error) => {
             error!(?error, "S3 service failed for HTTP/3 request");
@@ -173,8 +225,13 @@ async fn handle_request(resolver: Resolver, service: S3Service) {
     }
 }
 
-async fn send_response(mut stream: SendStream, response: HttpResponse) {
-    let (parts, mut body) = response.into_parts();
+async fn send_response<B>(mut stream: SendStream, response: Response<B>)
+where
+    B: HttpBody<Data = Bytes> + Send + 'static,
+    B::Error: std::fmt::Debug + Send + 'static,
+{
+    let (parts, body) = response.into_parts();
+    let mut body = std::pin::pin!(body);
     let mut headers = parts.headers;
 
     strip_hop_by_hop_headers(&mut headers);
@@ -190,7 +247,7 @@ async fn send_response(mut stream: SendStream, response: HttpResponse) {
     }
 
     loop {
-        let frame = std::future::poll_fn(|cx| Pin::new(&mut body).poll_frame(cx)).await;
+        let frame = std::future::poll_fn(|cx| body.as_mut().poll_frame(cx)).await;
 
         match frame {
             Some(Ok(frame)) => match frame.into_data() {

@@ -960,3 +960,171 @@ async fn preserves_sigv4_authority_over_http3() -> TestResult {
 
     Ok(())
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn serves_generic_tower_service_and_passes_remote_address() -> TestResult {
+    let (endpoint, certificate) = server_endpoint()?;
+    let server_address = endpoint.local_addr()?;
+
+    let (remote_tx, remote_rx) = tokio::sync::watch::channel(None);
+    let make_service = move |remote_addr| {
+        let _ = remote_tx.send(Some(remote_addr));
+
+        tower::service_fn(|_: Request<s3s_http3::RequestBody>| async {
+            Ok::<_, std::convert::Infallible>(Response::new(s3s::Body::from(Bytes::from_static(b"generic response"))))
+        })
+    };
+
+    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
+    let server_task = tokio::spawn(s3s_http3::serve_with(endpoint, make_service, async move {
+        let _ = shutdown_rx.await;
+    }));
+
+    let client_endpoint = client_endpoint(certificate)?;
+    let expected_remote = client_endpoint.local_addr()?;
+    let connection = client_endpoint.connect(server_address, "localhost")?.await?;
+
+    let (mut h3_connection, mut send_request) = h3::client::builder().build(h3_quinn::Connection::new(connection)).await?;
+
+    let driver = tokio::spawn(async move {
+        let _ = std::future::poll_fn(|cx| h3_connection.poll_close(cx)).await;
+    });
+
+    let (response, body, trailers) = send(
+        &mut send_request,
+        Request::builder().method(Method::GET).uri("http://localhost/").body(())?,
+        std::iter::empty::<Bytes>(),
+    )
+    .await?;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(body, b"generic response");
+    assert!(trailers.is_none());
+    assert_eq!(*remote_rx.borrow(), Some(expected_remote));
+
+    let _ = shutdown_tx.send(());
+    drop(send_request);
+    server_task.await?;
+
+    client_endpoint.close(0u32.into(), b"test complete");
+    driver.abort();
+    let _ = driver.await;
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn generic_service_errors_reset_stream() -> TestResult {
+    let (endpoint, certificate) = server_endpoint()?;
+    let server_address = endpoint.local_addr()?;
+
+    let make_service = |_remote_addr| {
+        tower::service_fn(|_: Request<s3s_http3::RequestBody>| async { Err::<Response<s3s::Body>, _>("service failed") })
+    };
+
+    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
+    let server_task = tokio::spawn(s3s_http3::serve_with(endpoint, make_service, async move {
+        let _ = shutdown_rx.await;
+    }));
+
+    let client_endpoint = client_endpoint(certificate)?;
+    let connection = client_endpoint.connect(server_address, "localhost")?.await?;
+    let (mut h3_connection, mut send_request) = h3::client::builder().build(h3_quinn::Connection::new(connection)).await?;
+
+    let driver = tokio::spawn(async move {
+        let _ = std::future::poll_fn(|cx| h3_connection.poll_close(cx)).await;
+    });
+
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        send(
+            &mut send_request,
+            Request::builder().method(Method::GET).uri("http://localhost/").body(())?,
+            std::iter::empty::<Bytes>(),
+        ),
+    )
+    .await?;
+
+    let Err(error) = result else {
+        return Err(std::io::Error::other("service unexpectedly returned a response").into());
+    };
+
+    assert!(
+        matches!(
+            error.downcast_ref::<h3::error::StreamError>(),
+            Some(h3::error::StreamError::RemoteTerminate { code, .. })
+                if *code == h3::error::Code::H3_INTERNAL_ERROR
+        ),
+        "unexpected HTTP/3 error: {error:?}",
+    );
+
+    let _ = shutdown_tx.send(());
+    drop(send_request);
+    server_task.await?;
+
+    client_endpoint.close(0u32.into(), b"test complete");
+    driver.abort();
+    let _ = driver.await;
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn streams_generic_response_data_and_trailers() -> TestResult {
+    let (endpoint, certificate) = server_endpoint()?;
+    let server_address = endpoint.local_addr()?;
+
+    let make_service = |_remote_addr| {
+        tower::service_fn(|_: Request<s3s_http3::RequestBody>| async {
+            let frames = [
+                Ok::<_, std::convert::Infallible>(http_body::Frame::data(Bytes::from_static(b"streamed "))),
+                Ok(http_body::Frame::data(Bytes::from_static(b"response"))),
+                Ok(http_body::Frame::trailers({
+                    let mut trailers = HeaderMap::new();
+                    trailers.insert("x-stream-status", HeaderValue::from_static("complete"));
+                    trailers
+                })),
+            ];
+
+            let body = http_body_util::StreamBody::new(futures_util::stream::iter(frames));
+            Ok::<_, std::convert::Infallible>(Response::new(body))
+        })
+    };
+
+    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
+    let server_task = tokio::spawn(s3s_http3::serve_with(endpoint, make_service, async move {
+        let _ = shutdown_rx.await;
+    }));
+
+    let client_endpoint = client_endpoint(certificate)?;
+    let connection = client_endpoint.connect(server_address, "localhost")?.await?;
+    let (mut h3_connection, mut send_request) = h3::client::builder().build(h3_quinn::Connection::new(connection)).await?;
+
+    let driver = tokio::spawn(async move {
+        let _ = std::future::poll_fn(|cx| h3_connection.poll_close(cx)).await;
+    });
+
+    let (response, body, trailers) = send(
+        &mut send_request,
+        Request::builder().method(Method::GET).uri("http://localhost/").body(())?,
+        std::iter::empty::<Bytes>(),
+    )
+    .await?;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(body, b"streamed response");
+    assert_eq!(
+        trailers.and_then(|headers| headers.get("x-stream-status").cloned()),
+        Some(HeaderValue::from_static("complete")),
+    );
+
+    let _ = shutdown_tx.send(());
+    drop(send_request);
+    server_task.await?;
+
+    client_endpoint.close(0u32.into(), b"test complete");
+    driver.abort();
+    let _ = driver.await;
+
+    Ok(())
+}

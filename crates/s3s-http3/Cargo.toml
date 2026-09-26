@@ -20,7 +20,7 @@ http.workspace = true
 http-body.workspace = true
 tokio = { workspace = true, features = ["macros", "rt", "sync", "time"] }
 tokio-util.workspace = true
-tower.workspace = true
+tower = { workspace = true, features = ["util"] }
 tracing.workspace = true
 h3 = { version = "0.0.8", features = ["tracing"] }
 h3-quinn = { version = "0.0.10", features = ["tracing"] }
@@ -43,4 +43,6 @@ hyper-util = { workspace = true, features = [
       "http2",
       "tokio",
 ] }
+futures-util.workspace = true
+http-body-util.workspace = true
 tokio-rustls.workspace = true

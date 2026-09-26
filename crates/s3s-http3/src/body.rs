@@ -17,15 +17,17 @@ enum State {
     Done,
 }
 
-pub(crate) struct Body {
+/// A streaming HTTP/3 request body
+pub struct Body {
     stream: Option<RecvStream>,
     state: State,
     expected_length: Option<u64>,
     received_length: u64,
 }
 
+/// An error while reading an HTTP/3 request body.
 #[derive(Debug)]
-pub(crate) struct BodyError(Box<dyn std::error::Error + Send + Sync>);
+pub struct BodyError(Box<dyn std::error::Error + Send + Sync>);
 
 impl std::fmt::Display for BodyError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

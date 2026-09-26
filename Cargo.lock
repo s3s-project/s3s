@@ -3884,10 +3884,12 @@ name = "s3s-http3"
 version = "0.17.0-alpha.1"
 dependencies = [
  "bytes",
+ "futures-util",
  "h3",
  "h3-quinn",
  "http 1.5.0",
  "http-body 1.1.0",
+ "http-body-util",
  "hyper",
  "hyper-util",
  "quinn",
