@@ -1,60 +1,55 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
-//! An HTTP/3 server for the S3 API, backed by a local directory.
+//! An HTTP/3 server that serves a generic [`tower`] service.
+//!
+//! Unlike `examples/server.rs` (which serves an `S3Service`), this example uses the
+//! `serve_with` entry point: the factory receives the peer [`std::net::SocketAddr`] of each
+//! QUIC connection, and the service receives a streaming [`s3s_http3::RequestBody`].
+//! Nothing here depends on the S3 API: the response body is a plain
+//! [`http_body_util::Full`].
+//!
+//! Hop-by-hop response headers (`connection`, `transfer-encoding`, `te`, `upgrade`,
+//! `keep-alive`, and any header listed in `connection`) are stripped by the transport.
+//!
+//! # Certificate
+//!
+//! With `S3S_HTTP3_CERT` and `S3S_HTTP3_KEY` unset, a temporary self-signed certificate is
+//! generated at startup; set both to use your own PEM files.
 //!
 //! # Environment
 //!
 //! | variable | default | meaning |
 //! | --- | --- | --- |
-//! | `S3S_HTTP3_ROOT` | `target/s3s-http3-data` | directory used as the object store |
-//! | `S3S_HTTP3_BIND` | `127.0.0.1:8443` | UDP address to bind |
+//! | `S3S_HTTP3_BIND` | `127.0.0.1:8444` | UDP address to bind |
 //! | `S3S_HTTP3_CERT` | unset | certificate chain in PEM |
 //! | `S3S_HTTP3_KEY` | unset | private key in PEM |
-//! | `S3S_HTTP3_ACCESS_KEY` | unset | `SigV4` access key |
-//! | `S3S_HTTP3_SECRET_KEY` | unset | `SigV4` secret key |
-//!
-//! With `S3S_HTTP3_CERT` and `S3S_HTTP3_KEY` unset, a temporary self-signed certificate is
-//! generated at startup; set both to use your own PEM files. Without credentials the server
-//! prints a warning and keeps the endpoint on loopback. The endpoint needs UDP, TLS 1.3,
-//! and the `h3` ALPN protocol.
 //!
 //! # Run
 //!
 //! ```text
-//! cargo run -p s3s-http3 --example server
+//! cargo run -p s3s-http3 --example serve-with
 //!
-//! curl --http3-only -k --resolve localhost:8443:127.0.0.1 \
-//!   -X PUT https://localhost:8443/bucket
-//!
-//! curl --http3-only -k --resolve localhost:8443:127.0.0.1 \
-//!   -X PUT --data-binary 'hello over HTTP/3' https://localhost:8443/bucket/key
-//!
-//! curl --http3-only -k --resolve localhost:8443:127.0.0.1 \
-//!   https://localhost:8443/bucket/key
+//! curl --http3-only -k --resolve localhost:8444:127.0.0.1 \
+//!   --data-binary 'hello over HTTP/3' https://localhost:8444/anything
 //! ```
 //!
-//! The final command should print `hello over HTTP/3`.
+//! The response prints the peer address and the number of body bytes received.
 
+use bytes::Bytes;
+use http::{Request, Response};
+use http_body_util::{BodyExt, Full};
 use quinn::rustls::pki_types::pem::PemObject;
 use quinn::rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
-
-use s3s::auth::SimpleAuth;
-use s3s::host::SingleDomain;
-use s3s::service::S3ServiceBuilder;
-use s3s_fs::FileSystem;
 
 use std::env;
 use std::error::Error;
 use std::io;
+use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 type Result<T = ()> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
-
-fn env_path(name: &str, default: &str) -> PathBuf {
-    env::var_os(name).map_or_else(|| PathBuf::from(default), PathBuf::from)
-}
 
 fn load_server_config(cert: Option<&Path>, key: Option<&Path>) -> Result<quinn::ServerConfig> {
     let (certs, key) = match (cert, key) {
@@ -74,7 +69,6 @@ fn load_server_config(cert: Option<&Path>, key: Option<&Path>) -> Result<quinn::
         .with_no_client_auth()
         .with_single_cert(certs, key)
         .map_err(io::Error::other)?;
-
     tls.alpn_protocols = vec![b"h3".to_vec()];
 
     let crypto = quinn::crypto::rustls::QuicServerConfig::try_from(tls).map_err(io::Error::other)?;
@@ -105,49 +99,33 @@ fn self_signed() -> Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result {
     let _ = quinn::rustls::crypto::ring::default_provider().install_default();
-    let root = env_path("S3S_HTTP3_ROOT", "target/s3s-http3-data");
+
+    let bind: SocketAddr = env::var("S3S_HTTP3_BIND")
+        .unwrap_or_else(|_| "127.0.0.1:8444".to_owned())
+        .parse()?;
     let cert = env::var_os("S3S_HTTP3_CERT").map(PathBuf::from);
     let key = env::var_os("S3S_HTTP3_KEY").map(PathBuf::from);
 
-    let bind: std::net::SocketAddr = env::var("S3S_HTTP3_BIND")
-        .unwrap_or_else(|_| "127.0.0.1:8443".to_owned())
-        .parse()?;
-
-    std::fs::create_dir_all(&root)?;
-
-    let filesystem = FileSystem::new(&root).map_err(|error| io::Error::other(format!("{error:?}")))?;
-
-    let mut builder = S3ServiceBuilder::new(filesystem);
-    builder.set_host(SingleDomain::new("localhost")?);
-
-    match (env::var("S3S_HTTP3_ACCESS_KEY").ok(), env::var("S3S_HTTP3_SECRET_KEY").ok()) {
-        (Some(access_key), Some(secret_key)) => {
-            builder.set_auth(SimpleAuth::from_single(access_key, secret_key));
-            println!("authentication enabled");
-        }
-        (None, None) => eprintln!("warning: authentication disabled; keep this server on loopback"),
-        _ => {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "both S3S_HTTP3_ACCESS_KEY and S3S_HTTP3_SECRET_KEY are required",
-            )
-            .into());
-        }
-    }
-
-    let service = builder.build();
     let endpoint = s3s_http3::Endpoint::server(load_server_config(cert.as_deref(), key.as_deref())?, bind)?;
     let local_addr = endpoint.local_addr()?;
+    println!("generic HTTP/3 service listening on https://{local_addr}");
 
-    println!("HTTP/3 server listening on https://{local_addr}");
-    println!("data root: {}", root.display());
+    let make_service = move |remote_addr: SocketAddr| {
+        tower::service_fn(move |request: Request<s3s_http3::RequestBody>| async move {
+            let collected = BodyExt::collect(request.into_body()).await?;
+            let received = collected.to_bytes();
+            let received_len = received.len();
+            let text = format!("remote={remote_addr}\nreceived={received_len} bytes\n");
+            Ok::<_, Box<dyn Error + Send + Sync>>(Response::new(Full::new(Bytes::from(text))))
+        })
+    };
 
     let shutdown = async {
         tokio::signal::ctrl_c().await.expect("failed to install Ctrl-C handler");
         println!("shutting down");
     };
 
-    s3s_http3::serve(endpoint, service, shutdown).await;
+    s3s_http3::serve_with(endpoint, make_service, shutdown).await;
 
     Ok(())
 }

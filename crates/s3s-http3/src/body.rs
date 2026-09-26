@@ -17,7 +17,24 @@ enum State {
     Done,
 }
 
-/// A streaming HTTP/3 request body
+/// A streaming HTTP/3 request body, exported as [`crate::RequestBody`].
+///
+/// The body yields the request data as data frames and then, if the client sent any, one
+/// trailers frame. `is_end_stream` becomes `true` once the trailers (or the end of the data)
+/// have been consumed.
+///
+/// # Draining
+///
+/// Dropping the body before it is fully read spawns a background task that keeps reading the
+/// remaining data. Dropping the underlying QUIC receive stream instead would make quinn send
+/// `STOP_SENDING`, which aborts the client's upload mid-flight.
+///
+/// # Content length
+///
+/// When the request declares a `content-length`, the body checks it while it is polled: too
+/// much or too little data makes the body yield a [`BodyError`] and stop the stream with
+/// `H3_MESSAGE_ERROR`. The check only covers data that is actually polled, so drained data is
+/// not validated.
 pub struct Body {
     stream: Option<RecvStream>,
     state: State,
@@ -26,6 +43,10 @@ pub struct Body {
 }
 
 /// An error while reading an HTTP/3 request body.
+///
+/// This is the error type of [`crate::RequestBody`] and implements [`std::error::Error`],
+/// including [`std::error::Error::source`]. It is produced by a failure of the underlying
+/// QUIC/h3 receive stream or by a `content-length` mismatch.
 #[derive(Debug)]
 pub struct BodyError(Box<dyn std::error::Error + Send + Sync>);
 

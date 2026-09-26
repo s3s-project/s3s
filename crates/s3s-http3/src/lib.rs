@@ -9,6 +9,49 @@
 //! Quinn QUIC endpoint. Request and response bodies are streamed without
 //! buffering objects in the adapter.
 //!
+//! # Usage
+//!
+//! The endpoint is built by the caller (QUIC TLS 1.3 with the `h3` ALPN protocol);
+//! this crate only serves requests on it. [`serve`] takes an
+//! [`s3s::service::S3Service`]:
+//!
+//! ```
+//! # use std::error::Error;
+//! # async fn example(endpoint: s3s_http3::Endpoint, service: s3s::service::S3Service) -> Result<(), Box<dyn Error>> {
+//! s3s_http3::serve(endpoint, service, std::future::pending::<()>()).await;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! [`serve_with`] takes a factory that is called once per QUIC connection with the
+//! peer address, so a generic [`tower::Service`] receives a streaming
+//! [`RequestBody`] and can keep per-connection context:
+//!
+//! ```
+//! # use std::error::Error;
+//! use bytes::Bytes;
+//! use http::{Request, Response};
+//! use http_body_util::{BodyExt, Full};
+//! use s3s_http3::RequestBody;
+//!
+//! # async fn example(endpoint: s3s_http3::Endpoint) -> Result<(), Box<dyn Error + Send + Sync>> {
+//! let make_service = move |remote_addr: std::net::SocketAddr| {
+//!     tower::service_fn(move |request: Request<RequestBody>| async move {
+//!         let body = BodyExt::collect(request.into_body()).await?;
+//!         let received = body.to_bytes().len();
+//!         let text = format!("from {remote_addr}: {received} bytes\n");
+//!         Ok::<_, Box<dyn Error + Send + Sync>>(Response::new(Full::new(Bytes::from(text))))
+//!     })
+//! };
+//!
+//! s3s_http3::serve_with(endpoint, make_service, std::future::pending::<()>()).await;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! Runnable examples live in `examples/server.rs` (an S3 service) and
+//! `examples/serve-with.rs` (a generic service).
+//!
 //! # TLS and networking
 //!
 //! The supplied [`Endpoint`] must use QUIC TLS 1.3 with the `h3` ALPN

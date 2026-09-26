@@ -8,24 +8,24 @@ Run from the repository root:
 
 ```sh
 # Small GET/PUT correctness check; starts and stops both servers.
-just --justfile crates/s3s-http3/benchmark/justfile bench-check
+just --justfile crates/s3s-http3/benches/justfile bench-check
 
 # GET and PUT, 16 and 64 MiB objects, concurrency 1 and 8.
 # Eight requests per batch; starts/stops the servers automatically.
-just --justfile crates/s3s-http3/benchmark/justfile bench-large
+just --justfile crates/s3s-http3/benches/justfile bench-large
 ```
 
 For a custom comparison, start the servers, run the desired cases, then stop:
 
 ```sh
-just --justfile crates/s3s-http3/benchmark/justfile bench-up
+just --justfile crates/s3s-http3/benches/justfile bench-up
 
 # Arguments: request count, concurrency limit, GET|PUT, object size in MiB.
-just --justfile crates/s3s-http3/benchmark/justfile bench-throughput 8 8 GET 64
-just --justfile crates/s3s-http3/benchmark/justfile bench-throughput 8 8 PUT 64
-just --justfile crates/s3s-http3/benchmark/justfile bench-throughput 2 2 PUT 256
+just --justfile crates/s3s-http3/benches/justfile bench-throughput 8 8 GET 64
+just --justfile crates/s3s-http3/benches/justfile bench-throughput 8 8 PUT 64
+just --justfile crates/s3s-http3/benches/justfile bench-throughput 2 2 PUT 256
 
-just --justfile crates/s3s-http3/benchmark/justfile bench-down
+just --justfile crates/s3s-http3/benches/justfile bench-down
 ```
 
 Object size accepts integer MiB from 1 to 1024. Existing calls such as
@@ -72,7 +72,7 @@ The lower-level `bench-load` remains available for diagnostics:
 
 ```sh
 # protocol, count, concurrency, destination, method, size MiB, PUT prefix
-just --justfile crates/s3s-http3/benchmark/justfile bench-load h3 8 8 127.0.0.1 GET 64
+just --justfile crates/s3s-http3/benches/justfile bench-load h3 8 8 127.0.0.1 GET 64
 ```
 
 `bench-load` does not seed data, apply the runner's disk budget, or clean up
