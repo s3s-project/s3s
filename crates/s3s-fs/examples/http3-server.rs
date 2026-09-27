@@ -30,7 +30,8 @@
 //! # Run
 //!
 //! ```text
-//! cargo run -p s3s-fs --features http3 --example http3-server
+//! S3S_HTTP3_CERT_OUT=target/s3s-http3-cert.pem \
+//!   cargo run -p s3s-fs --features http3 --example http3-server
 //!
 //! cargo run -p s3s-fs --features http3 --example http3-client -- \
 //!   --url https://localhost:8443 --cert target/s3s-http3-cert.pem
