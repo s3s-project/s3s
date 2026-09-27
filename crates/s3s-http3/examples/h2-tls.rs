@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
+//! The HTTP/2 counterpart used by the benchmark harness (see `benches/README.md`).
+//!
+//! This is **not** a usage example for `s3s-http3`. For that, see `examples/server.rs`
+//! (serving an `S3Service`) and `examples/serve-with.rs` (serving a generic Tower
+//! service). This binary serves a minimal S3 endpoint over hyper's HTTP/2 with TLS on
+//! port 8015 so that the benchmark can compare it with the HTTP/3 example.
+
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::server::conn::auto::Builder as ConnBuilder;
 use s3s::host::SingleDomain;
