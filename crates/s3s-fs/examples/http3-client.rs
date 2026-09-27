@@ -13,6 +13,9 @@
 //!
 //! # Arguments
 //!
+//! The command line is parsed with `clap`; run the example with `--help` for
+//! the full list. `--cert` is required.
+//!
 //! | argument | default | meaning |
 //! | --- | --- | --- |
 //! | `--url` | `https://localhost:8014` | endpoint to connect to |
@@ -29,11 +32,11 @@
 //! ```
 
 use bytes::{Buf, Bytes};
+use clap::Parser;
 use http::{Method, Request, Response, StatusCode, Uri, Version, header};
 use quinn::rustls::pki_types::CertificateDer;
 use quinn::rustls::pki_types::pem::PemObject;
 
-use std::env;
 use std::error::Error;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -47,54 +50,26 @@ type ClientStream = h3::client::RequestStream<h3_quinn::BidiStream<Bytes>, Bytes
 const OBJECT_KEY: &str = "hello.txt";
 const OBJECT_BODY: &[u8] = b"hello over HTTP/3";
 
-struct Args {
+/// Smoke tests an S3 endpoint over HTTP/3.
+#[derive(Debug, Parser)]
+#[command(version)]
+struct Opt {
+    /// Endpoint to connect to.
+    #[arg(long, default_value = "https://localhost:8014")]
     url: Uri,
+
+    /// PEM certificate chain to trust; the client uses no other root.
+    #[arg(long)]
     cert: PathBuf,
+
+    /// Bucket used by the test.
+    #[arg(long, default_value = "s3s-smoke")]
     bucket: String,
-}
-
-fn usage() -> &'static str {
-    "usage: http3-client [--url URL] --cert PEM [--bucket NAME]"
-}
-
-fn parse_args() -> Result<Args> {
-    let mut url: Option<Uri> = None;
-    let mut cert = None;
-    let mut bucket = "s3s-smoke".to_owned();
-    let mut args = env::args().skip(1);
-
-    while let Some(arg) = args.next() {
-        let mut value = || args.next().ok_or_else(|| io::Error::other(format!("{arg} requires a value")));
-
-        match arg.as_str() {
-            "--url" => url = Some(value()?.parse()?),
-            "--cert" => cert = Some(PathBuf::from(value()?)),
-            "--bucket" => bucket = value()?,
-            "--help" | "-h" => {
-                println!("{}", usage());
-                std::process::exit(0);
-            }
-            other => return Err(io::Error::other(format!("unexpected argument: {other}\n{}", usage())).into()),
-        }
-    }
-
-    let cert = cert.ok_or_else(|| {
-        io::Error::other(format!(
-            "--cert is required: the client trusts only the certificate chain in that file\n{}",
-            usage()
-        ))
-    })?;
-
-    Ok(Args {
-        url: url.unwrap_or("https://localhost:8014".parse()?),
-        cert,
-        bucket,
-    })
 }
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result {
-    let args = parse_args()?;
+    let args = Opt::parse();
 
     match tokio::time::timeout(Duration::from_secs(60), smoke_test(args)).await {
         Ok(result) => result,
@@ -102,7 +77,7 @@ async fn main() -> Result {
     }
 }
 
-async fn smoke_test(args: Args) -> Result {
+async fn smoke_test(args: Opt) -> Result {
     let authority = args
         .url
         .authority()

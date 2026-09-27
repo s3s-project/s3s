@@ -94,6 +94,9 @@ uuid = { workspace = true, features = ["v4"] }
 
 [dev-dependencies]
 anyhow = { workspace = true, features = ["backtrace"] }
+# The examples are dev targets: the library and the binary keep clap optional
+# behind the `binary` feature, and the http3 example does not need that feature.
+clap = { workspace = true }
 aws-config.workspace = true
 aws-credential-types = { workspace = true, features = ["test-util"] }
 aws-sdk-s3 = { workspace = true, features = ["behavior-version-latest"] }
