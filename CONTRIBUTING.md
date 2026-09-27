@@ -57,6 +57,8 @@ Install `s3s-fs` from source
 cargo install --path crates/s3s-fs --features binary
 ```
 
+The default build has no HTTP/3 dependencies. To serve the same file system over QUIC as well, add the `http3` feature (`--features binary,http3`) and start the server with `--http3`; releases publish `s3s-http3` before `s3s-fs`.
+
 You can also use the shortcut
 
 ```bash

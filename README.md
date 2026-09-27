@@ -48,7 +48,19 @@ This experimental project intends to offer an ergonomic adapter for building S3-
 
 `s3s-fs` implements the S3 API based on file system, as a sample implementation. It is designed for integration testing, which can be used to [mock an S3 client](https://github.com/Nugine/s3s/blob/main/crates/s3s-fs/tests/it_aws.rs). It also provides a binary for debugging. [Play it!](./CONTRIBUTING.md#play-the-test-server)
 
-`s3s-http3` is an experimental, opt-in HTTP/3 transport: it serves an `S3Service`, or any [`tower::Service`](https://crates.io/crates/tower), over QUIC, so the same S3 API is reachable over UDP with TLS 1.3 and the `h3` ALPN protocol. The adapter is server-side only, and its API may change while the HTTP/3 ecosystem evolves. Runnable servers are in `crates/s3s-http3/examples/server.rs` and `crates/s3s-http3/examples/serve-with.rs`.
+The same file system can also be served over HTTP/3: build the binary with the optional `http3` feature and pass `--http3`.
+
+```sh
+cargo install s3s-fs --features binary,http3
+s3s-fs --http3 --port 8014 /data
+```
+
+- `http://host:port` keeps serving HTTP/1.1 and HTTP/2 over TCP, while `https://host:port` serves HTTP/3 on the same port.
+- The server does not send `Alt-Svc`, so an HTTP/3 client connects explicitly.
+- Without `--cert` and `--key` a self-signed certificate is generated; `--cert-out` writes the certificate a client has to trust. All three options require `--http3`.
+- A default build has no HTTP/3 dependencies, and `s3s-fs` is published after `s3s-http3`.
+
+`s3s-http3` is an experimental, opt-in HTTP/3 transport: it serves an `S3Service`, or any [`tower::Service`](https://crates.io/crates/tower), over QUIC, so the same S3 API is reachable over UDP with TLS 1.3 and the `h3` ALPN protocol. The adapter is server-side only, and its API may change while the HTTP/3 ecosystem evolves. Runnable servers are in `crates/s3s-fs/examples/http3-server.rs` and `crates/s3s-http3/examples/serve-with.rs`.
 
 The other workspace members are supporting crates:
 - `s3s-sigv2`, `s3s-sigv4` — AWS Signature Version 2 and Version 4 parsing, canonicalization and signing.
