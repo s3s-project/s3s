@@ -14,11 +14,10 @@ use s3s_fs::FileSystem;
 
 use std::error::Error;
 use std::fs;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::common::{
-    Client, TestResult, connect_client, library_error, load_certificate, receive_response, send, shutdown_server,
+    CleanupGuard, Client, TestResult, connect_client, library_error, load_certificate, receive_response, send, shutdown_server,
 };
 
 const TEST_ACCESS_KEY: &str = "AKIAHTTP3TEST";
@@ -685,19 +684,6 @@ async fn content_length_mismatch(harness: &mut S3Harness) -> TestResult {
     Ok(())
 }
 
-/// Removes the temporary data directory when the test ends.
-struct CleanupGuard {
-    path: PathBuf,
-}
-
-impl Drop for CleanupGuard {
-    fn drop(&mut self) {
-        if self.path.exists() {
-            let _ = fs::remove_dir_all(&self.path);
-        }
-    }
-}
-
 /// Serves an `S3Service` over HTTP/3 on a temporary data directory.
 struct S3Harness {
     server_address: std::net::SocketAddr,
@@ -722,11 +708,7 @@ impl S3Harness {
     }
 
     async fn start(name: &str, auth: bool) -> TestResult<Self> {
-        let base = std::env::temp_dir().join(format!("s3s-fs-http3-{name}-{}", std::process::id()));
-
-        if base.exists() {
-            fs::remove_dir_all(&base)?;
-        }
+        let (base, cleanup) = CleanupGuard::new(name)?;
 
         let root = base.join("data");
         fs::create_dir_all(&root)?;
@@ -770,7 +752,7 @@ impl S3Harness {
             shutdown,
             server,
             client,
-            _cleanup: CleanupGuard { path: base },
+            _cleanup: cleanup,
         })
     }
 
