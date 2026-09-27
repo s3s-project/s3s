@@ -4,21 +4,37 @@ Agent guidance for the **s3s** repository.
 
 ## Overview
 
-s3s is an experimental Rust project providing an ergonomic adapter for building
-S3-compatible services. It implements the Amazon S3 REST API as a generic `hyper`
-service: HTTP requests are converted to S3 operation inputs, user-defined services
-are called, and outputs or errors are converted back to HTTP responses.
+s3s is an experimental Rust project providing an ergonomic adapter for building S3-compatible services. It implements the Amazon S3 REST API as a generic `hyper` service: HTTP requests are converted to S3 operation inputs, user-defined services are called, and outputs or errors are converted back to HTTP responses.
 
 ## Architecture
 
+Core:
+
 - `s3s` — core crate: S3 REST API as a hyper service
+
+Adapters and integrations:
+
 - `s3s-aws` — aws-sdk-s3 integration and useful types
 - `s3s-fs` — sample file-system implementation (testing/debugging)
+- `s3s-http3` — experimental, opt-in HTTP/3 transport for `s3s`
+- `s3s-proxy` — proxy for E2E testing
+
+Support libraries:
+
 - `s3s-model` — data types generated from AWS Smithy models
 - `s3s-policy` — S3 policy handling
+- `s3s-multipart` — general-purpose async streaming parser for `multipart/form-data`; `s3s` uses it for `POST Object` form uploads
+- `s3s-chunked` — async streaming decoder for `aws-chunked` request bodies (placeholder crate: the implementation is under development)
+- `s3s-rfc2047` — RFC 2047 MIME encoded-word encoding and decoding
+- `s3s-sigv2` — AWS Signature Version 2 parsing, canonicalization and signing
+- `s3s-sigv4` — AWS Signature Version 4 parsing, canonicalization and signing
+
+Tools and internal:
+
 - `s3s-test` — testing utilities
-- `s3s-proxy` — proxy for E2E testing
 - `s3s-e2e` — end-to-end testing framework
+- `s3s-codegen` — build tool: generates the S3 data types from the AWS Smithy models
+- `s3s-wasm` — internal crate (`publish = false`): runs `s3s` under WebAssembly in its test suite
 
 ## Development
 
@@ -39,8 +55,7 @@ are called, and outputs or errors are converted back to HTTP responses.
 - Look at `s3s-fs` as a reference implementation.
 - Modifying S3 operations: check if codegen is needed (`just codegen`), update tests,
   run the full test suite (`just test`), consider E2E impact.
-- Adding features: follow the crate structure, add unit/integration tests, update docs
-  if public APIs change, run `just dev`.
+- Adding features: follow the crate structure, add unit/integration tests, update docs if public APIs change, run `just dev`.
 - Fixing bugs: add a reproducing test first, fix minimally, run the full suite.
 
 ## Where to look
@@ -52,13 +67,13 @@ are called, and outputs or errors are converted back to HTTP responses.
 
 ## Security
 
-The `S3Service` and adapters have no built-in security protection. Consider HTTP body
-length limits, rate limiting, and back pressure; services may be exposed to the Internet.
+The `S3Service` and adapters have no built-in security protection. Consider HTTP body length limits, rate limiting, and back pressure; services may be exposed to the Internet.
 
 ## Gotchas
 
-- `codegen` emits two variants per generated file (`generated.rs` / `generated_minio.rs`),
-  selected by `cfg_if!` — verify both feature variants.
+- `codegen` merges the base and MinIO variants of each module into a single `generated.rs` (the temporary `generated_minio.rs` is removed), selecting the differences inline with `#[cfg(feature = "minio")]` / `#[cfg(not(feature = "minio"))]` — verify both the `minio` and the default build.
+- `fuzz/` is its own workspace (not part of the root `members`), so the root `just lint` /
+  `just test` do not cover the fuzz targets; use the recipes in `fuzz/justfile`.
 - Prefer `` [`path::Type`] `` intra-doc links; `[`Type`](path::Type)` triggers
   `rustdoc::redundant_explicit_links`, bare `[Type]` triggers clippy `doc_markdown`.
 
