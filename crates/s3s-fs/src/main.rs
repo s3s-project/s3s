@@ -201,11 +201,62 @@ async fn run(opt: Opt) -> Result {
 
     // Both transports are stopped: the QUIC endpoint drained while the TCP
     // connections were closing.
+    //
+    // A failed task must not be reported as a clean shutdown: the shutdown
+    // signal makes the task end with `Ok`, so anything else is a real failure.
     #[cfg(all(feature = "binary", feature = "http3"))]
     if let Some(task) = http3_task {
-        let _ = task.await;
+        join_http3_task(task).await?;
     }
 
     info!("server is stopped");
     Ok(())
+}
+
+/// Waits for the HTTP/3 server task.
+///
+/// The task is stopped by the shutdown signal and ends normally, so a join
+/// error means it panicked or was cancelled instead of stopping gracefully.
+#[cfg(all(feature = "binary", feature = "http3"))]
+async fn join_http3_task(task: tokio::task::JoinHandle<()>) -> Result {
+    task.await.map_err(|err| {
+        let what = if err.is_panic() { "panicked" } else { "was cancelled" };
+        s3s_fs::Error::from_string(format!("the HTTP/3 server task {what}: {err}"))
+    })
+}
+
+#[cfg(all(test, feature = "binary", feature = "http3"))]
+mod tests {
+    use super::join_http3_task;
+    use std::future::pending;
+
+    #[tokio::test]
+    async fn http3_task_stopped_gracefully_is_not_an_error() {
+        let (stop, shutdown) = tokio::sync::oneshot::channel::<()>();
+        let task = tokio::spawn(async move {
+            let _ = shutdown.await;
+        });
+
+        stop.send(()).expect("the shutdown receiver must be alive");
+        assert!(join_http3_task(task).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn http3_task_panic_is_reported() {
+        let task = tokio::spawn(async {
+            panic!("the server task panicked");
+        });
+
+        let err = join_http3_task(task).await.expect_err("a panic must be reported");
+        assert!(format!("{err:?}").contains("panicked"), "{err:?}");
+    }
+
+    #[tokio::test]
+    async fn http3_task_cancellation_is_reported() {
+        let task = tokio::spawn(pending::<()>());
+
+        task.abort();
+        let err = join_http3_task(task).await.expect_err("a cancellation must be reported");
+        assert!(format!("{err:?}").contains("cancelled"), "{err:?}");
+    }
 }
