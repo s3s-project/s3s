@@ -17,7 +17,9 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::common::{Client, TestResult, connect_client, receive_response, send, server_endpoint, shutdown_server};
+use crate::common::{
+    Client, TestResult, connect_client, library_error, load_certificate, receive_response, send, shutdown_server,
+};
 
 const TEST_ACCESS_KEY: &str = "AKIAHTTP3TEST";
 const TEST_SECRET_KEY: &str = "http3-test-secret";
@@ -720,11 +722,13 @@ impl S3Harness {
     }
 
     async fn start(name: &str, auth: bool) -> TestResult<Self> {
-        let root = std::env::temp_dir().join(format!("s3s-http3-{name}-{}", std::process::id()));
+        let base = std::env::temp_dir().join(format!("s3s-fs-http3-{name}-{}", std::process::id()));
 
-        if root.exists() {
-            fs::remove_dir_all(&root)?;
+        if base.exists() {
+            fs::remove_dir_all(&base)?;
         }
+
+        let root = base.join("data");
         fs::create_dir_all(&root)?;
 
         let filesystem = FileSystem::new(&root).map_err(|error| std::io::Error::other(format!("{error:?}")))?;
@@ -741,11 +745,18 @@ impl S3Harness {
 
         let service = builder.build();
 
-        let (endpoint, certificate) = server_endpoint()?;
-        let server_address = endpoint.local_addr()?;
+        // The endpoint generates a self-signed certificate and exports it,
+        // which is what the client has to trust.
+        let cert_out = base.join("cert.pem");
+        let config = s3s_fs::http3::Http3Config::new("127.0.0.1:0".parse()?, None, None, Some(cert_out.clone()));
+        let endpoint = s3s_fs::http3::Http3Server::bind(config)
+            .await
+            .map_err(|error| library_error(&error))?;
+        let server_address = endpoint.local_addr();
+        let certificate = load_certificate(&cert_out)?;
 
         let (shutdown, shutdown_rx) = tokio::sync::oneshot::channel();
-        let server = tokio::spawn(s3s_http3::serve(endpoint, service, async move {
+        let server = tokio::spawn(endpoint.serve(service, async move {
             let _ = shutdown_rx.await;
         }));
 
@@ -759,7 +770,7 @@ impl S3Harness {
             shutdown,
             server,
             client,
-            _cleanup: CleanupGuard { path: root },
+            _cleanup: CleanupGuard { path: base },
         })
     }
 

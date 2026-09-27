@@ -6,8 +6,8 @@ h2_url := "https://localhost:8015"
 h3_url := "https://localhost:8443"
 
 bench-build:
-    cargo build --manifest-path "{{ repo_dir }}/Cargo.toml" --release -p s3s-http3 --example h2-tls
-    cargo build --manifest-path "{{ repo_dir }}/Cargo.toml" --release -p s3s-http3 --example server
+    cargo build --manifest-path "{{ repo_dir }}/Cargo.toml" --release -p s3s-fs --features http3 --example h2-tls
+    cargo build --manifest-path "{{ repo_dir }}/Cargo.toml" --release -p s3s-fs --features http3 --example http3-server
 
 [positional-arguments]
 bench-prepare size_mib="1":
@@ -75,7 +75,7 @@ bench-up: bench-build bench-prepare
         S3S_HTTP3_BIND=127.0.0.1:8443 \
         S3S_HTTP3_CERT="{{ bench_dir }}/cert.pem" \
         S3S_HTTP3_KEY="{{ bench_dir }}/key.pem" \
-        "{{ repo_dir }}/target/release/examples/server" \
+        "{{ repo_dir }}/target/release/examples/http3-server" \
         > "{{ bench_dir }}/h3.log" 2>&1 < /dev/null &
     echo "$!" > "$h3_pid"
 
@@ -257,7 +257,7 @@ bench-down:
 
         command_name="$(ps -p "$pid" -o comm= | tr -d '[:space:]')"
         case "$command_name" in
-            h2-tls|server) ;;
+            h2-tls|http3-server) ;;
             *)
                 echo "refusing to stop unexpected process $pid ($command_name)"
                 continue

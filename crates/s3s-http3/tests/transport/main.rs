@@ -6,4 +6,3 @@
 
 mod common;
 mod generic_service;
-mod s3_api;

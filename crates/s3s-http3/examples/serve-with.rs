@@ -3,7 +3,7 @@
 
 //! An HTTP/3 server that serves a generic [`tower`] service.
 //!
-//! Unlike `examples/server.rs` (which serves an `S3Service`), this example uses the
+//! Unlike a server for the S3 API (see the `s3s-fs` crate), this example uses the
 //! `serve_with` entry point: the factory receives the peer [`std::net::SocketAddr`] of each
 //! QUIC connection, and the service receives a streaming [`s3s_http3::RequestBody`].
 //! Nothing here depends on the S3 API: the response body is a plain
