@@ -25,8 +25,9 @@ enum State {
 ///
 /// # Draining
 ///
-/// Dropping the body before it is fully read spawns a background task that keeps reading the
-/// remaining data. Dropping the underlying QUIC receive stream instead would make quinn send
+/// When a Tokio runtime is available, dropping the body before it is fully read spawns a
+/// background task that keeps reading the remaining data; without a runtime the remaining data
+/// is not drained. Dropping the underlying QUIC receive stream instead would make quinn send
 /// `STOP_SENDING`, which aborts the client's upload mid-flight.
 ///
 /// # Content length

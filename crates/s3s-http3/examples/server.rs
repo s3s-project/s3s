@@ -16,7 +16,8 @@
 //!
 //! With `S3S_HTTP3_CERT` and `S3S_HTTP3_KEY` unset, a temporary self-signed certificate is
 //! generated at startup; set both to use your own PEM files. Without credentials the server
-//! prints a warning and keeps the endpoint on loopback. The endpoint needs UDP, TLS 1.3,
+//! prints a warning and asks the operator to keep the endpoint on loopback, so leave
+//! `S3S_HTTP3_BIND` on a loopback address in that case. The endpoint needs UDP, TLS 1.3,
 //! and the `h3` ALPN protocol.
 //!
 //! # Run
