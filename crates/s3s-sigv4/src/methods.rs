@@ -3,6 +3,8 @@
 
 //! Canonicalization and signing for AWS Signature Version 4.
 
+use std::fmt;
+
 use smallvec::SmallVec;
 use stdx::str::StrExt;
 use zeroize::Zeroize;
@@ -336,6 +338,72 @@ pub fn create_string_to_sign(canonical_request: &str, amz_date: &AmzDate, region
     ans
 }
 
+/// Write `string_to_sign` of a chunk into `w`.
+///
+/// The lines are the `AWS4-HMAC-SHA256-PAYLOAD` form of the chunked upload:
+///
+/// ```text
+/// AWS4-HMAC-SHA256-PAYLOAD
+/// <timestamp>
+/// <date>/<region>/<service>/aws4_request
+/// <previous-signature>
+/// <hash("")>
+/// <hash(current-chunk-data)>
+/// ```
+///
+/// `<timestamp>` is the ISO 8601 form of `amz_date`, `<hash("")>` is
+/// `EMPTY_STRING_SHA256_HASH`, and `chunk_digest_hex` is the lowercase hexadecimal
+/// SHA-256 digest of the chunk data.
+///
+/// Reference: <https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-streaming.html>
+///
+/// # Errors
+///
+/// Returns an error if writing into `w` fails.
+pub fn write_chunk_string_to_sign(
+    w: &mut impl fmt::Write,
+    amz_date: &AmzDate,
+    region: &str,
+    service: &str,
+    prev_signature: &str,
+    chunk_digest_hex: &str,
+) -> fmt::Result {
+    {
+        // AWS4-HMAC-SHA256-PAYLOAD
+        w.write_str("AWS4-HMAC-SHA256-PAYLOAD\n")?;
+    }
+    {
+        // <timestamp>
+        w.write_str(&amz_date.fmt_iso8601())?;
+        w.write_char('\n')?;
+    }
+    {
+        // <date>/<region>/<service>/aws4_request
+        w.write_str(&amz_date.fmt_date())?;
+        w.write_char('/')?;
+        w.write_str(region)?;
+        w.write_char('/')?;
+        w.write_str(service)?;
+        w.write_str("/aws4_request\n")?;
+    }
+    {
+        // <previous-signature>
+        w.write_str(prev_signature)?;
+        w.write_char('\n')?;
+    }
+    {
+        // <hash("")>
+        w.write_str(EMPTY_STRING_SHA256_HASH)?;
+        w.write_char('\n')?;
+    }
+    {
+        // <hash(current-chunk-data)>
+        w.write_str(chunk_digest_hex)?;
+    }
+
+    Ok(())
+}
+
 /// create `string_to_sign` of a chunk
 #[must_use]
 pub fn create_chunk_string_to_sign(
@@ -347,38 +415,74 @@ pub fn create_chunk_string_to_sign(
 ) -> String {
     let mut ans = String::with_capacity(256);
 
-    {
-        ans.push_str("AWS4-HMAC-SHA256-PAYLOAD\n");
-    }
-    {
-        ans.push_str(&amz_date.fmt_iso8601());
-        ans.push('\n');
-    }
-    {
-        ans.push_str(&amz_date.fmt_date());
-        ans.push('/');
-        ans.push_str(region);
-        ans.push('/');
-        ans.push_str(service);
-        ans.push_str("/aws4_request\n");
-    }
-    {
-        ans.push_str(prev_signature);
-        ans.push('\n');
-    }
-    {
-        ans.push_str(EMPTY_STRING_SHA256_HASH);
-        ans.push('\n');
-    }
-    {
-        if chunk_data.is_empty() {
-            ans.push_str(EMPTY_STRING_SHA256_HASH);
-        } else {
-            hex_sha256_chunk(chunk_data, |s| ans.push_str(s));
-        }
+    if chunk_data.is_empty() {
+        let _ = write_chunk_string_to_sign(&mut ans, amz_date, region, service, prev_signature, EMPTY_STRING_SHA256_HASH);
+    } else {
+        hex_sha256_chunk(chunk_data, |digest| {
+            let _ = write_chunk_string_to_sign(&mut ans, amz_date, region, service, prev_signature, digest);
+        });
     }
 
     ans
+}
+
+/// Write `string_to_sign` of the final trailer block (0-chunk with trailing headers) into `w`.
+///
+/// The lines are the `AWS4-HMAC-SHA256-TRAILER` form of the chunked upload:
+///
+/// ```text
+/// AWS4-HMAC-SHA256-TRAILER
+/// <timestamp>
+/// <date>/<region>/<service>/aws4_request
+/// <previous-signature>
+/// <hash(trailing-headers)>
+/// ```
+///
+/// `<timestamp>` is the ISO 8601 form of `amz_date` and `canonical_trailers` are the
+/// canonicalized trailing headers whose SHA-256 digest is the final line.
+///
+/// Reference: <https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-streaming-trailers.html>
+///
+/// # Errors
+///
+/// Returns an error if writing into `w` fails.
+pub fn write_trailer_string_to_sign(
+    w: &mut impl fmt::Write,
+    amz_date: &AmzDate,
+    region: &str,
+    service: &str,
+    prev_signature: &str,
+    canonical_trailers: &[u8],
+) -> fmt::Result {
+    {
+        // AWS4-HMAC-SHA256-TRAILER
+        w.write_str("AWS4-HMAC-SHA256-TRAILER\n")?;
+    }
+    {
+        // <timestamp>
+        w.write_str(&amz_date.fmt_iso8601())?;
+        w.write_char('\n')?;
+    }
+    {
+        // <date>/<region>/<service>/aws4_request
+        w.write_str(&amz_date.fmt_date())?;
+        w.write_char('/')?;
+        w.write_str(region)?;
+        w.write_char('/')?;
+        w.write_str(service)?;
+        w.write_str("/aws4_request\n")?;
+    }
+    {
+        // <previous-signature>
+        w.write_str(prev_signature)?;
+        w.write_char('\n')?;
+    }
+    {
+        // <hash(trailing-headers)>
+        hex_sha256(canonical_trailers, |digest| w.write_str(digest))?;
+    }
+
+    Ok(())
 }
 
 /// create `string_to_sign` of the final trailer block (0-chunk with trailing headers)
@@ -391,31 +495,7 @@ pub fn create_trailer_string_to_sign(
     canonical_trailers: &[u8],
 ) -> String {
     let mut ans = String::with_capacity(256);
-
-    {
-        ans.push_str("AWS4-HMAC-SHA256-TRAILER\n");
-    }
-    {
-        ans.push_str(&amz_date.fmt_iso8601());
-        ans.push('\n');
-    }
-    {
-        ans.push_str(&amz_date.fmt_date());
-        ans.push('/');
-        ans.push_str(region);
-        ans.push('/');
-        ans.push_str(service);
-        ans.push_str("/aws4_request\n");
-    }
-    {
-        ans.push_str(prev_signature);
-        ans.push('\n');
-    }
-    {
-        // hash of canonicalized trailing headers
-        hex_sha256(canonical_trailers, |s| ans.push_str(s));
-    }
-
+    let _ = write_trailer_string_to_sign(&mut ans, amz_date, region, service, prev_signature, canonical_trailers);
     ans
 }
 
@@ -585,6 +665,139 @@ mod tests {
 
     fn header_auth_signature(string_to_sign: &str, amz_date: &AmzDate, region: &str, service: &str) -> String {
         calculate_signature(string_to_sign, SECRET_KEY, amz_date, region, service)
+    }
+
+    #[test]
+    fn write_helpers_match_the_allocating_variants() {
+        let amz_date = AmzDate::parse("20130524T000000Z").expect("valid timestamp");
+        let region = "us-east-1";
+        let service = "s3";
+        let prev_signature = "4f232c4386841ef735655705268965c44a0e4690baa4adea153f7db9fa80a0a9";
+
+        let data: &[&[u8]] = &[b"hello", b" world"];
+        let expected = create_chunk_string_to_sign(&amz_date, region, service, prev_signature, data);
+        let digest = hex_sha256_string(b"hello world");
+        let mut written = String::new();
+        write_chunk_string_to_sign(&mut written, &amz_date, region, service, prev_signature, &digest).unwrap();
+        assert_eq!(written, expected);
+
+        let empty: &[&[u8]] = &[];
+        let expected = create_chunk_string_to_sign(&amz_date, region, service, prev_signature, empty);
+        let mut written = String::new();
+        write_chunk_string_to_sign(&mut written, &amz_date, region, service, prev_signature, EMPTY_STRING_SHA256_HASH).unwrap();
+        assert_eq!(written, expected);
+
+        let canonical = b"x-amz-checksum-crc32:AAAAAA==\n";
+        let expected = create_trailer_string_to_sign(&amz_date, region, service, prev_signature, canonical);
+        let mut written = String::new();
+        write_trailer_string_to_sign(&mut written, &amz_date, region, service, prev_signature, canonical).unwrap();
+        assert_eq!(written, expected);
+    }
+
+    #[test]
+    fn write_chunk_string_to_sign_matches_the_documented_layout() {
+        // Chunk 1 of the example in the AWS docs:
+        // https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-streaming.html
+        let amz_date = AmzDate::parse("20130524T000000Z").expect("valid timestamp");
+        let mut written = String::new();
+        write_chunk_string_to_sign(
+            &mut written,
+            &amz_date,
+            "us-east-1",
+            "s3",
+            "4f232c4386841ef735655705268965c44a0e4690baa4adea153f7db9fa80a0a9",
+            "bf718b6f653bebc184e1479f1935b8da974d701b893afcf49e701f3e2f9f9c5a",
+        )
+        .unwrap();
+
+        assert_eq!(
+            written,
+            concat!(
+                "AWS4-HMAC-SHA256-PAYLOAD\n",
+                "20130524T000000Z\n",
+                "20130524/us-east-1/s3/aws4_request\n",
+                "4f232c4386841ef735655705268965c44a0e4690baa4adea153f7db9fa80a0a9\n",
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n",
+                "bf718b6f653bebc184e1479f1935b8da974d701b893afcf49e701f3e2f9f9c5a",
+            )
+        );
+    }
+
+    #[test]
+    fn write_trailer_string_to_sign_matches_the_documented_layout() {
+        // Trailer chunk of the example in the AWS docs:
+        // https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-streaming-trailers.html
+        // The final line is the SHA-256 digest of the canonicalized trailing headers.
+        let amz_date = AmzDate::parse("20130524T000000Z").expect("valid timestamp");
+        let mut written = String::new();
+        write_trailer_string_to_sign(
+            &mut written,
+            &amz_date,
+            "us-east-1",
+            "s3",
+            "e05ab64fe1dfdbf0b5870abbaabdb063c371d4e96f2767e6934d90529c5ae850",
+            b"x-amz-checksum-crc32c:wdBDMA==\n",
+        )
+        .unwrap();
+
+        assert_eq!(
+            written,
+            concat!(
+                "AWS4-HMAC-SHA256-TRAILER\n",
+                "20130524T000000Z\n",
+                "20130524/us-east-1/s3/aws4_request\n",
+                "e05ab64fe1dfdbf0b5870abbaabdb063c371d4e96f2767e6934d90529c5ae850\n",
+                "2e4ab969aa65b1ad6def2db10e4d3a8260683d194dbaf757f90e8a37960a4b3c",
+            )
+        );
+    }
+
+    /// Writer that accepts a fixed number of writes and then fails, so every `?` of
+    /// the string-to-sign writers can be exercised on its error path.
+    struct FailAfter {
+        successes: usize,
+    }
+
+    impl fmt::Write for FailAfter {
+        fn write_str(&mut self, _: &str) -> fmt::Result {
+            if self.successes == 0 {
+                return Err(fmt::Error);
+            }
+            self.successes -= 1;
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn writers_propagate_write_failures() {
+        let amz_date = AmzDate::parse("20130524T000000Z").expect("valid timestamp");
+        let region = "us-east-1";
+        let service = "s3";
+        let prev_signature = "4f232c4386841ef735655705268965c44a0e4690baa4adea153f7db9fa80a0a9";
+        let chunk_digest = "bf718b6f653bebc184e1479f1935b8da974d701b893afcf49e701f3e2f9f9c5a";
+        let canonical_trailers = b"x-amz-checksum-crc32c:wdBDMA==\n";
+
+        // Allowing exactly `k` writes and failing the next one walks every `?` in turn:
+        // each `k` below the total must surface the error instead of swallowing it.
+        let mut chunk_writes = None;
+        for k in 0..32 {
+            let mut writer = FailAfter { successes: k };
+            if write_chunk_string_to_sign(&mut writer, &amz_date, region, service, prev_signature, chunk_digest).is_ok() {
+                chunk_writes = Some(k);
+                break;
+            }
+        }
+        assert_eq!(chunk_writes, Some(14), "the writer must fail until every write succeeds");
+
+        let mut trailer_writes = None;
+        for k in 0..32 {
+            let mut writer = FailAfter { successes: k };
+            if write_trailer_string_to_sign(&mut writer, &amz_date, region, service, prev_signature, canonical_trailers).is_ok() {
+                trailer_writes = Some(k);
+                break;
+            }
+        }
+        assert_eq!(trailer_writes, Some(12), "the trailing-header digest is written last");
     }
 
     #[test]
