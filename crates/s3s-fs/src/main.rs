@@ -43,6 +43,22 @@ struct Opt {
     #[arg(long)]
     domain: Vec<String>,
 
+    /// Serve the S3 API over HTTP/3 (QUIC) in addition to TCP.
+    #[arg(long)]
+    http3: bool,
+
+    /// PEM file with the certificate chain used by TLS-based transports.
+    #[arg(long, requires = "http3")]
+    cert: Option<PathBuf>,
+
+    /// Private key in PEM used by TLS-based transports.
+    #[arg(long, requires = "http3")]
+    key: Option<PathBuf>,
+
+    /// Write the certificate that is actually used to this PEM file.
+    #[arg(long, requires = "http3")]
+    cert_out: Option<PathBuf>,
+
     /// Root directory of stored data.
     root: PathBuf,
 }
@@ -68,6 +84,16 @@ fn check_cli_args(opt: &Opt) {
     // TODO: how to specify the requirements with clap derive API?
     if let (Some(_), None) | (None, Some(_)) = (&opt.access_key, &opt.secret_key) {
         let msg = "access key and secret key must be specified together";
+        cmd.error(ErrorKind::MissingRequiredArgument, msg).exit();
+    }
+
+    if opt.http3 && cfg!(not(all(feature = "binary", feature = "http3"))) {
+        let msg = "this binary was built without the http3 feature";
+        cmd.error(ErrorKind::InvalidValue, msg).exit();
+    }
+
+    if let (Some(_), None) | (None, Some(_)) = (&opt.cert, &opt.key) {
+        let msg = "certificate and private key must be specified together";
         cmd.error(ErrorKind::MissingRequiredArgument, msg).exit();
     }
 
@@ -119,6 +145,21 @@ async fn run(opt: Opt) -> Result {
     let http_server = ConnBuilder::new(TokioExecutor::new());
     let graceful = hyper_util::server::graceful::GracefulShutdown::new();
 
+    // The QUIC endpoint shares the address and the shutdown of the TCP listener.
+    #[cfg(all(feature = "binary", feature = "http3"))]
+    let (http3_stop, http3_shutdown) = tokio::sync::oneshot::channel::<()>();
+
+    #[cfg(all(feature = "binary", feature = "http3"))]
+    let http3_task = if opt.http3 {
+        let config = s3s_fs::http3::Http3Config::new(local_addr, opt.cert, opt.key, opt.cert_out);
+        let server = s3s_fs::http3::Http3Server::bind(config).await?;
+        Some(tokio::spawn(server.serve(service.clone(), async move {
+            let _ = http3_shutdown.await;
+        })))
+    } else {
+        None
+    };
+
     let mut ctrl_c = std::pin::pin!(tokio::signal::ctrl_c());
 
     info!("server is running at http://{local_addr}");
@@ -146,6 +187,9 @@ async fn run(opt: Opt) -> Result {
         });
     }
 
+    #[cfg(all(feature = "binary", feature = "http3"))]
+    let _ = http3_stop.send(());
+
     tokio::select! {
         () = graceful.shutdown() => {
              tracing::debug!("Gracefully shutdown!");
@@ -153,6 +197,13 @@ async fn run(opt: Opt) -> Result {
         () = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
              tracing::debug!("Waited 10 seconds for graceful shutdown, aborting...");
         }
+    }
+
+    // Both transports are stopped: the QUIC endpoint drained while the TCP
+    // connections were closing.
+    #[cfg(all(feature = "binary", feature = "http3"))]
+    if let Some(task) = http3_task {
+        let _ = task.await;
     }
 
     info!("server is stopped");
