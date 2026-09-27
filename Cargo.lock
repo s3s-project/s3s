@@ -3801,6 +3801,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "s3s-chunked"
+version = "0.18.0-alpha.1"
+
+[[package]]
 name = "s3s-codegen"
 version = "0.0.0"
 dependencies = [
