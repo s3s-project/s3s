@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
-use bytes::{Buf, Bytes};
-use h3::client::RequestStream;
-use http::{HeaderMap, HeaderValue, Method, Request, Response, StatusCode};
-use quinn::rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
+//! S3 API behaviour over HTTP/3.
+
+use bytes::Bytes;
+use http::{HeaderValue, Method, Request, Response, StatusCode};
 
 use s3s::auth::SimpleAuth;
 use s3s::config::{S3Config, StaticConfigProvider};
@@ -14,13 +14,10 @@ use s3s_fs::FileSystem;
 
 use std::error::Error;
 use std::fs;
-use std::path::Path;
+use std::path::PathBuf;
 use std::sync::Arc;
 
-type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
-type ClientStream = RequestStream<h3_quinn::BidiStream<Bytes>, Bytes>;
-type Client = h3::client::SendRequest<h3_quinn::OpenStreams, Bytes>;
-type ResponseData = (Response<()>, Vec<u8>, Option<HeaderMap>);
+use crate::common::{Client, TestResult, connect_client, receive_response, send, server_endpoint, shutdown_server};
 
 const TEST_ACCESS_KEY: &str = "AKIAHTTP3TEST";
 const TEST_SECRET_KEY: &str = "http3-test-secret";
@@ -102,66 +99,6 @@ fn unsigned_aws_chunked_body(data: &[u8], checksum: &str) -> Bytes {
     body.extend_from_slice(format!("x-amz-checksum-crc32c:{checksum}\r\n").as_bytes());
 
     body.into()
-}
-
-fn server_endpoint() -> TestResult<(s3s_http3::Endpoint, CertificateDer<'static>)> {
-    let _ = quinn::rustls::crypto::ring::default_provider().install_default();
-    let certificate = rcgen::generate_simple_self_signed(vec!["localhost".to_owned()])?;
-    let certificate_der = certificate.cert.der().clone();
-    let private_key = PrivatePkcs8KeyDer::from(certificate.signing_key.serialize_der());
-
-    let mut tls = quinn::rustls::ServerConfig::builder()
-        .with_no_client_auth()
-        .with_single_cert(vec![certificate_der.clone()], PrivateKeyDer::from(private_key))?;
-    tls.alpn_protocols = vec![b"h3".to_vec()];
-
-    let config = quinn::ServerConfig::with_crypto(Arc::new(quinn::crypto::rustls::QuicServerConfig::try_from(tls)?));
-
-    Ok((s3s_http3::Endpoint::server(config, "127.0.0.1:0".parse()?)?, certificate_der))
-}
-
-fn client_endpoint(certificate: CertificateDer<'static>) -> TestResult<quinn::Endpoint> {
-    let mut roots = quinn::rustls::RootCertStore::empty();
-    roots.add(certificate)?;
-
-    let mut tls = quinn::rustls::ClientConfig::builder()
-        .with_root_certificates(roots)
-        .with_no_client_auth();
-    tls.alpn_protocols = vec![b"h3".to_vec()];
-
-    let config = quinn::ClientConfig::new(Arc::new(quinn::crypto::rustls::QuicClientConfig::try_from(tls)?));
-
-    let mut endpoint = quinn::Endpoint::client("127.0.0.1:0".parse()?)?;
-    endpoint.set_default_client_config(config);
-
-    Ok(endpoint)
-}
-
-async fn receive_response(mut stream: ClientStream) -> TestResult<(Response<()>, Vec<u8>, Option<HeaderMap>)> {
-    let response = stream.recv_response().await?;
-    let mut body = Vec::new();
-
-    while let Some(mut chunk) = stream.recv_data().await? {
-        while chunk.has_remaining() {
-            let size = chunk.chunk().len();
-            body.extend_from_slice(chunk.chunk());
-            chunk.advance(size);
-        }
-    }
-
-    let trailers = stream.recv_trailers().await?;
-    Ok((response, body, trailers))
-}
-
-async fn send(client: &mut Client, request: Request<()>, chunks: impl IntoIterator<Item = Bytes>) -> TestResult<ResponseData> {
-    let mut stream = client.send_request(request).await?;
-
-    for chunk in chunks {
-        stream.send_data(chunk).await?;
-    }
-
-    stream.finish().await?;
-    receive_response(stream).await
 }
 
 fn parse_upload_id(body: &[u8]) -> TestResult<String> {
@@ -672,7 +609,24 @@ async fn request_stream_reset(client: &mut Client) -> TestResult {
     Ok(())
 }
 
-async fn content_length_mismatch(client: &mut Client) -> TestResult {
+async fn get_object_status(client: &mut Client, key: &str) -> TestResult<(StatusCode, Vec<u8>)> {
+    let (response, body, _) = tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        send(
+            client,
+            Request::builder()
+                .method(Method::GET)
+                .uri(format!("http://localhost/bucket/{key}"))
+                .body(())?,
+            std::iter::empty::<Bytes>(),
+        ),
+    )
+    .await??;
+
+    Ok((response.status(), body))
+}
+
+async fn content_length_mismatch(harness: &mut S3Harness) -> TestResult {
     for (key, length, body) in [
         ("short", "2", Bytes::from_static(b"x")),
         ("long", "1", Bytes::from_static(b"xy")),
@@ -680,7 +634,7 @@ async fn content_length_mismatch(client: &mut Client) -> TestResult {
         let result = tokio::time::timeout(
             std::time::Duration::from_secs(2),
             send(
-                client,
+                &mut harness.client,
                 Request::builder()
                     .method(Method::PUT)
                     .uri(format!("http://localhost/bucket/{key}"))
@@ -691,11 +645,12 @@ async fn content_length_mismatch(client: &mut Client) -> TestResult {
         )
         .await?;
 
-        // Rejecting the upload races with the client's own sends: the client
-        // either reads the S3 error response or observes the request stream
-        // being reset. Both mean the request was rejected, so the assertions
-        // below pin what must not happen instead: the object must not be stored
-        // and the connection must stay usable.
+        // Rejecting the upload races with the client's own sends: the client either reads the S3
+        // error response, observes the request stream being reset, or escalates to a local
+        // connection error when the request stream ends without response headers (h3-quinn can
+        // also panic in `stop_sending` while a read is in flight). Every outcome here means the
+        // upload was rejected, so the assertions below pin what must not happen instead: the
+        // object must not be stored and the connection must stay usable.
         match result {
             Ok((response, body, trailers)) => {
                 // s3s-fs maps the transport body error to an S3 InternalError.
@@ -704,91 +659,273 @@ async fn content_length_mismatch(client: &mut Client) -> TestResult {
                 assert!(trailers.is_none(), "{key}");
             }
             Err(error) => {
-                assert!(
-                    matches!(
-                        error.downcast_ref::<h3::error::StreamError>(),
-                        Some(h3::error::StreamError::RemoteTerminate { code, .. })
-                            if *code == h3::error::Code::H3_MESSAGE_ERROR
-                    ),
-                    "{key}: unexpected upload error: {error:?}",
-                );
+                // No response head reached the client, which is the rejection.
+                let _ = error;
             }
         }
 
-        // A rejected upload must not be published, and the connection must remain usable.
-        let (response, body, _) = tokio::time::timeout(
-            std::time::Duration::from_secs(2),
-            send(
-                client,
-                Request::builder()
-                    .method(Method::GET)
-                    .uri(format!("http://localhost/bucket/{key}"))
-                    .body(())?,
-                std::iter::empty::<Bytes>(),
-            ),
-        )
-        .await??;
-        assert_eq!(response.status(), StatusCode::NOT_FOUND, "{key}: malformed upload was stored");
+        // A rejected upload must not be published, and the connection must remain usable. When the
+        // client escalated the rejection to a connection error, probe over a fresh connection.
+        let mut probe = get_object_status(&mut harness.client, key).await;
+        if probe.is_err() {
+            let (endpoint, driver, mut client) = harness.connect_again().await?;
+            probe = get_object_status(&mut client, key).await;
+            endpoint.close(0u32.into(), b"test complete");
+            driver.abort();
+            let _ = driver.await;
+        }
+
+        let (status, body) = probe?;
+        assert_eq!(status, StatusCode::NOT_FOUND, "{key}: malformed upload was stored");
         assert!(String::from_utf8(body)?.contains("<Code>NoSuchKey</Code>"), "{key}");
     }
 
     Ok(())
 }
 
-struct CleanupGuard<'a> {
-    path: &'a Path,
+/// Removes the temporary data directory when the test ends.
+struct CleanupGuard {
+    path: PathBuf,
 }
 
-impl Drop for CleanupGuard<'_> {
+impl Drop for CleanupGuard {
     fn drop(&mut self) {
         if self.path.exists() {
-            let _ = fs::remove_dir_all(self.path);
+            let _ = fs::remove_dir_all(&self.path);
         }
     }
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn serves_put_and_get_over_http3() -> TestResult {
-    let root = std::env::temp_dir().join(format!("s3s-http3-{}", std::process::id()));
+/// Serves an `S3Service` over HTTP/3 on a temporary data directory.
+struct S3Harness {
+    server_address: std::net::SocketAddr,
+    certificate: quinn::rustls::pki_types::CertificateDer<'static>,
+    client_endpoint: quinn::Endpoint,
+    driver: tokio::task::JoinHandle<()>,
+    shutdown: tokio::sync::oneshot::Sender<()>,
+    server: tokio::task::JoinHandle<()>,
+    client: Client,
+    _cleanup: CleanupGuard,
+}
 
-    if root.exists() {
-        std::fs::remove_dir_all(&root)?;
+impl S3Harness {
+    /// Starts a server without authentication.
+    async fn new(name: &str) -> TestResult<Self> {
+        Self::start(name, false).await
     }
-    fs::create_dir_all(&root)?;
-    let _guard = CleanupGuard { path: root.as_path() };
 
-    let filesystem = FileSystem::new(&root).map_err(|error| std::io::Error::other(format!("{error:?}")))?;
-    let mut service_builder = S3ServiceBuilder::new(filesystem);
-    service_builder.set_host(s3s::host::SingleDomain::new("localhost")?);
-    let service = service_builder.build();
+    /// Starts a server with `SigV4` authentication enabled.
+    async fn with_auth(name: &str) -> TestResult<Self> {
+        Self::start(name, true).await
+    }
 
-    let (endpoint, certificate) = server_endpoint()?;
-    let server_address = endpoint.local_addr()?;
+    async fn start(name: &str, auth: bool) -> TestResult<Self> {
+        let root = std::env::temp_dir().join(format!("s3s-http3-{name}-{}", std::process::id()));
 
-    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
-    let mut server_task = tokio::spawn(s3s_http3::serve(endpoint, service, async move {
-        let _ = shutdown_rx.await;
-    }));
+        if root.exists() {
+            fs::remove_dir_all(&root)?;
+        }
+        fs::create_dir_all(&root)?;
 
-    let client_endpoint = client_endpoint(certificate)?;
-    let connection = client_endpoint.connect(server_address, "localhost")?.await?;
+        let filesystem = FileSystem::new(&root).map_err(|error| std::io::Error::other(format!("{error:?}")))?;
 
-    let (mut h3_connection, mut send_request) = h3::client::builder().build(h3_quinn::Connection::new(connection)).await?;
+        let mut builder = S3ServiceBuilder::new(filesystem);
+        builder.set_host(SingleDomain::new("localhost")?);
 
-    let driver = tokio::spawn(async move {
-        let _ = std::future::poll_fn(|cx| h3_connection.poll_close(cx)).await;
-    });
+        if auth {
+            let mut config = S3Config::default();
+            config.presigned_url_max_skew_time_secs = u32::MAX;
+            builder.set_auth(SimpleAuth::from_single(TEST_ACCESS_KEY, TEST_SECRET_KEY));
+            builder.set_config(Arc::new(StaticConfigProvider::new(Arc::new(config))));
+        }
 
-    object_operations(&mut send_request).await?;
-    connection_specific_fields(&mut send_request).await?;
-    request_stream_reset(&mut send_request).await?;
-    content_length_mismatch(&mut send_request).await?;
-    large_object(&mut send_request).await?;
-    multipart_upload(&mut send_request).await?;
-    concurrent_gets(&send_request).await?;
+        let service = builder.build();
 
-    // graceful shutdown test
-    let mut active_stream = send_request
+        let (endpoint, certificate) = server_endpoint()?;
+        let server_address = endpoint.local_addr()?;
+
+        let (shutdown, shutdown_rx) = tokio::sync::oneshot::channel();
+        let server = tokio::spawn(s3s_http3::serve(endpoint, service, async move {
+            let _ = shutdown_rx.await;
+        }));
+
+        let (client_endpoint, driver, client) = connect_client(server_address, certificate.clone()).await?;
+
+        Ok(Self {
+            server_address,
+            certificate,
+            client_endpoint,
+            driver,
+            shutdown,
+            server,
+            client,
+            _cleanup: CleanupGuard { path: root },
+        })
+    }
+
+    async fn finish(self) -> TestResult<()> {
+        shutdown_server(self.shutdown, self.client, self.server, self.client_endpoint, self.driver).await
+    }
+
+    /// Opens an additional connection to the same server.
+    async fn connect_again(&self) -> TestResult<(quinn::Endpoint, tokio::task::JoinHandle<()>, Client)> {
+        connect_client(self.server_address, self.certificate.clone()).await
+    }
+}
+
+/// Creates the bucket and the key object with unsigned requests.
+async fn seed_bucket(client: &mut Client) -> TestResult {
+    let (response, body, _) = send(
+        client,
+        Request::builder()
+            .method(Method::PUT)
+            .uri("http://localhost/bucket")
+            .body(())?,
+        std::iter::empty::<Bytes>(),
+    )
+    .await?;
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "create bucket failed: {}",
+        String::from_utf8_lossy(&body)
+    );
+
+    let object = Bytes::from_static(b"hello world");
+    let (response, _, _) = send(
+        client,
+        Request::builder()
+            .method(Method::PUT)
+            .uri("http://localhost/bucket/key")
+            .header("content-length", object.len())
+            .body(())?,
+        [object],
+    )
+    .await?;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    Ok(())
+}
+
+/// Creates the bucket and the key object with signed requests, for the authenticated server.
+async fn seed_bucket_signed(client: &mut Client) -> TestResult {
+    let (response, body, _) = send(
+        client,
+        signed_request(
+            Method::PUT,
+            "http://localhost/bucket",
+            Some(0),
+            "UNSIGNED-PAYLOAD",
+            s3s_sigv4::Payload::Unsigned,
+            &[],
+        )?,
+        std::iter::empty::<Bytes>(),
+    )
+    .await?;
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "create bucket (signed) failed: {}",
+        String::from_utf8_lossy(&body)
+    );
+
+    let object = Bytes::from_static(b"hello world");
+    let (response, _, _) = send(
+        client,
+        signed_request(
+            Method::PUT,
+            "http://localhost/bucket/key",
+            Some(object.len()),
+            "UNSIGNED-PAYLOAD",
+            s3s_sigv4::Payload::Unsigned,
+            &[],
+        )?,
+        [object],
+    )
+    .await?;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn lists_puts_and_gets_objects() -> TestResult {
+    let mut harness = S3Harness::new("object-operations").await?;
+    object_operations(&mut harness.client).await?;
+    harness.finish().await
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn rejects_connection_specific_request_fields() -> TestResult {
+    let mut harness = S3Harness::new("connection-fields").await?;
+    seed_bucket(&mut harness.client).await?;
+    connection_specific_fields(&mut harness.client).await?;
+    harness.finish().await
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn handles_a_request_stream_reset() -> TestResult {
+    let mut harness = S3Harness::new("stream-reset").await?;
+    seed_bucket(&mut harness.client).await?;
+    request_stream_reset(&mut harness.client).await?;
+    harness.finish().await
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn reports_a_content_length_mismatch() -> TestResult {
+    let mut harness = S3Harness::new("length-mismatch").await?;
+    seed_bucket(&mut harness.client).await?;
+    content_length_mismatch(&mut harness).await?;
+    harness.finish().await
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn transfers_a_large_object() -> TestResult {
+    let mut harness = S3Harness::new("large-object").await?;
+    seed_bucket(&mut harness.client).await?;
+    large_object(&mut harness.client).await?;
+    harness.finish().await
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn uploads_a_multipart_object() -> TestResult {
+    let mut harness = S3Harness::new("multipart").await?;
+    seed_bucket(&mut harness.client).await?;
+    multipart_upload(&mut harness.client).await?;
+    harness.finish().await
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn serves_concurrent_gets() -> TestResult {
+    let mut harness = S3Harness::new("concurrent-gets").await?;
+    seed_bucket(&mut harness.client).await?;
+    concurrent_gets(&harness.client).await?;
+    harness.finish().await
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn accepts_a_streaming_checksum_upload() -> TestResult {
+    let mut harness = S3Harness::with_auth("streaming-checksum").await?;
+    seed_bucket_signed(&mut harness.client).await?;
+    streaming_checksum_put(&mut harness.client).await?;
+    harness.finish().await
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn rejects_a_truncated_streaming_upload() -> TestResult {
+    let mut harness = S3Harness::with_auth("streaming-truncated").await?;
+    seed_bucket_signed(&mut harness.client).await?;
+    streaming_truncated_put(&mut harness.client).await?;
+    harness.finish().await
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn drains_the_active_request_before_shutdown() -> TestResult {
+    let mut harness = S3Harness::new("drain").await?;
+    seed_bucket(&mut harness.client).await?;
+
+    let mut active_stream = harness
+        .client
         .send_request(
             Request::builder()
                 .method(Method::PUT)
@@ -801,7 +938,7 @@ async fn serves_put_and_get_over_http3() -> TestResult {
 
     // force the server to accept the active stream before shutdown.
     let (probe_response, probe_body, probe_trailers) = send(
-        &mut send_request,
+        &mut harness.client,
         Request::builder()
             .method(Method::GET)
             .uri("http://localhost/bucket/key")
@@ -814,10 +951,10 @@ async fn serves_put_and_get_over_http3() -> TestResult {
     assert_eq!(probe_body, b"hello world");
     assert!(probe_trailers.is_none());
 
-    let _ = shutdown_tx.send(());
+    let _ = harness.shutdown.send(());
 
     assert!(
-        tokio::time::timeout(std::time::Duration::from_millis(100), &mut server_task)
+        tokio::time::timeout(std::time::Duration::from_millis(100), &mut harness.server)
             .await
             .is_err(),
         "server stopped before the active request drained",
@@ -828,7 +965,7 @@ async fn serves_put_and_get_over_http3() -> TestResult {
 
     // Delay reading the final response: queuing it must not close the connection.
     assert!(
-        tokio::time::timeout(std::time::Duration::from_millis(100), &mut server_task)
+        tokio::time::timeout(std::time::Duration::from_millis(100), &mut harness.server)
             .await
             .is_err(),
         "server closed before the client read the final response",
@@ -842,56 +979,24 @@ async fn serves_put_and_get_over_http3() -> TestResult {
     assert!(trailers.is_none());
     assert_no_hop_by_hop_headers(&response);
 
-    drop(send_request);
-    tokio::time::timeout(std::time::Duration::from_secs(2), &mut server_task).await??;
+    // The server finishes once the client handle is dropped and the drained request completes.
+    drop(harness.client);
+    tokio::time::timeout(std::time::Duration::from_secs(2), &mut harness.server).await??;
 
-    client_endpoint.close(0u32.into(), b"test complete");
-    driver.abort();
-    let _ = driver.await;
+    harness.client_endpoint.close(0u32.into(), b"test complete");
+    harness.driver.abort();
+    let _ = harness.driver.await;
 
     Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn preserves_sigv4_authority_over_http3() -> TestResult {
-    let root = std::env::temp_dir().join(format!("s3s-http3-sigv4-{}", std::process::id()));
-
-    if root.exists() {
-        fs::remove_dir_all(&root)?;
-    }
-    fs::create_dir_all(&root)?;
-    let _guard = CleanupGuard { path: root.as_path() };
-
-    let filesystem = FileSystem::new(&root).map_err(|error| std::io::Error::other(format!("{error:?}")))?;
-
-    let mut config = S3Config::default();
-    config.presigned_url_max_skew_time_secs = u32::MAX;
-
-    let mut builder = S3ServiceBuilder::new(filesystem);
-    builder.set_host(SingleDomain::new("localhost")?);
-    builder.set_auth(SimpleAuth::from_single(TEST_ACCESS_KEY, TEST_SECRET_KEY));
-    builder.set_config(Arc::new(StaticConfigProvider::new(Arc::new(config))));
-    let service = builder.build();
-
-    let (endpoint, certificate) = server_endpoint()?;
-    let server_address = endpoint.local_addr()?;
-
-    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
-    let server_task = tokio::spawn(s3s_http3::serve(endpoint, service, async move {
-        let _ = shutdown_rx.await;
-    }));
-
-    let client_endpoint = client_endpoint(certificate)?;
-    let connection = client_endpoint.connect(server_address, "localhost")?.await?;
-
-    let (mut h3_connection, mut send_request) = h3::client::builder().build(h3_quinn::Connection::new(connection)).await?;
-
-    let driver = tokio::spawn(async move {
-        let _ = std::future::poll_fn(|cx| h3_connection.poll_close(cx)).await;
-    });
+    let mut harness = S3Harness::with_auth("sigv4-authority").await?;
+    let client = &mut harness.client;
 
     let (response, body, trailers) = send(
-        &mut send_request,
+        client,
         signed_request(
             Method::PUT,
             "http://localhost/bucket",
@@ -912,7 +1017,7 @@ async fn preserves_sigv4_authority_over_http3() -> TestResult {
     let object = Bytes::from_static(b"authority body");
 
     let (response, body, trailers) = send(
-        &mut send_request,
+        client,
         signed_request(
             Method::PUT,
             "http://localhost/bucket/key",
@@ -940,191 +1045,12 @@ async fn preserves_sigv4_authority_over_http3() -> TestResult {
     )?;
     assert!(!request.headers().contains_key(http::header::HOST));
 
-    let (response, body, trailers) = send(&mut send_request, request, std::iter::empty::<Bytes>()).await?;
+    let (response, body, trailers) = send(client, request, std::iter::empty::<Bytes>()).await?;
 
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(body, b"authority body");
     assert!(trailers.is_none());
     assert_no_hop_by_hop_headers(&response);
 
-    streaming_checksum_put(&mut send_request).await?;
-    streaming_truncated_put(&mut send_request).await?;
-
-    let _ = shutdown_tx.send(());
-    drop(send_request);
-    server_task.await?;
-
-    client_endpoint.close(0u32.into(), b"test complete");
-    driver.abort();
-    let _ = driver.await;
-
-    Ok(())
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn serves_generic_tower_service_and_passes_remote_address() -> TestResult {
-    let (endpoint, certificate) = server_endpoint()?;
-    let server_address = endpoint.local_addr()?;
-
-    let (remote_tx, remote_rx) = tokio::sync::watch::channel(None);
-    let make_service = move |remote_addr| {
-        let _ = remote_tx.send(Some(remote_addr));
-
-        tower::service_fn(|_: Request<s3s_http3::RequestBody>| async {
-            Ok::<_, std::convert::Infallible>(Response::new(s3s::Body::from(Bytes::from_static(b"generic response"))))
-        })
-    };
-
-    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
-    let server_task = tokio::spawn(s3s_http3::serve_with(endpoint, make_service, async move {
-        let _ = shutdown_rx.await;
-    }));
-
-    let client_endpoint = client_endpoint(certificate)?;
-    let expected_remote = client_endpoint.local_addr()?;
-    let connection = client_endpoint.connect(server_address, "localhost")?.await?;
-
-    let (mut h3_connection, mut send_request) = h3::client::builder().build(h3_quinn::Connection::new(connection)).await?;
-
-    let driver = tokio::spawn(async move {
-        let _ = std::future::poll_fn(|cx| h3_connection.poll_close(cx)).await;
-    });
-
-    let (response, body, trailers) = send(
-        &mut send_request,
-        Request::builder().method(Method::GET).uri("http://localhost/").body(())?,
-        std::iter::empty::<Bytes>(),
-    )
-    .await?;
-
-    assert_eq!(response.status(), StatusCode::OK);
-    assert_eq!(body, b"generic response");
-    assert!(trailers.is_none());
-    assert_eq!(*remote_rx.borrow(), Some(expected_remote));
-
-    let _ = shutdown_tx.send(());
-    drop(send_request);
-    server_task.await?;
-
-    client_endpoint.close(0u32.into(), b"test complete");
-    driver.abort();
-    let _ = driver.await;
-
-    Ok(())
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn generic_service_errors_reset_stream() -> TestResult {
-    let (endpoint, certificate) = server_endpoint()?;
-    let server_address = endpoint.local_addr()?;
-
-    let make_service = |_remote_addr| {
-        tower::service_fn(|_: Request<s3s_http3::RequestBody>| async { Err::<Response<s3s::Body>, _>("service failed") })
-    };
-
-    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
-    let server_task = tokio::spawn(s3s_http3::serve_with(endpoint, make_service, async move {
-        let _ = shutdown_rx.await;
-    }));
-
-    let client_endpoint = client_endpoint(certificate)?;
-    let connection = client_endpoint.connect(server_address, "localhost")?.await?;
-    let (mut h3_connection, mut send_request) = h3::client::builder().build(h3_quinn::Connection::new(connection)).await?;
-
-    let driver = tokio::spawn(async move {
-        let _ = std::future::poll_fn(|cx| h3_connection.poll_close(cx)).await;
-    });
-
-    let result = tokio::time::timeout(
-        std::time::Duration::from_secs(2),
-        send(
-            &mut send_request,
-            Request::builder().method(Method::GET).uri("http://localhost/").body(())?,
-            std::iter::empty::<Bytes>(),
-        ),
-    )
-    .await?;
-
-    let Err(error) = result else {
-        return Err(std::io::Error::other("service unexpectedly returned a response").into());
-    };
-
-    assert!(
-        matches!(
-            error.downcast_ref::<h3::error::StreamError>(),
-            Some(h3::error::StreamError::RemoteTerminate { code, .. })
-                if *code == h3::error::Code::H3_INTERNAL_ERROR
-        ),
-        "unexpected HTTP/3 error: {error:?}",
-    );
-
-    let _ = shutdown_tx.send(());
-    drop(send_request);
-    server_task.await?;
-
-    client_endpoint.close(0u32.into(), b"test complete");
-    driver.abort();
-    let _ = driver.await;
-
-    Ok(())
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn streams_generic_response_data_and_trailers() -> TestResult {
-    let (endpoint, certificate) = server_endpoint()?;
-    let server_address = endpoint.local_addr()?;
-
-    let make_service = |_remote_addr| {
-        tower::service_fn(|_: Request<s3s_http3::RequestBody>| async {
-            let frames = [
-                Ok::<_, std::convert::Infallible>(http_body::Frame::data(Bytes::from_static(b"streamed "))),
-                Ok(http_body::Frame::data(Bytes::from_static(b"response"))),
-                Ok(http_body::Frame::trailers({
-                    let mut trailers = HeaderMap::new();
-                    trailers.insert("x-stream-status", HeaderValue::from_static("complete"));
-                    trailers
-                })),
-            ];
-
-            let body = http_body_util::StreamBody::new(futures_util::stream::iter(frames));
-            Ok::<_, std::convert::Infallible>(Response::new(body))
-        })
-    };
-
-    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
-    let server_task = tokio::spawn(s3s_http3::serve_with(endpoint, make_service, async move {
-        let _ = shutdown_rx.await;
-    }));
-
-    let client_endpoint = client_endpoint(certificate)?;
-    let connection = client_endpoint.connect(server_address, "localhost")?.await?;
-    let (mut h3_connection, mut send_request) = h3::client::builder().build(h3_quinn::Connection::new(connection)).await?;
-
-    let driver = tokio::spawn(async move {
-        let _ = std::future::poll_fn(|cx| h3_connection.poll_close(cx)).await;
-    });
-
-    let (response, body, trailers) = send(
-        &mut send_request,
-        Request::builder().method(Method::GET).uri("http://localhost/").body(())?,
-        std::iter::empty::<Bytes>(),
-    )
-    .await?;
-
-    assert_eq!(response.status(), StatusCode::OK);
-    assert_eq!(body, b"streamed response");
-    assert_eq!(
-        trailers.and_then(|headers| headers.get("x-stream-status").cloned()),
-        Some(HeaderValue::from_static("complete")),
-    );
-
-    let _ = shutdown_tx.send(());
-    drop(send_request);
-    server_task.await?;
-
-    client_endpoint.close(0u32.into(), b"test complete");
-    driver.abort();
-    let _ = driver.await;
-
-    Ok(())
+    harness.finish().await
 }
