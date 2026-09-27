@@ -22,6 +22,10 @@ name = "s3s-fs"
 required-features = ["binary"]
 
 [[example]]
+name = "http3-client"
+required-features = ["http3"]
+
+[[example]]
 name = "http3-server"
 required-features = ["http3"]
 

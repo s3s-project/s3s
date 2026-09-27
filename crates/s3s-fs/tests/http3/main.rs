@@ -6,5 +6,7 @@
 
 mod common;
 
+#[cfg(feature = "binary")]
+mod cli;
 mod module;
 mod s3_api;
