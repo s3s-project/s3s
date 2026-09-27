@@ -6,15 +6,17 @@
 //! The S3 SDKs and most curl builds cannot speak HTTP/3, so this example talks
 //! the protocol directly: it creates a bucket, uploads an object, reads the
 //! object back and verifies the bytes, lists the bucket, and deletes the object
-//! and the bucket. Every response is checked to be HTTP/3. A server that uses a
-//! self-signed certificate has to be trusted with `--cert`.
+//! and the bucket. Every response is checked to be HTTP/3. The client trusts
+//! exactly the certificate chain passed with `--cert`, which is therefore
+//! required: it is meant for a server that uses a self-signed certificate, such
+//! as `s3s-fs --http3 --cert-out`.
 //!
 //! # Arguments
 //!
 //! | argument | default | meaning |
 //! | --- | --- | --- |
 //! | `--url` | `https://localhost:8014` | endpoint to connect to |
-//! | `--cert` | unset | PEM certificate chain to trust |
+//! | `--cert` | required | PEM certificate chain to trust; the client uses no other root |
 //! | `--bucket` | `s3s-smoke` | bucket used by the test |
 //!
 //! # Run
@@ -47,12 +49,12 @@ const OBJECT_BODY: &[u8] = b"hello over HTTP/3";
 
 struct Args {
     url: Uri,
-    cert: Option<PathBuf>,
+    cert: PathBuf,
     bucket: String,
 }
 
 fn usage() -> &'static str {
-    "usage: http3-client [--url URL] [--cert PEM] [--bucket NAME]"
+    "usage: http3-client [--url URL] --cert PEM [--bucket NAME]"
 }
 
 fn parse_args() -> Result<Args> {
@@ -75,6 +77,13 @@ fn parse_args() -> Result<Args> {
             other => return Err(io::Error::other(format!("unexpected argument: {other}\n{}", usage())).into()),
         }
     }
+
+    let cert = cert.ok_or_else(|| {
+        io::Error::other(format!(
+            "--cert is required: the client trusts only the certificate chain in that file\n{}",
+            usage()
+        ))
+    })?;
 
     Ok(Args {
         url: url.unwrap_or("https://localhost:8014".parse()?),
@@ -101,7 +110,7 @@ async fn smoke_test(args: Args) -> Result {
     let host = authority.host().to_owned();
     let port = authority.port_u16().unwrap_or(443);
 
-    let endpoint = client_endpoint(args.cert.as_deref())?;
+    let endpoint = client_endpoint(&args.cert)?;
     let connection = connect(&endpoint, &host, port).await?;
     let (mut h3_connection, mut client) = h3::client::builder().build(h3_quinn::Connection::new(connection)).await?;
 
@@ -180,15 +189,14 @@ async fn connect(endpoint: &quinn::Endpoint, host: &str, port: u16) -> Result<qu
     Err(io::Error::other(last_error.unwrap_or_else(|| format!("{host} did not resolve to an address"))).into())
 }
 
-fn client_endpoint(cert: Option<&Path>) -> Result<quinn::Endpoint> {
+fn client_endpoint(cert: &Path) -> Result<quinn::Endpoint> {
     let _ = quinn::rustls::crypto::ring::default_provider().install_default();
 
+    // The only roots are the ones in the given file: a server certificate that
+    // is not in the chain cannot be verified.
     let mut roots = quinn::rustls::RootCertStore::empty();
-
-    if let Some(path) = cert {
-        for certificate in CertificateDer::pem_file_iter(path)? {
-            roots.add(certificate?)?;
-        }
+    for certificate in CertificateDer::pem_file_iter(cert)? {
+        roots.add(certificate?)?;
     }
 
     let mut tls = quinn::rustls::ClientConfig::builder()
