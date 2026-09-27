@@ -3871,7 +3871,6 @@ dependencies = [
  "serde_json",
  "std-next",
  "thiserror",
- "time",
  "tokio",
  "tokio-util",
  "tracing",
