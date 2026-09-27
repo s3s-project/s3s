@@ -11,15 +11,22 @@
 S3 Service Adapter
 
 
-| crate                      |                                           version                                           |                                 docs                                 |
-| :------------------------- | :-----------------------------------------------------------------------------------------: | :------------------------------------------------------------------: |
-| [s3s](./crates/s3s/)       |    [![Crates.io](https://img.shields.io/crates/v/s3s.svg)](https://crates.io/crates/s3s)    |    [![Docs](https://docs.rs/s3s/badge.svg)](https://docs.rs/s3s/)    |
-| [s3s-aws](./crates/s3s-aws/)       |    [![Crates.io](https://img.shields.io/crates/v/s3s-aws.svg)](https://crates.io/crates/s3s-aws)    |    [![Docs](https://docs.rs/s3s-aws/badge.svg)](https://docs.rs/s3s-aws/)    |
-| [s3s-sigv2](./crates/s3s-sigv2/)    |    [![Crates.io](https://img.shields.io/crates/v/s3s-sigv2.svg)](https://crates.io/crates/s3s-sigv2)    |    [![Docs](https://docs.rs/s3s-sigv2/badge.svg)](https://docs.rs/s3s-sigv2/)    |
-| [s3s-sigv4](./crates/s3s-sigv4/)    |    [![Crates.io](https://img.shields.io/crates/v/s3s-sigv4.svg)](https://crates.io/crates/s3s-sigv4)    |    [![Docs](https://docs.rs/s3s-sigv4/badge.svg)](https://docs.rs/s3s-sigv4/)    |
-| [s3s-rfc2047](./crates/s3s-rfc2047/) |    [![Crates.io](https://img.shields.io/crates/v/s3s-rfc2047.svg)](https://crates.io/crates/s3s-rfc2047)    |    [![Docs](https://docs.rs/s3s-rfc2047/badge.svg)](https://docs.rs/s3s-rfc2047/)    |
-| [s3s-fs](./crates/s3s-fs/) | [![Crates.io](https://img.shields.io/crates/v/s3s-fs.svg)](https://crates.io/crates/s3s-fs) | [![Docs](https://docs.rs/s3s-fs/badge.svg)](https://docs.rs/s3s-fs/) |
-| [s3s-http3](./crates/s3s-http3/) | [![Crates.io](https://img.shields.io/crates/v/s3s-http3.svg)](https://crates.io/crates/s3s-http3) | [![Docs](https://docs.rs/s3s-http3/badge.svg)](https://docs.rs/s3s-http3/) |
+| crate                                    |                                                  version                                                  |                                        docs                                        |
+| :--------------------------------------- | :-------------------------------------------------------------------------------------------------------: | :--------------------------------------------------------------------------------: |
+| [s3s](./crates/s3s/)                     |           [![Crates.io](https://img.shields.io/crates/v/s3s.svg)](https://crates.io/crates/s3s)           |           [![Docs](https://docs.rs/s3s/badge.svg)](https://docs.rs/s3s/)           |
+| [s3s-aws](./crates/s3s-aws/)             |       [![Crates.io](https://img.shields.io/crates/v/s3s-aws.svg)](https://crates.io/crates/s3s-aws)       |       [![Docs](https://docs.rs/s3s-aws/badge.svg)](https://docs.rs/s3s-aws/)       |
+| [s3s-multipart](./crates/s3s-multipart/) | [![Crates.io](https://img.shields.io/crates/v/s3s-multipart.svg)](https://crates.io/crates/s3s-multipart) | [![Docs](https://docs.rs/s3s-multipart/badge.svg)](https://docs.rs/s3s-multipart/) |
+| [s3s-sigv2](./crates/s3s-sigv2/)         |     [![Crates.io](https://img.shields.io/crates/v/s3s-sigv2.svg)](https://crates.io/crates/s3s-sigv2)     |     [![Docs](https://docs.rs/s3s-sigv2/badge.svg)](https://docs.rs/s3s-sigv2/)     |
+| [s3s-sigv4](./crates/s3s-sigv4/)         |     [![Crates.io](https://img.shields.io/crates/v/s3s-sigv4.svg)](https://crates.io/crates/s3s-sigv4)     |     [![Docs](https://docs.rs/s3s-sigv4/badge.svg)](https://docs.rs/s3s-sigv4/)     |
+| [s3s-rfc2047](./crates/s3s-rfc2047/)     |   [![Crates.io](https://img.shields.io/crates/v/s3s-rfc2047.svg)](https://crates.io/crates/s3s-rfc2047)   |   [![Docs](https://docs.rs/s3s-rfc2047/badge.svg)](https://docs.rs/s3s-rfc2047/)   |
+| [s3s-fs](./crates/s3s-fs/)               |        [![Crates.io](https://img.shields.io/crates/v/s3s-fs.svg)](https://crates.io/crates/s3s-fs)        |        [![Docs](https://docs.rs/s3s-fs/badge.svg)](https://docs.rs/s3s-fs/)        |
+| [s3s-http3](./crates/s3s-http3/)         |     [![Crates.io](https://img.shields.io/crates/v/s3s-http3.svg)](https://crates.io/crates/s3s-http3)     |     [![Docs](https://docs.rs/s3s-http3/badge.svg)](https://docs.rs/s3s-http3/)     |
+| [s3s-model](./crates/s3s-model/)         |     [![Crates.io](https://img.shields.io/crates/v/s3s-model.svg)](https://crates.io/crates/s3s-model)     |     [![Docs](https://docs.rs/s3s-model/badge.svg)](https://docs.rs/s3s-model/)     |
+| [s3s-policy](./crates/s3s-policy/)       |    [![Crates.io](https://img.shields.io/crates/v/s3s-policy.svg)](https://crates.io/crates/s3s-policy)    |    [![Docs](https://docs.rs/s3s-policy/badge.svg)](https://docs.rs/s3s-policy/)    |
+| [s3s-proxy](./crates/s3s-proxy/)         |     [![Crates.io](https://img.shields.io/crates/v/s3s-proxy.svg)](https://crates.io/crates/s3s-proxy)     |                                 n/a (binary crate)                                 |
+| [s3s-test](./crates/s3s-test/)           |      [![Crates.io](https://img.shields.io/crates/v/s3s-test.svg)](https://crates.io/crates/s3s-test)      |      [![Docs](https://docs.rs/s3s-test/badge.svg)](https://docs.rs/s3s-test/)      |
+| [s3s-e2e](./crates/s3s-e2e/)             |       [![Crates.io](https://img.shields.io/crates/v/s3s-e2e.svg)](https://crates.io/crates/s3s-e2e)       |                                 n/a (binary crate)                                 |
+| [s3s-wasm](./crates/s3s-wasm/)           |                                         not published (internal)                                          |                                        n/a                                         |
 
 📚 **[Development documentation](https://s3s-project.github.io/s3s/)** for the `main` branch is available on GitHub Pages.
 
@@ -29,11 +36,28 @@ This experimental project intends to offer an ergonomic adapter for building S3-
 
 `s3s-aws` provides useful types and integration with [`aws-sdk-s3`](https://crates.io/crates/aws-sdk-s3).
 
+`s3s-multipart` is a general-purpose asynchronous streaming parser for `multipart/form-data`. It is not tied to S3, and `s3s` builds on it for `POST Object` form uploads.
+- Parsing: it consumes a stream of `bytes::Bytes` chunks and yields parts with their headers and data.
+- S3 integration: [`crates/s3s/src/http/multipart.rs`](./crates/s3s/src/http/multipart.rs) keeps the S3 contract on top of the parser.
+- Protocol tests: [`crates/s3s-multipart/tests/protocol/`](./crates/s3s-multipart/tests/protocol/).
+- Benchmarks: [`crates/s3s-multipart/benches/`](./crates/s3s-multipart/benches/) — `parse_throughput`, `take_data_stream`, and `vs_multer`, which compares it with [`multer`](https://crates.io/crates/multer).
+- Fuzzing: [`fuzz/fuzz_targets/multipart_parser.rs`](./fuzz/fuzz_targets/multipart_parser.rs).
+- RFC differences: deliberate differences from RFC 2046 section 5.1 and RFC 7578 are documented in the [Compatibility notes](https://docs.rs/s3s-multipart/latest/s3s_multipart/#compatibility-notes).
+
 `s3s-rfc2047` provides RFC 2047 MIME encoded-word encoding and decoding for non-ASCII header values.
 
 `s3s-fs` implements the S3 API based on file system, as a sample implementation. It is designed for integration testing, which can be used to [mock an S3 client](https://github.com/Nugine/s3s/blob/main/crates/s3s-fs/tests/it_aws.rs). It also provides a binary for debugging. [Play it!](./CONTRIBUTING.md#play-the-test-server)
 
 `s3s-http3` is an experimental, opt-in HTTP/3 transport: it serves an `S3Service`, or any [`tower::Service`](https://crates.io/crates/tower), over QUIC, so the same S3 API is reachable over UDP with TLS 1.3 and the `h3` ALPN protocol. The adapter is server-side only, and its API may change while the HTTP/3 ecosystem evolves. Runnable servers are in `crates/s3s-http3/examples/server.rs` and `crates/s3s-http3/examples/serve-with.rs`.
+
+The other workspace members are supporting crates:
+- `s3s-sigv2`, `s3s-sigv4` — AWS Signature Version 2 and Version 4 parsing, canonicalization and signing.
+- `s3s-model` — the S3 protocol model used by the code generator: the Smithy model types and the S3 error codes.
+- `s3s-policy` — the S3 policy language model with wildcard pattern matching.
+- `s3s-proxy` — a proxy implementation used by the end-to-end tests.
+- `s3s-test` — a reusable test harness for S3-compatible services.
+- `s3s-e2e` — the end-to-end test runner built on it.
+- `s3s-wasm` — an internal crate (`publish = false`) that runs `s3s` under WebAssembly in its test suite.
 
 ## How it works
 
