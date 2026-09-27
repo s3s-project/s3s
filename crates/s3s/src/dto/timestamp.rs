@@ -96,6 +96,15 @@ const RFC1123: &[FormatItem<'_>] =
 /// See <https://github.com/minio/minio-java/issues/1419>
 const RFC3339: &[FormatItem<'_>] = format_description!("[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:3]Z");
 
+/// Both the date-time and the HTTP date format carry a four-digit year.
+fn check_year(year: i32) -> Result<(), FormatTimestampError> {
+    if (0..=9999).contains(&year) {
+        return Ok(());
+    }
+
+    Err(FormatTimestampError::Time(time::error::Format::InvalidComponent("year")))
+}
+
 impl Timestamp {
     /// Parses `Timestamp` from string
     ///
@@ -139,24 +148,31 @@ impl Timestamp {
     /// Formats `Timestamp` into a writer
     ///
     /// # Errors
-    /// Returns an error if the formatting fails
+    /// Returns an error if the timestamp cannot be represented in the requested format.
+    /// The date-time and HTTP date formats carry a four-digit year, so they reject a
+    /// timestamp outside `0..=9999`.
     pub fn format(&self, format: TimestampFormat, w: &mut impl io::Write) -> Result<(), FormatTimestampError> {
         match format {
             TimestampFormat::DateTime => {
+                check_year(self.0.year())?;
                 self.0.format_into(w, RFC3339)?;
             }
             TimestampFormat::HttpDate => {
+                check_year(self.0.year())?;
                 self.0.format_into(w, RFC1123)?;
             }
             TimestampFormat::EpochSeconds => {
-                let val = self.0.unix_timestamp_nanos();
+                let nanos = self.0.unix_timestamp_nanos();
+                let seconds = nanos.div_euclid(1_000_000_000);
+                let subsecond = nanos.rem_euclid(1_000_000_000);
 
-                #[allow(clippy::cast_precision_loss)] // FIXME: accurate conversion?
-                {
-                    let secs = (val / 1_000_000_000) as f64;
-                    let nanos = (val % 1_000_000_000) as f64 / 1_000_000_000.0;
-                    let ts = secs + nanos;
-                    write!(w, "{ts}")?;
+                if subsecond == 0 {
+                    write!(w, "{seconds}")?;
+                } else {
+                    // The fraction of an epoch-seconds value is always positive, so a negative
+                    // instant is written as the floor second plus the fraction: -0.5 s is "-1.5".
+                    let digits = format!("{subsecond:09}");
+                    write!(w, "{seconds}.{}", digits.trim_end_matches('0'))?;
                 }
             }
         }

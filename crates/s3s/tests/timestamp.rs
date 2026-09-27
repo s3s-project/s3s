@@ -203,21 +203,19 @@ fn run_format_suite(name: &str, cases: &[TestCase], format: TimestampFormat) {
 }
 
 #[test]
-#[ignore = "red baseline: 66 of 122 cases fail, epoch-seconds formatting loses sub-second precision and mis-splits negative instants"]
 fn format_epoch_seconds() {
     let suite = load_test_suite();
     run_format_suite("format_epoch_seconds", &suite.format_epoch_seconds, TimestampFormat::EpochSeconds);
 }
 
 #[test]
-#[ignore = "red baseline: 36 of 122 cases fail, out-of-range years are formatted instead of rejected"]
 fn format_http_date() {
     let suite = load_test_suite();
     run_format_suite("format_http_date", &suite.format_http_date, TimestampFormat::HttpDate);
 }
 
 #[test]
-#[ignore = "red baseline: 113 of 122 cases fail, subseconds are always three digits and out-of-range years are formatted"]
+#[ignore = "suite exception: the wire format is fixed to millisecond precision; 77 of 122 cases use a different width"]
 fn format_date_time() {
     let suite = load_test_suite();
     run_format_suite("format_date_time", &suite.format_date_time, TimestampFormat::DateTime);
