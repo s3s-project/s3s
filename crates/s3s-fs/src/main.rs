@@ -43,6 +43,22 @@ struct Opt {
     #[arg(long)]
     domain: Vec<String>,
 
+    /// Serve the S3 API over HTTP/3 (QUIC) in addition to TCP.
+    #[arg(long)]
+    http3: bool,
+
+    /// PEM file with the certificate chain used by TLS-based transports.
+    #[arg(long, requires = "http3")]
+    cert: Option<PathBuf>,
+
+    /// Private key in PEM used by TLS-based transports.
+    #[arg(long, requires = "http3")]
+    key: Option<PathBuf>,
+
+    /// Write the certificate that is actually used to this PEM file.
+    #[arg(long, requires = "http3")]
+    cert_out: Option<PathBuf>,
+
     /// Root directory of stored data.
     root: PathBuf,
 }
@@ -68,6 +84,16 @@ fn check_cli_args(opt: &Opt) {
     // TODO: how to specify the requirements with clap derive API?
     if let (Some(_), None) | (None, Some(_)) = (&opt.access_key, &opt.secret_key) {
         let msg = "access key and secret key must be specified together";
+        cmd.error(ErrorKind::MissingRequiredArgument, msg).exit();
+    }
+
+    if opt.http3 && cfg!(not(all(feature = "binary", feature = "http3"))) {
+        let msg = "this binary was built without the http3 feature";
+        cmd.error(ErrorKind::InvalidValue, msg).exit();
+    }
+
+    if let (Some(_), None) | (None, Some(_)) = (&opt.cert, &opt.key) {
+        let msg = "certificate and private key must be specified together";
         cmd.error(ErrorKind::MissingRequiredArgument, msg).exit();
     }
 
@@ -119,6 +145,21 @@ async fn run(opt: Opt) -> Result {
     let http_server = ConnBuilder::new(TokioExecutor::new());
     let graceful = hyper_util::server::graceful::GracefulShutdown::new();
 
+    // The QUIC endpoint shares the address and the shutdown of the TCP listener.
+    #[cfg(all(feature = "binary", feature = "http3"))]
+    let (http3_stop, http3_shutdown) = tokio::sync::oneshot::channel::<()>();
+
+    #[cfg(all(feature = "binary", feature = "http3"))]
+    let http3_task = if opt.http3 {
+        let config = s3s_fs::http3::Http3Config::new(local_addr, opt.cert, opt.key, opt.cert_out);
+        let server = s3s_fs::http3::Http3Server::bind(config).await?;
+        Some(tokio::spawn(server.serve(service.clone(), async move {
+            let _ = http3_shutdown.await;
+        })))
+    } else {
+        None
+    };
+
     let mut ctrl_c = std::pin::pin!(tokio::signal::ctrl_c());
 
     info!("server is running at http://{local_addr}");
@@ -146,6 +187,9 @@ async fn run(opt: Opt) -> Result {
         });
     }
 
+    #[cfg(all(feature = "binary", feature = "http3"))]
+    let _ = http3_stop.send(());
+
     tokio::select! {
         () = graceful.shutdown() => {
              tracing::debug!("Gracefully shutdown!");
@@ -155,6 +199,64 @@ async fn run(opt: Opt) -> Result {
         }
     }
 
+    // Both transports are stopped: the QUIC endpoint drained while the TCP
+    // connections were closing.
+    //
+    // A failed task must not be reported as a clean shutdown: the shutdown
+    // signal makes the task end with `Ok`, so anything else is a real failure.
+    #[cfg(all(feature = "binary", feature = "http3"))]
+    if let Some(task) = http3_task {
+        join_http3_task(task).await?;
+    }
+
     info!("server is stopped");
     Ok(())
+}
+
+/// Waits for the HTTP/3 server task.
+///
+/// The task is stopped by the shutdown signal and ends normally, so a join
+/// error means it panicked or was cancelled instead of stopping gracefully.
+#[cfg(all(feature = "binary", feature = "http3"))]
+async fn join_http3_task(task: tokio::task::JoinHandle<()>) -> Result {
+    task.await.map_err(|err| {
+        let what = if err.is_panic() { "panicked" } else { "was cancelled" };
+        s3s_fs::Error::from_string(format!("the HTTP/3 server task {what}: {err}"))
+    })
+}
+
+#[cfg(all(test, feature = "binary", feature = "http3"))]
+mod tests {
+    use super::join_http3_task;
+    use std::future::pending;
+
+    #[tokio::test]
+    async fn http3_task_stopped_gracefully_is_not_an_error() {
+        let (stop, shutdown) = tokio::sync::oneshot::channel::<()>();
+        let task = tokio::spawn(async move {
+            let _ = shutdown.await;
+        });
+
+        stop.send(()).expect("the shutdown receiver must be alive");
+        assert!(join_http3_task(task).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn http3_task_panic_is_reported() {
+        let task = tokio::spawn(async {
+            panic!("the server task panicked");
+        });
+
+        let err = join_http3_task(task).await.expect_err("a panic must be reported");
+        assert!(format!("{err:?}").contains("panicked"), "{err:?}");
+    }
+
+    #[tokio::test]
+    async fn http3_task_cancellation_is_reported() {
+        let task = tokio::spawn(pending::<()>());
+
+        task.abort();
+        let err = join_http3_task(task).await.expect_err("a cancellation must be reported");
+        assert!(format!("{err:?}").contains("cancelled"), "{err:?}");
+    }
 }

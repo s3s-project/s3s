@@ -14,6 +14,8 @@ mod error;
 
 mod checksum;
 mod fs;
+#[cfg(feature = "http3")]
+pub mod http3;
 mod s3;
 mod utils;
 

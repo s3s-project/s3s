@@ -49,8 +49,9 @@
 //! # }
 //! ```
 //!
-//! Runnable examples live in `examples/server.rs` (an S3 service) and
-//! `examples/serve-with.rs` (a generic service).
+//! A runnable example lives in `examples/serve-with.rs` (a generic service).
+//! The `s3s-fs` crate serves the file system over HTTP/3 and is a reference for
+//! an `S3Service` on an endpoint.
 //!
 //! # TLS and networking
 //!

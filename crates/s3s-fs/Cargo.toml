@@ -13,9 +13,21 @@ rust-version.workspace = true
 [lints]
 workspace = true
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [[bin]]
 name = "s3s-fs"
 required-features = ["binary"]
+
+[[example]]
+name = "http3-client"
+required-features = ["http3"]
+
+[[example]]
+name = "http3-server"
+required-features = ["http3"]
 
 [[test]]
 name = "aws"
@@ -27,8 +39,18 @@ name = "opendal"
 path = "tests/opendal/main.rs"
 harness = false
 
+[[test]]
+name = "http3"
+path = "tests/http3/main.rs"
+required-features = ["http3"]
+
 [features]
 binary = ["tokio/full", "dep:clap", "dep:tracing-subscriber", "dep:hyper-util"]
+# The QUIC transport, the self-signed certificate generator and the HTTP/3
+# client used by the examples and the integration tests. These are optional
+# dependencies instead of dev-dependencies because the default dependency tree
+# must stay free of HTTP/3 crates, and Cargo has no optional dev-dependencies.
+http3 = ["dep:s3s-http3", "dep:quinn", "dep:rcgen", "dep:h3", "dep:h3-quinn"]
 
 [dependencies]
 async-trait.workspace = true
@@ -37,6 +59,8 @@ bytes.workspace = true
 clap = { workspace = true, optional = true }
 crc32c.workspace = true
 futures.workspace = true
+h3 = { version = "0.0.8", features = ["tracing"], optional = true }
+h3-quinn = { version = "0.0.10", features = ["tracing"], optional = true }
 hex-simd.workspace = true
 hyper-util = { workspace = true, optional = true, features = [
     "server-auto",
@@ -48,7 +72,14 @@ hyper-util = { workspace = true, optional = true, features = [
 mime.workspace = true
 numeric_cast.workspace = true
 path-absolutize.workspace = true
+quinn = { version = "0.11.11", default-features = false, features = [
+  "futures-io",
+  "runtime-tokio",
+  "rustls-ring",
+], optional = true }
+rcgen = { version = "0.14.10", optional = true }
 s3s = { version = "0.17.0", path = "../s3s" }
+s3s-http3 = { version = "0.17.0-alpha.1", path = "../s3s-http3", optional = true }
 serde.workspace = true
 serde_json.workspace = true
 std-next.workspace = true
@@ -63,17 +94,23 @@ uuid = { workspace = true, features = ["v4"] }
 
 [dev-dependencies]
 anyhow = { workspace = true, features = ["backtrace"] }
+# The examples are dev targets: the library and the binary keep clap optional
+# behind the `binary` feature, and the http3 example does not need that feature.
+clap = { workspace = true }
 aws-config.workspace = true
 aws-credential-types = { workspace = true, features = ["test-util"] }
 aws-sdk-s3 = { workspace = true, features = ["behavior-version-latest"] }
 aws-sdk-sts = { workspace = true, features = ["behavior-version-latest"] }
 futures-util.workspace = true
+http.workspace = true
 hyper = { workspace = true, features = ["http1", "http2"] }
 hyper-util = { workspace = true, features = ["server-auto", "server-graceful", "http1", "http2", "tokio"] }
 opendal = { workspace = true, default-features = false, features = ["services-s3", "executors-tokio", "reqwest-rustls-tls"] }
 s3s-aws = { version = "0.17.0", path = "../s3s-aws" }
+s3s-sigv4 = { version = "0.17.0", path = "../s3s-sigv4" }
 s3s-test = { version = "0.17.0", path = "../s3s-test" }
 tokio = { workspace = true, features = ["full"] }
+tokio-rustls = { workspace = true, features = ["ring"] }
 tracing-subscriber.workspace = true
 
 [build-dependencies]
