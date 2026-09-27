@@ -34,7 +34,6 @@ binary = ["tokio/full", "dep:clap", "dep:tracing-subscriber", "dep:hyper-util"]
 async-trait.workspace = true
 base64-simd.workspace = true
 bytes.workspace = true
-chrono = { workspace = true, default-features = false, features = ["std", "clock"] }
 clap = { workspace = true, optional = true }
 crc32c.workspace = true
 futures.workspace = true

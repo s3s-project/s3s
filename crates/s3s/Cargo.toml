@@ -33,7 +33,6 @@ base64-simd.workspace = true
 bytes.workspace = true
 bytestring.workspace = true
 cfg-if.workspace = true
-chrono = { workspace = true, default-features = false }
 crc-fast.workspace = true
 futures = { workspace = true, features = ["std"] }
 hex-simd.workspace = true
