@@ -16,6 +16,7 @@ S3 Service Adapter
 | [s3s](./crates/s3s/)                     |           [![Crates.io](https://img.shields.io/crates/v/s3s.svg)](https://crates.io/crates/s3s)           |           [![Docs](https://docs.rs/s3s/badge.svg)](https://docs.rs/s3s/)           |
 | [s3s-aws](./crates/s3s-aws/)             |       [![Crates.io](https://img.shields.io/crates/v/s3s-aws.svg)](https://crates.io/crates/s3s-aws)       |       [![Docs](https://docs.rs/s3s-aws/badge.svg)](https://docs.rs/s3s-aws/)       |
 | [s3s-multipart](./crates/s3s-multipart/) | [![Crates.io](https://img.shields.io/crates/v/s3s-multipart.svg)](https://crates.io/crates/s3s-multipart) | [![Docs](https://docs.rs/s3s-multipart/badge.svg)](https://docs.rs/s3s-multipart/) |
+| [s3s-chunked](./crates/s3s-chunked/)     |   [![Crates.io](https://img.shields.io/crates/v/s3s-chunked.svg)](https://crates.io/crates/s3s-chunked)   |   [![Docs](https://docs.rs/s3s-chunked/badge.svg)](https://docs.rs/s3s-chunked/)   |
 | [s3s-sigv2](./crates/s3s-sigv2/)         |     [![Crates.io](https://img.shields.io/crates/v/s3s-sigv2.svg)](https://crates.io/crates/s3s-sigv2)     |     [![Docs](https://docs.rs/s3s-sigv2/badge.svg)](https://docs.rs/s3s-sigv2/)     |
 | [s3s-sigv4](./crates/s3s-sigv4/)         |     [![Crates.io](https://img.shields.io/crates/v/s3s-sigv4.svg)](https://crates.io/crates/s3s-sigv4)     |     [![Docs](https://docs.rs/s3s-sigv4/badge.svg)](https://docs.rs/s3s-sigv4/)     |
 | [s3s-rfc2047](./crates/s3s-rfc2047/)     |   [![Crates.io](https://img.shields.io/crates/v/s3s-rfc2047.svg)](https://crates.io/crates/s3s-rfc2047)   |   [![Docs](https://docs.rs/s3s-rfc2047/badge.svg)](https://docs.rs/s3s-rfc2047/)   |
@@ -51,6 +52,7 @@ This experimental project intends to offer an ergonomic adapter for building S3-
 `s3s-http3` is an experimental, opt-in HTTP/3 transport: it serves an `S3Service`, or any [`tower::Service`](https://crates.io/crates/tower), over QUIC, so the same S3 API is reachable over UDP with TLS 1.3 and the `h3` ALPN protocol. The adapter is server-side only, and its API may change while the HTTP/3 ecosystem evolves. Runnable servers are in `crates/s3s-http3/examples/server.rs` and `crates/s3s-http3/examples/serve-with.rs`.
 
 The other workspace members are supporting crates:
+- `s3s-chunked` — the `aws-chunked` streaming request-body decoder, initialized as a placeholder while the implementation is under development.
 - `s3s-sigv2`, `s3s-sigv4` — AWS Signature Version 2 and Version 4 parsing, canonicalization and signing.
 - `s3s-model` — the S3 protocol model used by the code generator: the Smithy model types and the S3 error codes.
 - `s3s-policy` — the S3 policy language model with wildcard pattern matching.
