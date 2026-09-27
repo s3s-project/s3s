@@ -70,6 +70,15 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - run: just ci-rust
+      # The workspace commands above build everything with --all-features, so a
+      # default build is never checked for the optional HTTP/3 dependencies, and
+      # the feature is never checked without the binary feature.
+      - name: Check s3s-fs feature subsets
+        run: |
+          test "$(cargo tree -p s3s-fs | grep -cE 'quinn|h3 v')" = 0
+          test "$(cargo tree -p s3s-fs --features http3 | grep -cE 'quinn|h3 v')" -gt 0
+          cargo check -p s3s-fs --all-targets
+          cargo build -p s3s-fs --no-default-features --features http3
 
   cross-test:
     needs: skip-check
