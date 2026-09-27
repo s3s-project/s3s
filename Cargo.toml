@@ -28,6 +28,24 @@ multiple_crate_versions = "allow"
 debug = "line-tables-only"
 
 [workspace.dependencies]
+# Workspace crates
+s3s = { path = "crates/s3s", version = "0.17.0", default-features = false }
+s3s-aws = { path = "crates/s3s-aws", version = "0.17.0" }
+s3s-chunked = { path = "crates/s3s-chunked", version = "0.18.0-alpha.1" }
+s3s-codegen = { path = "codegen", version = "0.0.0" }
+s3s-e2e = { path = "crates/s3s-e2e", version = "0.17.0" }
+s3s-fs = { path = "crates/s3s-fs", version = "0.17.0" }
+s3s-http3 = { path = "crates/s3s-http3", version = "0.17.0-alpha.1" }
+s3s-model = { path = "crates/s3s-model", version = "0.17.0" }
+s3s-multipart = { path = "crates/s3s-multipart", version = "0.17.0" }
+s3s-policy = { path = "crates/s3s-policy", version = "0.17.0" }
+s3s-proxy = { path = "crates/s3s-proxy", version = "0.17.0" }
+s3s-rfc2047 = { path = "crates/s3s-rfc2047", version = "0.17.0" }
+s3s-sigv2 = { path = "crates/s3s-sigv2", version = "0.17.0" }
+s3s-sigv4 = { path = "crates/s3s-sigv4", version = "0.17.0" }
+s3s-test = { path = "crates/s3s-test", version = "0.17.0" }
+s3s-wasm = { path = "crates/s3s-wasm", version = "0.0.0" }
+
 # Data structures
 arc-swap = "1.9.2"
 arrayvec = "0.7.8"
@@ -46,9 +64,6 @@ hex-simd = "0.8.0"
 itoa = "1.0.18"
 nom = "8.0.0"
 regex = "1.13.1"
-s3s-chunked = { path = "crates/s3s-chunked", version = "0.18.0-alpha.1" }
-s3s-multipart = { path = "crates/s3s-multipart", version = "0.17.0" }
-s3s-rfc2047 = { path = "crates/s3s-rfc2047", version = "0.17.0" }
 
 # Date & time
 jiff = { version = "0.2.35", default-features = false, features = ["std"] }

@@ -28,7 +28,7 @@ quinn = { version = "0.11.11", default-features = false, features = [
   "runtime-tokio",
   "rustls-ring",
 ] }
-s3s = { version = "0.17.0", path = "../s3s" }
+s3s.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "signal"] }

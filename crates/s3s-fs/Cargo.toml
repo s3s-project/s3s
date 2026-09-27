@@ -78,8 +78,8 @@ quinn = { version = "0.11.11", default-features = false, features = [
   "rustls-ring",
 ], optional = true }
 rcgen = { version = "0.14.10", optional = true }
-s3s = { version = "0.17.0", path = "../s3s" }
-s3s-http3 = { version = "0.17.0-alpha.1", path = "../s3s-http3", optional = true }
+s3s.workspace = true
+s3s-http3 = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
 std-next.workspace = true
@@ -106,12 +106,12 @@ http.workspace = true
 hyper = { workspace = true, features = ["http1", "http2"] }
 hyper-util = { workspace = true, features = ["server-auto", "server-graceful", "http1", "http2", "tokio"] }
 opendal = { workspace = true, default-features = false, features = ["services-s3", "executors-tokio", "reqwest-rustls-tls"] }
-s3s-aws = { version = "0.17.0", path = "../s3s-aws" }
-s3s-sigv4 = { version = "0.17.0", path = "../s3s-sigv4" }
-s3s-test = { version = "0.17.0", path = "../s3s-test" }
+s3s-aws.workspace = true
+s3s-sigv4.workspace = true
+s3s-test.workspace = true
 tokio = { workspace = true, features = ["full"] }
 tokio-rustls = { workspace = true, features = ["ring"] }
 tracing-subscriber.workspace = true
 
 [build-dependencies]
-s3s-test = { version = "0.17.0", path = "../s3s-test" }
+s3s-test.workspace = true
