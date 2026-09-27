@@ -3776,6 +3776,18 @@ dependencies = [
 [[package]]
 name = "s3s-chunked"
 version = "0.18.0-alpha.1"
+dependencies = [
+ "bytes",
+ "futures",
+ "futures-core",
+ "http",
+ "memchr",
+ "pin-project-lite",
+ "s3s-sigv4",
+ "sha2 0.11.0",
+ "thiserror",
+ "zeroize",
+]
 
 [[package]]
 name = "s3s-codegen"
