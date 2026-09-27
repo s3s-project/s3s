@@ -39,5 +39,8 @@ pub use self::post_signature::*;
 mod presigned_url;
 pub use self::presigned_url::*;
 
+mod sha256_sum;
+pub use self::sha256_sum::Sha256Sum;
+
 pub(crate) mod crypto;
 pub(crate) mod parser;
