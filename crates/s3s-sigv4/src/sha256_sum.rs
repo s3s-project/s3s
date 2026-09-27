@@ -32,13 +32,16 @@ impl Sha256Sum {
     /// Returns `None` unless `value` is exactly 64 lowercase hexadecimal characters.
     #[must_use]
     pub fn from_hex(value: &str) -> Option<Self> {
-        if !is_sha256_checksum(value) {
+        // The length is checked before decoding because hex_simd::decode panics
+        // when the output buffer is too small; non-hexadecimal digits make it fail.
+        if value.len() != 64 {
             return None;
         }
 
         let mut digest = [0_u8; 32];
-        let decoded = hex_simd::decode(value.as_bytes(), Out::from_slice(&mut digest)).ok()?;
-        (decoded.len() == digest.len()).then_some(Self(digest))
+        hex_simd::decode(value.as_bytes(), Out::from_slice(&mut digest)).ok()?;
+
+        is_sha256_checksum(value).then_some(Self(digest))
     }
 
     /// Returns the raw digest bytes.
@@ -88,6 +91,7 @@ mod tests {
         assert!(Sha256Sum::from_hex("00").is_none());
         assert!(Sha256Sum::from_hex("").is_none());
         assert!(Sha256Sum::from_hex("not-a-sha256").is_none());
+        assert!(Sha256Sum::from_hex(&"z".repeat(64)).is_none());
     }
 
     #[test]
