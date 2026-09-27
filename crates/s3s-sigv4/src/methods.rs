@@ -752,6 +752,54 @@ mod tests {
         );
     }
 
+    /// Writer that accepts a fixed number of writes and then fails, so every `?` of
+    /// the string-to-sign writers can be exercised on its error path.
+    struct FailAfter {
+        successes: usize,
+    }
+
+    impl fmt::Write for FailAfter {
+        fn write_str(&mut self, _: &str) -> fmt::Result {
+            if self.successes == 0 {
+                return Err(fmt::Error);
+            }
+            self.successes -= 1;
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn writers_propagate_write_failures() {
+        let amz_date = AmzDate::parse("20130524T000000Z").expect("valid timestamp");
+        let region = "us-east-1";
+        let service = "s3";
+        let prev_signature = "4f232c4386841ef735655705268965c44a0e4690baa4adea153f7db9fa80a0a9";
+        let chunk_digest = "bf718b6f653bebc184e1479f1935b8da974d701b893afcf49e701f3e2f9f9c5a";
+        let canonical_trailers = b"x-amz-checksum-crc32c:wdBDMA==\n";
+
+        // Allowing exactly `k` writes and failing the next one walks every `?` in turn:
+        // each `k` below the total must surface the error instead of swallowing it.
+        let mut chunk_writes = None;
+        for k in 0..32 {
+            let mut writer = FailAfter { successes: k };
+            if write_chunk_string_to_sign(&mut writer, &amz_date, region, service, prev_signature, chunk_digest).is_ok() {
+                chunk_writes = Some(k);
+                break;
+            }
+        }
+        assert_eq!(chunk_writes, Some(14), "the writer must fail until every write succeeds");
+
+        let mut trailer_writes = None;
+        for k in 0..32 {
+            let mut writer = FailAfter { successes: k };
+            if write_trailer_string_to_sign(&mut writer, &amz_date, region, service, prev_signature, canonical_trailers).is_ok() {
+                trailer_writes = Some(k);
+                break;
+            }
+        }
+        assert_eq!(trailer_writes, Some(12), "the trailing-header digest is written last");
+    }
+
     #[test]
     fn example_get_object() {
         // let access_key_id = "AKIAIOSFODNN7EXAMPLE";
