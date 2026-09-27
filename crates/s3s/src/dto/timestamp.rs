@@ -171,8 +171,17 @@ impl Timestamp {
                 } else {
                     // The fraction of an epoch-seconds value is always positive, so a negative
                     // instant is written as the floor second plus the fraction: -0.5 s is "-1.5".
-                    let digits = format!("{subsecond:09}");
-                    write!(w, "{seconds}.{}", digits.trim_end_matches('0'))?;
+                    //
+                    // Trim the trailing zeros by dividing them off and pad to what is left, so
+                    // this hot path writes straight to the writer without allocating a string.
+                    let mut digits = subsecond;
+                    let mut width = 9_usize;
+                    while digits % 10 == 0 {
+                        digits /= 10;
+                        width -= 1;
+                    }
+
+                    write!(w, "{seconds}.{digits:0width$}")?;
                 }
             }
         }
@@ -313,6 +322,36 @@ mod tests {
         ts.format(TimestampFormat::EpochSeconds, &mut buf).unwrap();
         let text = String::from_utf8(buf).unwrap();
         assert_eq!(text, "0");
+    }
+
+    fn format_epoch_seconds_of(nanos: i128) -> String {
+        let ts = Timestamp::from(time::OffsetDateTime::from_unix_timestamp_nanos(nanos).unwrap());
+        let mut buf = Vec::new();
+        ts.format(TimestampFormat::EpochSeconds, &mut buf).unwrap();
+        String::from_utf8(buf).unwrap()
+    }
+
+    #[test]
+    fn format_epoch_seconds_trims_trailing_zeros() {
+        // (nanoseconds, expected shortest exact decimal)
+        let cases: [(i128, &str); 11] = [
+            (0, "0"),
+            (100_000_000, "0.1"),
+            (10_000, "0.00001"),
+            (1, "0.000000001"),
+            (120_000_000, "0.12"),
+            (123_000_000, "0.123"),
+            (123_400_000, "0.1234"),
+            (123_456_789, "0.123456789"),
+            // A negative instant keeps the convention of a positive fraction.
+            (-1, "-1.999999999"),
+            (-500_000_000, "-1.5"),
+            (-1_500_000_000, "-2.5"),
+        ];
+
+        for (nanos, expected) in cases {
+            assert_eq!(format_epoch_seconds_of(nanos), expected, "nanos={nanos}");
+        }
     }
 
     #[test]
