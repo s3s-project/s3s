@@ -3767,6 +3767,7 @@ dependencies = [
  "s3s",
  "std-next",
  "sync_wrapper",
+ "tokio",
  "tracing",
  "transform-stream",
 ]

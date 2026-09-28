@@ -177,7 +177,7 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
                     let aws_variant_name = variant.name.to_upper_camel_case();
                     g!("{aws_path}::{aws_variant_name}(v) => Self::{0}(try_from_aws(v)?),", variant.name);
                 }
-                g!("_ => unimplemented!(\"unknown variant of {aws_path}: {{x:?}}\"),");
+                g!("_ => return unknown_union_variant(\"{aws_path}\"),");
                 g!("}})");
             }
             _ => panic!(),
@@ -257,7 +257,7 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
                     let aws_variant_name = variant.name.to_upper_camel_case();
                     g!("Self::{0}(v) => {aws_path}::{aws_variant_name}(try_into_aws(v)?),", variant.name);
                 }
-                g!("_ => unimplemented!(\"unknown variant of {}: {{x:?}}\"),", ty.name);
+                g!("_ => return unknown_union_variant(\"{}\"),", ty.name);
                 g!("}})");
             }
             _ => panic!(),

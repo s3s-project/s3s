@@ -31,3 +31,6 @@ std-next.workspace = true
 sync_wrapper = "1.0.2"
 tracing.workspace = true
 transform-stream.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt", "time"] }
