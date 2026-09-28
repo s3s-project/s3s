@@ -698,7 +698,7 @@ mod tests {
         let result = VersioningConfiguration::deserialize(&mut d).unwrap();
         assert_eq!(result.status.as_ref().map(BucketVersioningStatus::as_str), Some("Enabled"));
         // The inner <Status> and <MFADelete> must be swallowed, not parsed.
-        assert!(result.mfa_delete.is_none(), "MFADelete inside <Unknown> should be skipped: {result:#?}");
+        assert!(result.mfa_delete.is_none(), "MFADelete inside <Unknown> should be skipped");
     }
 
     /// Nested structs (`Tag`) must reject unknown elements — only top-level

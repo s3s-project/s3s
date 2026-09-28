@@ -218,7 +218,7 @@ impl AwsConversion for s3s::dto::AnalyticsFilter {
             aws_sdk_s3::types::AnalyticsFilter::And(v) => Self::And(try_from_aws(v)?),
             aws_sdk_s3::types::AnalyticsFilter::Prefix(v) => Self::Prefix(try_from_aws(v)?),
             aws_sdk_s3::types::AnalyticsFilter::Tag(v) => Self::Tag(try_from_aws(v)?),
-            _ => unimplemented!("unknown variant of aws_sdk_s3::types::AnalyticsFilter: {x:?}"),
+            _ => return unknown_union_variant("aws_sdk_s3::types::AnalyticsFilter"),
         })
     }
 
@@ -227,7 +227,7 @@ impl AwsConversion for s3s::dto::AnalyticsFilter {
             Self::And(v) => aws_sdk_s3::types::AnalyticsFilter::And(try_into_aws(v)?),
             Self::Prefix(v) => aws_sdk_s3::types::AnalyticsFilter::Prefix(try_into_aws(v)?),
             Self::Tag(v) => aws_sdk_s3::types::AnalyticsFilter::Tag(try_into_aws(v)?),
-            _ => unimplemented!("unknown variant of AnalyticsFilter: {x:?}"),
+            _ => return unknown_union_variant("AnalyticsFilter"),
         })
     }
 }
@@ -6750,7 +6750,7 @@ impl AwsConversion for s3s::dto::MetricsFilter {
             aws_sdk_s3::types::MetricsFilter::And(v) => Self::And(try_from_aws(v)?),
             aws_sdk_s3::types::MetricsFilter::Prefix(v) => Self::Prefix(try_from_aws(v)?),
             aws_sdk_s3::types::MetricsFilter::Tag(v) => Self::Tag(try_from_aws(v)?),
-            _ => unimplemented!("unknown variant of aws_sdk_s3::types::MetricsFilter: {x:?}"),
+            _ => return unknown_union_variant("aws_sdk_s3::types::MetricsFilter"),
         })
     }
 
@@ -6760,7 +6760,7 @@ impl AwsConversion for s3s::dto::MetricsFilter {
             Self::And(v) => aws_sdk_s3::types::MetricsFilter::And(try_into_aws(v)?),
             Self::Prefix(v) => aws_sdk_s3::types::MetricsFilter::Prefix(try_into_aws(v)?),
             Self::Tag(v) => aws_sdk_s3::types::MetricsFilter::Tag(try_into_aws(v)?),
-            _ => unimplemented!("unknown variant of MetricsFilter: {x:?}"),
+            _ => return unknown_union_variant("MetricsFilter"),
         })
     }
 }
@@ -7071,14 +7071,14 @@ impl AwsConversion for s3s::dto::ObjectEncryption {
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
         Ok(match x {
             aws_sdk_s3::types::ObjectEncryption::Ssekms(v) => Self::SSEKMS(try_from_aws(v)?),
-            _ => unimplemented!("unknown variant of aws_sdk_s3::types::ObjectEncryption: {x:?}"),
+            _ => return unknown_union_variant("aws_sdk_s3::types::ObjectEncryption"),
         })
     }
 
     fn try_into_aws(x: Self) -> S3Result<Self::Target> {
         Ok(match x {
             Self::SSEKMS(v) => aws_sdk_s3::types::ObjectEncryption::Ssekms(try_into_aws(v)?),
-            _ => unimplemented!("unknown variant of ObjectEncryption: {x:?}"),
+            _ => return unknown_union_variant("ObjectEncryption"),
         })
     }
 }
@@ -9969,7 +9969,7 @@ impl AwsConversion for s3s::dto::SelectObjectContentEvent {
             aws_sdk_s3::types::SelectObjectContentEventStream::Progress(v) => Self::Progress(try_from_aws(v)?),
             aws_sdk_s3::types::SelectObjectContentEventStream::Records(v) => Self::Records(try_from_aws(v)?),
             aws_sdk_s3::types::SelectObjectContentEventStream::Stats(v) => Self::Stats(try_from_aws(v)?),
-            _ => unimplemented!("unknown variant of aws_sdk_s3::types::SelectObjectContentEventStream: {x:?}"),
+            _ => return unknown_union_variant("aws_sdk_s3::types::SelectObjectContentEventStream"),
         })
     }
 
@@ -9980,7 +9980,7 @@ impl AwsConversion for s3s::dto::SelectObjectContentEvent {
             Self::Progress(v) => aws_sdk_s3::types::SelectObjectContentEventStream::Progress(try_into_aws(v)?),
             Self::Records(v) => aws_sdk_s3::types::SelectObjectContentEventStream::Records(try_into_aws(v)?),
             Self::Stats(v) => aws_sdk_s3::types::SelectObjectContentEventStream::Stats(try_into_aws(v)?),
-            _ => unimplemented!("unknown variant of SelectObjectContentEvent: {x:?}"),
+            _ => return unknown_union_variant("SelectObjectContentEvent"),
         })
     }
 }

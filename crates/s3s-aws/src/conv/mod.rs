@@ -5,6 +5,9 @@ mod builtin;
 
 mod generated;
 
+#[cfg(test)]
+mod tests;
+
 use s3s::s3_error;
 use s3s::{S3Error, S3Result};
 
@@ -33,6 +36,14 @@ where
         Some(x) => T::try_from_aws(x).map_err(Into::into),
         None => Err(s3_error!(InternalError, "missing field: {}", field_name)),
     }
+}
+
+/// Builds the error for a union whose variant the generated conversion table does not model.
+///
+/// The SDK reports an unrecognized union member as a fieldless `Unknown` variant, so there is
+/// no variant name to report and no value worth formatting into the message.
+pub(crate) fn unknown_union_variant<T>(type_name: &str) -> S3Result<T> {
+    Err(s3_error!(InternalError, "unknown union variant: {}", type_name))
 }
 
 #[must_use]
