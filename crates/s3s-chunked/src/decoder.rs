@@ -48,8 +48,8 @@
 //!
 //! - Every loop in a step either consumes input or returns `Pending`; progress
 //!   is never assumed.
-//! - Chunk data is yielded only after its signature verified; trailer headers
-//!   are published only after the trailer block verified.
+//! - Chunk data is yielded only after its signature is verified; trailer headers
+//!   are published only after the trailer block is verified.
 //! - Every failure sets [`Phase::Done`] before the error item is returned, so a
 //!   failed stream never resumes.
 //! - Produced bytes are accounted against the declared decoded length before
