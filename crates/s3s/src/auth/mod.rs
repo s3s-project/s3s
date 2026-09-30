@@ -85,6 +85,31 @@ pub use self::simple_auth::SimpleAuth;
 
 use crate::error::S3Result;
 
+/// Canonical URI encoding for `SigV4` authentication on a custom route.
+///
+/// A trusted [`S3Route::is_match`](crate::route::S3Route::is_match) implementation
+/// can insert this value into the request extensions when it claims a request.
+/// Without an override, authentication uses [`Self::S3`]. Overrides are ignored
+/// for requests that do not match a custom route, so native S3 operations retain
+/// their existing signing rules.
+///
+/// This affects header and presigned `SigV4` authentication. It changes only the
+/// canonical URI's percent-encoding, not path normalization, routing, or the
+/// original request URI. `SigV2` and POST policy signatures are unaffected.
+///
+/// The encoding policy must come from the server's route configuration, not
+/// from an untrusted request header or query parameter.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum SigV4PathEncoding {
+    /// Percent-decode the URI path before `SigV4` encoding, preserving the
+    /// existing S3 verifier's raw-path compatibility behavior.
+    #[default]
+    S3,
+    /// Encode the original URI path again, as generic AWS `SigV4` signers do.
+    /// For example, `%1F` on the wire becomes `%251F` in the canonical URI.
+    DoubleEncoded,
+}
+
 /// S3 Authentication Provider
 ///
 /// This trait defines the interface for authenticating S3 requests using AWS signatures.

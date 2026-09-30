@@ -87,6 +87,7 @@ async fn sts_header_auth_verifies_small_body() {
     let config = test_config();
 
     let mut cx = SignatureContext {
+        path_encoding: crate::auth::SigV4PathEncoding::S3,
         auth: Some(&auth),
         config: &config,
         req_version: Version::HTTP_11,
@@ -127,6 +128,7 @@ async fn sts_header_auth_rejects_oversized_body() {
     let config = test_config();
 
     let mut cx = SignatureContext {
+        path_encoding: crate::auth::SigV4PathEncoding::S3,
         auth: Some(&auth),
         config: &config,
         req_version: Version::HTTP_11,

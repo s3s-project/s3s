@@ -587,6 +587,7 @@ pub(crate) fn sig_v2_test_context<'a>(
     mime: Option<Mime>,
 ) -> SignatureContext<'a> {
     SignatureContext {
+        path_encoding: crate::auth::SigV4PathEncoding::S3,
         auth,
         config,
         req_version: ::http::Version::HTTP_11,

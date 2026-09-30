@@ -1,0 +1,135 @@
+{
+  "generator": "botocore 1.42.97",
+  "requests": [
+    {
+      "name": "generic_probe",
+      "signer": "SigV4Auth",
+      "method": "GET",
+      "uri": "/iceberg/v1/warehouse/namespaces/ods%1Fkfk_log_order/tables/files",
+      "canonical_uri": "/iceberg/v1/warehouse/namespaces/ods%251Fkfk_log_order/tables/files",
+      "headers": {
+        "Host": "catalog.example:9000",
+        "Content-Type": "application/json",
+        "X-Amz-Content-SHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "X-Amz-Date": "20200101T000000Z",
+        "Authorization": "AWS4-HMAC-SHA256 Credential=catalog-test-access/20200101/us-east-1/s3/aws4_request, SignedHeaders=content-type;host;x-amz-content-sha256;x-amz-date, Signature=38357111b8355d0efdc6746cc5e94930c455d2f6741ea38c65e6556fe45d882d"
+      },
+      "body": ""
+    },
+    {
+      "name": "legacy_probe",
+      "signer": "S3SigV4Auth",
+      "method": "GET",
+      "uri": "/iceberg/v1/warehouse/namespaces/ods%1Fkfk_log_order/tables/files",
+      "canonical_uri": "/iceberg/v1/warehouse/namespaces/ods%1Fkfk_log_order/tables/files",
+      "headers": {
+        "Host": "catalog.example:9000",
+        "Content-Type": "application/json",
+        "X-Amz-Date": "20200101T000000Z",
+        "X-Amz-Content-SHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "Authorization": "AWS4-HMAC-SHA256 Credential=catalog-test-access/20200101/us-east-1/s3/aws4_request, SignedHeaders=content-type;host;x-amz-content-sha256;x-amz-date, Signature=b6e20ce207f5f04d663f27866614a5e86b096d547827cac213b5a0a50b71d776"
+      },
+      "body": ""
+    },
+    {
+      "name": "generic_base",
+      "signer": "SigV4Auth",
+      "method": "GET",
+      "uri": "/iceberg/v1/warehouse/namespaces/ods/tables/kfk_log_order",
+      "canonical_uri": "/iceberg/v1/warehouse/namespaces/ods/tables/kfk_log_order",
+      "headers": {
+        "Host": "catalog.example:9000",
+        "Content-Type": "application/json",
+        "X-Amz-Content-SHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "X-Amz-Date": "20200101T000000Z",
+        "Authorization": "AWS4-HMAC-SHA256 Credential=catalog-test-access/20200101/us-east-1/s3/aws4_request, SignedHeaders=content-type;host;x-amz-content-sha256;x-amz-date, Signature=86db889a37b6b51852deadf0fc1f06fd4e5318a03a82b8afeb522ed41fbcfde0"
+      },
+      "body": ""
+    },
+    {
+      "name": "generic_commit",
+      "signer": "SigV4Auth",
+      "method": "POST",
+      "uri": "/iceberg/v1/warehouse/namespaces/ods%1Fchild/tables/events",
+      "canonical_uri": "/iceberg/v1/warehouse/namespaces/ods%251Fchild/tables/events",
+      "headers": {
+        "Host": "catalog.example:9000",
+        "Content-Type": "application/json",
+        "X-Amz-Content-SHA256": "fdf67518d4c158c461fed04f3428d44ed841333ecbe6d01e7f5b6e1c5937dc45",
+        "X-Amz-Date": "20200101T000000Z",
+        "Authorization": "AWS4-HMAC-SHA256 Credential=catalog-test-access/20200101/us-east-1/s3/aws4_request, SignedHeaders=content-type;host;x-amz-content-sha256;x-amz-date, Signature=592959814af464b8ee52312896871348435e3cb106d14030b5508a5778b60106"
+      },
+      "body": "{\"requirements\":[],\"updates\":[]}"
+    },
+    {
+      "name": "generic_s3_path",
+      "signer": "SigV4Auth",
+      "method": "GET",
+      "uri": "/bucket/name%20space",
+      "canonical_uri": "/bucket/name%2520space",
+      "headers": {
+        "Host": "catalog.example:9000",
+        "Content-Type": "application/json",
+        "X-Amz-Content-SHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "X-Amz-Date": "20200101T000000Z",
+        "Authorization": "AWS4-HMAC-SHA256 Credential=catalog-test-access/20200101/us-east-1/s3/aws4_request, SignedHeaders=content-type;host;x-amz-content-sha256;x-amz-date, Signature=c0fa633b6d6bf37b8faff8b3a3ff5e5d2f2dd7fc3269f60fc31cb172d890f900"
+      },
+      "body": ""
+    },
+    {
+      "name": "legacy_s3_path",
+      "signer": "S3SigV4Auth",
+      "method": "GET",
+      "uri": "/bucket/name%20space",
+      "canonical_uri": "/bucket/name%20space",
+      "headers": {
+        "Host": "catalog.example:9000",
+        "Content-Type": "application/json",
+        "X-Amz-Date": "20200101T000000Z",
+        "X-Amz-Content-SHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "Authorization": "AWS4-HMAC-SHA256 Credential=catalog-test-access/20200101/us-east-1/s3/aws4_request, SignedHeaders=content-type;host;x-amz-content-sha256;x-amz-date, Signature=2254053b6b81a458a10e8dfb66c387a45074ec1b4bd2d0c06ea467ef4a93d7a1"
+      },
+      "body": ""
+    },
+    {
+      "name": "generic_presigned",
+      "signer": "SigV4QueryAuth",
+      "method": "GET",
+      "uri": "/iceberg/v1/warehouse/namespaces/ods%1Fkfk_log_order/tables/files?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=catalog-test-access%2F20990101%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20990101T000000Z&X-Amz-Expires=60&X-Amz-SignedHeaders=host&X-Amz-Signature=c16718a5c89b903257aa5c33aea96f0ec152734f8bf10e996c2a68e95bdfe039",
+      "canonical_uri": "/iceberg/v1/warehouse/namespaces/ods%251Fkfk_log_order/tables/files",
+      "headers": {
+        "Host": "catalog.example:9000"
+      },
+      "body": ""
+    },
+    {
+      "name": "legacy_presigned",
+      "signer": "S3SigV4QueryAuth",
+      "method": "GET",
+      "uri": "/iceberg/v1/warehouse/namespaces/ods%1Fkfk_log_order/tables/files?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=catalog-test-access%2F20990101%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20990101T000000Z&X-Amz-Expires=60&X-Amz-SignedHeaders=host&X-Amz-Signature=a890a007b5439bcee671c6f9d0487e6698d32d31726c4adeffd783e3b77e331a",
+      "canonical_uri": "/iceberg/v1/warehouse/namespaces/ods%1Fkfk_log_order/tables/files",
+      "headers": {
+        "Host": "catalog.example:9000"
+      },
+      "body": ""
+    },
+    {
+      "name": "generic_streaming",
+      "signer": "SigV4Auth with AWS chunk signature chain",
+      "method": "POST",
+      "uri": "/iceberg/v1/warehouse/namespaces/ods%1Fkfk_log_order/tables/files",
+      "canonical_uri": "/iceberg/v1/warehouse/namespaces/ods%251Fkfk_log_order/tables/files",
+      "headers": {
+        "Host": "catalog.example:9000",
+        "Content-Type": "application/json",
+        "X-Amz-Content-SHA256": "STREAMING-AWS4-HMAC-SHA256-PAYLOAD",
+        "X-Amz-Decoded-Content-Length": "2",
+        "Content-Encoding": "aws-chunked",
+        "X-Amz-Date": "20200101T000000Z",
+        "Authorization": "AWS4-HMAC-SHA256 Credential=catalog-test-access/20200101/us-east-1/s3/aws4_request, SignedHeaders=content-encoding;content-type;host;x-amz-content-sha256;x-amz-date;x-amz-decoded-content-length, Signature=779957542013b453c2e8df4d3f314ca43dd73661356740c67987db3432a7baba",
+        "Content-Length": "174"
+      },
+      "body": "2;chunk-signature=6fcbe4c32e53834f98ba3f09010fcaf9b1ff9aefb7450728536ccd14c6d2d0be\r\n{}\r\n0;chunk-signature=9ff246cb5f89e9185455e568a72b9ea5f21e3e80ccde18cd07968336f3acc8a0\r\n\r\n"
+    }
+  ]
+}

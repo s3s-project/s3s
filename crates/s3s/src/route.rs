@@ -169,6 +169,21 @@ pub trait S3Route: Send + Sync + 'static {
     /// }
     /// ```
     ///
+    /// # `SigV4` path encoding
+    ///
+    /// A matching route can select its canonical URI encoding by inserting
+    /// [`crate::auth::SigV4PathEncoding`] into `extensions`. For example:
+    ///
+    /// ```
+    /// use s3s::auth::SigV4PathEncoding;
+    /// # let mut extensions = hyper::http::Extensions::new();
+    /// extensions.insert(SigV4PathEncoding::DoubleEncoded);
+    /// ```
+    ///
+    /// Choose the policy from trusted route configuration. The default is
+    /// [`crate::auth::SigV4PathEncoding::S3`], and overrides are ignored when
+    /// this method returns `false`. The request URI and headers are preserved.
+    ///
     /// # Timing contract
     ///
     /// Called exactly once per request, after virtual-host resolution and

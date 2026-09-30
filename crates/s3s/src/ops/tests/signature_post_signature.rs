@@ -37,6 +37,7 @@ file content\r\n\
     let headers = HeaderMap::new();
 
     let mut cx = SignatureContext {
+        path_encoding: crate::auth::SigV4PathEncoding::S3,
         auth: None,
         config: &config,
         req_version: ::http::Version::HTTP_11,
@@ -158,6 +159,7 @@ async fn v4_post_signature_rejects_stale_request_time() {
     let headers = HeaderMap::new();
     let mut body = Body::from(body);
     let mut cx = SignatureContext {
+        path_encoding: crate::auth::SigV4PathEncoding::S3,
         auth: Some(&auth),
         config: &config,
         req_version: ::http::Version::HTTP_11,
