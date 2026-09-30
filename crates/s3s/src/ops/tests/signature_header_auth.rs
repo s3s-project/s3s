@@ -42,7 +42,9 @@ fn raw_path_fallback_rejects_missing_or_mismatched_signatures() {
         "s3",
     );
     let err = verifier
-        .verify_with_raw_path_fallback(&canonical_request, || panic!("raw fallback should not be attempted"))
+        .verify_with_raw_path_fallback(&canonical_request, crate::auth::SigV4PathEncoding::S3, || {
+            panic!("raw fallback should not be attempted")
+        })
         .expect_err("signature mismatch without raw reserved characters should be rejected");
     assert_eq!(err.code(), &S3ErrorCode::SignatureDoesNotMatch);
 
@@ -62,7 +64,7 @@ fn raw_path_fallback_rejects_missing_or_mismatched_signatures() {
         "s3",
     );
     let err = verifier
-        .verify_with_raw_path_fallback(&canonical_request, || {
+        .verify_with_raw_path_fallback(&canonical_request, crate::auth::SigV4PathEncoding::S3, || {
             s3s_sigv4::create_canonical_request_with_raw_uri_path(
                 method.as_str(),
                 "/test-bucket/path=",
@@ -72,6 +74,13 @@ fn raw_path_fallback_rejects_missing_or_mismatched_signatures() {
             )
         })
         .expect_err("raw fallback signature mismatch should be rejected");
+    assert_eq!(err.code(), &S3ErrorCode::SignatureDoesNotMatch);
+
+    let err = verifier
+        .verify_with_raw_path_fallback(&canonical_request, crate::auth::SigV4PathEncoding::DoubleEncoded, || {
+            panic!("DoubleEncoded must verify only its selected canonical URI")
+        })
+        .expect_err("a mismatched double-encoded signature must be rejected");
     assert_eq!(err.code(), &S3ErrorCode::SignatureDoesNotMatch);
 }
 
@@ -369,6 +378,7 @@ async fn v4_header_auth_with_port_in_signed_host() {
     ]);
     let mut body = Body::empty();
     let mut cx = SignatureContext {
+        path_encoding: crate::auth::SigV4PathEncoding::S3,
         auth: Some(&auth),
         config: &config,
         req_version: ::http::Version::HTTP_11,
@@ -423,6 +433,7 @@ async fn v4_header_auth_rejects_wrong_region() {
     let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
     let mut body = Body::empty();
     let mut cx = SignatureContext {
+        path_encoding: crate::auth::SigV4PathEncoding::S3,
         auth: Some(&auth),
         config: &config,
         req_version: ::http::Version::HTTP_11,
@@ -472,6 +483,7 @@ async fn v4_header_auth_rejects_unsupported_algorithm() {
         let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
         let mut body = Body::empty();
         let mut cx = SignatureContext {
+            path_encoding: crate::auth::SigV4PathEncoding::S3,
             auth: Some(&auth),
             config: &config,
             req_version: ::http::Version::HTTP_11,
@@ -549,6 +561,7 @@ async fn v4_header_auth_accepts_configured_service() {
 
     let mut body = Body::empty();
     let mut cx = SignatureContext {
+        path_encoding: crate::auth::SigV4PathEncoding::S3,
         auth: Some(&auth),
         config: &config,
         req_version: ::http::Version::HTTP_11,
@@ -637,6 +650,7 @@ async fn v4_header_auth_accepts_standard_and_raw_uri_path_signatures() {
 
         let mut body = Body::empty();
         let mut cx = SignatureContext {
+            path_encoding: crate::auth::SigV4PathEncoding::S3,
             auth: Some(&auth),
             config: &config,
             req_version: ::http::Version::HTTP_11,
@@ -715,6 +729,7 @@ async fn v4_header_auth_accepts_rest_base64_content_sha256() {
     ]);
     let mut body = Body::from(Bytes::from_static(body_data));
     let mut cx = SignatureContext {
+        path_encoding: crate::auth::SigV4PathEncoding::S3,
         auth: Some(&auth),
         config: &config,
         req_version: ::http::Version::HTTP_11,
@@ -793,6 +808,7 @@ async fn v4_header_auth_uses_http2_authority_for_signed_host() {
 
     let mut body = Body::empty();
     let mut cx = SignatureContext {
+        path_encoding: crate::auth::SigV4PathEncoding::S3,
         auth: Some(&auth),
         config: &config,
         req_version: ::http::Version::HTTP_2,
@@ -906,6 +922,7 @@ async fn v4_header_auth_raw_uri_path_signature_seeds_streaming_body() {
 
     let mut body = Body::from(Bytes::from(streaming_body));
     let mut cx = SignatureContext {
+        path_encoding: crate::auth::SigV4PathEncoding::S3,
         auth: Some(&auth),
         config: &config,
         req_version: ::http::Version::HTTP_11,
@@ -979,6 +996,7 @@ async fn v2_header_auth_returns_no_region() {
     };
 
     let mut cx = SignatureContext {
+        path_encoding: crate::auth::SigV4PathEncoding::S3,
         auth: Some(&auth),
         config: &config,
         req_version: ::http::Version::HTTP_11,
@@ -1055,6 +1073,7 @@ async fn v4_header_auth_rejects_stale_request_time() {
 
     let mut body = Body::empty();
     let mut cx = SignatureContext {
+        path_encoding: crate::auth::SigV4PathEncoding::S3,
         auth: Some(&auth),
         config: &config,
         req_version: ::http::Version::HTTP_11,

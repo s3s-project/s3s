@@ -42,6 +42,7 @@ async fn presigned_url_expires_0_should_be_expired() {
     let mut body = Body::empty();
 
     let mut cx = SignatureContext {
+        path_encoding: crate::auth::SigV4PathEncoding::S3,
         auth: None,
         config: &config,
         req_version: ::http::Version::HTTP_11,

@@ -46,6 +46,7 @@ async fn v4_presigned_url_rejects_invalid_expires_as_authorization_query_error()
     let headers = headers_from_slice(&[("authorization", "AWS4-HMAC-SHA256 Credential=invalid")]);
     let mut body = Body::empty();
     let mut cx = SignatureContext {
+        path_encoding: crate::auth::SigV4PathEncoding::S3,
         auth: None,
         config: &config,
         req_version: ::http::Version::HTTP_11,
@@ -100,6 +101,7 @@ async fn v4_presigned_url_accepts_expires_beyond_aws_default_when_configured() {
     let headers = headers_from_slice(&[("host", "s3.amazonaws.com")]);
     let mut body = Body::empty();
     let mut cx = SignatureContext {
+        path_encoding: crate::auth::SigV4PathEncoding::S3,
         auth: None,
         config: &config,
         req_version: ::http::Version::HTTP_11,
@@ -138,6 +140,7 @@ async fn x_amz_expires_limit_applies_only_to_presigned_query_auth() {
     let anonymous_headers = HeaderMap::new();
     let mut body = Body::empty();
     let mut anonymous = SignatureContext {
+        path_encoding: crate::auth::SigV4PathEncoding::S3,
         auth: None,
         config: &config,
         req_version: ::http::Version::HTTP_11,
@@ -164,6 +167,7 @@ async fn x_amz_expires_limit_applies_only_to_presigned_query_auth() {
     let header_auth_headers = headers_from_slice(&[("authorization", "AWS4-HMAC-SHA256 Credential=invalid")]);
     let mut body = Body::empty();
     let mut header_auth = SignatureContext {
+        path_encoding: crate::auth::SigV4PathEncoding::S3,
         auth: None,
         config: &config,
         req_version: ::http::Version::HTTP_11,
@@ -235,6 +239,7 @@ async fn v4_presigned_url_rejects_unknown_service() {
     let mut body = Body::empty();
 
     let mut cx = SignatureContext {
+        path_encoding: crate::auth::SigV4PathEncoding::S3,
         auth: Some(&auth),
         config: &config,
         req_version: ::http::Version::HTTP_11,
@@ -288,6 +293,7 @@ async fn v4_presigned_url_rejects_wrong_region() {
     let headers = headers_from_slice(&[("host", "s3.amazonaws.com")]);
     let mut body = Body::empty();
     let mut cx = SignatureContext {
+        path_encoding: crate::auth::SigV4PathEncoding::S3,
         auth: Some(&auth),
         config: &config,
         req_version: ::http::Version::HTTP_11,
@@ -365,6 +371,7 @@ async fn v4_presigned_url_accepts_standard_and_raw_uri_path_signatures() {
 
         let mut body = Body::empty();
         let mut cx = SignatureContext {
+            path_encoding: crate::auth::SigV4PathEncoding::S3,
             auth: Some(&auth),
             config: &config,
             req_version: ::http::Version::HTTP_11,
@@ -427,6 +434,7 @@ async fn v4_presigned_url_uses_http2_authority_for_signed_host() {
     let headers = HeaderMap::new();
     let mut body = Body::empty();
     let mut cx = SignatureContext {
+        path_encoding: crate::auth::SigV4PathEncoding::S3,
         auth: Some(&auth),
         config: &config,
         req_version: ::http::Version::HTTP_2,
@@ -492,6 +500,7 @@ async fn v4_presigned_url_with_port_in_signed_host() {
     let headers = headers_from_slice(&[("host", host)]);
     let mut body = Body::empty();
     let mut cx = SignatureContext {
+        path_encoding: crate::auth::SigV4PathEncoding::S3,
         auth: Some(&auth),
         config: &config,
         req_version: ::http::Version::HTTP_11,
@@ -554,6 +563,7 @@ async fn sig_v2_vhost_presigned_url_with_port_uses_wire_host() {
     let enabled_config = sig_v2_test_config(true);
     let auth = crate::auth::SimpleAuth::from_single("AKIAIOSFODNN7EXAMPLE", secret_key.clone());
     let mut cx = SignatureContext {
+        path_encoding: crate::auth::SigV4PathEncoding::S3,
         auth: Some(&auth),
         config: &enabled_config,
         req_version: ::http::Version::HTTP_11,
@@ -583,6 +593,7 @@ async fn sig_v2_vhost_presigned_url_with_port_uses_wire_host() {
     let mut body = Body::empty();
     let disabled_config = sig_v2_test_config(false);
     let mut cx = SignatureContext {
+        path_encoding: crate::auth::SigV4PathEncoding::S3,
         auth: Some(&auth),
         config: &disabled_config,
         req_version: ::http::Version::HTTP_11,
@@ -655,6 +666,7 @@ async fn v4_presigned_url_put_with_valid_content_sha256() {
 
     let mut body = Body::from(Bytes::from_static(body_data));
     let mut cx = SignatureContext {
+        path_encoding: crate::auth::SigV4PathEncoding::S3,
         auth: Some(&auth),
         config: &config,
         req_version: ::http::Version::HTTP_11,
@@ -734,6 +746,7 @@ async fn v4_presigned_url_put_rejects_streaming_content_sha256() {
 
     let mut body = Body::from(Bytes::from_static(body_data));
     let mut cx = SignatureContext {
+        path_encoding: crate::auth::SigV4PathEncoding::S3,
         auth: Some(&auth),
         config: &config,
         req_version: ::http::Version::HTTP_11,

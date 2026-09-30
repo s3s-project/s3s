@@ -692,6 +692,7 @@ async fn verify_signature(
     vh_bucket: Option<&str>,
     vh_region: Option<&str>,
     mut content_length: Option<u64>,
+    path_encoding: crate::auth::SigV4PathEncoding,
 ) -> S3Result<Option<u64>> {
     let decoded_uri_path = urlencoding::decode(req.uri.path()).map_err(|_| S3ErrorCode::InvalidURI)?;
 
@@ -712,6 +713,7 @@ async fn verify_signature(
 
         decoded_uri_path: &decoded_uri_path,
         raw_uri_path: req.uri.path(),
+        path_encoding,
         vh_bucket,
 
         content_length,
@@ -942,7 +944,16 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
         resolved_op.as_ref().is_none_or(|op| op.has_request_payload())
     };
     let content_length_for_signature = signature_content_length(req, content_length, request_has_payload);
-    content_length = verify_signature(req, ccx, vh_bucket, vh_region.as_deref(), content_length_for_signature).await?;
+    let path_encoding = if custom_route_hit {
+        req.extensions
+            .get::<crate::auth::SigV4PathEncoding>()
+            .copied()
+            .unwrap_or_default()
+    } else {
+        crate::auth::SigV4PathEncoding::S3
+    };
+    content_length =
+        verify_signature(req, ccx, vh_bucket, vh_region.as_deref(), content_length_for_signature, path_encoding).await?;
 
     if custom_route_hit {
         return Ok(Prepare::CustomRoute);

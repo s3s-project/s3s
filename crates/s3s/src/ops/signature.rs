@@ -10,6 +10,7 @@
 )]
 use crate::auth::S3Auth;
 use crate::auth::SecretKey;
+use crate::auth::SigV4PathEncoding;
 use crate::auth::signature::Signature;
 use crate::config::{S3Config, S3ConfigProvider};
 use crate::error::*;
@@ -188,6 +189,7 @@ pub struct SignatureContext<'a> {
 
     pub decoded_uri_path: &'a str,
     pub raw_uri_path: &'a str,
+    pub path_encoding: SigV4PathEncoding,
     pub vh_bucket: Option<&'a str>,
 
     pub content_length: Option<u64>,
@@ -309,6 +311,7 @@ impl SignatureVerificationContext<'_> {
     pub(super) fn verify_with_raw_path_fallback(
         &self,
         canonical_request: &str,
+        path_encoding: SigV4PathEncoding,
         raw_canonical_request: impl FnOnce() -> String,
     ) -> S3Result<Signature> {
         let string_to_sign = s3s_sigv4::create_string_to_sign(canonical_request, self.amz_date, self.region, self.service);
@@ -324,7 +327,7 @@ impl SignatureVerificationContext<'_> {
             return Ok(signature);
         }
 
-        if !has_unencoded_reserved_path_char(self.raw_uri_path) {
+        if path_encoding == SigV4PathEncoding::DoubleEncoded || !has_unencoded_reserved_path_char(self.raw_uri_path) {
             debug!(?signature, expected=?self.expected_signature, "signature mismatch");
             return Err(s3_error!(SignatureDoesNotMatch));
         }
@@ -349,6 +352,13 @@ impl SignatureVerificationContext<'_> {
 }
 
 impl<'a> SignatureContext<'a> {
+    fn canonical_uri_path(&self) -> &str {
+        match self.path_encoding {
+            SigV4PathEncoding::S3 => self.decoded_uri_path,
+            SigV4PathEncoding::DoubleEncoded => self.raw_uri_path,
+        }
+    }
+
     fn query_pairs(&self) -> &'a [(String, String)] {
         // `Option<&'a OrderedQs>` is Copy: extract the reference without
         // borrowing `self`, so the returned slice lives as long as `'a`.
@@ -682,9 +692,13 @@ impl<'a> SignatureContext<'a> {
             region,
             service,
         };
-        let canonical_request =
-            s3s_sigv4::create_presigned_canonical_request(method.as_str(), self.decoded_uri_path, self.query_pairs(), &headers);
-        verifier.verify_with_raw_path_fallback(&canonical_request, || {
+        let canonical_request = s3s_sigv4::create_presigned_canonical_request(
+            method.as_str(),
+            self.canonical_uri_path(),
+            self.query_pairs(),
+            &headers,
+        );
+        verifier.verify_with_raw_path_fallback(&canonical_request, self.path_encoding, || {
             s3s_sigv4::create_presigned_canonical_request_with_raw_uri_path(
                 method.as_str(),
                 self.raw_uri_path,
@@ -822,8 +836,8 @@ impl<'a> SignatureContext<'a> {
             service,
         };
         let canonical_request =
-            s3s_sigv4::create_canonical_request(method.as_str(), self.decoded_uri_path, query_strings, &headers, payload);
-        let signature = verifier.verify_with_raw_path_fallback(&canonical_request, || {
+            s3s_sigv4::create_canonical_request(method.as_str(), self.canonical_uri_path(), query_strings, &headers, payload);
+        let signature = verifier.verify_with_raw_path_fallback(&canonical_request, self.path_encoding, || {
             s3s_sigv4::create_canonical_request_with_raw_uri_path(
                 method.as_str(),
                 self.raw_uri_path,
