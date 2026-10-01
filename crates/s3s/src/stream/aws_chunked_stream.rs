@@ -1137,12 +1137,9 @@ mod tests {
         // The size limit is classified directly: the historical wrapper
         // (`Underlying(ChunkMetaTooLarge)`) is gone, so the S3 error code is
         // `EntityTooLarge` (400) instead of `InternalError` (500).
-        match result.unwrap() {
-            Err(error @ AwsChunkedStreamError::ChunkMetaTooLarge(_, _)) => {
-                assert_eq!(error.to_s3_error_code(), S3ErrorCode::EntityTooLarge);
-            }
-            other => panic!("Expected ChunkMetaTooLarge, got: {other:?}"),
-        }
+        let error = result.unwrap().unwrap_err();
+        assert_eq!(error.to_s3_error_code(), S3ErrorCode::EntityTooLarge);
+        assert!(matches!(error, AwsChunkedStreamError::ChunkMetaTooLarge(_, _)));
     }
 
     #[tokio::test]
