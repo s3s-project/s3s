@@ -32,6 +32,12 @@ crawl:
 spdx-check:
     uv run scripts/spdx_headers.py --check
 
+link-license:
+    cargo run -p xtask -- link-license
+
+link-license-check:
+    cargo run -p xtask -- link-license --check
+
 codegen:
     cargo run -p s3s-codegen
     cargo fmt --all
