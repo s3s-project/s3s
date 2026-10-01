@@ -23,7 +23,8 @@ pin_project! {
     /// The signing behaviour is fixed when the decoder is constructed:
     /// [`ChunkedStream::unsigned`] rejects signatures it cannot verify, while
     /// [`ChunkedStream::signed`] requires and verifies them. Whether the body
-    /// carries a trailer block is discovered while decoding.
+    /// carries a trailer block is discovered while decoding, unless
+    /// [`ChunkedStream::with_required_trailers`] says the request declared one.
     pub struct ChunkedStream<S> {
         #[pin]
         decoder: Decoder<S>,
@@ -31,6 +32,24 @@ pin_project! {
 }
 
 impl<S> ChunkedStream<S> {
+    /// Requires the body to end with a trailer block.
+    ///
+    /// A request that announced trailing headers but ends without them is a format
+    /// error instead of succeeding with nothing to expose. The default stays
+    /// permissive, because a body without trailers is valid for requests that did
+    /// not announce any.
+    #[must_use]
+    pub fn with_required_trailers(mut self, required: bool) -> Self {
+        self.require_trailers(required);
+        self
+    }
+
+    /// Requires the body to end with a trailer block, for callers that already
+    /// own the stream.
+    pub fn require_trailers(&mut self, required: bool) {
+        self.decoder.require_trailers(required);
+    }
+
     /// Creates an unsigned decoder without signature verification.
     ///
     /// A chunk signature or trailer signature in the body is rejected as a
