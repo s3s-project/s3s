@@ -13,6 +13,23 @@
 //! optional chunk signature, the `CRLF` that terminates each chunk, and the
 //! trailer block at the end.
 //!
+//! # Semantics
+//!
+//! - **Verify before yield**: a signed chunk is buffered until its signature is
+//!   verified; nothing from that chunk is produced before that.
+//! - **Signatures are never ignored**: in the signed mode chunk and trailer
+//!   signatures are mandatory, while in the unsigned mode any signature in the body
+//!   is rejected as a format error, because there is no signing context to verify
+//!   it with. The legacy decoder verified a signature whenever one was present,
+//!   even in unsigned mode; that behaviour is not preserved.
+//! - **Length accounting**: the declared `x-amz-decoded-content-length` is exact.
+//!   Producing more is [`Error::LengthMismatch`], producing less at the end of the
+//!   stream is [`Error::Incomplete`], and a chunk boundary at EOF is not an error.
+//! - **Fail-stop**: after an error item the stream yields `None` forever, so a
+//!   failed request never resumes.
+//! - **Trailing headers**: they are published through [`TrailerHandle`] only after
+//!   the trailer block is accepted, and taking them is a one-shot operation.
+//!
 //! # Modes
 //!
 //! The consumer selects the mode from the `x-amz-content-sha256` request

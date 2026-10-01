@@ -3774,7 +3774,7 @@ dependencies = [
 
 [[package]]
 name = "s3s-chunked"
-version = "0.18.0-alpha.1"
+version = "0.18.0-alpha.2"
 dependencies = [
  "bytes",
  "criterion",
