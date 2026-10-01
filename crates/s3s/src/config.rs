@@ -248,7 +248,13 @@ pub struct S3Config {
     /// Default: false (`SigV2` is disabled by default for security)
     pub enable_sig_v2: bool,
 
-    /// Maximum allowed `X-Amz-Expires` value for `SigV4` presigned URLs in seconds.
+    /// Maximum allowed validity period for presigned URLs in seconds.
+    ///
+    /// For `SigV4` presigned URLs this bounds the `X-Amz-Expires` query parameter.
+    /// For `SigV2` presigned URLs this bounds the difference between the `Expires`
+    /// query parameter and the current time.
+    ///
+    /// Set to 0 to disable the limit.
     ///
     /// Default: 604800 (7 days, matching AWS S3 behavior)
     ///

@@ -6,7 +6,7 @@
 use super::common::*;
 use crate::ops::signature::*;
 
-use crate::config::{S3Config, S3ConfigProvider};
+use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
 use crate::error::S3ErrorCode;
 use crate::http::{Body, OrderedQs};
 use crate::utils::crypto::hex_sha256;
@@ -538,9 +538,12 @@ async fn sig_v2_vhost_presigned_url_with_port_uses_wire_host() {
     let method = Method::GET;
     let uri = Uri::from_static("https://user.fs.example.com:19000/test.txt");
     let headers = headers_from_slice(&[("host", host)]);
+    // Keep the presigned URL within the default maximum validity window so this test
+    // stays focused on the port-carrying vhost canonicalization.
+    let expires = (jiff::Timestamp::now().as_second() + 3_600).to_string();
     let qs_pairs = vec![
         ("AWSAccessKeyId".to_owned(), "AKIAIOSFODNN7EXAMPLE".to_owned()),
-        ("Expires".to_owned(), "4294967295".to_owned()),
+        ("Expires".to_owned(), expires),
     ];
     let string_to_sign = s3s_sigv2::create_string_to_sign(
         s3s_sigv2::Mode::PresignedUrl,
@@ -771,4 +774,172 @@ async fn v4_presigned_url_put_rejects_streaming_content_sha256() {
         .await
         .expect_err("streaming content-sha256 should be rejected");
     assert_eq!(err.code(), &S3ErrorCode::NotImplemented);
+}
+
+const SIG_V2_TEST_ACCESS_KEY: &str = "AKIAIOSFODNN7EXAMPLE";
+const SIG_V2_TEST_SECRET_KEY: &str = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+
+fn sig_v2_test_config_with_max_expires(max_expires_secs: u32) -> Arc<dyn S3ConfigProvider> {
+    let config = S3Config {
+        enable_sig_v2: true,
+        presigned_url_max_expires_secs: max_expires_secs,
+        ..Default::default()
+    };
+    Arc::new(StaticConfigProvider::new(Arc::new(config)))
+}
+
+/// Builds a `SigV2` presigned GET /test.txt query string with the given absolute `Expires` value.
+fn sig_v2_presigned_query(expires: i64) -> OrderedQs {
+    let secret_key: crate::auth::SecretKey = SIG_V2_TEST_SECRET_KEY.into();
+    let query_pairs = vec![
+        ("AWSAccessKeyId".to_owned(), SIG_V2_TEST_ACCESS_KEY.to_owned()),
+        ("Expires".to_owned(), expires.to_string()),
+    ];
+    let string_to_sign = s3s_sigv2::create_string_to_sign(
+        s3s_sigv2::Mode::PresignedUrl,
+        Method::GET.as_str(),
+        "/test.txt",
+        Some(&query_pairs),
+        &[("host", "s3.amazonaws.com")],
+        None,
+    );
+    let signature = s3s_sigv2::calculate_signature(secret_key.expose(), &string_to_sign);
+    let mut query_pairs = query_pairs;
+    query_pairs.push(("Signature".to_owned(), signature.as_str().to_owned()));
+    OrderedQs::from_vec_unchecked(query_pairs)
+}
+
+async fn sig_v2_presigned_check(config: &Arc<dyn S3ConfigProvider>, expires: i64) -> crate::S3Result<CredentialsExt> {
+    let qs = sig_v2_presigned_query(expires);
+    let method = Method::GET;
+    let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+    let headers = headers_from_slice(&[("host", "s3.amazonaws.com")]);
+    let secret_key: crate::auth::SecretKey = SIG_V2_TEST_SECRET_KEY.into();
+    let auth = crate::auth::SimpleAuth::from_single(SIG_V2_TEST_ACCESS_KEY, secret_key);
+    let mut body = Body::empty();
+    let mut cx = sig_v2_test_context(config, Some(&auth), &method, &uri, &mut body, Some(&qs), &headers, None);
+    cx.v2_check().await.expect("v2 presigned url must be detected")
+}
+
+#[tokio::test]
+async fn sig_v2_presigned_url_rejects_expiration_beyond_max_expires() {
+    let now = jiff::Timestamp::now().as_second();
+    let config = sig_v2_test_config_with_max_expires(604_800);
+
+    let err = sig_v2_presigned_check(&config, now + 8 * 86_400)
+        .await
+        .expect_err("a validity period longer than the configured maximum must be rejected");
+    assert_eq!(err.code(), &S3ErrorCode::AuthorizationQueryParametersError);
+    assert_ne!(err.message(), Some("Request has expired"));
+}
+
+#[tokio::test]
+async fn sig_v2_presigned_url_accepts_expiration_within_max_expires() {
+    let now = jiff::Timestamp::now().as_second();
+    let config = sig_v2_test_config_with_max_expires(604_800);
+
+    let cred = sig_v2_presigned_check(&config, now + 3_600)
+        .await
+        .expect("a validity period within the configured maximum must be accepted");
+    assert_eq!(cred.access_key, SIG_V2_TEST_ACCESS_KEY);
+}
+
+#[tokio::test]
+async fn sig_v2_presigned_url_rejects_expired_request_with_access_denied() {
+    let now = jiff::Timestamp::now().as_second();
+    let config = sig_v2_test_config_with_max_expires(604_800);
+
+    let err = sig_v2_presigned_check(&config, now - 60)
+        .await
+        .expect_err("an already expired presigned URL must be rejected");
+    assert_eq!(err.code(), &S3ErrorCode::AccessDenied);
+    assert_eq!(err.message(), Some("Request has expired"));
+}
+
+#[tokio::test]
+async fn sig_v2_presigned_url_accepts_expiration_equal_to_max_expires() {
+    let now = jiff::Timestamp::now().as_second();
+    let config = sig_v2_test_config_with_max_expires(604_800);
+
+    let cred = sig_v2_presigned_check(&config, now + 604_800)
+        .await
+        .expect("exactly the configured maximum must be accepted");
+    assert_eq!(cred.access_key, SIG_V2_TEST_ACCESS_KEY);
+}
+
+#[tokio::test]
+async fn sig_v2_presigned_url_accepts_far_future_expiration_when_limit_is_zero() {
+    let now = jiff::Timestamp::now().as_second();
+    let config = sig_v2_test_config_with_max_expires(0);
+
+    let cred = sig_v2_presigned_check(&config, now + 8 * 86_400)
+        .await
+        .expect("a zero maximum must disable the validity limit");
+    assert_eq!(cred.access_key, SIG_V2_TEST_ACCESS_KEY);
+}
+
+#[tokio::test]
+async fn v4_presigned_url_accepts_expires_beyond_default_when_limit_is_zero() {
+    use crate::auth::SecretKey;
+    use crate::auth::SimpleAuth;
+
+    let access_key = "AKIAIOSFODNN7EXAMPLE";
+    let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+    let auth = SimpleAuth::from_single(access_key, secret_key.clone());
+    let s3_config = S3Config {
+        presigned_url_max_expires_secs: 0,
+        ..Default::default()
+    };
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(s3_config)));
+
+    let method = Method::GET;
+    let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+    let decoded_uri_path = "/test.txt";
+    let raw_uri_path = "/test.txt";
+    let amz_date = AmzDate::parse(&fmt_current_amz_date(time::OffsetDateTime::now_utc()))
+        .expect("current time should produce a valid x-amz-date");
+    let headers_for_signing = [("host", "s3.amazonaws.com")];
+    let mut query_strings_for_signing = presigned_query_fields(&amz_date, "s3");
+    query_strings_for_signing[3] = ("X-Amz-Expires".to_owned(), "604801".to_owned());
+
+    let canonical_request = s3s_sigv4::create_presigned_canonical_request(
+        method.as_str(),
+        decoded_uri_path,
+        &query_strings_for_signing,
+        headers_for_signing,
+    );
+    let string_to_sign = s3s_sigv4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
+    let signature = s3s_sigv4::calculate_signature(&string_to_sign, secret_key.expose(), &amz_date, "us-east-1", "s3");
+    let mut signed_query_strings = query_strings_for_signing;
+    signed_query_strings.push(("X-Amz-Signature".to_owned(), signature.as_str().to_owned()));
+    let qs = OrderedQs::from_vec_unchecked(signed_query_strings);
+    let headers = headers_from_slice(&[("host", "s3.amazonaws.com")]);
+
+    let mut body = Body::empty();
+    let mut cx = SignatureContext {
+        path_encoding: crate::auth::SigV4PathEncoding::S3,
+        auth: Some(&auth),
+        config: &config,
+        req_version: ::http::Version::HTTP_11,
+        req_method: &method,
+        req_uri: &uri,
+        req_body: &mut body,
+        qs: Some(&qs),
+        hs: &headers,
+        decoded_uri_path,
+        raw_uri_path,
+        vh_bucket: None,
+        content_length: None,
+        mime: None,
+        decoded_content_length: None,
+        transformed_body: None,
+        multipart: None,
+        trailing_headers: None,
+    };
+
+    let cred = cx
+        .v4_check_presigned_url()
+        .await
+        .expect("X-Amz-Expires beyond the default must be accepted when the limit is zero");
+    assert_eq!(cred.access_key, access_key);
 }
