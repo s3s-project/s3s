@@ -14,8 +14,6 @@ use http::StatusCode;
 use http::Uri;
 
 use s3s_chunked::TrailerHandle;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use stdx::default::default;
 
 /// An S3 HTTP request.
@@ -90,8 +88,6 @@ impl core::error::Error for HttpError {
 pub struct TrailingHeaders {
     /// The slot written by the body stream.
     handle: TrailerHandle,
-    /// Whether the headers were already taken.
-    taken: Arc<AtomicBool>,
 }
 
 impl core::fmt::Debug for TrailingHeaders {
@@ -106,10 +102,7 @@ impl core::fmt::Debug for TrailingHeaders {
 impl TrailingHeaders {
     /// Wraps the handle written by the body stream.
     pub(crate) fn new(handle: TrailerHandle) -> Self {
-        Self {
-            handle,
-            taken: Arc::new(AtomicBool::new(false)),
-        }
+        Self { handle }
     }
 
     /// Returns true if trailers have been produced by the body stream.
@@ -117,7 +110,7 @@ impl TrailingHeaders {
     /// Once [`Self::take`] has returned the headers, this reports `false`.
     #[must_use]
     pub fn is_ready(&self) -> bool {
-        !self.taken.load(Ordering::SeqCst) && self.handle.is_ready()
+        self.handle.is_ready()
     }
 
     /// Take the trailing headers if available.
@@ -126,18 +119,13 @@ impl TrailingHeaders {
     /// Calling it before the headers are ready does not consume them.
     #[must_use]
     pub fn take(&self) -> Option<HeaderMap> {
-        let headers = self.handle.take()?;
-        self.taken.store(true, Ordering::SeqCst);
-        Some(headers)
+        self.handle.take()
     }
 
     /// Read the trailing headers if available, without taking them.
     ///
     /// Returns `None` once the headers have been taken.
     pub fn read<R>(&self, f: impl FnOnce(&HeaderMap) -> R) -> Option<R> {
-        if self.taken.load(Ordering::SeqCst) {
-            return None;
-        }
         self.handle.read(f)
     }
 }
