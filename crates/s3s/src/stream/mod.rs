@@ -16,11 +16,6 @@
 pub mod aws_chunked_stream;
 pub mod upload_stream;
 
-#[cfg(test)]
-mod bench_ab;
-#[cfg(test)]
-mod parity_tests;
-
 use crate::error::StdError;
 
 use std::collections::VecDeque;

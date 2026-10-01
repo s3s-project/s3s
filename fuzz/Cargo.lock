@@ -924,12 +924,12 @@ dependencies = [
  "md-5",
  "memchr",
  "mime",
- "nom",
  "numeric_cast",
  "phf",
  "pin-project-lite",
  "quick-xml",
  "regex",
+ "s3s-chunked",
  "s3s-multipart",
  "s3s-rfc2047",
  "s3s-sigv2",
@@ -948,7 +948,6 @@ dependencies = [
  "tokio",
  "tower",
  "tracing",
- "transform-stream",
  "url",
  "urlencoding",
  "xxhash-rust",
@@ -1343,15 +1342,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a"
 dependencies = [
  "once_cell",
-]
-
-[[package]]
-name = "transform-stream"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c1a814d25437963577f6221d33a2aaa60bfb44acc3330cdc7c334644e9832022"
-dependencies = [
- "futures-core",
 ]
 
 [[package]]

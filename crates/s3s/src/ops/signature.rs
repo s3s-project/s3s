@@ -860,7 +860,7 @@ impl<'a> SignatureContext<'a> {
             let unsigned = matches!(amz_content_sha256, Some(AmzContentSha256::StreamingUnsignedPayloadTrailer));
             let seed_signature = Sha256Sum::from_hex(signature.as_str())
                 .ok_or_else(|| s3_error!(InternalError, "verified request signature is not canonical hex"))?;
-            let stream = AwsChunkedStream::new(
+            let mut stream = AwsChunkedStream::new(
                 mem::take(self.req_body),
                 seed_signature,
                 amz_date,
@@ -871,6 +871,12 @@ impl<'a> SignatureContext<'a> {
                 unsigned,
                 self.config.snapshot().aws_chunked_stream_max_chunk_size,
             );
+
+            // The request announced trailing headers, so the body has to carry the
+            // trailer block it promised instead of succeeding without it.
+            if has_trailer {
+                stream.require_trailers(true);
+            }
 
             debug!(len=?stream.exact_remaining_length(), "aws-chunked");
 

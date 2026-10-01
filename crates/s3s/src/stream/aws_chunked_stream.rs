@@ -3,10 +3,10 @@
 
 //! aws-chunked stream
 //!
-//! Decodes an `aws-chunked` request body, verifying the per-chunk signature
-//! chain for signed modes and the trailer signature for
-//! `STREAMING-AWS4-HMAC-SHA256-PAYLOAD-TRAILER`. The decoded bytes are never
-//! yielded before their signature has been verified.
+//! Thin adapter over [`s3s_chunked::ChunkedStream`]: the historical public shape
+//! of `AwsChunkedStream` (constructor, error type, trailing-headers handle) is
+//! preserved while decoding and signature verification live in the
+//! `s3s-chunked` crate.
 //!
 //! # Checksum trailers
 //!
@@ -23,82 +23,48 @@ use crate::auth::SecretKey;
 use crate::error::{S3ErrorCode, StdError};
 use crate::protocol::TrailingHeaders;
 use crate::stream::{ByteStream, DynByteStream, RemainingLength};
-use crate::utils::SyncBoxFuture;
-use crate::utils::crypto::{Sha256Sum, hex_bytes32};
-use s3s_sigv4::AmzDate;
-use s3s_sigv4::create_trailer_string_to_sign;
+use crate::utils::crypto::Sha256Sum;
 
-use hyper::HeaderMap;
-use hyper::http::{HeaderName, HeaderValue};
+use bytes::Bytes;
+use futures::Stream;
+use s3s_chunked::{ChunkedStream, Limits, SignContext, TrailerHandle};
+use s3s_sigv4::AmzDate;
 use std::fmt::{self, Debug};
 use std::pin::Pin;
-use std::sync::{Arc, Mutex, PoisonError};
 use std::task::{Context, Poll};
 
-use futures::pin_mut;
-use futures::stream::{Stream, StreamExt};
-use hyper::body::{Buf, Bytes};
-use memchr::memchr;
-use zeroize::Zeroizing;
+/// The input stream type-erased for the non-generic public struct.
+///
+/// The body is boxed and pinned so that any `S: Stream + Send + Sync + 'static`
+/// can be stored without an `Unpin` bound on the public constructor.
+type BoxedBody = Pin<Box<dyn Stream<Item = Result<Bytes, StdError>> + Send + Sync + 'static>>;
 
-/// Maximum size for chunk metadata
-/// Prevents `DoS` via oversized chunk size declarations
-const MAX_CHUNK_META_SIZE: usize = 1024;
-
-/// Maximum size for trailers
-/// Conservative limit: 16KB should be more than enough for any reasonable trailers
-const MAX_TRAILERS_SIZE: usize = 16 * 1024;
-
-/// Maximum number of trailing headers
-/// Prevents `DoS` via excessive header count
-const MAX_TRAILER_HEADERS: usize = 100;
-
-use transform_stream::{AsyncTryStream, Yielder};
-
+/// # Compatibility
+///
+/// The decoder behind this stream replaces the previous implementation, and three
+/// behaviours changed with it:
+///
+/// - A chunk or trailer signature in a request declared unsigned is a format error:
+///   an unsigned declaration carries no signing context, so such a signature cannot be
+///   verified. The previous implementation verified a signature whenever one was present.
+/// - A chunk metadata line above the limit is [`AwsChunkedStreamError::ChunkMetaTooLarge`],
+///   which maps to `EntityTooLarge` (400); it used to surface as an internal error
+///   (500).
+/// - The stream fails fast: after an error item it yields `None` for ever instead of
+///   resuming.
+///
 /// Aws chunked stream
 pub struct AwsChunkedStream {
-    /// inner
-    inner: AsyncTryStream<Bytes, AwsChunkedStreamError, SyncBoxFuture<'static, Result<(), AwsChunkedStreamError>>>,
+    /// The decoding state machine.
+    inner: ChunkedStream<BoxedBody>,
 
-    remaining_length: usize,
-
-    // Parsed trailing headers (lower-cased names) if present and verified.
-    trailers: Arc<Mutex<Option<HeaderMap>>>,
+    /// Verified trailing headers.
+    trailers: TrailerHandle,
 }
 
 impl Debug for AwsChunkedStream {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("AwsChunkedStream").finish_non_exhaustive()
-    }
-}
-
-/// signature ctx
-struct SignatureCtx {
-    /// date
-    amz_date: AmzDate,
-
-    /// region
-    region: Box<str>,
-
-    //// service
-    service: Box<str>,
-
-    /// derived signing key
-    signing_key: Zeroizing<[u8; 32]>,
-
-    /// previous chunk's signature
-    prev_signature: Sha256Sum,
-}
-
-impl Debug for SignatureCtx {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("SignatureCtx")
-            .field("amz_date", &self.amz_date)
-            .field("region", &self.region)
-            .field("service", &self.service)
-            .field("signing_key", &"[REDACTED]")
-            .field("prev_signature", &self.prev_signature)
-            .finish_non_exhaustive()
     }
 }
 
@@ -152,68 +118,25 @@ impl AwsChunkedStreamError {
     }
 }
 
-/// Chunk meta
-#[derive(Debug)]
-struct ChunkMeta<'a> {
-    /// chunk size
-    size: usize,
-    /// Optional chunk signature.
-    /// `Some` for signed chunks,
-    /// `None` for unsigned streaming
-    signature: Option<&'a [u8]>,
-}
-
-/// nom parser
-fn parse_chunk_meta(mut input: &[u8]) -> nom::IResult<&[u8], ChunkMeta<'_>> {
-    use crate::utils::parser::consume;
-    use nom::Parser;
-    use nom::bytes::complete::{tag, take, take_till1};
-    use nom::combinator::{all_consuming, map_res};
-    use nom::number::complete::hex_u32;
-    use nom::sequence::delimited;
-
-    let s = &mut input;
-
-    // read size until ';' or CR
-    let size = consume(s, take_till1(|c| c == b';' || c == b'\r'))?;
-    let (_, size) = map_res(hex_u32, TryInto::try_into).parse(size)?;
-
-    // Either ";chunk-signature=<64>\r\n" or just "\r\n"
-    let signature = if let Ok(sig) = consume(s, |i| {
-        all_consuming(delimited(tag(&b";chunk-signature="[..]), take(64_usize), tag(&b"\r\n"[..]))).parse(i)
-    }) {
-        Some(sig)
-    } else {
-        // If no signature extension, accept plain CRLF
-        let _ = consume(s, |i| all_consuming(tag(&b"\r\n"[..])).parse(i))?;
-        None
-    };
-
-    Ok((input, ChunkMeta { size, signature }))
-}
-
-/// check signature
-fn check_signature(ctx: &SignatureCtx, expected_signature: &[u8], chunk_data: &[Bytes]) -> Option<Sha256Sum> {
-    let expected = Sha256Sum::from_hex(std::str::from_utf8(expected_signature).ok()?)?;
-
-    let string_to_sign = hex_bytes32(ctx.prev_signature.as_bytes(), |prev_signature| {
-        s3s_sigv4::create_chunk_string_to_sign(&ctx.amz_date, &ctx.region, &ctx.service, prev_signature, chunk_data)
-    });
-
-    let signature = Sha256Sum::from_bytes(s3s_sigv4::calculate_signature_with_key(&string_to_sign, &ctx.signing_key));
-
-    (expected == signature).then_some(signature)
+impl From<s3s_chunked::Error> for AwsChunkedStreamError {
+    fn from(error: s3s_chunked::Error) -> Self {
+        use s3s_chunked::Error;
+        match error {
+            Error::Underlying(error) => Self::Underlying(error),
+            Error::SignatureMismatch => Self::SignatureMismatch,
+            Error::FormatError => Self::FormatError,
+            Error::Incomplete => Self::Incomplete,
+            Error::LengthMismatch => Self::LengthMismatch,
+            Error::ChunkMetaTooLarge(size, limit) => Self::ChunkMetaTooLarge(size, limit),
+            Error::ChunkDataTooLarge(size, limit) => Self::ChunkDataTooLarge(size, limit),
+            Error::TrailersTooLarge(size, limit) => Self::TrailersTooLarge(size, limit),
+            Error::TooManyTrailerHeaders(count, limit) => Self::TooManyTrailerHeaders(count, limit),
+        }
+    }
 }
 
 impl AwsChunkedStream {
     /// Constructs a `ChunkedStream`
-    ///
-    /// # Panics
-    ///
-    /// The worker task locks the internal trailers mutex while storing
-    /// verified trailers and unwraps the lock: if the mutex is poisoned (a
-    /// panic while any holder — the worker or a `TrailingHeaders` reader —
-    /// held the lock), polling the returned stream panics.
     #[allow(clippy::too_many_arguments)]
     pub fn new<S>(
         body: S,
@@ -229,483 +152,44 @@ impl AwsChunkedStream {
     where
         S: Stream<Item = Result<Bytes, StdError>> + Send + Sync + 'static,
     {
-        let trailers: Arc<Mutex<Option<HeaderMap>>> = Arc::new(Mutex::new(None));
-        let trailers_for_worker = Arc::clone(&trailers);
-        let inner = AsyncTryStream::<_, _, SyncBoxFuture<'static, Result<(), AwsChunkedStreamError>>>::new(|mut y| {
-            #[allow(clippy::shadow_same)] // necessary for `pin_mut!`
-            Box::pin(async move {
-                pin_mut!(body);
-                let mut prev_bytes = Bytes::new();
-                let mut buf: Vec<u8> = Vec::new();
-                let signing_key =
-                    Zeroizing::new(s3s_sigv4::derive_signing_key(secret_key.expose(), &amz_date, &region, &service));
-                drop(secret_key);
-                let mut ctx = SignatureCtx {
-                    amz_date,
-                    region,
-                    service,
-                    signing_key,
-                    prev_signature: seed_signature,
-                };
+        let limits = Limits {
+            max_signed_chunk_size: max_chunk_size,
+            ..Limits::default()
+        };
+        let body: BoxedBody = Box::pin(body);
 
-                loop {
-                    let meta = {
-                        match Self::read_meta_bytes(body.as_mut(), prev_bytes, &mut buf).await {
-                            None => break,
-                            Some(Err(e)) => return Err(AwsChunkedStreamError::Underlying(e)),
-                            Some(Ok(remaining_bytes)) => prev_bytes = remaining_bytes,
-                        }
-                        if let Ok((_, meta)) = parse_chunk_meta(&buf) {
-                            // Enforce signature presence based on mode
-                            if !unsigned && meta.signature.is_none() {
-                                return Err(AwsChunkedStreamError::FormatError);
-                            }
-                            meta
-                        } else {
-                            return Err(AwsChunkedStreamError::FormatError);
-                        }
-                    };
-
-                    tracing::trace!(?meta);
-
-                    if meta.signature.is_some() && meta.size > max_chunk_size {
-                        return Err(AwsChunkedStreamError::ChunkDataTooLarge(meta.size, max_chunk_size));
-                    }
-
-                    let remaining_after_data = if let Some(expected_sig) = meta.signature {
-                        let (data, remaining_bytes): (Vec<Bytes>, Bytes) = {
-                            match Self::read_data(body.as_mut(), prev_bytes, meta.size).await {
-                                None => return Err(AwsChunkedStreamError::Incomplete),
-                                Some(Err(e)) => return Err(e),
-                                Some(Ok((data, remaining_bytes))) => (data, remaining_bytes),
-                            }
-                        };
-
-                        match check_signature(&ctx, expected_sig, &data) {
-                            None => return Err(AwsChunkedStreamError::SignatureMismatch),
-                            Some(signature) => ctx.prev_signature = signature,
-                        }
-
-                        for bytes in data {
-                            y.yield_ok(bytes).await;
-                        }
-
-                        remaining_bytes
-                    } else {
-                        match Self::read_data_streaming(body.as_mut(), &mut y, prev_bytes, meta.size).await {
-                            None => return Err(AwsChunkedStreamError::Incomplete),
-                            Some(Err(e)) => return Err(e),
-                            Some(Ok(remaining_bytes)) => remaining_bytes,
-                        }
-                    };
-
-                    if meta.size == 0 {
-                        // Try to read all remaining bytes (including any immediate remainder) as trailing headers
-                        // block and verify signature if present.
-                        match Self::read_and_verify_trailers(body.as_mut(), remaining_after_data, &ctx, unsigned).await {
-                            // No more bytes => no trailers, treat as normal termination.
-                            None => break,
-                            Some(Err(e)) => return Err(e),
-                            Some(Ok((entries, _remaining_bytes))) => {
-                                // After trailers there must not be any additional payload bytes in a valid request.
-                                // However, if there are remaining bytes, we will just attempt to continue parsing
-                                // which will likely fail with FormatError.
-                                // Build HeaderMap from entries and store.
-                                let mut map: HeaderMap = HeaderMap::new();
-                                for (name, value) in entries {
-                                    // Names are already lower-cased ASCII
-                                    let hn: HeaderName = match name.parse() {
-                                        Ok(h) => h,
-                                        Err(_) => return Err(AwsChunkedStreamError::FormatError),
-                                    };
-                                    let hv: HeaderValue = match HeaderValue::from_str(&value) {
-                                        Ok(v) => v,
-                                        Err(_) => return Err(AwsChunkedStreamError::FormatError),
-                                    };
-                                    map.append(hn, hv);
-                                }
-                                tracing::debug!(trailers=?map);
-                                *trailers_for_worker.lock().unwrap_or_else(PoisonError::into_inner) = Some(map);
-                                break;
-                            }
-                        }
-                    }
-
-                    // Carry over any remaining bytes to next iteration when there are more chunks.
-                    prev_bytes = remaining_after_data;
-                }
-
-                Ok(())
-            })
-        });
-        Self {
-            inner,
-            remaining_length: decoded_content_length,
-            trailers,
-        }
-    }
-
-    /// Read trailing headers after the final 0-size chunk and verify trailer signature.
-    /// Returns:
-    /// - `None`: if there are no more bytes (no trailers present)
-    /// - `Some(Ok(remaining_bytes))`: when trailers are consumed; usually `remaining_bytes` is empty
-    /// - `Some(Err(..))`: on errors
-    async fn read_and_verify_trailers<S>(
-        mut body: Pin<&mut S>,
-        prev_bytes: Bytes,
-        ctx: &SignatureCtx,
-        unsigned: bool,
-    ) -> Option<Result<(Vec<(String, String)>, Bytes), AwsChunkedStreamError>>
-    where
-        S: Stream<Item = Result<Bytes, StdError>> + Send + 'static,
-    {
-        // Accumulate all remaining bytes until EOF with size limit
-        let mut buf: Vec<u8> = Vec::new();
-        let mut total_size: usize;
-
-        if prev_bytes.is_empty() {
-            total_size = 0;
+        let inner = if unsigned {
+            // An unsigned declaration carries no signing context, so any
+            // signature in the body is rejected as a format error instead of
+            // being verified.
+            // Nothing here derives a signing key the decoder will not use.
+            drop(secret_key);
+            ChunkedStream::unsigned(body, decoded_content_length, limits)
         } else {
-            total_size = prev_bytes.len();
-            if total_size > MAX_TRAILERS_SIZE {
-                return Some(Err(AwsChunkedStreamError::TrailersTooLarge(total_size, MAX_TRAILERS_SIZE)));
-            }
-            buf.extend_from_slice(prev_bytes.as_ref());
-        }
-
-        // Read to end with size limit
-        while let Some(next) = body.next().await {
-            match next {
-                Err(e) => return Some(Err(AwsChunkedStreamError::Underlying(e))),
-                Ok(bytes) => {
-                    total_size = total_size.saturating_add(bytes.len());
-                    if total_size > MAX_TRAILERS_SIZE {
-                        return Some(Err(AwsChunkedStreamError::TrailersTooLarge(total_size, MAX_TRAILERS_SIZE)));
-                    }
-                    buf.extend_from_slice(bytes.as_ref());
-                }
-            }
-        }
-
-        if buf.is_empty() || buf == b"\r\n" {
-            // No trailers present
-            return None;
-        }
-
-        // Parse trailing headers lines. Lines are separated by CRLF or LF.
-        // Build canonical_trailers by sorting headers (excluding x-amz-trailer-signature) and joining as `name:value\n`.
-        // Extract the provided trailer signature from header `x-amz-trailer-signature`.
-        let (canonical_trailers, provided_signature, entries) = match Self::parse_trailing_headers(&buf) {
-            Ok(x) => x,
-            Err(e) => return Some(Err(e)),
+            // The signing key is derived and zeroized inside `SignContext`; the
+            // secret itself is no longer needed.
+            let sign = SignContext::new(amz_date, region, service, secret_key.expose().as_bytes());
+            drop(secret_key);
+            let seed = s3s_chunked::Sha256Sum::from_bytes(*seed_signature.as_bytes());
+            ChunkedStream::signed(body, sign, seed, decoded_content_length, limits)
         };
+        let trailers = inner.trailer_handle();
 
-        // Verify the trailer signature if present, or require it when unsigned=false
-        if let Some(provided) = provided_signature.as_ref() {
-            let Some(provided) = std::str::from_utf8(provided).ok().and_then(Sha256Sum::from_hex) else {
-                return Some(Err(AwsChunkedStreamError::SignatureMismatch));
-            };
-
-            let string_to_sign = hex_bytes32(ctx.prev_signature.as_bytes(), |prev_signature| {
-                create_trailer_string_to_sign(&ctx.amz_date, &ctx.region, &ctx.service, prev_signature, &canonical_trailers)
-            });
-            let signature = Sha256Sum::from_bytes(s3s_sigv4::calculate_signature_with_key(&string_to_sign, &ctx.signing_key));
-            if provided != signature {
-                return Some(Err(AwsChunkedStreamError::SignatureMismatch));
-            }
-        } else if !unsigned {
-            // In signed-with-trailer mode, missing trailer signature is an error
-            return Some(Err(AwsChunkedStreamError::FormatError));
-        }
-
-        Some(Ok((entries, Bytes::new())))
+        Self { inner, trailers }
     }
 
-    #[allow(clippy::type_complexity)]
-    fn parse_trailing_headers(buf: &[u8]) -> Result<(Vec<u8>, Option<Vec<u8>>, Vec<(String, String)>), AwsChunkedStreamError> {
-        // Split into lines by `\n`. Accept optional `\r` before `\n` and also handle last line without `\n`.
-        let mut entries: Vec<(String, String)> = Vec::new();
-        let mut provided_signature: Option<Vec<u8>> = None;
-        let mut header_count: usize = 0;
-
-        let mut start = 0usize;
-        for i in 0..=buf.len() {
-            let is_end = i == buf.len();
-            let is_lf = !is_end && buf[i] == b'\n';
-            if is_lf || is_end {
-                let mut line = &buf[start..i];
-                // trim trailing CR
-                if let Some(&b'\r') = line.last() {
-                    line = &line[..line.len().saturating_sub(1)];
-                }
-                // advance start
-                start = i.saturating_add(1);
-
-                if line.is_empty() {
-                    continue;
-                }
-
-                // Check header count limit (before parsing)
-                header_count = header_count.saturating_add(1);
-                if header_count > MAX_TRAILER_HEADERS {
-                    return Err(AwsChunkedStreamError::TooManyTrailerHeaders(header_count, MAX_TRAILER_HEADERS));
-                }
-
-                // Find ':'
-                let Some(colon_pos) = memchr(b':', line) else {
-                    return Err(AwsChunkedStreamError::FormatError);
-                };
-                let (name_raw, value_raw) = line.split_at(colon_pos);
-                // value_raw starts with ':'
-                let value_raw = &value_raw[1..];
-
-                // Lowercase name
-                let name = String::from_utf8(name_raw.to_ascii_lowercase()).map_err(|_| AwsChunkedStreamError::FormatError)?;
-
-                // Trim ASCII whitespace around value
-                let value = {
-                    let v = value_raw;
-                    let v = trim_ascii_whitespace(v);
-                    String::from_utf8(v.to_vec()).map_err(|_| AwsChunkedStreamError::FormatError)?
-                };
-
-                if name == "x-amz-trailer-signature" {
-                    provided_signature = Some(value.into_bytes());
-                } else {
-                    entries.push((name, value));
-                }
-            }
-        }
-
-        // Sort by header name to canonicalize deterministically
-        entries.sort_by(|a, b| a.0.cmp(&b.0));
-
-        // Build canonical bytes: name:value\n with size limit
-        let mut canonical: Vec<u8> = Vec::new();
-        for (n, v) in &entries {
-            // Check size before adding entry
-            let entry_size = n.len().saturating_add(v.len()).saturating_add(2); // name:value\n
-            if canonical.len().saturating_add(entry_size) > MAX_TRAILERS_SIZE {
-                return Err(AwsChunkedStreamError::TrailersTooLarge(
-                    canonical.len().saturating_add(entry_size),
-                    MAX_TRAILERS_SIZE,
-                ));
-            }
-            canonical.extend_from_slice(n.as_bytes());
-            canonical.push(b':');
-            canonical.extend_from_slice(v.as_bytes());
-            canonical.push(b'\n');
-        }
-
-        Ok((canonical, provided_signature, entries))
-    }
-
-    /// read meta bytes and return remaining bytes
-    async fn read_meta_bytes<S>(mut body: Pin<&mut S>, prev_bytes: Bytes, buf: &mut Vec<u8>) -> Option<Result<Bytes, StdError>>
-    where
-        S: Stream<Item = Result<Bytes, StdError>> + Send + 'static,
-    {
-        buf.clear();
-
-        let mut push_meta_bytes = |mut bytes: Bytes| -> Result<Option<Bytes>, StdError> {
-            if let Some(idx) = memchr(b'\n', bytes.as_ref()) {
-                let len = idx.wrapping_add(1); // assume: idx < bytes.len()
-                let leading = bytes.split_to(len);
-                // Check size limit before extending buffer
-                if buf.len().saturating_add(leading.len()) > MAX_CHUNK_META_SIZE {
-                    return Err(Box::new(AwsChunkedStreamError::ChunkMetaTooLarge(
-                        buf.len().saturating_add(leading.len()),
-                        MAX_CHUNK_META_SIZE,
-                    )));
-                }
-                buf.extend_from_slice(leading.as_ref());
-                return Ok(Some(bytes));
-            }
-
-            // Check size limit before extending
-            if buf.len().saturating_add(bytes.len()) > MAX_CHUNK_META_SIZE {
-                return Err(Box::new(AwsChunkedStreamError::ChunkMetaTooLarge(
-                    buf.len().saturating_add(bytes.len()),
-                    MAX_CHUNK_META_SIZE,
-                )));
-            }
-
-            buf.extend_from_slice(bytes.as_ref());
-            Ok(None)
-        };
-
-        match push_meta_bytes(prev_bytes) {
-            Err(e) => return Some(Err(e)),
-            Ok(Some(remaining_bytes)) => return Some(Ok(remaining_bytes)),
-            Ok(None) => {}
-        }
-
-        loop {
-            match body.next().await? {
-                Err(e) => return Some(Err(e)),
-                Ok(bytes) => match push_meta_bytes(bytes) {
-                    Err(e) => return Some(Err(e)),
-                    Ok(Some(remaining_bytes)) => return Some(Ok(remaining_bytes)),
-                    Ok(None) => {}
-                },
-            }
-        }
-    }
-
-    /// read data and return remaining bytes
-    async fn read_data<S>(
-        mut body: Pin<&mut S>,
-        prev_bytes: Bytes,
-        mut data_size: usize,
-    ) -> Option<Result<(Vec<Bytes>, Bytes), AwsChunkedStreamError>>
-    where
-        S: Stream<Item = Result<Bytes, StdError>> + Send + 'static,
-    {
-        if data_size == 0 {
-            return Some(Ok((Vec::new(), prev_bytes)));
-        }
-
-        let mut bytes_buffer = Vec::new();
-        let mut push_data_bytes = |mut bytes: Bytes| {
-            if data_size == 0 {
-                return Some(bytes);
-            }
-            if data_size <= bytes.len() {
-                let data = bytes.split_to(data_size);
-                bytes_buffer.push(data);
-                data_size = 0;
-                Some(bytes)
-            } else {
-                data_size = data_size.wrapping_sub(bytes.len());
-                bytes_buffer.push(bytes);
-                None
-            }
-        };
-
-        let remaining_bytes = 'outer: {
-            if let Some(remaining_bytes) = push_data_bytes(prev_bytes) {
-                break 'outer remaining_bytes;
-            }
-
-            loop {
-                match body.next().await? {
-                    Err(e) => return Some(Err(AwsChunkedStreamError::Underlying(e))),
-                    Ok(bytes) => {
-                        if let Some(remaining_bytes) = push_data_bytes(bytes) {
-                            break 'outer remaining_bytes;
-                        }
-                    }
-                }
-            }
-        };
-
-        let remaining_bytes = match Self::consume_trailing_crlf(body, remaining_bytes).await? {
-            Err(e) => return Some(Err(e)),
-            Ok(remaining_bytes) => remaining_bytes,
-        };
-
-        Some(Ok((bytes_buffer, remaining_bytes)))
-    }
-
-    /// consume the trailing `\r\n` of a chunk and return remaining bytes
-    async fn consume_trailing_crlf<S>(
-        mut body: Pin<&mut S>,
-        mut remaining_bytes: Bytes,
-    ) -> Option<Result<Bytes, AwsChunkedStreamError>>
-    where
-        S: Stream<Item = Result<Bytes, StdError>> + Send + 'static,
-    {
-        if remaining_bytes.starts_with(b"\r\n") {
-            // fast path
-            remaining_bytes.advance(2);
-        } else {
-            for &expected_byte in b"\r\n" {
-                loop {
-                    match *remaining_bytes.as_ref() {
-                        [] => match body.next().await? {
-                            Err(e) => return Some(Err(AwsChunkedStreamError::Underlying(e))),
-                            Ok(bytes) => remaining_bytes = bytes,
-                        },
-
-                        [x, ..] if x == expected_byte => {
-                            remaining_bytes.advance(1);
-                            break;
-                        }
-                        _ => return Some(Err(AwsChunkedStreamError::FormatError)),
-                    }
-                }
-            }
-        }
-
-        Some(Ok(remaining_bytes))
-    }
-
-    /// read data and yield fragments directly
-    async fn read_data_streaming<S>(
-        mut body: Pin<&mut S>,
-        y: &mut Yielder<Result<Bytes, AwsChunkedStreamError>>,
-        prev_bytes: Bytes,
-        mut data_size: usize,
-    ) -> Option<Result<Bytes, AwsChunkedStreamError>>
-    where
-        S: Stream<Item = Result<Bytes, StdError>> + Send + 'static,
-    {
-        if data_size == 0 {
-            return Some(Ok(prev_bytes));
-        }
-
-        let mut remaining_bytes = prev_bytes;
-        loop {
-            if data_size == 0 {
-                break;
-            }
-
-            if remaining_bytes.is_empty() {
-                match body.next().await? {
-                    Err(e) => return Some(Err(AwsChunkedStreamError::Underlying(e))),
-                    Ok(bytes) => remaining_bytes = bytes,
-                }
-                continue;
-            }
-
-            if data_size <= remaining_bytes.len() {
-                let data = remaining_bytes.split_to(data_size);
-                data_size = 0;
-                y.yield_ok(data).await;
-            } else {
-                data_size = data_size.wrapping_sub(remaining_bytes.len());
-                let data = std::mem::take(&mut remaining_bytes);
-                y.yield_ok(data).await;
-            }
-        }
-
-        Self::consume_trailing_crlf(body, remaining_bytes).await
-    }
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Result<Bytes, AwsChunkedStreamError>>> {
-        let ans = Pin::new(&mut self.inner).poll_next(cx);
-        match ans {
-            Poll::Ready(Some(Ok(bytes))) => {
-                // The declared decoded length must match the actual chunk data:
-                // producing more bytes than the declaration is an overrun
-                // (previously masked by saturating subtraction).
-                if !bytes.is_empty() && bytes.len() > self.remaining_length {
-                    return Poll::Ready(Some(Err(AwsChunkedStreamError::LengthMismatch)));
-                }
-                self.remaining_length = self.remaining_length.saturating_sub(bytes.len());
-                Poll::Ready(Some(Ok(bytes)))
-            }
-            // The chunk stream ended (0-size chunk and trailers processed)
-            // before the declared decoded length was delivered.
-            Poll::Ready(None) if self.remaining_length != 0 => Poll::Ready(Some(Err(AwsChunkedStreamError::Incomplete))),
-            other => other,
-        }
+    /// Requires the body to end with a trailer block.
+    ///
+    /// A request that announced trailing headers but ends without them is a format
+    /// error instead of succeeding with nothing to expose.
+    pub fn require_trailers(&mut self, required: bool) {
+        self.inner.require_trailers(required);
     }
 
     /// Returns the declared decoded length minus the bytes produced so far.
     #[must_use]
     pub fn exact_remaining_length(&self) -> usize {
-        self.remaining_length
+        self.inner.exact_remaining_length()
     }
 
     /// Converts this stream into a dynamic byte stream.
@@ -717,10 +201,11 @@ impl AwsChunkedStream {
     // Note: Trailing headers should be accessed via trailing_headers_handle().
 
     /// Get a handle to access verified trailing headers later.
+    ///
     /// This can be cloned and stored outside to retrieve trailers after the
     /// stream has been fully read.
     pub(crate) fn trailing_headers_handle(&self) -> TrailingHeaders {
-        TrailingHeaders(Arc::clone(&self.trailers))
+        TrailingHeaders::new(self.trailers.clone())
     }
 }
 
@@ -728,7 +213,13 @@ impl Stream for AwsChunkedStream {
     type Item = Result<Bytes, AwsChunkedStreamError>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        self.poll(cx)
+        let this = self.get_mut();
+        match Pin::new(&mut this.inner).poll_next(cx) {
+            Poll::Ready(Some(Ok(bytes))) => Poll::Ready(Some(Ok(bytes))),
+            Poll::Ready(Some(Err(error))) => Poll::Ready(Some(Err(AwsChunkedStreamError::from(error)))),
+            Poll::Ready(None) => Poll::Ready(None),
+            Poll::Pending => Poll::Pending,
+        }
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -738,24 +229,24 @@ impl Stream for AwsChunkedStream {
 
 impl ByteStream for AwsChunkedStream {
     fn remaining_length(&self) -> RemainingLength {
-        RemainingLength::new_exact(self.remaining_length)
+        RemainingLength::new_exact(self.inner.exact_remaining_length())
     }
-}
-
-#[inline]
-fn trim_ascii_whitespace(mut s: &[u8]) -> &[u8] {
-    while matches!(s.first(), Some(b' ' | b'\t')) {
-        s = &s[1..];
-    }
-    while matches!(s.last(), Some(b' ' | b'\t')) {
-        s = &s[..s.len() - 1];
-    }
-    s
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    const SEED: &str = "4f232c4386841ef735655705268965c44a0e4690baa4adea153f7db9fa80a0a9";
+    const TIMESTAMP: &str = "20130524T000000Z";
+    const REGION: &str = "us-east-1";
+    const SERVICE: &str = "s3";
+    const SECRET_KEY: &str = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+    use futures::StreamExt as _;
+    use hyper::http::HeaderValue;
+    const MAX_CHUNK_META_SIZE: usize = s3s_chunked::Limits::DEFAULT_MAX_CHUNK_META_SIZE;
+    const MAX_TRAILER_HEADERS: usize = s3s_chunked::Limits::DEFAULT_MAX_TRAILER_HEADERS;
+    const MAX_TRAILERS_SIZE: usize = s3s_chunked::Limits::DEFAULT_MAX_TRAILERS_SIZE;
+    use s3s_sigv4::create_trailer_string_to_sign;
 
     #[test]
     fn to_s3_error_code_maps_all_variants() {
@@ -776,21 +267,6 @@ mod tests {
         for (err, expected) in cases {
             assert_eq!(err.to_s3_error_code(), expected, "{err:?}");
         }
-    }
-
-    #[test]
-    fn signature_ctx_debug_redacts_signing_key() {
-        let ctx = SignatureCtx {
-            amz_date: AmzDate::parse("20130524T000000Z").unwrap(),
-            region: "us-east-1".into(),
-            service: "s3".into(),
-            signing_key: Zeroizing::new([0xAA; 32]),
-            prev_signature: Sha256Sum::from_hex("4f232c4386841ef735655705268965c44a0e4690baa4adea153f7db9fa80a0a9").unwrap(),
-        };
-
-        let text = format!("{ctx:?}");
-        assert!(text.contains("signing_key: \"[REDACTED]\""));
-        assert!(!text.contains("signing_key: ["));
     }
 
     #[tokio::test]
@@ -1228,13 +704,15 @@ mod tests {
         assert_eq!(ans2.unwrap(), chunk2_data.as_slice());
 
         // No more data after verifying trailers
-        assert!(chunked_stream.next().await.is_none());
+        // A signature in an unsigned declaration is rejected, not verified:
+        // the decoder has no signing context to check it with.
+        let next = chunked_stream.next().await;
+        assert!(matches!(next, Some(Err(AwsChunkedStreamError::FormatError))), "unexpected: {next:?}");
+        assert!(chunked_stream.trailing_headers_handle().take().is_none(), "trailers are not published");
 
-        let handle = chunked_stream.trailing_headers_handle();
-        let trailers = handle.take().expect("trailers present");
-        assert_eq!(trailers.len(), 1);
-        let v = trailers.get("x-amz-meta-foo").unwrap();
-        assert_eq!(v, &HeaderValue::from_static("bar"));
+        // The rejected trailer block publishes nothing, so there is no handle
+        // to read here any more (the historical behaviour verified the
+        // signature and exposed x-amz-meta-foo).
     }
 
     #[tokio::test]
@@ -1508,7 +986,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_trailer_signature_mismatch() {
+    async fn test_trailer_signature_in_unsigned_mode_is_rejected() {
         // Test trailer signature verification failure
         let chunk_meta = b"3\r\n";
         let chunk_data = b"abc";
@@ -1542,7 +1020,7 @@ mod tests {
 
         let result = chunked_stream.next().await;
         // Should fail with signature mismatch in trailer
-        assert!(matches!(result, Some(Err(AwsChunkedStreamError::SignatureMismatch))));
+        assert!(matches!(result, Some(Err(AwsChunkedStreamError::FormatError))));
     }
 
     #[tokio::test]
@@ -1681,18 +1159,12 @@ mod tests {
         // Should get an error due to meta size limit
         let result = chunked_stream.next().await;
         assert!(result.is_some());
-        match result.unwrap() {
-            Err(AwsChunkedStreamError::Underlying(e)) => {
-                // The error is wrapped in Underlying
-                let downcasted = e.downcast_ref::<AwsChunkedStreamError>();
-                assert!(downcasted.is_some(), "Expected ChunkMetaTooLarge error");
-                assert!(
-                    matches!(downcasted.unwrap(), AwsChunkedStreamError::ChunkMetaTooLarge(_, _)),
-                    "Expected ChunkMetaTooLarge error"
-                );
-            }
-            other => panic!("Expected ChunkMetaTooLarge error wrapped in Underlying, got: {other:?}"),
-        }
+        // The size limit is classified directly: the historical wrapper
+        // (`Underlying(ChunkMetaTooLarge)`) is gone, so the S3 error code is
+        // `EntityTooLarge` (400) instead of `InternalError` (500).
+        let error = result.unwrap().unwrap_err();
+        assert_eq!(error.to_s3_error_code(), S3ErrorCode::EntityTooLarge);
+        assert!(matches!(error, AwsChunkedStreamError::ChunkMetaTooLarge(_, _)));
     }
 
     #[tokio::test]
@@ -1867,5 +1339,113 @@ mod tests {
                 "Trailers should not be stored when header count exceeds limits"
             );
         }
+    }
+
+    #[test]
+    fn propagates_pending_from_the_body() {
+        let mut inner = Box::pin(futures::stream::iter(vec![Ok(Bytes::from_static(b"3\r\nabc\r\n0\r\n\r\n"))]));
+        let mut pending_once = true;
+        let body = futures::stream::poll_fn(move |cx| {
+            if pending_once {
+                pending_once = false;
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
+            }
+            inner.as_mut().poll_next(cx)
+        });
+
+        let mut stream = AwsChunkedStream::new(
+            body,
+            Sha256Sum::from_hex(SEED).unwrap(),
+            AmzDate::parse(TIMESTAMP).unwrap(),
+            REGION.into(),
+            SERVICE.into(),
+            SECRET_KEY.into(),
+            3,
+            true,
+            crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
+        );
+
+        let payload = futures::executor::block_on(async {
+            let mut payload = Vec::new();
+            while let Some(item) = stream.next().await {
+                payload.extend_from_slice(&item.unwrap());
+            }
+            payload
+        });
+        assert_eq!(payload, b"abc");
+    }
+
+    #[test]
+    fn forwards_the_exact_remaining_length() {
+        let body = futures::stream::iter(vec![Ok(Bytes::from_static(b"3\r\nabc\r\n3\r\ndef\r\n0\r\n\r\n"))]);
+        let mut stream = AwsChunkedStream::new(
+            body,
+            Sha256Sum::from_hex(SEED).unwrap(),
+            AmzDate::parse(TIMESTAMP).unwrap(),
+            REGION.into(),
+            SERVICE.into(),
+            SECRET_KEY.into(),
+            6,
+            true,
+            crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
+        );
+
+        assert_eq!(stream.exact_remaining_length(), 6);
+        let first = futures::executor::block_on(stream.next()).unwrap().unwrap();
+        assert_eq!(first.as_ref(), b"abc");
+        assert_eq!(stream.exact_remaining_length(), 3);
+    }
+
+    #[test]
+    fn debug_reports_the_adapter_and_the_handle() {
+        let body = futures::stream::iter(Vec::<Result<Bytes, crate::error::StdError>>::new());
+        let stream = AwsChunkedStream::new(
+            body,
+            Sha256Sum::from_hex(SEED).unwrap(),
+            AmzDate::parse(TIMESTAMP).unwrap(),
+            REGION.into(),
+            SERVICE.into(),
+            SECRET_KEY.into(),
+            0,
+            true,
+            crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
+        );
+
+        let text = format!("{stream:?}");
+        assert!(text.starts_with("AwsChunkedStream"), "{text}");
+        let handle = stream.trailing_headers_handle();
+        let text = format!("{handle:?}");
+        assert!(text.starts_with("TrailingHeaders"), "{text}");
+    }
+
+    /// A request that announced trailing headers must carry the trailer block, so
+    /// the adapter has to pass that requirement down to the decoder.
+    #[tokio::test]
+    async fn required_trailers_reach_the_decoder() {
+        let body = futures::stream::iter(vec![Ok::<Bytes, crate::error::StdError>(Bytes::from_static(
+            b"3\r\nabc\r\n0\r\n\r\n",
+        ))]);
+        let mut stream = AwsChunkedStream::new(
+            body,
+            Sha256Sum::from_hex(SEED).unwrap(),
+            AmzDate::parse(TIMESTAMP).unwrap(),
+            REGION.into(),
+            SERVICE.into(),
+            SECRET_KEY.into(),
+            3,
+            true,
+            crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
+        );
+        stream.require_trailers(true);
+
+        let mut last = None;
+        while let Some(item) = stream.next().await {
+            last = Some(item);
+        }
+        assert!(
+            matches!(last, Some(Err(AwsChunkedStreamError::FormatError))),
+            "a missing trailer block is a format error, got {last:?}"
+        );
     }
 }
