@@ -24,7 +24,7 @@ networking so it can reach an S3 server listening on the host.
 Install `s3s-fs`, ensure Docker is running, and use the self-contained wrapper:
 
 ```bash
-just install s3s-fs
+just install-fs
 ./scripts/e2e-rclone-fs.sh
 ```
 
