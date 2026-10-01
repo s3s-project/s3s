@@ -8,6 +8,7 @@
 //! delegate their logic here.
 
 mod link_license;
+mod spdx;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -25,11 +26,14 @@ struct Cli {
 enum Command {
     /// Link the LICENSE file into every workspace member.
     LinkLicense(link_license::LinkLicense),
+    /// Check or insert SPDX license headers.
+    Spdx(spdx::Spdx),
 }
 
 fn main() -> ExitCode {
     let result = match Cli::parse().command {
         Command::LinkLicense(cmd) => cmd.run(),
+        Command::Spdx(cmd) => cmd.run(),
     };
     match result {
         Ok(true) => ExitCode::SUCCESS,

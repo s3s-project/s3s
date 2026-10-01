@@ -38,7 +38,6 @@ jobs:
       - uses: taiki-e/install-action@just
       - uses: astral-sh/setup-uv@v7
       - run: just ci-python
-      - run: just spdx-check
 
   rust-msrv:
     needs: skip-check
@@ -72,6 +71,7 @@ jobs:
           toolchain: ${{ matrix.toolchain }}
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      - run: just spdx-check
       - run: just link-license-check
       - run: just ci-rust
       # The workspace commands above build everything with --all-features, so a
