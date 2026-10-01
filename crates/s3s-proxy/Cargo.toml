@@ -32,7 +32,7 @@ hyper-util = { workspace = true, features = [
 ] }
 minio = { workspace = true, optional = true }
 reqwest.workspace = true
-s3s.workspace = true
+s3s = { workspace = true, features = ["http2"] }
 s3s-aws.workspace = true
 tokio = { workspace = true, features = ["full"] }
 tracing.workspace = true

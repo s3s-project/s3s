@@ -18,7 +18,9 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
+default = ["http2"]
 openssl = ["dep:openssl", "s3s-sigv4/openssl"]
+http2 = ["hyper/http2"]
 minio = []
 
 [target.'cfg(not(windows))'.dependencies]
@@ -40,7 +42,7 @@ hmac.workspace = true
 http.workspace = true
 http-body.workspace = true
 http-body-util.workspace = true
-hyper = { workspace = true, features = ["http1", "http2", "server"] }
+hyper = { workspace = true, features = ["http1", "server"] }
 itoa.workspace = true
 jiff.workspace = true
 md-5.workspace = true

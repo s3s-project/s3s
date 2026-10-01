@@ -17,6 +17,12 @@
 //! - **Flexible Configuration**: Customizable service configuration with hot-reload support
 //! - **Extensibility**: Custom routes, access control, and validation
 //!
+//! # Cargo features
+//!
+//! - `http2` (enabled by default): HTTP/2 support through hyper. Build with
+//!   `default-features = false` to serve HTTP/1.1 only without the `h2`
+//!   dependency, and enable `http2` explicitly when it is needed.
+//!
 //! # Architecture
 //!
 //! The `s3s` crate converts HTTP requests to S3 operation inputs, calls user-defined
