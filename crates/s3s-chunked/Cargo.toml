@@ -16,3 +16,17 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [lints]
 workspace = true
+
+[dependencies]
+bytes.workspace = true
+futures-core.workspace = true
+http.workspace = true
+memchr.workspace = true
+pin-project-lite.workspace = true
+s3s-sigv4.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+zeroize.workspace = true
+
+[dev-dependencies]
+futures = { workspace = true, features = ["executor"] }
