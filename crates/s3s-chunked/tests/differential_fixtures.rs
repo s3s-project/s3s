@@ -163,3 +163,154 @@ fn frozen_legacy_errors_hold() {
     let outcome = decode(&[&meta_too_large], 0);
     assert_eq!(outcome.error.as_deref(), Some("ChunkMetaTooLarge(1026,1024)"));
 }
+
+// Signed mode. The expectations are the ones the legacy oracle produced for the
+// same bodies; the signatures are rebuilt from the documented signing key, so
+// the bodies stay reproducible without the oracle.
+
+const SIGNED_SEED: &str = "4f232c4386841ef735655705268965c44a0e4690baa4adea153f7db9fa80a0a9";
+const SECRET_KEY: &str = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+const TIMESTAMP: &str = "20130524T000000Z";
+const REGION: &str = "us-east-1";
+const SERVICE: &str = "s3";
+
+fn amz_date() -> s3s_sigv4::AmzDate {
+    s3s_sigv4::AmzDate::parse(TIMESTAMP).expect("valid timestamp")
+}
+
+fn seed() -> s3s_chunked::Sha256Sum {
+    let mut bytes = [0_u8; 32];
+    for (index, byte) in bytes.iter_mut().enumerate() {
+        *byte = u8::from_str_radix(&SIGNED_SEED[index * 2..index * 2 + 2], 16).expect("hex seed");
+    }
+    s3s_chunked::Sha256Sum::from_bytes(bytes)
+}
+
+fn signature(string_to_sign: &str) -> String {
+    s3s_sigv4::calculate_signature(string_to_sign, SECRET_KEY, &amz_date(), REGION, SERVICE)
+}
+
+fn chunk_signature(prev: &str, data: &[u8]) -> String {
+    let string_to_sign = s3s_sigv4::create_chunk_string_to_sign(&amz_date(), REGION, SERVICE, prev, &[data]);
+    signature(&string_to_sign)
+}
+
+fn trailer_signature(prev: &str, canonical: &[u8]) -> String {
+    let string_to_sign = s3s_sigv4::create_trailer_string_to_sign(&amz_date(), REGION, SERVICE, prev, canonical);
+    signature(&string_to_sign)
+}
+
+/// Builds a signed body: every chunk carries a chained signature, and the trailer
+/// block, when present, carries one of its own.
+fn signed_body(chunks: &[&[u8]], trailers: Option<&[(&str, &str)]>) -> Vec<u8> {
+    let mut prev = SIGNED_SEED.to_owned();
+    let mut body = Vec::new();
+    for chunk in chunks {
+        let signature = chunk_signature(&prev, chunk);
+        body.extend_from_slice(format!("{:x};chunk-signature={signature}\r\n", chunk.len()).as_bytes());
+        body.extend_from_slice(chunk);
+        body.extend_from_slice(b"\r\n");
+        prev = signature;
+    }
+    let last = chunk_signature(&prev, b"");
+    body.extend_from_slice(format!("0;chunk-signature={last}\r\n").as_bytes());
+    if let Some(entries) = trailers {
+        let mut canonical = Vec::new();
+        for (name, value) in entries {
+            canonical.extend_from_slice(format!("{name}:{value}\n").as_bytes());
+            body.extend_from_slice(format!("{name}:{value}\r\n").as_bytes());
+        }
+        let signature = trailer_signature(&last, &canonical);
+        body.extend_from_slice(format!("x-amz-trailer-signature:{signature}\r\n").as_bytes());
+    }
+    body.extend_from_slice(b"\r\n");
+    body
+}
+
+fn decode_signed(fragments: &[&[u8]], declared_len: usize) -> Outcome {
+    let items: Vec<Result<Bytes, StdError>> = fragments.iter().map(|f| Ok(Bytes::copy_from_slice(f))).collect();
+    let ctx = s3s_chunked::SignContext::new(amz_date(), REGION.into(), SERVICE.into(), SECRET_KEY.as_bytes());
+    let mut stream = ChunkedStream::signed(futures::stream::iter(items), ctx, seed(), declared_len, Limits::default());
+    let handle = stream.trailer_handle();
+    let (payload, error) = futures::executor::block_on(async {
+        let mut payload = Vec::new();
+        let mut error = None;
+        while let Some(item) = stream.next().await {
+            match item {
+                Ok(bytes) => payload.extend_from_slice(&bytes),
+                Err(err) => {
+                    error = Some(error_name(&err));
+                    break;
+                }
+            }
+        }
+        (payload, error)
+    });
+    let remaining = stream.exact_remaining_length();
+    let trailers = handle.take().map(|map| {
+        let mut entries: Vec<String> = map
+            .iter()
+            .map(|(name, value)| format!("{name}:{}", value.to_str().unwrap_or("<binary>")))
+            .collect();
+        entries.sort();
+        entries
+    });
+    Outcome {
+        payload,
+        error,
+        remaining,
+        trailers,
+    }
+}
+
+#[test]
+fn signed_bodies_are_verified_and_pinned() {
+    let body = signed_body(&[b"hello"], None);
+
+    let outcome = decode_signed(&[&body], 5);
+    assert_eq!(outcome.payload, b"hello");
+    assert_eq!(outcome.error, None);
+    assert_eq!(outcome.remaining, 0);
+
+    // The framing must not depend on how the transport splits the body.
+    let one_byte: Vec<&[u8]> = body.chunks(1).collect();
+    let outcome = decode_signed(&one_byte, 5);
+    assert_eq!(outcome.payload, b"hello");
+    assert_eq!(outcome.error, None);
+
+    // A tampered chunk signature is rejected before any data is yielded.
+    let mut tampered = signed_body(&[b"hello"], None);
+    let marker = b";chunk-signature=";
+    let at = tampered
+        .windows(marker.len())
+        .position(|window| window == marker)
+        .expect("chunk signature")
+        + marker.len();
+    tampered[at] = if tampered[at] == b'a' { b'b' } else { b'a' };
+    let outcome = decode_signed(&[&tampered], 5);
+    assert_eq!(outcome.payload, b"");
+    assert_eq!(outcome.error.as_deref(), Some("SignatureMismatch"));
+}
+
+#[test]
+fn signed_trailers_are_verified_and_published() {
+    let body = signed_body(&[b"hello"], Some(&[("x-amz-meta-a", "1")]));
+
+    let outcome = decode_signed(&[&body], 5);
+    assert_eq!(outcome.payload, b"hello");
+    assert_eq!(outcome.error, None);
+    assert_eq!(outcome.trailers, Some(vec!["x-amz-meta-a:1".to_owned()]));
+
+    // A trailer signature that does not match publishes no headers.
+    let mut tampered = body.clone();
+    let marker = b"x-amz-trailer-signature:";
+    let at = tampered
+        .windows(marker.len())
+        .position(|window| window == marker)
+        .expect("trailer signature")
+        + marker.len();
+    tampered[at] = if tampered[at] == b'a' { b'b' } else { b'a' };
+    let outcome = decode_signed(&[&tampered], 5);
+    assert_eq!(outcome.error.as_deref(), Some("SignatureMismatch"));
+    assert!(outcome.trailers.is_none(), "a failed request publishes no trailers");
+}
