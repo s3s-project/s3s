@@ -372,7 +372,7 @@ mod tests {
 
     #[test]
     fn writes_the_same_bytes_as_json_dump_indent_4() {
-        let path = std::env::temp_dir().join("xtask-crawl-save-json-test.json");
+        let path = std::env::temp_dir().join(format!("xtask-crawl-save-json-test-{}.json", std::process::id()));
         save_json(&path, &json!({"a": [1, {"b": "\u{c2}"}]})).expect("write");
         let written = std::fs::read_to_string(&path).expect("read");
         assert_eq!(
