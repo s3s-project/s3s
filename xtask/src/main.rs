@@ -27,6 +27,7 @@ enum Command {
     /// Link the LICENSE file into every workspace member.
     LinkLicense(link_license::LinkLicense),
     /// Check or insert SPDX license headers.
+    #[command(subcommand)]
     Spdx(spdx::Spdx),
 }
 

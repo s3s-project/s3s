@@ -30,10 +30,10 @@ crawl:
     uv run data/crawl.py update
 
 spdx-check:
-    cargo run -p xtask -- spdx --check
+    cargo run -p xtask -- spdx check
 
 spdx-apply:
-    cargo run -p xtask -- spdx --apply
+    cargo run -p xtask -- spdx apply
 
 link-license:
     cargo run -p xtask -- link-license
