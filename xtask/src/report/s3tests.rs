@@ -99,7 +99,10 @@ struct TestCase {
 
 impl S3Tests {
     pub(crate) fn run(self) -> Result<bool> {
-        summarize(&self.report)
+        let report = read_report(&self.report)?;
+        print_report(&report);
+        check_baselines(&report)?;
+        Ok(true)
     }
 }
 
@@ -155,7 +158,15 @@ fn record(categories: &mut BTreeMap<&'static str, Counts>, case: &TestCase) {
     }
 }
 
-fn summarize(report_path: &Path) -> Result<bool> {
+/// The parsed report: the totals of every counted suite plus the per-category
+/// breakdown.
+#[derive(Debug, Default)]
+struct Report {
+    totals: Totals,
+    categories: BTreeMap<&'static str, Counts>,
+}
+
+fn read_report(report_path: &Path) -> Result<Report> {
     let xml = fs::read_to_string(report_path).with_context(|| format!("report not found: {}", report_path.display()))?;
     let mut reader = Reader::from_str(&xml);
     let mut totals = Totals::default();
@@ -224,31 +235,36 @@ fn summarize(report_path: &Path) -> Result<bool> {
         }
     }
 
+    Ok(Report { totals, categories })
+}
+
+fn print_report(report: &Report) {
     println!(
         "tests {}, failures {}, errors {}, skipped {}",
-        totals.tests, totals.failures, totals.errors, totals.skipped
+        report.totals.tests, report.totals.failures, report.totals.errors, report.totals.skipped
     );
     println!();
     println!(
         "{:<16} {:>6} {:>7} {:>9} {:>7} {:>8}",
         "capability", "total", "passed", "failures", "errors", "skipped"
     );
-    for (category, counts) in &categories {
+    for (category, counts) in &report.categories {
         println!(
             "{category:<16} {:>6} {:>7} {:>9} {:>7} {:>8}",
             counts.total, counts.passed, counts.failures, counts.errors, counts.skipped
         );
     }
+}
 
-    if totals.failures > ALLOWED_FAILURES || totals.errors > ALLOWED_ERRORS {
+fn check_baselines(report: &Report) -> Result<()> {
+    if report.totals.failures > ALLOWED_FAILURES || report.totals.errors > ALLOWED_ERRORS {
         bail!(
             "s3-tests regressions: failures {} (allowed {ALLOWED_FAILURES}), errors {} (allowed {ALLOWED_ERRORS})",
-            totals.failures,
-            totals.errors
+            report.totals.failures,
+            report.totals.errors
         );
     }
-
-    Ok(true)
+    Ok(())
 }
 
 fn set(current: &mut Option<TestCase>, apply: impl FnOnce(&mut TestCase)) {
@@ -259,7 +275,29 @@ fn set(current: &mut Option<TestCase>, apply: impl FnOnce(&mut TestCase)) {
 
 #[cfg(test)]
 mod tests {
-    use super::classify_test;
+    use super::{Report, Totals, check_baselines, classify_test, read_report};
+    use std::io::Write as _;
+
+    const JUNIT: &str = r#"<?xml version="1.0" encoding="utf-8"?>
+<testsuites name="pytest tests">
+  <testsuite name="pytest" errors="1" failures="1" skipped="1" tests="4" time="1.0">
+    <testcase classname="s3tests.functional.test_headers" name="test_ok" time="0.1" />
+    <testcase classname="s3tests.functional.test_headers" name="test_bad" time="0.1"><failure message="x">trace</failure></testcase>
+    <testcase classname="s3tests.functional.test_iam" name="test_err" time="0.1"><error message="y">trace</error></testcase>
+    <testcase classname="s3tests.functional.test_s3select" name="test_skip" time="0.1"><skipped message="z" /></testcase>
+    <testsuite name="nested" tests="99" failures="99">
+      <testcase classname="s3tests.functional.test_s3" name="test_object_lock_put" time="0.1" />
+    </testsuite>
+  </testsuite>
+</testsuites>
+"#;
+
+    fn report_file(name: &str, contents: &str) -> std::path::PathBuf {
+        let path = std::env::temp_dir().join(format!("xtask-report-{name}-{}.xml", std::process::id()));
+        let mut file = std::fs::File::create(&path).expect("create");
+        file.write_all(contents.as_bytes()).expect("write");
+        path
+    }
 
     #[test]
     fn classifies_modules_and_s3_tests() {
@@ -276,5 +314,60 @@ mod tests {
     fn the_earlier_pattern_wins() {
         // `presigned` comes before `_tag` and `bucket`.
         assert_eq!(classify_test("s3tests.functional.test_s3", "test_presigned_post_tag"), "presigned");
+    }
+
+    #[test]
+    fn reads_totals_and_categories_from_a_report() {
+        let report = read_report(&report_file("junit", JUNIT)).expect("parse");
+
+        assert_eq!(report.totals.tests, 4);
+        assert_eq!(report.totals.failures, 1);
+        assert_eq!(report.totals.errors, 1);
+        assert_eq!(report.totals.skipped, 1, "the nested suite is not counted in the totals");
+
+        let categories: Vec<(&str, u64, u64, u64, u64, u64)> = report
+            .categories
+            .iter()
+            .map(|(category, counts)| (*category, counts.total, counts.passed, counts.failures, counts.errors, counts.skipped))
+            .collect();
+        assert_eq!(
+            categories,
+            [
+                ("headers", 2, 1, 1, 0, 0),
+                ("iam", 1, 0, 0, 1, 0),
+                ("object-lock", 1, 1, 0, 0, 0),
+                ("s3-select", 1, 0, 0, 0, 1),
+            ],
+            "a self-closing test case passes, and the nested suite's case is counted"
+        );
+    }
+
+    #[test]
+    fn the_baseline_gate_reports_the_totals() {
+        let over = Report {
+            totals: Totals {
+                tests: 1043,
+                failures: 400,
+                errors: 302,
+                skipped: 84,
+            },
+            ..Report::default()
+        };
+        let error = check_baselines(&over).expect_err("over the baseline");
+        assert_eq!(
+            error.to_string(),
+            "s3-tests regressions: failures 400 (allowed 326), errors 302 (allowed 302)"
+        );
+
+        let at_the_limit = Report {
+            totals: Totals {
+                tests: 1043,
+                failures: 326,
+                errors: 302,
+                skipped: 84,
+            },
+            ..Report::default()
+        };
+        assert!(check_baselines(&at_the_limit).is_ok(), "the baseline itself is allowed");
     }
 }
