@@ -370,4 +370,30 @@ mod buffer_tests {
         assert!(sign.fragment_count() <= 64, "metadata stays bounded: {}", sign.fragment_count());
         assert_eq!(sign.fragment(0).len(), 4096);
     }
+
+    /// The fragment bound is 64 exactly: 64 fragments are still kept as delivered
+    /// and the 65th switches to one allocation.
+    #[test]
+    fn the_fragment_bound_is_exactly_sixty_four() {
+        let mut sign = state();
+        for _ in 0..64 {
+            sign.push(Bytes::from(vec![0_u8; 8 * 1024]));
+        }
+        assert!(!sign.is_coalesced(), "64 fragments are still kept as delivered");
+        assert_eq!(sign.fragment_count(), 64);
+
+        sign.push(Bytes::from(vec![0_u8; 8 * 1024]));
+        assert!(sign.is_coalesced(), "the 65th fragment coalesces");
+    }
+
+    /// The emitted fragment is the very buffer that arrived, not a copy.
+    #[test]
+    fn fragments_are_emitted_without_copying() {
+        let mut sign = state();
+        let arrived = Bytes::from(vec![1_u8; 8 * 1024]);
+        let address = arrived.as_ptr();
+        sign.push(arrived);
+
+        assert_eq!(sign.fragment(0).as_ptr(), address, "the fragment is the buffer that arrived");
+    }
 }

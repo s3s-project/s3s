@@ -38,8 +38,8 @@
 //!
 //! - A chunk is emitted as the fragments it arrived in, so a signed chunk reaches
 //!   its consumer without being copied; a chunk that arrives in a very large number
-//!   of fragments is coalesced into one allocation first, which bounds the read
-//!   buffers a malformed request can pin.
+//!   of fragments (more than 64) is coalesced into one allocation first, which
+//!   bounds the read buffers a malformed request can pin.
 //! - A verified chunk is emitted only after its signature, and trailer headers only
 //!   after the trailer block was accepted. A request that fails exposes nothing: it
 //!   yields its error and then `None` for ever.
