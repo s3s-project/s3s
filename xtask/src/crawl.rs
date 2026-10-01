@@ -111,15 +111,19 @@ const USER_AGENT: &str = concat!("s3s-xtask/", env!("CARGO_PKG_VERSION"));
 
 /// The HTTP client used for every request.
 ///
-/// `tcp_user_timeout` defaults to 30 seconds in reqwest, which kills the 3.9 MB
-/// model download mid-body on a slow link; the Python script this replaces had
-/// no such limit. The system proxy is honoured like `requests` does.
+/// The system proxy is honoured like `requests` does, and every request carries
+/// a user agent.
 fn client() -> Result<reqwest::blocking::Client> {
-    reqwest::blocking::Client::builder()
-        .tcp_user_timeout(None)
-        .user_agent(USER_AGENT)
-        .build()
-        .context("failed to build the HTTP client")
+    let builder = reqwest::blocking::Client::builder().user_agent(USER_AGENT);
+
+    // reqwest defaults `TCP_USER_TIMEOUT` to 30 seconds, which kills a
+    // multi-megabyte download mid-body on a slow link; the Python script this
+    // replaces had no such limit. The socket option only exists on these
+    // platforms, and so does the builder method.
+    #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+    let builder = builder.tcp_user_timeout(None);
+
+    builder.build().context("failed to build the HTTP client")
 }
 
 /// How many times a download is attempted before giving up.
