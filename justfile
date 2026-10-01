@@ -46,15 +46,15 @@ codegen:
     cargo fmt --all
     cargo check
 
-install-fs *args:
-    cargo install --path crates/s3s-fs --locked {{args}} --features binary --force
+install-fs *ARGS:
+    cargo install --path crates/s3s-fs --locked {{ARGS}} --features binary --force
 
-install-proxy *args:
-    cargo install --path crates/s3s-proxy --locked {{args}} --features minio --force
+install-proxy *ARGS:
+    cargo install --path crates/s3s-proxy --locked {{ARGS}} --features minio --force
 
-install-e2e *args:
+install-e2e *ARGS:
     touch crates/s3s-e2e/build.rs
-    cargo install --path crates/s3s-e2e --locked {{args}} --force
+    cargo install --path crates/s3s-e2e --locked {{ARGS}} --force
 
 install-all:
     cargo fetch
