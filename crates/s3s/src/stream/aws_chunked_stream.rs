@@ -142,19 +142,21 @@ impl AwsChunkedStream {
             max_signed_chunk_size: max_chunk_size,
             ..Limits::default()
         };
-        let sign = SignContext::new(amz_date, region, service, secret_key.expose().as_bytes());
-        // The signing key is derived and zeroized inside `SignContext`; the
-        // secret itself is no longer needed.
-        drop(secret_key);
-        let seed = s3s_chunked::Sha256Sum::from_bytes(*seed_signature.as_bytes());
         let body: BoxedBody = Box::pin(body);
 
         let inner = if unsigned {
             // An unsigned declaration carries no signing context, so any
             // signature in the body is rejected as a format error instead of
             // being verified.
+            // Nothing here derives a signing key the decoder will not use.
+            drop(secret_key);
             ChunkedStream::unsigned(body, decoded_content_length, limits)
         } else {
+            // The signing key is derived and zeroized inside `SignContext`; the
+            // secret itself is no longer needed.
+            let sign = SignContext::new(amz_date, region, service, secret_key.expose().as_bytes());
+            drop(secret_key);
+            let seed = s3s_chunked::Sha256Sum::from_bytes(*seed_signature.as_bytes());
             ChunkedStream::signed(body, sign, seed, decoded_content_length, limits)
         };
         let trailers = inner.trailer_handle();
