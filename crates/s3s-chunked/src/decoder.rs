@@ -86,6 +86,8 @@ struct State {
     remaining: usize,
     phase: Phase,
     carry: Bytes,
+    /// Consecutive empty fragments handed out by the body stream.
+    empty_fragments: u32,
     meta_buf: Vec<u8>,
     trailer_buf: Vec<u8>,
     chunk_signature: Option<[u8; 64]>,
@@ -160,6 +162,7 @@ impl<S> Decoder<S> {
                 remaining: decoded_content_length,
                 phase: Phase::Meta,
                 carry: Bytes::new(),
+                empty_fragments: 0,
                 meta_buf: Vec::new(),
                 trailer_buf: Vec::new(),
                 chunk_signature: None,
@@ -196,9 +199,23 @@ where
         let state = &mut *this.state;
 
         loop {
+            // A malformed stream can hand out empty fragments without ever being pending.
+
+            // Bound the work of a single poll call so the task returns to the executor.
+
+            const POLL_BUDGET: u32 = 64;
+
+            let mut steps = 0_u32;
+
             match step_phase(this.inner.as_mut(), state, cx) {
                 Step::Pending => return Poll::Pending,
-                Step::Again => {}
+                Step::Again => {
+                    steps += 1;
+                    if steps >= POLL_BUDGET {
+                        cx.waker().wake_by_ref();
+                        return Poll::Pending;
+                    }
+                }
                 Step::Yield(bytes) => return emit(bytes, &mut state.remaining, &mut state.phase),
                 Step::Done => {
                     state.phase = Phase::Done;
@@ -232,7 +249,14 @@ where
     S: Stream<Item = Result<Bytes, StdError>>,
 {
     let limit = state.limits.max_chunk_meta_size;
-    match poll_meta(inner.as_mut(), &mut state.carry, &mut state.meta_buf, limit, cx) {
+    match poll_meta(
+        inner.as_mut(),
+        &mut state.carry,
+        &mut state.meta_buf,
+        limit,
+        cx,
+        &mut state.empty_fragments,
+    ) {
         Poll::Pending => return Step::Pending,
         Poll::Ready(Err(error)) => return Step::Fail(error),
         Poll::Ready(Ok(MetaOutcome::End)) => {
@@ -308,7 +332,10 @@ where
             Poll::Pending => return Step::Pending,
             Poll::Ready(None) => return Step::Fail(Error::Incomplete),
             Poll::Ready(Some(Err(error))) => return Step::Fail(error),
-            Poll::Ready(Some(Ok(bytes))) => state.carry = bytes,
+            Poll::Ready(Some(Ok(bytes))) => match accept_fragment(&mut state.empty_fragments, bytes) {
+                Ok(bytes) => state.carry = bytes,
+                Err(error) => return Step::Fail(error),
+            },
         }
         return Step::Again;
     }
@@ -361,7 +388,10 @@ where
                 Poll::Pending => return Step::Pending,
                 Poll::Ready(None) => return Step::Fail(Error::Incomplete),
                 Poll::Ready(Some(Err(error))) => return Step::Fail(error),
-                Poll::Ready(Some(Ok(bytes))) => state.carry = bytes,
+                Poll::Ready(Some(Ok(bytes))) => match accept_fragment(&mut state.empty_fragments, bytes) {
+                    Ok(bytes) => state.carry = bytes,
+                    Err(error) => return Step::Fail(error),
+                },
             },
         }
     }
@@ -434,19 +464,24 @@ where
             Poll::Pending => return Step::Pending,
             Poll::Ready(None) => break,
             Poll::Ready(Some(Err(error))) => return Step::Fail(error),
-            Poll::Ready(Some(Ok(bytes))) => state.carry = bytes,
+            Poll::Ready(Some(Ok(bytes))) => match accept_fragment(&mut state.empty_fragments, bytes) {
+                Ok(bytes) => state.carry = bytes,
+                Err(error) => return Step::Fail(error),
+            },
         }
+    }
+
+    if state.remaining != 0 {
+        // Report the length failure before the trailers are even looked at, so a
+        // request that produced too little never exposes trailing headers.
+        return Step::Fail(Error::Incomplete);
     }
 
     if let Err(error) = verify_trailers(state) {
         return Step::Fail(error);
     }
 
-    if state.remaining == 0 {
-        return Step::Done;
-    }
-
-    Step::Fail(Error::Incomplete)
+    Step::Done
 }
 
 /// Parses and verifies the buffered trailer block, publishing the headers.
@@ -496,6 +531,7 @@ fn poll_meta<S>(
     buf: &mut Vec<u8>,
     limit: usize,
     cx: &mut Context<'_>,
+    empty: &mut u32,
 ) -> Poll<Result<MetaOutcome, Error>>
 where
     S: Stream<Item = Result<Bytes, StdError>>,
@@ -524,12 +560,32 @@ where
             Poll::Pending => return Poll::Pending,
             Poll::Ready(None) => return Poll::Ready(Ok(MetaOutcome::End)),
             Poll::Ready(Some(Err(error))) => return Poll::Ready(Err(error)),
-            Poll::Ready(Some(Ok(bytes))) => *carry = bytes,
+            Poll::Ready(Some(Ok(bytes))) => match accept_fragment(empty, bytes) {
+                Ok(bytes) => *carry = bytes,
+                Err(error) => return Poll::Ready(Err(error)),
+            },
         }
     }
 }
 
 /// Polls one input fragment, mapping the stream error type.
+/// A body stream that only hands out empty fragments cannot make the decoder
+/// progress, so a run of them is a malformed request rather than a slow one.
+const MAX_EMPTY_FRAGMENTS: u32 = 64;
+
+/// Accepts one polled fragment, rejecting a stream that only yields empty ones.
+fn accept_fragment(empty: &mut u32, bytes: Bytes) -> Result<Bytes, Error> {
+    if bytes.is_empty() {
+        *empty += 1;
+        if *empty > MAX_EMPTY_FRAGMENTS {
+            return Err(Error::FormatError);
+        }
+    } else {
+        *empty = 0;
+    }
+    Ok(bytes)
+}
+
 fn poll_fragment<S>(mut inner: Pin<&mut S>, cx: &mut Context<'_>) -> Poll<Option<Result<Bytes, Error>>>
 where
     S: Stream<Item = Result<Bytes, StdError>>,
@@ -570,5 +626,33 @@ mod tests {
         let mut decoder = idle_decoder();
         decoder.state.phase = Phase::Emitting { index: 0 };
         assert!(matches!(futures::executor::block_on(decoder.next()), Some(Err(Error::FormatError))));
+    }
+}
+
+#[cfg(test)]
+mod empty_fragment_tests {
+    use crate::{ChunkedStream, Error, Limits};
+
+    use bytes::Bytes;
+    use futures::{StreamExt as _, stream};
+
+    /// A stream that only hands out empty fragments cannot make progress; the
+    /// decoder has to reject it inside one poll call rather than poll for ever.
+    #[test]
+    fn a_flood_of_empty_fragments_is_rejected() {
+        let endless = stream::repeat_with(|| Ok::<Bytes, crate::StdError>(Bytes::new()));
+        let mut stream = ChunkedStream::unsigned(endless, 1, Limits::default());
+        let item = futures::executor::block_on(stream.next());
+        assert!(matches!(item, Some(Err(Error::FormatError))), "got {item:?}");
+    }
+
+    /// Empty fragments that are followed by real data are not a problem.
+    #[test]
+    fn empty_fragments_before_data_are_fine() {
+        let mut items: Vec<Result<Bytes, crate::StdError>> = (0..8).map(|_| Ok(Bytes::new())).collect();
+        items.push(Ok(Bytes::from_static(b"3\r\nabc\r\n0\r\n\r\n")));
+        let mut stream = ChunkedStream::unsigned(stream::iter(items), 3, Limits::default());
+        let item = futures::executor::block_on(stream.next());
+        assert!(matches!(&item, Some(Ok(bytes)) if bytes.as_ref() == b"abc"), "got {item:?}");
     }
 }
