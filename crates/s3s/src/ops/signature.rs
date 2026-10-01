@@ -110,6 +110,20 @@ fn reject_unsigned_amz_headers(config: &S3Config, hs: &HeaderMap, signed_names: 
     Ok(())
 }
 
+/// Returns whether the `SigV4` signed-header list covers `host`.
+///
+/// `SigV4` requires `host` (HTTP/1.1) or `:authority` (HTTP/2) to be part of
+/// `CanonicalHeaders`, and therefore of `SignedHeaders` / `X-Amz-SignedHeaders`.
+/// [`collect_signed_headers`] reads only the header names the client declared, so
+/// without this check a request signed over a list that omits `host` is accepted and
+/// the host used for routing stays outside the signature.
+///
+/// The check is opt-in via [`S3Config::require_signed_host`]. The signed-header list is
+/// client-supplied and not lowercased, so the comparison is case-insensitive.
+pub(super) fn signed_host_is_covered(config: &S3Config, signed_names: &[&str]) -> bool {
+    !config.require_signed_host || signed_names.iter().any(|name| name.eq_ignore_ascii_case("host"))
+}
+
 fn extract_amz_date(hs: &HeaderMap) -> S3Result<Option<AmzDate>> {
     let Some(val) = http::get_unique_header_str(hs, crate::header::X_AMZ_DATE.as_str()) else {
         return Ok(None);
@@ -626,6 +640,13 @@ impl<'a> SignatureContext<'a> {
             ));
         }
 
+        if !signed_host_is_covered(&config, &presigned_url.signed_headers) {
+            return Err(s3_error!(
+                AuthorizationQueryParametersError,
+                "The authorization query parameters that you provided are not valid; the signed-header list must include host."
+            ));
+        }
+
         // Per AWS SigV4 spec, the credential scope date must match the x-amz-date date.
         if presigned_url.credential.date != presigned_url.amz_date.fmt_date().as_str() {
             return Err(s3_error!(SignatureDoesNotMatch, "credential scope date does not match x-amz-date"));
@@ -757,6 +778,13 @@ impl<'a> SignatureContext<'a> {
         let config = self.config.snapshot();
 
         validate_sig_v4_service(service, &config)?;
+
+        if !signed_host_is_covered(&config, &authorization.signed_headers) {
+            return Err(s3_error!(
+                AuthorizationHeaderMalformed,
+                "The authorization header is malformed; the signed-header list must include host."
+            ));
+        }
 
         let auth = require_auth(self.auth)?;
 
