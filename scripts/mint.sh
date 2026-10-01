@@ -11,4 +11,4 @@ docker run \
     -v /tmp/mint:/mint/log \
     minio/mint:edge
 
-./scripts/report-mint.py /tmp/mint/log.json
+cargo run -q -p xtask -- report mint /tmp/mint/log.json

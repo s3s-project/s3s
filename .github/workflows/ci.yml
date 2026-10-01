@@ -153,10 +153,10 @@ jobs:
           docker pull "$MINIO_IMAGE_REF"
       - run: just install-proxy
       - run: ./scripts/e2e-mint.sh
-      - run: ./scripts/report-mint.py /tmp/mint/log.json
+      - run: cargo run -q -p xtask -- report mint /tmp/mint/log.json
       # The mint console output only shows one failure per suite and the raw
-      # /tmp/mint/log.json is what report-mint.py reads, so both are collected
-      # even when the gate fails.
+      # /tmp/mint/log.json is what `xtask report mint` reads, so both are
+      # collected even when the gate fails.
       - name: Collect mint logs
         if: always()
         run: |
