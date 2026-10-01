@@ -39,6 +39,20 @@ use std::task::{Context, Poll};
 /// can be stored without an `Unpin` bound on the public constructor.
 type BoxedBody = Pin<Box<dyn Stream<Item = Result<Bytes, StdError>> + Send + Sync + 'static>>;
 
+/// # Compatibility
+///
+/// The decoder behind this stream replaces the previous implementation, and three
+/// behaviours changed with it:
+///
+/// - A chunk or trailer signature in a request declared unsigned is a format error:
+///   an unsigned declaration carries no signing context, so such a signature cannot be
+///   verified. The previous implementation verified a signature whenever one was present.
+/// - A chunk metadata line above the limit is [`AwsChunkedStreamError::ChunkMetaTooLarge`],
+///   which maps to `EntityTooLarge` (400); it used to surface as an internal error
+///   (500).
+/// - The stream fails fast: after an error item it yields `None` for ever instead of
+///   resuming.
+///
 /// Aws chunked stream
 pub struct AwsChunkedStream {
     /// The decoding state machine.
