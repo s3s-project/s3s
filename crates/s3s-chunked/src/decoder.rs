@@ -631,7 +631,7 @@ mod tests {
 }
 
 #[cfg(test)]
-mod empty_fragment_tests {
+mod fragment_and_trailer_tests {
     use crate::{ChunkedStream, Error, Limits};
 
     use bytes::Bytes;
@@ -683,7 +683,6 @@ mod empty_fragment_tests {
         let items = futures::executor::block_on(stream.by_ref().collect::<Vec<_>>());
         assert_eq!(items.len(), 1, "payload only: {items:?}");
     }
-    #[cfg(test)]
     mod trailer_publication_tests {
         use crate::{ChunkedStream, Error, Limits};
 
@@ -728,7 +727,6 @@ mod empty_fragment_tests {
         }
     }
 
-    #[cfg(test)]
     mod empty_fragment_boundary_tests {
         use crate::{ChunkedStream, Error, Limits};
 

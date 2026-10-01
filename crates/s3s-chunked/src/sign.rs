@@ -48,8 +48,8 @@ impl SignContext {
 /// read buffer per fragment and grow the fragment list without bound. Once the
 /// list gets long the buffered bytes are coalesced into a single allocation and
 /// later fragments are appended there, which releases those read buffers. The
-/// switch happens once, so the extra work stays linear, and a chunk arrives in a
-/// handful of fragments as usual stays copy free.
+/// switch happens once, so the extra work stays linear, and a chunk that arrives
+/// in the usual handful of fragments stays copy free.
 enum ChunkBuffer {
     /// Fragments kept as delivered.
     Fragments(Vec<Bytes>),
