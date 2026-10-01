@@ -45,11 +45,11 @@ impl SignContext {
 /// Fragments are normally kept exactly as the transport delivered them, so a
 /// verified chunk reaches its consumer without the payload being copied.
 /// Framing is peer controlled though: a stream of tiny fragments would pin one
-/// read buffer per fragment and grow the fragment list without bound. Once a
-/// fragment is smaller than a whole read buffer, or the list gets long, the
-/// buffered bytes are coalesced into a single allocation and later fragments are
-/// appended there. The switch happens once, so the extra work stays linear and
-/// the regular path never copies.
+/// read buffer per fragment and grow the fragment list without bound. Once the
+/// list gets long the buffered bytes are coalesced into a single allocation and
+/// later fragments are appended there, which releases those read buffers. The
+/// switch happens once, so the extra work stays linear, and a chunk arrives in a
+/// handful of fragments as usual stays copy free.
 enum ChunkBuffer {
     /// Fragments kept as delivered.
     Fragments(Vec<Bytes>),
@@ -60,10 +60,6 @@ enum ChunkBuffer {
 }
 
 impl ChunkBuffer {
-    /// A fragment at least this large is a whole read buffer, so keeping it
-    /// pins only the memory it actually uses.
-    const WHOLE_FRAGMENT: usize = 8 * 1024;
-
     /// Upper bound on the fragment list, which bounds the metadata and the
     /// number of read buffers a single chunk can pin.
     const MAX_FRAGMENTS: usize = 64;
@@ -76,7 +72,7 @@ impl ChunkBuffer {
     fn push(&mut self, bytes: Bytes) {
         match self {
             Self::Fragments(fragments) => {
-                if bytes.len() < Self::WHOLE_FRAGMENT || fragments.len() >= Self::MAX_FRAGMENTS {
+                if fragments.len() >= Self::MAX_FRAGMENTS {
                     let capacity = fragments.iter().map(Bytes::len).sum::<usize>() + bytes.len();
                     let mut buffer = BytesMut::with_capacity(capacity);
                     for fragment in fragments.drain(..) {

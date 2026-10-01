@@ -207,23 +207,9 @@ where
         let state = &mut *this.state;
 
         loop {
-            // A malformed stream can hand out empty fragments without ever being pending.
-
-            // Bound the work of a single poll call so the task returns to the executor.
-
-            const POLL_BUDGET: u32 = 64;
-
-            let mut steps = 0_u32;
-
             match step_phase(this.inner.as_mut(), state, cx) {
                 Step::Pending => return Poll::Pending,
-                Step::Again => {
-                    steps += 1;
-                    if steps >= POLL_BUDGET {
-                        cx.waker().wake_by_ref();
-                        return Poll::Pending;
-                    }
-                }
+                Step::Again => {}
                 Step::Yield(bytes) => return emit(bytes, &mut state.remaining, &mut state.phase),
                 Step::Done => {
                     state.phase = Phase::Done;
@@ -583,7 +569,6 @@ where
     }
 }
 
-/// Polls one input fragment, mapping the stream error type.
 /// A body stream that only hands out empty fragments cannot make the decoder
 /// progress, so a run of them is a malformed request rather than a slow one.
 const MAX_EMPTY_FRAGMENTS: u32 = 64;
@@ -601,6 +586,7 @@ fn accept_fragment(empty: &mut u32, bytes: Bytes) -> Result<Bytes, Error> {
     Ok(bytes)
 }
 
+/// Polls one input fragment, mapping the stream error type.
 fn poll_fragment<S>(mut inner: Pin<&mut S>, cx: &mut Context<'_>) -> Poll<Option<Result<Bytes, Error>>>
 where
     S: Stream<Item = Result<Bytes, StdError>>,
@@ -696,5 +682,71 @@ mod empty_fragment_tests {
         );
         let items = futures::executor::block_on(stream.by_ref().collect::<Vec<_>>());
         assert_eq!(items.len(), 1, "payload only: {items:?}");
+    }
+    #[cfg(test)]
+    mod trailer_publication_tests {
+        use crate::{ChunkedStream, Error, Limits};
+
+        use bytes::Bytes;
+        use futures::{StreamExt as _, stream};
+
+        const BODY: &[u8] = b"3\r\nabc\r\n0\r\nx-amz-meta-foo: bar\r\n\r\n";
+        const PUBLISHED: usize = 3;
+
+        /// A request that produced fewer bytes than it declared is a failure, and a
+        /// failed request must not expose the trailing headers it carried.
+        #[test]
+        fn a_short_payload_publishes_no_trailers() {
+            let mut stream = ChunkedStream::unsigned(
+                stream::iter(vec![Ok::<Bytes, crate::StdError>(Bytes::from_static(BODY))]),
+                10, // three bytes arrive, ten were declared
+                Limits::default(),
+            );
+            let handle = stream.trailer_handle();
+
+            let items = futures::executor::block_on(stream.by_ref().collect::<Vec<_>>());
+
+            assert!(matches!(items.last(), Some(Err(Error::Incomplete))), "got {:?}", items.last());
+            assert!(handle.take().is_none(), "a failed request publishes no trailers");
+        }
+
+        /// The happy path still publishes them once everything checks out.
+        #[test]
+        fn a_complete_payload_publishes_trailers() {
+            let mut stream = ChunkedStream::unsigned(
+                stream::iter(vec![Ok::<Bytes, crate::StdError>(Bytes::from_static(BODY))]),
+                PUBLISHED,
+                Limits::default(),
+            );
+            let handle = stream.trailer_handle();
+
+            let items = futures::executor::block_on(stream.by_ref().collect::<Vec<_>>());
+
+            assert_eq!(items.len(), 1, "one payload item: {items:?}");
+            let trailers = handle.take().expect("trailers are published");
+            assert_eq!(trailers.get("x-amz-meta-foo").unwrap(), "bar");
+        }
+    }
+
+    #[cfg(test)]
+    mod empty_fragment_boundary_tests {
+        use crate::{ChunkedStream, Error, Limits};
+
+        use bytes::Bytes;
+        use futures::{StreamExt as _, stream};
+
+        /// Exactly the limit is still just a slow stream; one more is malformed.
+        #[test]
+        fn the_empty_fragment_limit_is_a_boundary() {
+            let at_limit: Vec<Result<Bytes, crate::StdError>> = (0..64).map(|_| Ok(Bytes::new())).collect();
+            let mut stream = ChunkedStream::unsigned(stream::iter(at_limit), 1, Limits::default());
+            let item = futures::executor::block_on(stream.next());
+            assert!(matches!(item, Some(Err(Error::Incomplete))), "64 empty fragments then EOF: {item:?}");
+
+            let over_limit: Vec<Result<Bytes, crate::StdError>> = (0..65).map(|_| Ok(Bytes::new())).collect();
+            let mut stream = ChunkedStream::unsigned(stream::iter(over_limit), 1, Limits::default());
+            let item = futures::executor::block_on(stream.next());
+            assert!(matches!(item, Some(Err(Error::FormatError))), "65 empty fragments: {item:?}");
+        }
     }
 }
