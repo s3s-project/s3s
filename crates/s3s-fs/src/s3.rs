@@ -248,11 +248,7 @@ impl S3 for FileSystem {
                 src_etag = Some(ETag::Strong(self.get_md5_sum(bucket, key).await?));
             }
             let src = src_etag.as_ref().ok_or_else(|| s3_error!(InternalError))?;
-            let matches = match condition {
-                ETagCondition::Any => true,
-                ETagCondition::ETag(etag) => src.strong_cmp(etag),
-            };
-            if !matches {
+            if !condition.matches_strong(src) {
                 return Err(s3_error!(PreconditionFailed));
             }
         } else if let Some(ref if_unmodified_since) = input.copy_source_if_unmodified_since
@@ -267,11 +263,7 @@ impl S3 for FileSystem {
                 src_etag = Some(ETag::Strong(self.get_md5_sum(bucket, key).await?));
             }
             let src = src_etag.as_ref().ok_or_else(|| s3_error!(InternalError))?;
-            let matches = match condition {
-                ETagCondition::Any => true,
-                ETagCondition::ETag(etag) => src.weak_cmp(etag),
-            };
-            if matches {
+            if condition.matches_weak(src) {
                 return Err(s3_error!(PreconditionFailed));
             }
         } else if let Some(ref if_modified_since) = input.copy_source_if_modified_since
@@ -851,13 +843,13 @@ impl S3 for FileSystem {
             if !object_path.exists() {
                 return Err(s3_error!(PreconditionFailed, "Object does not exist"));
             }
-            if let ETagCondition::ETag(expected) = condition {
+            if !condition.is_any() {
                 let info = self.load_internal_info(&bucket, &key).await?;
                 let etag_value = match info.as_ref().and_then(crate::checksum::load_e_tag) {
                     Some(v) => v,
                     None => self.get_md5_sum(&bucket, &key).await?,
                 };
-                if !ETag::Strong(etag_value).strong_cmp(expected) {
+                if !condition.matches_strong(&ETag::Strong(etag_value)) {
                     return Err(s3_error!(PreconditionFailed, "ETag does not match"));
                 }
             }
@@ -1470,24 +1462,17 @@ impl S3 for FileSystem {
             return Err(s3_error!(PreconditionFailed, "Object already exists"));
         }
         if let Some(ref condition) = if_match {
-            if condition.is_any() {
-                // If-Match: * — require the object to exist
-                if !object_path.exists() {
-                    return Err(s3_error!(PreconditionFailed, "Object does not exist"));
-                }
-            } else if let Some(expected_etag) = condition.as_etag() {
-                if object_path.exists() {
-                    let info = self.load_internal_info(&bucket, &key).await?;
-                    let etag_value = match info.as_ref().and_then(crate::checksum::load_e_tag) {
-                        Some(e_tag) => e_tag,
-                        None => self.get_md5_sum(&bucket, &key).await?,
-                    };
-                    let existing_etag = ETag::Strong(etag_value);
-                    if !expected_etag.strong_cmp(&existing_etag) {
-                        return Err(s3_error!(PreconditionFailed, "ETag does not match"));
-                    }
-                } else {
-                    return Err(s3_error!(PreconditionFailed, "Object does not exist"));
+            if !object_path.exists() {
+                return Err(s3_error!(PreconditionFailed, "Object does not exist"));
+            }
+            if !condition.is_any() {
+                let info = self.load_internal_info(&bucket, &key).await?;
+                let etag_value = match info.as_ref().and_then(crate::checksum::load_e_tag) {
+                    Some(e_tag) => e_tag,
+                    None => self.get_md5_sum(&bucket, &key).await?,
+                };
+                if !condition.matches_strong(&ETag::Strong(etag_value)) {
+                    return Err(s3_error!(PreconditionFailed, "ETag does not match"));
                 }
             }
         }

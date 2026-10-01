@@ -108,5 +108,26 @@ mod tests {
         let hv = original.clone().try_into_header_value().unwrap();
         let parsed = ETagCondition::try_from_header_value(&hv).unwrap();
         assert_eq!(original, parsed);
+
+        let original = ETagCondition::List(vec![ETag::Strong("a".to_owned()), ETag::Weak("b".to_owned())]);
+        let hv = original.clone().try_into_header_value().unwrap();
+        let parsed = ETagCondition::try_from_header_value(&hv).unwrap();
+        assert_eq!(original, parsed);
+    }
+
+    #[test]
+    fn etag_condition_try_from_header_value_list() {
+        let hv = HeaderValue::from_static("\"a\", \"b\"");
+        let cond = ETagCondition::try_from_header_value(&hv).unwrap();
+        assert_eq!(cond.etags().len(), 2);
+        assert_eq!(cond.as_etag(), None);
+        assert!(cond.matches_strong(&ETag::Strong("b".to_owned())));
+    }
+
+    #[test]
+    fn etag_condition_try_into_header_value_list() {
+        let cond = ETagCondition::List(vec![ETag::Strong("a".to_owned()), ETag::Strong("b".to_owned())]);
+        let hv = cond.try_into_header_value().unwrap();
+        assert_eq!(hv.as_bytes(), b"\"a\", \"b\"");
     }
 }

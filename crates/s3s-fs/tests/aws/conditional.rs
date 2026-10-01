@@ -25,6 +25,7 @@ pub fn register(tcx: &mut TestContext) {
     case!(tcx, FsServer, Conditional, test_put_object_if_match_multipart_etag);
     case!(tcx, FsServer, Conditional, test_put_object_if_match_legacy_md5_fallback);
     case!(tcx, FsServer, Conditional, test_put_object_if_match_rejects_weak_etag);
+    case!(tcx, FsServer, Conditional, test_put_object_if_match_etag_list);
 }
 
 impl Conditional {
@@ -419,6 +420,65 @@ impl Conditional {
         let result = c.get_object().bucket(bucket).key(key).send().await?;
         let body = result.body.collect().await?.into_bytes();
         assert_eq!(body.as_ref(), initial);
+
+        delete_object(c, bucket, key).await?;
+        delete_bucket(c, bucket).await?;
+
+        Ok(())
+    }
+
+    /// Test that `If-Match` accepts a comma-separated list of entity tags and
+    /// succeeds when any member matches the stored entity tag.
+    async fn test_put_object_if_match_etag_list(self: Arc<Self>) -> Result<()> {
+        let c = &self.s3;
+        let bucket = format!("if-match-list-{}", Uuid::new_v4());
+        let bucket = bucket.as_str();
+        let key = "etag-list.txt";
+        let initial = b"list initial content";
+        let updated = b"list updated content";
+
+        create_bucket(c, bucket).await?;
+
+        let initial_etag = {
+            let result = c
+                .put_object()
+                .bucket(bucket)
+                .key(key)
+                .body(ByteStream::from_static(initial))
+                .send()
+                .await?;
+            result.e_tag().expect("put_object should return e_tag").to_owned()
+        };
+
+        // A list where only one member matches has to satisfy If-Match.
+        c.put_object()
+            .bucket(bucket)
+            .key(key)
+            .body(ByteStream::from_static(updated))
+            .if_match(format!("\"wrong-etag-value\", {initial_etag}"))
+            .send()
+            .await
+            .expect("list with a matching member must satisfy If-Match");
+
+        let result = c.get_object().bucket(bucket).key(key).send().await?;
+        let body = result.body.collect().await?.into_bytes();
+        assert_eq!(body.as_ref(), updated);
+
+        // A list without any matching member has to fail.
+        let err = c
+            .put_object()
+            .bucket(bucket)
+            .key(key)
+            .body(ByteStream::from_static(b"should not be stored"))
+            .if_match("\"wrong-1\", \"wrong-2\"")
+            .send()
+            .await
+            .expect_err("list without a matching member must fail");
+        assert_eq!(err.into_service_error().code(), Some("PreconditionFailed"));
+
+        let result = c.get_object().bucket(bucket).key(key).send().await?;
+        let body = result.body.collect().await?.into_bytes();
+        assert_eq!(body.as_ref(), updated, "object must not be overwritten");
 
         delete_object(c, bucket, key).await?;
         delete_bucket(c, bucket).await?;
