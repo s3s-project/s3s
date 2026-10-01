@@ -11,7 +11,7 @@ use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::{ArgGroup, Parser};
 
 use crate::repo_root;
@@ -38,8 +38,20 @@ pub(crate) struct Spdx {
     apply: bool,
 }
 
+/// Which of the two modes the caller selected.
+///
+/// The clap group on the struct requires exactly one of the two flags, so the
+/// command line never reaches the empty or the ambiguous case; both are kept as
+/// a guard for programmatic callers and are covered by the unit test below.
+#[derive(Debug, PartialEq, Eq)]
+enum Mode {
+    Check,
+    Apply,
+}
+
 impl Spdx {
     pub(crate) fn run(self) -> Result<bool> {
+        let mode = self.mode()?;
         let root = repo_root();
         let mut files = Vec::new();
         collect(&root, &mut files)?;
@@ -57,7 +69,7 @@ impl Spdx {
                 continue;
             }
             let generated = is_generated(&text);
-            if self.apply {
+            if mode == Mode::Apply {
                 if generated {
                     skipped_generated += 1;
                     continue;
@@ -71,7 +83,7 @@ impl Spdx {
             }
         }
 
-        if self.apply {
+        if mode == Mode::Apply {
             println!("applied: {applied} file(s), skipped generated: {skipped_generated} file(s)");
             return Ok(true);
         }
@@ -82,6 +94,16 @@ impl Spdx {
         println!("missing SPDX header in {} file(s):", failures.len());
         println!("{}", failures.join("\n"));
         Ok(false)
+    }
+
+    /// Read both flags instead of inferring the mode from `--apply`.
+    fn mode(&self) -> Result<Mode> {
+        match (self.check, self.apply) {
+            (true, false) => Ok(Mode::Check),
+            (false, true) => Ok(Mode::Apply),
+            (false, false) => bail!("no mode selected: pass --check or --apply"),
+            (true, true) => bail!("--check and --apply are mutually exclusive"),
+        }
     }
 }
 
@@ -155,4 +177,25 @@ fn collect(dir: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Mode, Spdx};
+
+    fn spdx(check: bool, apply: bool) -> Spdx {
+        Spdx { check, apply }
+    }
+
+    #[test]
+    fn mode_reads_both_flags() {
+        assert_eq!(spdx(true, false).mode().unwrap(), Mode::Check);
+        assert_eq!(spdx(false, true).mode().unwrap(), Mode::Apply);
+    }
+
+    #[test]
+    fn mode_rejects_an_empty_or_ambiguous_selection() {
+        assert!(spdx(false, false).mode().is_err());
+        assert!(spdx(true, true).mode().is_err());
+    }
 }
