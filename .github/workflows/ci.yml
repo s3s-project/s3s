@@ -72,6 +72,7 @@ jobs:
           toolchain: ${{ matrix.toolchain }}
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      - run: just link-license-check
       - run: just ci-rust
       # The workspace commands above build everything with --all-features, so a
       # default build is never checked for the optional HTTP/3 dependencies, and
