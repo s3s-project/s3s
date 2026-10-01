@@ -211,6 +211,11 @@ impl ByteStream for AwsChunkedStream {
 #[cfg(test)]
 mod tests {
     use super::*;
+    const SEED: &str = "4f232c4386841ef735655705268965c44a0e4690baa4adea153f7db9fa80a0a9";
+    const TIMESTAMP: &str = "20130524T000000Z";
+    const REGION: &str = "us-east-1";
+    const SERVICE: &str = "s3";
+    const SECRET_KEY: &str = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
     use futures::StreamExt as _;
     use hyper::http::HeaderValue;
     const MAX_CHUNK_META_SIZE: usize = s3s_chunked::Limits::DEFAULT_MAX_CHUNK_META_SIZE;
@@ -1312,5 +1317,83 @@ mod tests {
                 "Trailers should not be stored when header count exceeds limits"
             );
         }
+    }
+
+    #[test]
+    fn propagates_pending_from_the_body() {
+        let mut inner = Box::pin(futures::stream::iter(vec![Ok(Bytes::from_static(b"3\r\nabc\r\n0\r\n\r\n"))]));
+        let mut pending_once = true;
+        let body = futures::stream::poll_fn(move |cx| {
+            if pending_once {
+                pending_once = false;
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
+            }
+            inner.as_mut().poll_next(cx)
+        });
+
+        let mut stream = AwsChunkedStream::new(
+            body,
+            Sha256Sum::from_hex(SEED).unwrap(),
+            AmzDate::parse(TIMESTAMP).unwrap(),
+            REGION.into(),
+            SERVICE.into(),
+            SECRET_KEY.into(),
+            3,
+            true,
+            crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
+        );
+
+        let payload = futures::executor::block_on(async {
+            let mut payload = Vec::new();
+            while let Some(item) = stream.next().await {
+                payload.extend_from_slice(&item.unwrap());
+            }
+            payload
+        });
+        assert_eq!(payload, b"abc");
+    }
+
+    #[test]
+    fn forwards_the_exact_remaining_length() {
+        let body = futures::stream::iter(vec![Ok(Bytes::from_static(b"3\r\nabc\r\n3\r\ndef\r\n0\r\n\r\n"))]);
+        let mut stream = AwsChunkedStream::new(
+            body,
+            Sha256Sum::from_hex(SEED).unwrap(),
+            AmzDate::parse(TIMESTAMP).unwrap(),
+            REGION.into(),
+            SERVICE.into(),
+            SECRET_KEY.into(),
+            6,
+            true,
+            crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
+        );
+
+        assert_eq!(stream.exact_remaining_length(), 6);
+        let first = futures::executor::block_on(stream.next()).unwrap().unwrap();
+        assert_eq!(first.as_ref(), b"abc");
+        assert_eq!(stream.exact_remaining_length(), 3);
+    }
+
+    #[test]
+    fn debug_reports_the_adapter_and_the_handle() {
+        let body = futures::stream::iter(Vec::<Result<Bytes, crate::error::StdError>>::new());
+        let stream = AwsChunkedStream::new(
+            body,
+            Sha256Sum::from_hex(SEED).unwrap(),
+            AmzDate::parse(TIMESTAMP).unwrap(),
+            REGION.into(),
+            SERVICE.into(),
+            SECRET_KEY.into(),
+            0,
+            true,
+            crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
+        );
+
+        let text = format!("{stream:?}");
+        assert!(text.starts_with("AwsChunkedStream"), "{text}");
+        let handle = stream.trailing_headers_handle();
+        let text = format!("{handle:?}");
+        assert!(text.starts_with("TrailingHeaders"), "{text}");
     }
 }
