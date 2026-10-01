@@ -29,4 +29,10 @@ thiserror.workspace = true
 zeroize.workspace = true
 
 [dev-dependencies]
+criterion.workspace = true
 futures = { workspace = true, features = ["executor"] }
+mimalloc.workspace = true
+
+[[bench]]
+name = "chunked_decode"
+harness = false
