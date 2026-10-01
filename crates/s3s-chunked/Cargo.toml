@@ -1,6 +1,6 @@
 [package]
 name = "s3s-chunked"
-version = "0.18.0-alpha.1"
+version = "0.18.0-alpha.2"
 description = "Async streaming decoder for aws-chunked request bodies"
 readme = "../../README.md"
 keywords = ["aws", "chunked", "streaming", "parser", "s3"]

@@ -81,7 +81,7 @@ sync-version:
     cargo set-version -p s3s-e2e        0.17.0
     cargo set-version -p s3s-http3      0.17.0-alpha.1
     cargo set-version -p s3s-multipart  0.17.0
-    cargo set-version -p s3s-chunked    0.18.0-alpha.1
+    cargo set-version -p s3s-chunked    0.18.0-alpha.2
 
 # ------------------------------------------------
 
