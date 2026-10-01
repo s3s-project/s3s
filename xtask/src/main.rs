@@ -9,6 +9,7 @@
 
 mod crawl;
 mod link_license;
+mod report;
 mod spdx;
 
 use std::path::{Path, PathBuf};
@@ -30,6 +31,9 @@ enum Command {
     Crawl(crawl::Crawl),
     /// Link the LICENSE file into every workspace member.
     LinkLicense(link_license::LinkLicense),
+    /// Report gates for the end-to-end suites.
+    #[command(subcommand)]
+    Report(report::Report),
     /// Check or insert SPDX license headers.
     #[command(subcommand)]
     Spdx(spdx::Spdx),
@@ -39,6 +43,7 @@ fn main() -> ExitCode {
     let result = match Cli::parse().command {
         Command::Crawl(cmd) => cmd.run(),
         Command::LinkLicense(cmd) => cmd.run(),
+        Command::Report(cmd) => cmd.run(),
         Command::Spdx(cmd) => cmd.run(),
     };
     match result {

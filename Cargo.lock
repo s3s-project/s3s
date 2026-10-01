@@ -5287,6 +5287,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "clap",
+ "quick-xml 0.42.0",
  "regex",
  "reqwest 0.13.5",
  "serde",

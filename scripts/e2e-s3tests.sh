@@ -225,7 +225,7 @@ REPORT_STATUS=0
 if [ -f "$REPORT_DIR/junit.xml" ]; then
     cp "$REPORT_DIR/junit.xml" "$TARGET_DIR/s3-tests.junit.xml"
     set +e
-    python3 "$ROOT_DIR/scripts/report-s3tests.py" "$TARGET_DIR/s3-tests.junit.xml"
+    cargo run -q --manifest-path "$ROOT_DIR/Cargo.toml" -p xtask -- report s3-tests "$TARGET_DIR/s3-tests.junit.xml"
     REPORT_STATUS=$?
     set -e
 else
