@@ -113,7 +113,7 @@ impl ChunkBuffer {
         match self {
             Self::Fragments(fragments) => fragments[index].clone(),
             Self::Sealed(bytes) => bytes.clone(),
-            Self::Coalesced(buffer) => Bytes::copy_from_slice(&buffer[index.min(buffer.len())..]),
+            Self::Coalesced(buffer) => Bytes::copy_from_slice(buffer),
         }
     }
 
@@ -174,6 +174,11 @@ impl SignState {
         self.data.fragment_count()
     }
 
+    /// Test-only: whether the buffer switched to a single allocation.
+    #[cfg(test)]
+    pub(crate) fn is_coalesced(&self) -> bool {
+        matches!(self.data, ChunkBuffer::Coalesced(_) | ChunkBuffer::Sealed(_))
+    }
     pub fn fragment(&self, index: usize) -> Bytes {
         self.data.fragment(index)
     }
@@ -335,5 +340,34 @@ mod buffer_tests {
         sign.push(Bytes::from_static(b"tiny"));
         sign.clear_chunk();
         assert_eq!(sign.fragment_count(), 0);
+    }
+
+    /// A chunk that arrives in whole buffers, tail included, must not be copied:
+    /// triggering the copy on a small incoming fragment also caught the ordinary
+    /// tail fragment and put regular chunks on the copy path.
+    #[test]
+    fn whole_fragments_and_a_small_tail_stay_copy_free() {
+        let mut sign = state();
+        for _ in 0..8 {
+            sign.push(Bytes::from(vec![0_u8; 8 * 1024]));
+        }
+        sign.push(Bytes::from(vec![0_u8; 88]));
+
+        assert!(!sign.is_coalesced(), "whole buffers and their tail are not copied");
+        assert_eq!(sign.fragment_count(), 9);
+    }
+
+    /// A run of tiny fragments switches to one allocation, and the fragment
+    /// metadata stays bounded instead of growing with the payload.
+    #[test]
+    fn a_run_of_tiny_fragments_is_coalesced_and_bounded() {
+        let mut sign = state();
+        for _ in 0..4096 {
+            sign.push(Bytes::from_static(&[7]));
+        }
+
+        assert!(sign.is_coalesced(), "tiny fragments switch to a single allocation");
+        assert!(sign.fragment_count() <= 64, "metadata stays bounded: {}", sign.fragment_count());
+        assert_eq!(sign.fragment(0).len(), 4096);
     }
 }

@@ -30,7 +30,19 @@
 //!
 //! Whether the body carries a trailer block is discovered while decoding: the
 //! signed and unsigned modes both accept a body that ends right after the final
-//! zero chunk.
+//! zero chunk. A request that announced trailing headers can require the block
+//! with [`ChunkedStream::with_required_trailers`]; without it an empty block is
+//! accepted, and a run of empty body fragments is a format error either way.
+//!
+//! # Guarantees
+//!
+//! - A chunk is emitted as the fragments it arrived in, so a signed chunk reaches
+//!   its consumer without being copied; a chunk that arrives in a very large number
+//!   of fragments is coalesced into one allocation first, which bounds the read
+//!   buffers a malformed request can pin.
+//! - A verified chunk is emitted only after its signature, and trailer headers only
+//!   after the trailer block was accepted. A request that fails exposes nothing: it
+//!   yields its error and then `None` for ever.
 //!
 //! The `SigV4a` values (`STREAMING-AWS4-ECDSA-P256-SHA256-PAYLOAD` and
 //! `STREAMING-AWS4-ECDSA-P256-SHA256-PAYLOAD-TRAILER`) are not implemented
