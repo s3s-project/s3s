@@ -27,7 +27,7 @@ doc:
     RUSTDOCFLAGS="--cfg docsrs" cargo +nightly doc --open --no-deps --all-features
 
 crawl:
-    uv run data/crawl.py update
+    cargo run -p xtask -- crawl update
 
 spdx-check:
     cargo run -p xtask -- spdx check
