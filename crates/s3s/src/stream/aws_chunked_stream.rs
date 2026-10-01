@@ -178,6 +178,14 @@ impl AwsChunkedStream {
         Self { inner, trailers }
     }
 
+    /// Requires the body to end with a trailer block.
+    ///
+    /// A request that announced trailing headers but ends without them is a format
+    /// error instead of succeeding with nothing to expose.
+    pub fn require_trailers(&mut self, required: bool) {
+        self.inner.require_trailers(required);
+    }
+
     /// Returns the declared decoded length minus the bytes produced so far.
     #[must_use]
     pub fn exact_remaining_length(&self) -> usize {
@@ -1409,5 +1417,35 @@ mod tests {
         let handle = stream.trailing_headers_handle();
         let text = format!("{handle:?}");
         assert!(text.starts_with("TrailingHeaders"), "{text}");
+    }
+
+    /// A request that announced trailing headers must carry the trailer block, so
+    /// the adapter has to pass that requirement down to the decoder.
+    #[tokio::test]
+    async fn required_trailers_reach_the_decoder() {
+        let body = futures::stream::iter(vec![Ok::<Bytes, crate::error::StdError>(Bytes::from_static(
+            b"3\r\nabc\r\n0\r\n\r\n",
+        ))]);
+        let mut stream = AwsChunkedStream::new(
+            body,
+            Sha256Sum::from_hex(SEED).unwrap(),
+            AmzDate::parse(TIMESTAMP).unwrap(),
+            REGION.into(),
+            SERVICE.into(),
+            SECRET_KEY.into(),
+            3,
+            true,
+            crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
+        );
+        stream.require_trailers(true);
+
+        let mut last = None;
+        while let Some(item) = stream.next().await {
+            last = Some(item);
+        }
+        assert!(
+            matches!(last, Some(Err(AwsChunkedStreamError::FormatError))),
+            "a missing trailer block is a format error, got {last:?}"
+        );
     }
 }
