@@ -25,7 +25,7 @@ cleanup() {
 trap cleanup EXIT
 
 if ! command -v "$S3S_FS_BIN" >/dev/null 2>&1; then
-    echo "s3s-fs is required; run: just install s3s-fs" >&2
+    echo "s3s-fs is required; run: just install-fs" >&2
     exit 1
 fi
 if [[ -z "${RUST_LOG:-}" ]]; then

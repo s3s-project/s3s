@@ -91,7 +91,7 @@ reset_minio_container() {
 }
 
 if ! command -v s3s-proxy >/dev/null 2>&1; then
-    echo "s3s-proxy is required; run: just install s3s-proxy"
+    echo "s3s-proxy is required; run: just install-proxy"
     exit 1
 fi
 

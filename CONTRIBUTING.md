@@ -62,7 +62,7 @@ The default build has no HTTP/3 dependencies. To serve the same file system over
 You can also use the shortcut
 
 ```bash
-just install s3s-fs
+just install-fs
 ```
 
 Or install from crates.io
@@ -97,7 +97,7 @@ builds the last upstream state from source and publishes it to
 Install `s3s-proxy`
 
 ```bash
-just install s3s-proxy
+just install-proxy
 ```
 
 Run the combined server and save logs
@@ -117,7 +117,7 @@ Open a new terminal, then run the test suite
 Install `s3s-proxy`
 
 ```bash
-just install s3s-proxy
+just install-proxy
 ```
 
 Run a minimal Ceph `s3-tests` run against `s3s-proxy` (backed by MinIO):
@@ -139,7 +139,7 @@ remote-to-remote copy, and a forced multipart upload. Install `s3s-fs`, ensure
 Docker is running, then run:
 
 ```bash
-just install s3s-fs
+just install-fs
 ./scripts/e2e-rclone-fs.sh
 ```
 
