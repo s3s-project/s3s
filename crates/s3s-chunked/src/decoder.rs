@@ -88,6 +88,8 @@ struct State {
     carry: Bytes,
     /// Consecutive empty fragments handed out by the body stream.
     empty_fragments: u32,
+    /// Whether the body has to end with a trailer block.
+    trailers_required: bool,
     meta_buf: Vec<u8>,
     trailer_buf: Vec<u8>,
     chunk_signature: Option<[u8; 64]>,
@@ -154,6 +156,11 @@ enum Step {
 }
 
 impl<S> Decoder<S> {
+    /// Requires the body to carry a trailer block.
+    pub fn require_trailers(&mut self, required: bool) {
+        self.state.trailers_required = required;
+    }
+
     pub fn new(inner: S, decoded_content_length: usize, limits: Limits, signing: Signing) -> Self {
         Self {
             inner,
@@ -163,6 +170,7 @@ impl<S> Decoder<S> {
                 phase: Phase::Meta,
                 carry: Bytes::new(),
                 empty_fragments: 0,
+                trailers_required: false,
                 meta_buf: Vec::new(),
                 trailer_buf: Vec::new(),
                 chunk_signature: None,
@@ -487,7 +495,14 @@ where
 /// Parses and verifies the buffered trailer block, publishing the headers.
 fn verify_trailers(state: &mut State) -> Result<(), Error> {
     if state.trailer_buf.is_empty() || state.trailer_buf.as_slice() == b"\r\n" {
-        return Ok(());
+        // A request that announced trailing headers and then ends without a trailer
+        // block would silently drop them, so require the block when the caller says
+        // the request declared one.
+        return if state.trailers_required {
+            Err(Error::FormatError)
+        } else {
+            Ok(())
+        };
     }
 
     let parsed = parse_trailers(&state.trailer_buf, &state.limits)?;
@@ -654,5 +669,32 @@ mod empty_fragment_tests {
         let mut stream = ChunkedStream::unsigned(stream::iter(items), 3, Limits::default());
         let item = futures::executor::block_on(stream.next());
         assert!(matches!(&item, Some(Ok(bytes)) if bytes.as_ref() == b"abc"), "got {item:?}");
+    }
+
+    /// A trailer block that the caller required but the body never carried is a
+    /// failure, so a declared checksum cannot silently disappear.
+    #[test]
+    fn a_missing_trailer_block_is_rejected_when_required() {
+        let mut stream = ChunkedStream::unsigned(
+            stream::iter(vec![Ok::<Bytes, crate::StdError>(Bytes::from_static(b"3\r\nabc\r\n0\r\n\r\n"))]),
+            3,
+            Limits::default(),
+        )
+        .with_required_trailers(true);
+        let items = futures::executor::block_on(stream.by_ref().collect::<Vec<_>>());
+        assert!(matches!(items.last(), Some(Err(Error::FormatError))), "got {:?}", items.last());
+    }
+
+    /// The default stays permissive: a body without trailers is valid when the
+    /// request did not announce any.
+    #[test]
+    fn a_missing_trailer_block_is_fine_by_default() {
+        let mut stream = ChunkedStream::unsigned(
+            stream::iter(vec![Ok::<Bytes, crate::StdError>(Bytes::from_static(b"3\r\nabc\r\n0\r\n\r\n"))]),
+            3,
+            Limits::default(),
+        );
+        let items = futures::executor::block_on(stream.by_ref().collect::<Vec<_>>());
+        assert_eq!(items.len(), 1, "payload only: {items:?}");
     }
 }
