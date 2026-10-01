@@ -7,6 +7,7 @@
 //! human-facing entry point; recipes that need more than a single command line
 //! delegate their logic here.
 
+mod crawl;
 mod link_license;
 mod report;
 mod spdx;
@@ -25,11 +26,14 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Crawl the AWS Smithy models and the S3 error code documentation.
+    #[command(subcommand)]
+    Crawl(crawl::Crawl),
+    /// Link the LICENSE file into every workspace member.
+    LinkLicense(link_license::LinkLicense),
     /// Report gates for the end-to-end suites.
     #[command(subcommand)]
     Report(report::Report),
-    /// Link the LICENSE file into every workspace member.
-    LinkLicense(link_license::LinkLicense),
     /// Check or insert SPDX license headers.
     #[command(subcommand)]
     Spdx(spdx::Spdx),
@@ -37,8 +41,9 @@ enum Command {
 
 fn main() -> ExitCode {
     let result = match Cli::parse().command {
-        Command::Report(cmd) => cmd.run(),
+        Command::Crawl(cmd) => cmd.run(),
         Command::LinkLicense(cmd) => cmd.run(),
+        Command::Report(cmd) => cmd.run(),
         Command::Spdx(cmd) => cmd.run(),
     };
     match result {
