@@ -150,8 +150,9 @@ impl AwsChunkedStream {
         let body: BoxedBody = Box::pin(body);
 
         let inner = if unsigned {
-            // Unsigned requests still verify chunks that carry a signature,
-            // which keeps the historical behaviour.
+            // An unsigned declaration carries no signing context, so any
+            // signature in the body is rejected as a format error instead of
+            // being verified.
             ChunkedStream::unsigned(body, decoded_content_length, limits)
         } else {
             ChunkedStream::signed(body, sign, seed, decoded_content_length, limits)
