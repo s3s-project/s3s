@@ -63,7 +63,7 @@ install-all:
     just install-e2e --offline
 
 coverage *ARGS:
-    cargo llvm-cov -p s3s -p s3s-sigv2 -p s3s-sigv4 -p s3s-test --all-features --html {{ARGS}}
+    cargo llvm-cov -p s3s -p s3s-chunked -p s3s-sigv2 -p s3s-sigv4 -p s3s-test --all-features --html {{ARGS}}
 
 # ------------------------------------------------
 
