@@ -403,7 +403,7 @@ fn step_emitting(state: &mut State, index: usize) -> Step {
         return Step::Fail(Error::FormatError);
     };
 
-    if index < sign.data_len() {
+    if index < sign.fragment_count() {
         let data = sign.fragment(index);
         state.phase = Phase::Emitting { index: index + 1 };
         return Step::Yield(data);

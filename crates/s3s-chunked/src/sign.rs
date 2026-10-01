@@ -9,7 +9,7 @@ use s3s_sigv4::AmzDate;
 
 use std::fmt::{self, Debug, Formatter};
 
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut};
 use zeroize::Zeroizing;
 
 /// Signing context shared by the chunks of a signed `aws-chunked` stream.
@@ -40,11 +40,117 @@ impl SignContext {
     }
 }
 
+/// Buffered payload of the current signed chunk.
+///
+/// Fragments are normally kept exactly as the transport delivered them, so a
+/// verified chunk reaches its consumer without the payload being copied.
+/// Framing is peer controlled though: a stream of tiny fragments would pin one
+/// read buffer per fragment and grow the fragment list without bound. Once a
+/// fragment is smaller than a whole read buffer, or the list gets long, the
+/// buffered bytes are coalesced into a single allocation and later fragments are
+/// appended there. The switch happens once, so the extra work stays linear and
+/// the regular path never copies.
+enum ChunkBuffer {
+    /// Fragments kept as delivered.
+    Fragments(Vec<Bytes>),
+    /// Fragments coalesced into one growing allocation.
+    Coalesced(BytesMut),
+    /// Coalesced bytes frozen after the signature was verified.
+    Sealed(Bytes),
+}
+
+impl ChunkBuffer {
+    /// A fragment at least this large is a whole read buffer, so keeping it
+    /// pins only the memory it actually uses.
+    const WHOLE_FRAGMENT: usize = 8 * 1024;
+
+    /// Upper bound on the fragment list, which bounds the metadata and the
+    /// number of read buffers a single chunk can pin.
+    const MAX_FRAGMENTS: usize = 64;
+
+    fn new() -> Self {
+        Self::Fragments(Vec::new())
+    }
+
+    /// Buffers one fragment of the current chunk.
+    fn push(&mut self, bytes: Bytes) {
+        match self {
+            Self::Fragments(fragments) => {
+                if bytes.len() < Self::WHOLE_FRAGMENT || fragments.len() >= Self::MAX_FRAGMENTS {
+                    let capacity = fragments.iter().map(Bytes::len).sum::<usize>() + bytes.len();
+                    let mut buffer = BytesMut::with_capacity(capacity);
+                    for fragment in fragments.drain(..) {
+                        buffer.extend_from_slice(&fragment);
+                    }
+                    buffer.extend_from_slice(&bytes);
+                    *self = Self::Coalesced(buffer);
+                } else {
+                    fragments.push(bytes);
+                }
+            }
+            Self::Coalesced(buffer) => buffer.extend_from_slice(&bytes),
+            Self::Sealed(_) => unreachable!("a sealed buffer is not pushed into"),
+        }
+    }
+
+    /// Drops the buffered fragments of the previous chunk.
+    fn clear(&mut self) {
+        match self {
+            Self::Fragments(fragments) => fragments.clear(),
+            Self::Coalesced(buffer) => buffer.clear(),
+            Self::Sealed(_) => *self = Self::new(),
+        }
+    }
+
+    /// Number of fragments the chunk is emitted as.
+    fn fragment_count(&self) -> usize {
+        match self {
+            Self::Fragments(fragments) => fragments.len(),
+            Self::Coalesced(buffer) => usize::from(!buffer.is_empty()),
+            Self::Sealed(bytes) => usize::from(!bytes.is_empty()),
+        }
+    }
+
+    /// One fragment of the chunk; callers only ask for indices below
+    /// `fragment_count`, and only after the signature was verified.
+    fn fragment(&self, index: usize) -> Bytes {
+        match self {
+            Self::Fragments(fragments) => fragments[index].clone(),
+            Self::Sealed(bytes) => bytes.clone(),
+            Self::Coalesced(buffer) => Bytes::copy_from_slice(&buffer[index.min(buffer.len())..]),
+        }
+    }
+
+    /// Hashes the buffered payload without copying it.
+    fn sha256(&self) -> crate::Sha256Sum {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        match self {
+            Self::Fragments(fragments) => {
+                for fragment in fragments {
+                    hasher.update(fragment.as_ref());
+                }
+            }
+            Self::Coalesced(buffer) => hasher.update(&buffer[..]),
+            Self::Sealed(bytes) => hasher.update(bytes.as_ref()),
+        }
+        crate::Sha256Sum::from_bytes(hasher.finalize().into())
+    }
+
+    /// Freezes a coalesced buffer, so a verified chunk is handed out without
+    /// another copy.
+    fn seal(&mut self) {
+        if let Self::Coalesced(buffer) = self {
+            *self = Self::Sealed(buffer.split().freeze());
+        }
+    }
+}
+
 /// Per-stream signing state: the chunk chain and reusable buffers.
 pub struct SignState {
     ctx: SignContext,
     prev_signature: crate::Sha256Sum,
-    data: Vec<Bytes>,
+    data: ChunkBuffer,
     string_to_sign: String,
 }
 
@@ -53,7 +159,7 @@ impl SignState {
         Self {
             ctx,
             prev_signature: seed_signature,
-            data: Vec::new(),
+            data: ChunkBuffer::new(),
             string_to_sign: String::with_capacity(256),
         }
     }
@@ -68,12 +174,12 @@ impl SignState {
         self.data.push(bytes);
     }
 
-    pub fn data_len(&self) -> usize {
-        self.data.len()
+    pub fn fragment_count(&self) -> usize {
+        self.data.fragment_count()
     }
 
     pub fn fragment(&self, index: usize) -> Bytes {
-        self.data[index].clone()
+        self.data.fragment(index)
     }
 
     /// Verifies the signature of the current chunk and advances the chain.
@@ -81,11 +187,12 @@ impl SignState {
     /// The buffered fragments are only yielded after this succeeds.
     pub fn verify_chunk(&mut self, expected: &[u8; 64]) -> Result<(), Error> {
         let expected = parse_signature(expected)?;
-        let digest = sha256_chunks(&self.data);
+        let digest = self.data.sha256();
         let signature = self.sign_digest(&digest);
         if !expected.ct_equal(&signature) {
             return Err(Error::SignatureMismatch);
         }
+        self.data.seal();
         self.prev_signature = signature;
         Ok(())
     }
@@ -141,15 +248,6 @@ fn parse_signature(bytes: &[u8]) -> Result<crate::Sha256Sum, Error> {
         .ok_or(Error::SignatureMismatch)
 }
 
-fn sha256_chunks(chunks: &[Bytes]) -> crate::Sha256Sum {
-    use sha2::{Digest, Sha256};
-    let mut hasher = Sha256::new();
-    for chunk in chunks {
-        hasher.update(chunk.as_ref());
-    }
-    crate::Sha256Sum::from_bytes(hasher.finalize().into())
-}
-
 impl Debug for SignContext {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("SignContext")
@@ -189,5 +287,57 @@ mod tests {
         assert!(text.contains("SignContext"));
         assert!(text.contains("[REDACTED]"));
         assert!(!text.contains("wJalrXUtnFEMI"));
+    }
+}
+
+#[cfg(test)]
+mod buffer_tests {
+    use super::*;
+
+    fn state() -> SignState {
+        let ctx = SignContext::new(
+            AmzDate::parse("20130524T000000Z").unwrap(),
+            "us-east-1".into(),
+            "s3".into(),
+            b"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+        );
+        SignState::new(ctx, crate::Sha256Sum::from_bytes([0; 32]))
+    }
+
+    #[test]
+    fn keeps_whole_fragments_as_delivered() {
+        let mut sign = state();
+        for _ in 0..4 {
+            sign.push(Bytes::from(vec![0_u8; 8 * 1024]));
+        }
+        assert_eq!(sign.fragment_count(), 4, "whole buffers stay zero copy");
+        assert_eq!(sign.fragment(0).len(), 8 * 1024);
+    }
+
+    #[test]
+    fn coalesces_tiny_fragments() {
+        let mut sign = state();
+        for _ in 0..1024 {
+            sign.push(Bytes::from_static(&[7]));
+        }
+        assert_eq!(sign.fragment_count(), 1, "tiny fragments are coalesced");
+        assert_eq!(sign.fragment(0).len(), 1024);
+    }
+
+    #[test]
+    fn coalesces_beyond_the_fragment_cap() {
+        let mut sign = state();
+        for _ in 0..(ChunkBuffer::MAX_FRAGMENTS + 8) {
+            sign.push(Bytes::from(vec![0_u8; 8 * 1024]));
+        }
+        assert_eq!(sign.fragment_count(), 1, "the fragment list is bounded");
+    }
+
+    #[test]
+    fn clears_between_chunks() {
+        let mut sign = state();
+        sign.push(Bytes::from_static(b"tiny"));
+        sign.clear_chunk();
+        assert_eq!(sign.fragment_count(), 0);
     }
 }
