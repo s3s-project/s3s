@@ -40,8 +40,14 @@ impl<S> ChunkedStream<S> {
     /// not announce any.
     #[must_use]
     pub fn with_required_trailers(mut self, required: bool) -> Self {
-        self.decoder.require_trailers(required);
+        self.require_trailers(required);
         self
+    }
+
+    /// Requires the body to end with a trailer block, for callers that already
+    /// own the stream.
+    pub fn require_trailers(&mut self, required: bool) {
+        self.decoder.require_trailers(required);
     }
 
     /// Creates an unsigned decoder without signature verification.
