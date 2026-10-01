@@ -4,7 +4,7 @@
 //! Frozen differential fixtures.
 //!
 //! The expectations below were produced by the legacy `AwsChunkedStream`
-//! oracle of the differential harness in `crates/s3s/src/stream/parity_tests.rs`.
+//! oracle of the `s3s` crate.
 //! They stay in the crate so the framing, trailer and length-accounting
 //! behaviour remains pinned after the legacy implementation is deleted.
 //!

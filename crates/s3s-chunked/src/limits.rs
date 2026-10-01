@@ -10,8 +10,11 @@ pub struct Limits {
     /// Maximum size of a chunk that carries a chunk signature, in bytes.
     ///
     /// A signed chunk is buffered in memory until its signature is verified, so
-    /// this limit bounds that buffer. Unsigned chunks are streamed through
-    /// without buffering and are not limited here.
+    /// this limit bounds the payload bytes retained for it. Fragments are kept
+    /// as delivered while they are whole read buffers, and coalesced into one
+    /// allocation once they are small or numerous, which also bounds the
+    /// per-fragment overhead a malformed request can pin. Unsigned chunks are
+    /// streamed through without buffering and are not limited here.
     pub max_signed_chunk_size: usize,
 
     /// Maximum size of the trailer block, in bytes.
