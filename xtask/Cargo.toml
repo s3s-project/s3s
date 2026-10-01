@@ -14,6 +14,8 @@ workspace = true
 anyhow.workspace = true
 clap.workspace = true
 regex.workspace = true
-reqwest = { workspace = true, features = ["blocking"] }
+# `system-proxy` is part of the workspace default set, which is disabled
+# workspace-wide: without it the crawler ignores HTTPS_PROXY and stalls.
+reqwest = { workspace = true, features = ["blocking", "system-proxy"] }
 serde.workspace = true
 serde_json = { workspace = true, features = ["preserve_order"] }

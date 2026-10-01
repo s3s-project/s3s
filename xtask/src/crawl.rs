@@ -11,6 +11,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
+use std::time::Duration;
 
 use anyhow::{Context, Result, bail, ensure};
 use clap::Subcommand;
@@ -24,6 +25,8 @@ const S3_MODEL_COMMIT: &str = "db89911ca6d038dd370d843a515a813c1aa47e9d";
 const STS_MODEL_COMMIT: &str = "97e6a2936175d03ec1de31284613e0ef94d2f9cb";
 const AWS_MODEL_RAW: &str = "https://github.com/awslabs/aws-sdk-rust/raw";
 const ERROR_CODES_DOC: &str = "https://docs.aws.amazon.com/AmazonS3/latest/API/API_Error.md";
+/// Wait before retrying a failed download.
+const RETRY_DELAY: Duration = Duration::from_secs(2);
 const DATE_TIME_SUITE: &str =
     "https://github.com/smithy-lang/smithy-rs/raw/main/rust-runtime/aws-smithy-types/test_data/date_time_format_test_suite.json";
 
@@ -88,8 +91,7 @@ fn download_date_time_format_test_suite() -> Result<()> {
 }
 
 fn crawl_error_codes() -> Result<()> {
-    let response = reqwest::blocking::get(ERROR_CODES_DOC).with_context(|| format!("unable to fetch {ERROR_CODES_DOC}"))?;
-    let md_text = response.text().with_context(|| format!("unable to read {ERROR_CODES_DOC}"))?;
+    let md_text = fetch_text(ERROR_CODES_DOC)?;
     if md_text.len() < 100 {
         bail!("unexpected response from {ERROR_CODES_DOC} (len={})", md_text.len());
     }
@@ -103,15 +105,63 @@ fn crawl_error_codes() -> Result<()> {
     save_json(&path, &data)
 }
 
-/// Fetch a URL whose body must be a JSON document, and return the body verbatim.
-fn download_json(url: &str) -> Result<String> {
-    let response = reqwest::blocking::get(url).with_context(|| format!("unable to fetch {url}"))?;
+/// Identifies the tool; the AWS documentation answers 403 without a
+/// `User-Agent`, and unlike `requests` reqwest does not send one.
+const USER_AGENT: &str = concat!("s3s-xtask/", env!("CARGO_PKG_VERSION"));
+
+/// The HTTP client used for every request.
+///
+/// `tcp_user_timeout` defaults to 30 seconds in reqwest, which kills the 3.9 MB
+/// model download mid-body on a slow link; the Python script this replaces had
+/// no such limit. The system proxy is honoured like `requests` does.
+fn client() -> Result<reqwest::blocking::Client> {
+    reqwest::blocking::Client::builder()
+        .tcp_user_timeout(None)
+        .user_agent(USER_AGENT)
+        .build()
+        .context("failed to build the HTTP client")
+}
+
+/// How many times a download is attempted before giving up.
+///
+/// The models are a few megabytes and a flaky link can stall one of them
+/// mid-body; the Python script this replaces failed outright in that case.
+const FETCH_ATTEMPTS: usize = 3;
+
+/// Fetch a URL and return its body, retrying a stalled transfer.
+fn fetch_text(url: &str) -> Result<String> {
+    let client = client()?;
+    let mut last_error = None;
+
+    for attempt in 1..=FETCH_ATTEMPTS {
+        match read_body(&client, url) {
+            Ok(text) => return Ok(text),
+            Err(error) => {
+                if attempt < FETCH_ATTEMPTS {
+                    eprintln!("attempt {attempt}/{FETCH_ATTEMPTS} failed, retrying: {error:#}");
+                    std::thread::sleep(RETRY_DELAY);
+                }
+                last_error = Some(error);
+            }
+        }
+    }
+
+    Err(last_error.expect("at least one attempt runs"))
+}
+
+fn read_body(client: &reqwest::blocking::Client, url: &str) -> Result<String> {
+    let response = client.get(url).send().with_context(|| format!("unable to fetch {url}"))?;
     ensure!(
         response.status() == reqwest::StatusCode::OK,
         "unexpected status {} from {url}",
         response.status()
     );
-    let text = response.text().with_context(|| format!("unable to read {url}"))?;
+    response.text().with_context(|| format!("unable to read {url}"))
+}
+
+/// Fetch a URL whose body must be a JSON document, and return the body verbatim.
+fn download_json(url: &str) -> Result<String> {
+    let text = fetch_text(url)?;
     serde_json::from_str::<Value>(&text).with_context(|| format!("unexpected response from {url}"))?;
     Ok(text)
 }
@@ -276,7 +326,28 @@ fn save_json(path: &Path, data: &Value) -> Result<()> {
     let mut serializer = serde_json::Serializer::with_formatter(&mut buffer, formatter);
     data.serialize(&mut serializer)
         .context("failed to serialize the error codes")?;
-    fs::write(path, buffer).with_context(|| format!("failed to write {}", path.display()))
+    let text = String::from_utf8(buffer).context("the serializer produced invalid UTF-8")?;
+    fs::write(path, escape_non_ascii(&text)).with_context(|| format!("failed to write {}", path.display()))
+}
+
+/// `json.dump` escapes non-ASCII characters by default (`ensure_ascii=True`) and
+/// `serde_json` does not, so the text is escaped here to keep the file
+/// byte-identical with the one the script wrote.
+fn escape_non_ascii(text: &str) -> String {
+    use std::fmt::Write as _;
+
+    let mut escaped = String::with_capacity(text.len());
+    for character in text.chars() {
+        if character.is_ascii() {
+            escaped.push(character);
+        } else {
+            let mut units = [0_u16; 2];
+            for unit in character.encode_utf16(&mut units) {
+                write!(escaped, "\\u{unit:04x}").expect("writing into a String cannot fail");
+            }
+        }
+    }
+    escaped
 }
 
 fn write_text(path: &Path, text: &str) -> Result<()> {
@@ -285,8 +356,27 @@ fn write_text(path: &Path, text: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{clean_description, merge_error_codes, parse_error_codes};
+    use super::{clean_description, escape_non_ascii, merge_error_codes, parse_error_codes, save_json};
     use serde_json::json;
+
+    #[test]
+    fn escapes_non_ascii_like_json_dump() {
+        assert_eq!(escape_non_ascii("plain"), "plain");
+        assert_eq!(escape_non_ascii("signed.\u{c2}"), "signed.\\u00c2");
+        assert_eq!(escape_non_ascii("\u{1f600}"), "\\ud83d\\ude00");
+    }
+
+    #[test]
+    fn writes_the_same_bytes_as_json_dump_indent_4() {
+        let path = std::env::temp_dir().join("xtask-crawl-save-json-test.json");
+        save_json(&path, &json!({"a": [1, {"b": "\u{c2}"}]})).expect("write");
+        let written = std::fs::read_to_string(&path).expect("read");
+        assert_eq!(
+            written,
+            "{\n    \"a\": [\n        1,\n        {\n            \"b\": \"\\u00c2\"\n        }\n    ]\n}"
+        );
+        std::fs::remove_file(&path).ok();
+    }
 
     const SAMPLE: &str = "\n+\n  +  *Code:* AccessDenied\n  +  *Description:* [Access Denied](https://example.com/x)\n  +  *HTTP Status Code:* 403 Forbidden\n  +  *SOAP Fault Code Prefix:* Client\n\n+\n  +  *Code:* NoSuchBucket\n  +  *Description:* The bucket does not exist.\n  +  *Code:* 404 Not Found\n\n+\n  +  *Code:* SlowDown\n  +  *Description:* Reduce your request rate.\n  +  *HTTP Status Code:* N/A\n\n+\n  +  *Code:* NoDescription\n";
 
