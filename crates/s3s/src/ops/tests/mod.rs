@@ -28,6 +28,7 @@ pub(super) mod common;
 pub(crate) use self::common::NeverGetSecretKeyAuth;
 
 mod access;
+mod anonymous_streaming;
 mod budget;
 mod content_length;
 mod custom_route;
