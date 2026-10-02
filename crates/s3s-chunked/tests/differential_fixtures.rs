@@ -72,6 +72,8 @@ fn error_name(error: &Error) -> String {
         Error::ChunkDataTooLarge(size, limit) => format!("ChunkDataTooLarge({size},{limit})"),
         Error::TrailersTooLarge(size, limit) => format!("TrailersTooLarge({size},{limit})"),
         Error::TooManyTrailerHeaders(count, limit) => format!("TooManyTrailerHeaders({count},{limit})"),
+        Error::TrailersMissing => "TrailersMissing".to_owned(),
+        Error::TrailersEmpty => "TrailersEmpty".to_owned(),
     }
 }
 

@@ -315,6 +315,8 @@ fn error_name(error: &Error) -> String {
         Error::ChunkDataTooLarge(..) => "ChunkDataTooLarge".to_owned(),
         Error::TrailersTooLarge(..) => "TrailersTooLarge".to_owned(),
         Error::TooManyTrailerHeaders(..) => "TooManyTrailerHeaders".to_owned(),
+        Error::TrailersMissing => "TrailersMissing".to_owned(),
+        Error::TrailersEmpty => "TrailersEmpty".to_owned(),
     }
 }
 

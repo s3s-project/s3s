@@ -83,6 +83,17 @@ pub enum AwsChunkedStreamError {
     /// Incomplete stream
     #[error("AwsChunkedStreamError: Incomplete")]
     Incomplete,
+
+    /// The request announced trailing headers but none arrived: the body ended before the
+    /// section's terminator, or an unsigned stream carried an empty section. The service
+    /// reports both as malformed trailing data.
+    #[error("AwsChunkedStreamError: TrailersMissing")]
+    TrailersMissing,
+
+    /// The request announced trailing headers, the section terminator arrived without a
+    /// header, and the stream is signed: the body ended before the headers it promised.
+    #[error("AwsChunkedStreamError: TrailersEmpty")]
+    TrailersEmpty,
     /// More bytes produced than the declared decoded length
     #[error("AwsChunkedStreamError: LengthMismatch")]
     LengthMismatch,
@@ -108,15 +119,38 @@ impl AwsChunkedStreamError {
         match self {
             Self::Underlying(_) => S3ErrorCode::InternalError,
             Self::SignatureMismatch => S3ErrorCode::SignatureDoesNotMatch,
+            Self::TrailersMissing => S3ErrorCode::MalformedTrailerError,
             Self::FormatError
             | Self::Incomplete
+            | Self::TrailersEmpty
             | Self::LengthMismatch
             | Self::TrailersTooLarge(..)
             | Self::TooManyTrailerHeaders(..) => S3ErrorCode::IncompleteBody,
             Self::ChunkMetaTooLarge(..) | Self::ChunkDataTooLarge(..) => S3ErrorCode::EntityTooLarge,
         }
     }
+
+    /// Returns the message to report for this error shape, when it differs from the
+    /// error code's default message.
+    ///
+    /// AWS reports the same code with different messages depending on the shape of
+    /// the failure: an empty trailer section is `IncompleteBody` with "The request
+    /// body terminated unexpectedly", while the code's default message describes a
+    /// body shorter than its `Content-Length`. Implementations should prefer this
+    /// message over [`S3ErrorCode::default_message`] when it is present.
+    #[must_use]
+    pub fn message(&self) -> Option<&'static str> {
+        match self {
+            Self::TrailersEmpty => Some(EMPTY_TRAILER_SECTION_MESSAGE),
+            _ => None,
+        }
+    }
 }
+
+/// The message AWS returns when an announced trailer section is present but empty.
+///
+/// Verbatim from the AWS response for `IncompleteBody` in that shape.
+const EMPTY_TRAILER_SECTION_MESSAGE: &str = "The request body terminated unexpectedly";
 
 impl From<s3s_chunked::Error> for AwsChunkedStreamError {
     fn from(error: s3s_chunked::Error) -> Self {
@@ -126,6 +160,8 @@ impl From<s3s_chunked::Error> for AwsChunkedStreamError {
             Error::SignatureMismatch => Self::SignatureMismatch,
             Error::FormatError => Self::FormatError,
             Error::Incomplete => Self::Incomplete,
+            Error::TrailersMissing => Self::TrailersMissing,
+            Error::TrailersEmpty => Self::TrailersEmpty,
             Error::LengthMismatch => Self::LengthMismatch,
             Error::ChunkMetaTooLarge(size, limit) => Self::ChunkMetaTooLarge(size, limit),
             Error::ChunkDataTooLarge(size, limit) => Self::ChunkDataTooLarge(size, limit),
@@ -281,6 +317,8 @@ mod tests {
             (AwsChunkedStreamError::SignatureMismatch, S3ErrorCode::SignatureDoesNotMatch),
             (AwsChunkedStreamError::FormatError, S3ErrorCode::IncompleteBody),
             (AwsChunkedStreamError::Incomplete, S3ErrorCode::IncompleteBody),
+            (AwsChunkedStreamError::TrailersMissing, S3ErrorCode::MalformedTrailerError),
+            (AwsChunkedStreamError::TrailersEmpty, S3ErrorCode::IncompleteBody),
             (AwsChunkedStreamError::LengthMismatch, S3ErrorCode::IncompleteBody),
             (AwsChunkedStreamError::ChunkMetaTooLarge(1, 2), S3ErrorCode::EntityTooLarge),
             (AwsChunkedStreamError::ChunkDataTooLarge(1, 2), S3ErrorCode::EntityTooLarge),
@@ -289,6 +327,23 @@ mod tests {
         ];
         for (err, expected) in cases {
             assert_eq!(err.to_s3_error_code(), expected, "{err:?}");
+        }
+    }
+
+    /// Only the shapes whose AWS message differs from the code default expose one.
+    #[test]
+    fn message_is_shape_specific() {
+        assert_eq!(
+            AwsChunkedStreamError::TrailersEmpty.message(),
+            Some("The request body terminated unexpectedly")
+        );
+        for error in [
+            AwsChunkedStreamError::TrailersMissing,
+            AwsChunkedStreamError::FormatError,
+            AwsChunkedStreamError::Incomplete,
+            AwsChunkedStreamError::SignatureMismatch,
+        ] {
+            assert_eq!(error.message(), None, "{error:?} keeps the code default message");
         }
     }
 
@@ -670,6 +725,101 @@ mod tests {
         assert_eq!(trailers.len(), 1);
         let v = trailers.get("x-amz-checksum-crc32c").unwrap();
         assert_eq!(v, &HeaderValue::from_static("sOO8/Q=="));
+    }
+
+    /// The same signed example without its trailer block: the request announced
+    /// trailers, so the missing block is its own error instead of a generic format
+    /// error, and it maps to `MalformedTrailerError`.
+    #[tokio::test]
+    async fn signed_missing_trailer_block_has_its_own_error() {
+        // Chunk signatures from the AWS streaming example above; no trailer block.
+        let chunk1_meta = b"10000;chunk-signature=b474d8862b1487a5145d686f57f013e54db672cee1c953b3010fb58501ef5aa2\r\n";
+        let chunk2_meta = b"400;chunk-signature=1c1344b170168f8e65b41376b44b20fe354e373826ccbbe2c1d40a8cae51e5c7\r\n";
+        let chunk3_meta = b"0;chunk-signature=2ca2aba2005185cf7159c6277faf83795951dd77a3a99e6e65d5c9f85863f992\r\n";
+
+        let chunk1_data = vec![b'a'; 0x10000];
+        let chunk2_data = vec![b'a'; 1024];
+        let decoded_content_length = chunk1_data.len() + chunk2_data.len();
+
+        let chunk_results: Vec<Result<Bytes, _>> = vec![
+            Ok(join(&[chunk1_meta, &chunk1_data, b"\r\n"])),
+            Ok(join(&[chunk2_meta, &chunk2_data, b"\r\n"])),
+            // The completion chunk ends the stream: no trailer section terminator.
+            Ok(join(&[chunk3_meta])),
+        ];
+
+        let stream = futures::stream::iter(chunk_results);
+        let mut chunked_stream = AwsChunkedStream::new(
+            stream,
+            Sha256Sum::from_hex("106e2a8a18243abcf37539882f36619c00e2dfc72633413f02d3b74544bfeb8e").unwrap(),
+            AmzDate::parse(TIMESTAMP).unwrap(),
+            REGION.into(),
+            SERVICE.into(),
+            SECRET_KEY.into(),
+            decoded_content_length,
+            false,
+            crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
+        );
+        chunked_stream.require_trailers(true);
+
+        let mut last = None;
+        while let Some(item) = chunked_stream.next().await {
+            last = Some(item);
+        }
+        let error = last
+            .expect("the stream yields an error")
+            .expect_err("the missing trailer block fails the stream");
+        assert!(matches!(error, AwsChunkedStreamError::TrailersMissing), "got {error:?}");
+        assert_eq!(error.to_s3_error_code(), S3ErrorCode::MalformedTrailerError);
+        assert_eq!(
+            error.to_s3_error_code().default_message(),
+            Some("The request contained trailing data that was not well-formed or did not conform to our published schema.")
+        );
+    }
+
+    /// The same signed example with an empty trailer section (terminator present, no
+    /// headers) keeps `IncompleteBody` and reports the AWS message for that shape.
+    #[tokio::test]
+    async fn signed_empty_trailer_block_still_maps_to_incomplete_body() {
+        let chunk1_meta = b"10000;chunk-signature=b474d8862b1487a5145d686f57f013e54db672cee1c953b3010fb58501ef5aa2\r\n";
+        let chunk2_meta = b"400;chunk-signature=1c1344b170168f8e65b41376b44b20fe354e373826ccbbe2c1d40a8cae51e5c7\r\n";
+        let chunk3_meta = b"0;chunk-signature=2ca2aba2005185cf7159c6277faf83795951dd77a3a99e6e65d5c9f85863f992\r\n";
+
+        let chunk1_data = vec![b'a'; 0x10000];
+        let chunk2_data = vec![b'a'; 1024];
+        let decoded_content_length = chunk1_data.len() + chunk2_data.len();
+
+        let chunk_results: Vec<Result<Bytes, _>> = vec![
+            Ok(join(&[chunk1_meta, &chunk1_data, b"\r\n"])),
+            Ok(join(&[chunk2_meta, &chunk2_data, b"\r\n"])),
+            // The section terminator is there, the announced headers are not.
+            Ok(join(&[chunk3_meta, b"\r\n"])),
+        ];
+
+        let stream = futures::stream::iter(chunk_results);
+        let mut chunked_stream = AwsChunkedStream::new(
+            stream,
+            Sha256Sum::from_hex("106e2a8a18243abcf37539882f36619c00e2dfc72633413f02d3b74544bfeb8e").unwrap(),
+            AmzDate::parse(TIMESTAMP).unwrap(),
+            REGION.into(),
+            SERVICE.into(),
+            SECRET_KEY.into(),
+            decoded_content_length,
+            false,
+            crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
+        );
+        chunked_stream.require_trailers(true);
+
+        let mut last = None;
+        while let Some(item) = chunked_stream.next().await {
+            last = Some(item);
+        }
+        let error = last
+            .expect("the stream yields an error")
+            .expect_err("the empty trailer section fails the stream");
+        assert!(matches!(error, AwsChunkedStreamError::TrailersEmpty), "got {error:?}");
+        assert_eq!(error.to_s3_error_code(), S3ErrorCode::IncompleteBody);
+        assert_eq!(error.message(), Some("The request body terminated unexpectedly"));
     }
 
     #[tokio::test]
@@ -1443,7 +1593,8 @@ mod tests {
     }
 
     /// A request that announced trailing headers must carry the trailer block, so
-    /// the adapter has to pass that requirement down to the decoder.
+    /// the adapter has to pass that requirement down to the decoder. This stream is
+    /// unsigned, and an unsigned empty section is malformed trailing data.
     #[tokio::test]
     async fn required_trailers_reach_the_decoder() {
         let body = futures::stream::iter(vec![Ok::<Bytes, crate::error::StdError>(Bytes::from_static(
@@ -1467,8 +1618,8 @@ mod tests {
             last = Some(item);
         }
         assert!(
-            matches!(last, Some(Err(AwsChunkedStreamError::FormatError))),
-            "a missing trailer block is a format error, got {last:?}"
+            matches!(last, Some(Err(AwsChunkedStreamError::TrailersMissing))),
+            "an unsigned empty trailer section is malformed trailing data, got {last:?}"
         );
     }
 }

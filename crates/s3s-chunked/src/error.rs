@@ -22,6 +22,22 @@ pub enum Error {
     #[error("incomplete aws-chunked stream")]
     Incomplete,
 
+    /// The request announced trailing headers but none were published: the block never
+    /// arrived, or an unsigned stream carried a section that holds no header.
+    ///
+    /// This is distinct from [`Error::FormatError`]: the framing that arrived was
+    /// well-formed.
+    #[error("missing trailer block")]
+    TrailersMissing,
+
+    /// The request announced trailing headers, the section terminator arrived without a
+    /// header, and the stream is signed: the body ended before the headers it promised.
+    ///
+    /// This is distinct from [`Error::FormatError`]: the section terminator arrived,
+    /// so the framing itself is well-formed.
+    #[error("empty trailer section")]
+    TrailersEmpty,
+
     /// More decoded bytes were produced than the declared decoded length.
     #[error("decoded length mismatch")]
     LengthMismatch,
@@ -52,6 +68,8 @@ mod tests {
         assert_eq!(Error::SignatureMismatch.to_string(), "chunk signature mismatch");
         assert_eq!(Error::FormatError.to_string(), "malformed aws-chunked stream");
         assert_eq!(Error::Incomplete.to_string(), "incomplete aws-chunked stream");
+        assert_eq!(Error::TrailersMissing.to_string(), "missing trailer block");
+        assert_eq!(Error::TrailersEmpty.to_string(), "empty trailer section");
         assert_eq!(Error::LengthMismatch.to_string(), "decoded length mismatch");
         assert_eq!(
             Error::ChunkMetaTooLarge(1025, 1024).to_string(),
