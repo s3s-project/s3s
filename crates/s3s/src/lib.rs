@@ -22,6 +22,21 @@
 //! - `http2` (enabled by default): HTTP/2 support through hyper. Build with
 //!   `default-features = false` to serve HTTP/1.1 only without the `h2`
 //!   dependency, and enable `http2` explicitly when it is needed.
+//! - `tokio-timer` (enabled by default): drives the keep-alive whitespace of
+//!   `CompleteMultipartUpload` with tokio's timer, so it needs a tokio runtime just
+//!   like `tokio::time::interval` does. Use `futures-timer` on other runtimes.
+//! - `futures-timer`: drives the same whitespace with `futures-timer`, which does
+//!   not depend on a runtime. It takes precedence over `tokio-timer` when both are
+//!   enabled.
+//! - `wasm`: adds the wasm support of the `futures-timer` backend (its JS timer
+//!   implementation). It is orthogonal to the backend choice and does nothing on
+//!   its own, so native builds that only need `futures-timer` do not pull the wasm
+//!   dependencies.
+//!
+//! The keep-alive whitespace of `CompleteMultipartUpload` needs a timer: pick a
+//! backend with one of these features, or enable both. With neither one the padding
+//! is disabled — the response starts with the XML declaration and continues with the
+//! final document, without whitespace in between.
 //!
 //! # Architecture
 //!
@@ -160,6 +175,7 @@ mod protocol;
 mod s3_op;
 mod s3_trait;
 mod time;
+mod timer;
 
 pub mod access;
 pub mod auth;
