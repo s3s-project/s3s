@@ -261,13 +261,32 @@ fn emit_requests(cases: &[Case]) {
     g(["];", ""]);
 }
 
+/// Whether `name` is a checksum value header, `x-amz-checksum-<algorithm>`, rather
+/// than one of the auxiliary `x-amz-checksum-algorithm` / `-mode` / `-type` headers.
+fn is_checksum_value_header(name: &str) -> bool {
+    let Some(suffix) = name.strip_prefix("x-amz-checksum-") else {
+        return false;
+    };
+    !matches!(suffix, "algorithm" | "mode" | "type")
+}
+
 fn header_list(case: &Case) -> String {
-    if case.headers.is_empty() {
-        return "[]".to_owned();
-    }
+    // A request may carry at most one checksum value header: the service rejects a request
+    // that names more than one, so the sample keeps the first and drops the rest. A sample
+    // with all of them is refused before the operation reaches its handler, which is what
+    // these cases exercise.
+    let mut checksum_value_seen = false;
     let entries = case
         .headers
         .iter()
+        .filter(|(name, _)| {
+            if !is_checksum_value_header(name) {
+                return true;
+            }
+            let keep = !checksum_value_seen;
+            checksum_value_seen = true;
+            keep
+        })
         .map(|(name, value)| format!("({name:?}, {value:?})"))
         .collect::<Vec<_>>()
         .join(", ");

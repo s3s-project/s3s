@@ -1055,6 +1055,12 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
     let s3_path = req.s3ext.s3_path.as_ref().unwrap();
     debug!(op = %op.name(), ?s3_path, "resolved route");
 
+    // Header validity is decided before the access decision: AWS answers these
+    // malformed-header errors even for callers that lack the operation
+    // permission.
+    http::validate_checksum_headers(req)?;
+    http::validate_expected_bucket_owner(req)?;
+
     authorize(
         ccx,
         op.name(),
