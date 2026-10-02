@@ -249,6 +249,38 @@ pub fn parse_opt_header_timestamp(req: &Request, name: &HeaderName, fmt: Timesta
     }
 }
 
+/// Returns the first value of an optional header, ignoring any further values.
+///
+/// The conditional date fields read a repeated field as its first value: the service evaluates the
+/// condition carried by the first field line (measured: a repeated `If-Unmodified-Since` whose
+/// first value is older than the object answers 412), so a repeated header is not an error here.
+fn get_optional_header_first_value<'r>(req: &'r Request, name: &HeaderName) -> Option<&'r HeaderValue> {
+    let val = req.headers.get(name)?;
+
+    if val.is_empty() {
+        return None;
+    }
+
+    Some(val)
+}
+
+/// Parses an optional header timestamp, ignoring a value that cannot be used as a date in `fmt`.
+///
+/// The conditional date fields use this parser instead of [`parse_opt_header_timestamp`]: a value
+/// that is not a valid HTTP-date is ignored (RFC 9110 §13.1.3, §13.1.4), and so is a value that
+/// cannot be decoded as UTF-8, because neither can carry a valid HTTP-date. A repeated field is
+/// read as its first value, the way the service reads it. The same rules apply to the copy-source
+/// and rename-source conditions.
+///
+/// Nothing here can fail, so the generated caller takes the value without a `?`, the way it takes
+/// [`parse_opt_range_header`].
+pub fn parse_opt_header_timestamp_ignoring_invalid(req: &Request, name: &HeaderName, fmt: TimestampFormat) -> Option<Timestamp> {
+    let val = get_optional_header_first_value(req, name)?;
+    let s = val.to_str().ok()?;
+
+    Timestamp::parse(fmt, s).ok()
+}
+
 pub fn parse_list_header<T>(req: &Request, name: &HeaderName) -> S3Result<List<T>>
 where
     T: TryFromHeaderValue,
@@ -823,6 +855,64 @@ mod tests {
         let name = HeaderName::from_static("x-amz-date");
         let result = parse_opt_header_timestamp(&req, &name, TimestampFormat::HttpDate);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_opt_header_timestamp_ignoring_invalid_ignores_bad_values() {
+        let mut req = make_request();
+        let name = HeaderName::from_static("if-modified-since");
+        req.headers.insert("if-modified-since", "not-a-date".parse().unwrap());
+        let ts = parse_opt_header_timestamp_ignoring_invalid(&req, &name, TimestampFormat::HttpDate);
+        assert!(ts.is_none());
+
+        req.headers
+            .insert("if-modified-since", "Wed, 21 Oct 2015 07:28:00 GMT".parse().unwrap());
+        let ts = parse_opt_header_timestamp_ignoring_invalid(&req, &name, TimestampFormat::HttpDate);
+        assert!(ts.is_some());
+    }
+
+    /// A field that is present but empty cannot carry a date either, so both parsers read it as
+    /// absent; the lenient one does not need to reject anything here.
+    #[test]
+    fn parse_opt_header_timestamp_ignoring_invalid_ignores_an_empty_value() {
+        let mut req = make_request();
+        let name = HeaderName::from_static("if-modified-since");
+        req.headers.insert("if-modified-since", HeaderValue::from_static(""));
+
+        let ts = parse_opt_header_timestamp_ignoring_invalid(&req, &name, TimestampFormat::HttpDate);
+        assert!(ts.is_none());
+        let strict = parse_opt_header_timestamp(&req, &name, TimestampFormat::HttpDate).expect("an empty value is absent");
+        assert!(strict.is_none());
+    }
+
+    /// A value that cannot be decoded as UTF-8 cannot be a valid HTTP-date either, so the lenient
+    /// parser ignores it while the strict one still reports it.
+    #[test]
+    fn parse_opt_header_timestamp_ignoring_invalid_ignores_undecodable_values() {
+        let mut req = make_request();
+        let name = HeaderName::from_static("if-modified-since");
+        req.headers
+            .insert("if-modified-since", HeaderValue::from_bytes(&[0xff, 0xfe]).unwrap());
+
+        let ts = parse_opt_header_timestamp_ignoring_invalid(&req, &name, TimestampFormat::HttpDate);
+        assert!(ts.is_none());
+        assert!(parse_opt_header_timestamp(&req, &name, TimestampFormat::HttpDate).is_err());
+    }
+
+    /// A repeated field is read as its first value (the service evaluates the first field line);
+    /// the strict parser keeps answering a repeated header with an error.
+    #[test]
+    fn parse_opt_header_timestamp_ignoring_invalid_reads_the_first_of_repeated_fields() {
+        let mut req = make_request();
+        let name = HeaderName::from_static("if-modified-since");
+        req.headers
+            .append("if-modified-since", HeaderValue::from_static("Wed, 21 Oct 2015 07:28:00 GMT"));
+        req.headers
+            .append("if-modified-since", HeaderValue::from_static("not-a-date"));
+
+        let ts = parse_opt_header_timestamp_ignoring_invalid(&req, &name, TimestampFormat::HttpDate);
+        assert!(ts.is_some(), "the first value carries the condition");
+        assert!(parse_opt_header_timestamp(&req, &name, TimestampFormat::HttpDate).is_err());
     }
 
     // --- parse_query / parse_opt_query tests ---

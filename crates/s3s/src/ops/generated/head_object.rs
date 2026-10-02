@@ -24,12 +24,12 @@ impl HeadObject {
         let if_match: Option<IfMatch> = http::parse_opt_header(req, &IF_MATCH)?;
 
         let if_modified_since: Option<IfModifiedSince> =
-            http::parse_opt_header_timestamp(req, &IF_MODIFIED_SINCE, TimestampFormat::HttpDate)?;
+            http::parse_opt_header_timestamp_ignoring_invalid(req, &IF_MODIFIED_SINCE, TimestampFormat::HttpDate);
 
         let if_none_match: Option<IfNoneMatch> = http::parse_opt_header(req, &IF_NONE_MATCH)?;
 
         let if_unmodified_since: Option<IfUnmodifiedSince> =
-            http::parse_opt_header_timestamp(req, &IF_UNMODIFIED_SINCE, TimestampFormat::HttpDate)?;
+            http::parse_opt_header_timestamp_ignoring_invalid(req, &IF_UNMODIFIED_SINCE, TimestampFormat::HttpDate);
 
         let part_number: Option<PartNumber> = http::parse_opt_query(req, "partNumber")?;
 
