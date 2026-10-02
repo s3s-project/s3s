@@ -104,24 +104,41 @@ fn reject_unsigned_amz_headers(config: &S3Config, hs: &HeaderMap, signed_names: 
             continue;
         }
         if !signed_names.iter().any(|signed| signed.eq_ignore_ascii_case(name)) {
-            return Err(s3_error!(AccessDenied, "There were headers present in the request which were not signed"));
+            return Err(unsigned_headers_error());
         }
     }
     Ok(())
 }
 
-/// Returns whether the `SigV4` signed-header list covers `host`.
+/// The rejection shared by the unsigned-header checks: an `x-amz-*` header that the
+/// signed-header list does not cover, or `host` missing from that list.
+fn unsigned_headers_error() -> S3Error {
+    s3_error!(AccessDenied, "There were headers present in the request which were not signed")
+}
+
+/// Rejects a `SigV4` request whose signed-header list omits `host` when
+/// [`S3Config::require_signed_host`] is enabled.
 ///
 /// `SigV4` requires `host` (HTTP/1.1) or `:authority` (HTTP/2) to be part of
 /// `CanonicalHeaders`, and therefore of `SignedHeaders` / `X-Amz-SignedHeaders`.
 /// [`collect_signed_headers`] reads only the header names the client declared, so
 /// without this check a request signed over a list that omits `host` is accepted and
-/// the host used for routing stays outside the signature.
+/// the host used for routing stays outside the signature. AWS rejects such a request
+/// with `AccessDenied`, so this check returns the same error as
+/// [`reject_unsigned_amz_headers`].
 ///
-/// The check is opt-in via [`S3Config::require_signed_host`]. The signed-header list is
-/// client-supplied and not lowercased, so the comparison is case-insensitive.
-pub(super) fn signed_host_is_covered(config: &S3Config, signed_names: &[&str]) -> bool {
-    !config.require_signed_host || signed_names.iter().any(|name| name.eq_ignore_ascii_case("host"))
+/// The signed-header list is client-supplied and not lowercased, so the comparison is
+/// case-insensitive.
+pub(super) fn reject_unsigned_host(config: &S3Config, signed_names: &[&str]) -> S3Result<()> {
+    if !config.require_signed_host {
+        return Ok(());
+    }
+
+    if signed_names.iter().any(|name| name.eq_ignore_ascii_case("host")) {
+        return Ok(());
+    }
+
+    Err(unsigned_headers_error())
 }
 
 fn extract_amz_date(hs: &HeaderMap) -> S3Result<Option<AmzDate>> {
@@ -640,12 +657,9 @@ impl<'a> SignatureContext<'a> {
             ));
         }
 
-        if !signed_host_is_covered(&config, &presigned_url.signed_headers) {
-            return Err(s3_error!(
-                AuthorizationQueryParametersError,
-                "The authorization query parameters that you provided are not valid; the signed-header list must include host."
-            ));
-        }
+        // A presigned URL whose X-Amz-SignedHeaders omits host is rejected like any
+        // other request that leaves a required header outside the signature.
+        reject_unsigned_host(&config, &presigned_url.signed_headers)?;
 
         // Per AWS SigV4 spec, the credential scope date must match the x-amz-date date.
         if presigned_url.credential.date != presigned_url.amz_date.fmt_date().as_str() {
@@ -779,12 +793,9 @@ impl<'a> SignatureContext<'a> {
 
         validate_sig_v4_service(service, &config)?;
 
-        if !signed_host_is_covered(&config, &authorization.signed_headers) {
-            return Err(s3_error!(
-                AuthorizationHeaderMalformed,
-                "The authorization header is malformed; the signed-header list must include host."
-            ));
-        }
+        // Reject a missing host before the secret key lookup, like the other
+        // unsigned-header rejection further down.
+        reject_unsigned_host(&config, &authorization.signed_headers)?;
 
         let auth = require_auth(self.auth)?;
 

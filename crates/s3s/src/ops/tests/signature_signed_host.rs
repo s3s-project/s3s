@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
-//! The optional requirement that the `SigV4` signed-header list covers `host`.
+//! The requirement that the `SigV4` signed-header list covers `host`.
 
 use super::common::*;
 
 use crate::auth::SimpleAuth;
 use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
+use crate::error::S3ErrorCode;
 use crate::http::Request;
-use crate::ops::signature::signed_host_is_covered;
+use crate::ops::signature::reject_unsigned_host;
 
 use hyper::{Method, StatusCode, Uri, Version};
 use std::fmt::Write as _;
@@ -16,6 +17,8 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 const URI: &str = "http://localhost/test-bucket/test-key.txt";
+
+const UNSIGNED_HEADERS_MESSAGE: &str = "There were headers present in the request which were not signed";
 
 fn config_with_require_signed_host(require_signed_host: bool) -> Arc<dyn S3ConfigProvider> {
     Arc::new(StaticConfigProvider::new(Arc::new(S3Config {
@@ -149,21 +152,66 @@ fn presigned_request(version: Version, uri: Uri, extra: &[(&'static str, &'stati
     Request::from(builder.body(empty_unknown_length_body()).unwrap())
 }
 
-#[test]
-fn signed_host_check_is_opt_in_and_case_insensitive() {
-    let mut config = S3Config::default();
-    assert!(signed_host_is_covered(&config, &["x-amz-date"]), "the check must be disabled by default");
+fn assert_access_denied_body(version: Version, body: &str) {
+    assert!(
+        body.contains("<Code>AccessDenied</Code>"),
+        "{version:?}: unexpected error code in body: {body:?}"
+    );
+    assert!(
+        body.contains(UNSIGNED_HEADERS_MESSAGE),
+        "{version:?}: unexpected error message in body: {body:?}"
+    );
+}
 
-    config.require_signed_host = true;
-    assert!(signed_host_is_covered(&config, &["host"]));
-    assert!(signed_host_is_covered(&config, &["x-amz-date", "Host"]));
-    assert!(signed_host_is_covered(&config, &["HOST", "x-amz-date"]));
-    assert!(!signed_host_is_covered(&config, &["x-amz-date"]));
-    assert!(!signed_host_is_covered(&config, &[]));
+#[test]
+fn unsigned_host_is_rejected_by_default_and_the_check_can_be_disabled() {
+    let mut config = S3Config::default();
+
+    let err = reject_unsigned_host(&config, &["x-amz-date"]).expect_err("host must be required by default");
+    assert_eq!(err.code(), &S3ErrorCode::AccessDenied);
+    assert_eq!(err.message(), Some(UNSIGNED_HEADERS_MESSAGE));
+
+    reject_unsigned_host(&config, &["host"]).expect("a covered host must be accepted");
+    reject_unsigned_host(&config, &["x-amz-date", "Host"]).expect("the comparison must be case-insensitive");
+    reject_unsigned_host(&config, &["HOST"]).expect("the comparison must be case-insensitive");
+
+    config.require_signed_host = false;
+    reject_unsigned_host(&config, &["x-amz-date"]).expect("the check must be disableable");
+    reject_unsigned_host(&config, &[]).expect("the check must be disableable");
 }
 
 #[tokio::test]
-async fn unsigned_host_is_accepted_by_default_on_header_auth() {
+async fn unsigned_host_is_rejected_by_default_on_header_auth() {
+    for version in [Version::HTTP_11, Version::HTTP_2] {
+        let test_s3 = Arc::new(TestS3::default());
+        let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
+        let config = test_config();
+        let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
+        let ccx = test_context(&s3, &config, &auth);
+
+        let mut req = signed_request_with_names(Method::PUT, version, URI, &["x-amz-content-sha256", "x-amz-date"]);
+        let response = super::call(&mut req, &ccx)
+            .await
+            .expect("a host-less request must still be answered");
+        assert_eq!(
+            response.status,
+            StatusCode::FORBIDDEN,
+            "{version:?}: a host-less signed list must be rejected, got {:?}",
+            response.status
+        );
+        let body = response.body.bytes().expect("error body is buffered");
+        let body = std::str::from_utf8(&body).expect("error body is UTF-8");
+        assert_access_denied_body(version, body);
+        assert_eq!(
+            test_s3.put_object.load(Ordering::SeqCst),
+            0,
+            "{version:?}: a rejected request must not upload"
+        );
+    }
+}
+
+#[tokio::test]
+async fn unsigned_host_is_accepted_when_the_check_is_disabled_on_header_auth() {
     for version in [Version::HTTP_11, Version::HTTP_2] {
         let test_s3 = Arc::new(TestS3::default());
         let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
@@ -177,43 +225,10 @@ async fn unsigned_host_is_accepted_by_default_on_header_auth() {
             .expect("a request signed without host must be routed");
         assert!(
             response.status.is_success(),
-            "{version:?}: a host-less signed list must keep working by default, got {:?}",
+            "{version:?}: a host-less signed list must keep working when disabled, got {:?}",
             response.status
         );
         assert_eq!(test_s3.put_object.load(Ordering::SeqCst), 1, "{version:?}: the upload must be routed");
-    }
-}
-
-#[tokio::test]
-async fn unsigned_host_is_rejected_when_required_on_header_auth() {
-    for version in [Version::HTTP_11, Version::HTTP_2] {
-        let test_s3 = Arc::new(TestS3::default());
-        let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
-        let config = config_with_require_signed_host(true);
-        let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
-        let ccx = test_context(&s3, &config, &auth);
-
-        let mut req = signed_request_with_names(Method::PUT, version, URI, &["x-amz-content-sha256", "x-amz-date"]);
-        let response = super::call(&mut req, &ccx)
-            .await
-            .expect("a host-less request must still be answered");
-        assert_eq!(
-            response.status,
-            StatusCode::BAD_REQUEST,
-            "{version:?}: a host-less signed list must be rejected, got {:?}",
-            response.status
-        );
-        let body = response.body.bytes().expect("error body is buffered");
-        let body = std::str::from_utf8(&body).expect("error body is UTF-8");
-        assert!(
-            body.contains("<Code>AuthorizationHeaderMalformed</Code>"),
-            "{version:?}: unexpected error body: {body:?}"
-        );
-        assert_eq!(
-            test_s3.put_object.load(Ordering::SeqCst),
-            0,
-            "{version:?}: a rejected request must not upload"
-        );
     }
 }
 
@@ -240,7 +255,38 @@ async fn signed_host_is_accepted_when_required_on_header_auth() {
 }
 
 #[tokio::test]
-async fn unsigned_host_is_accepted_by_default_on_presigned_url() {
+async fn unsigned_host_is_rejected_by_default_on_presigned_url() {
+    for version in [Version::HTTP_11, Version::HTTP_2] {
+        let test_s3 = Arc::new(TestS3::default());
+        let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
+        let config = test_config();
+        let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
+        let ccx = test_context(&s3, &config, &auth);
+
+        let uri = presigned_put_uri(&[("x-amz-content-sha256", EMPTY_SHA256)]);
+        let mut req = presigned_request(version, uri, &[("x-amz-content-sha256", EMPTY_SHA256)]);
+        let response = super::call(&mut req, &ccx)
+            .await
+            .expect("a host-less presigned request must still be answered");
+        assert_eq!(
+            response.status,
+            StatusCode::FORBIDDEN,
+            "{version:?}: a host-less X-Amz-SignedHeaders must be rejected, got {:?}",
+            response.status
+        );
+        let body = response.body.bytes().expect("error body is buffered");
+        let body = std::str::from_utf8(&body).expect("error body is UTF-8");
+        assert_access_denied_body(version, body);
+        assert_eq!(
+            test_s3.put_object.load(Ordering::SeqCst),
+            0,
+            "{version:?}: a rejected request must not upload"
+        );
+    }
+}
+
+#[tokio::test]
+async fn unsigned_host_is_accepted_when_the_check_is_disabled_on_presigned_url() {
     for version in [Version::HTTP_11, Version::HTTP_2] {
         let test_s3 = Arc::new(TestS3::default());
         let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
@@ -255,44 +301,10 @@ async fn unsigned_host_is_accepted_by_default_on_presigned_url() {
             .expect("a presigned URL signed without host must be routed");
         assert!(
             response.status.is_success(),
-            "{version:?}: a host-less X-Amz-SignedHeaders must keep working by default, got {:?}",
+            "{version:?}: a host-less X-Amz-SignedHeaders must keep working when disabled, got {:?}",
             response.status
         );
         assert_eq!(test_s3.put_object.load(Ordering::SeqCst), 1, "{version:?}: the upload must be routed");
-    }
-}
-
-#[tokio::test]
-async fn unsigned_host_is_rejected_when_required_on_presigned_url() {
-    for version in [Version::HTTP_11, Version::HTTP_2] {
-        let test_s3 = Arc::new(TestS3::default());
-        let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
-        let config = config_with_require_signed_host(true);
-        let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
-        let ccx = test_context(&s3, &config, &auth);
-
-        let uri = presigned_put_uri(&[("x-amz-content-sha256", EMPTY_SHA256)]);
-        let mut req = presigned_request(version, uri, &[("x-amz-content-sha256", EMPTY_SHA256)]);
-        let response = super::call(&mut req, &ccx)
-            .await
-            .expect("a host-less presigned request must still be answered");
-        assert_eq!(
-            response.status,
-            StatusCode::BAD_REQUEST,
-            "{version:?}: a host-less X-Amz-SignedHeaders must be rejected, got {:?}",
-            response.status
-        );
-        let body = response.body.bytes().expect("error body is buffered");
-        let body = std::str::from_utf8(&body).expect("error body is UTF-8");
-        assert!(
-            body.contains("<Code>AuthorizationQueryParametersError</Code>"),
-            "{version:?}: unexpected error body: {body:?}"
-        );
-        assert_eq!(
-            test_s3.put_object.load(Ordering::SeqCst),
-            0,
-            "{version:?}: a rejected request must not upload"
-        );
     }
 }
 

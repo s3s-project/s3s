@@ -336,15 +336,17 @@ pub struct S3Config {
     ///
     /// `SigV4` requires the `host` header (HTTP/1.1) or `:authority` (HTTP/2) to be
     /// part of `CanonicalHeaders`, and therefore of `SignedHeaders` /
-    /// `X-Amz-SignedHeaders`. When enabled, a `SigV4` request whose signed-header
-    /// list omits `host` is rejected before the secret key lookup: header
-    /// authentication returns `AuthorizationHeaderMalformed` and presigned URL
-    /// authentication returns `AuthorizationQueryParametersError`.
+    /// `X-Amz-SignedHeaders`. AWS rejects a request whose signed-header list omits
+    /// `host` with `AccessDenied` and "There were headers present in the request
+    /// which were not signed".
     ///
-    /// The signed-header list is client-supplied and not lowercased, so the check is
+    /// When enabled, header authentication and presigned URL authentication reject
+    /// such a request before the secret key lookup, with that same error. The
+    /// signed-header list is client-supplied and not lowercased, so the check is
     /// case-insensitive.
     ///
-    /// Default: false (a request signed over a list without `host` keeps working)
+    /// Default: true. Set to `false` to keep accepting clients that cannot sign
+    /// `host`; the host used for routing then stays outside the signature.
     pub require_signed_host: bool,
     /// `x-amz-*` request headers that may be presented unsigned on a `SigV4` request.
     ///
@@ -385,7 +387,7 @@ impl Default for S3Config {
             operation_id_routing: true,
             allow_presigned_url: true,
             allow_post_signature: true,
-            require_signed_host: false,
+            require_signed_host: true,
             unsigned_amz_header_allowlist: Vec::new(),
         }
     }
@@ -613,7 +615,7 @@ mod tests {
             operation_id_routing: true,
             allow_presigned_url: true,
             allow_post_signature: true,
-            require_signed_host: true,
+            require_signed_host: false,
             unsigned_amz_header_allowlist: vec!["x-amz-cf-id".to_owned()],
         };
 
@@ -657,7 +659,7 @@ mod tests {
         assert_eq!(config.sig_v4_allowed_services, ["s3", "sts"]);
         assert_eq!(config.presigned_url_max_expires_secs, DEFAULT_PRESIGNED_URL_MAX_EXPIRES_SECS);
         assert!(config.normalize_content_length);
-        assert!(!config.require_signed_host);
+        assert!(config.require_signed_host);
     }
 
     #[test]
