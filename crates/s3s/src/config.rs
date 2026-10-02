@@ -299,16 +299,38 @@ pub struct S3Config {
     /// without aws-chunked) are never backfilled and keep a missing
     /// `Content-Length`.
     ///
-    /// AWS rejects a `PUT` that carries neither `Content-Length` nor
-    /// `Transfer-Encoding` with `411 MissingContentLength`. This option is
-    /// deliberately more permissive by default: such a body is empty, its
-    /// length is therefore known to be zero, and implementations observe a
-    /// backfilled `Content-Length: 0` instead of the 411. Set this option to
-    /// `false` to keep the missing header missing so that stricter behavior
-    /// can be enforced elsewhere.
+    /// Requests that declare neither `Content-Length` nor
+    /// `Transfer-Encoding` are refused by
+    /// [`S3Config::require_content_length`], which is enabled by default, so
+    /// this backfill only applies to requests that pass that requirement: the
+    /// length it inserts is the aws-chunked decoded length or an exact
+    /// remaining length.
     ///
     /// Default: true
     pub normalize_content_length: bool,
+
+    /// Whether a streaming upload has to declare its body length.
+    ///
+    /// Streaming operations (`PutObject`, `UploadPart`,
+    /// `WriteGetObjectResponse`) refuse a request that carries neither
+    /// `Content-Length` nor `Transfer-Encoding` with
+    /// `411 MissingContentLength`, which is the answer the service gives for
+    /// that shape: such a request declares no body length, which RFC 9112 §6.3
+    /// reads as zero bytes, and the service requires the length to be stated
+    /// explicitly. The size limit of [`S3Config::put_object_max_size`] keeps
+    /// its precedence.
+    ///
+    /// An `aws-chunked` request declares its length through
+    /// `x-amz-decoded-content-length`, so it is unaffected, as are requests
+    /// that carry either header. Operations with an XML payload are outside
+    /// this check.
+    ///
+    /// Set to `false` to accept such uploads instead: the length is then
+    /// backfilled per [`S3Config::normalize_content_length`], or left missing
+    /// when that option is disabled as well.
+    ///
+    /// Default: true
+    pub require_content_length: bool,
 
     /// Whether client-declared operation intent (OIR) routing is enabled.
     ///
@@ -403,6 +425,7 @@ impl Default for S3Config {
             presigned_url_max_expires_secs: DEFAULT_PRESIGNED_URL_MAX_EXPIRES_SECS,
             normalize_forward_slash_path: false,
             normalize_content_length: true,
+            require_content_length: true,
             operation_id_routing: true,
             allow_presigned_url: true,
             allow_post_signature: true,
@@ -631,6 +654,7 @@ mod tests {
             presigned_url_max_expires_secs: 86_400,
             normalize_forward_slash_path: false,
             normalize_content_length: true,
+            require_content_length: false,
             operation_id_routing: true,
             allow_presigned_url: true,
             allow_post_signature: true,
@@ -678,6 +702,7 @@ mod tests {
         assert_eq!(config.sig_v4_allowed_services, ["s3", "sts"]);
         assert_eq!(config.presigned_url_max_expires_secs, DEFAULT_PRESIGNED_URL_MAX_EXPIRES_SECS);
         assert!(config.normalize_content_length);
+        assert!(config.require_content_length);
         assert!(config.require_signed_host);
     }
 

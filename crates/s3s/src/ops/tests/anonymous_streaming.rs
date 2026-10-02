@@ -117,6 +117,24 @@ fn anonymous_put(framed: Bytes, decoded_content_length: Option<usize>, extra_hea
     Request::from(builder.body(Body::from(framed)).expect("valid request"))
 }
 
+/// The same declaration without a wire length: no `Content-Length` and no
+/// `Transfer-Encoding`, only the aws-chunked decoded length.
+fn anonymous_put_without_wire_length(framed: Bytes, decoded_content_length: usize, extra_headers: &[(&str, &str)]) -> Request {
+    let uri = request_uri();
+    let mut builder = hyper::Request::builder()
+        .method(Method::PUT)
+        .version(Version::HTTP_11)
+        .uri(uri.clone())
+        .header(crate::header::HOST, uri.authority().expect("authority").as_str())
+        .header("content-encoding", "aws-chunked")
+        .header(crate::header::X_AMZ_CONTENT_SHA256, UNSIGNED_TRAILER)
+        .header(crate::header::X_AMZ_DECODED_CONTENT_LENGTH, decoded_content_length);
+    for &(name, value) in extra_headers {
+        builder = builder.header(name, value);
+    }
+    Request::from(builder.body(Body::from(framed)).expect("valid request"))
+}
+
 fn anonymous_plain_put(body: Bytes) -> Request {
     let uri = request_uri();
     Request::from(
@@ -173,6 +191,40 @@ async fn anonymous_unsigned_trailer_put_reaches_the_implementation_decoded() {
         .expect("put_object should run")
         .expect("the body should be readable");
     assert_eq!(received, payload, "an anonymous aws-chunked body must reach the implementation decoded");
+}
+
+/// `x-amz-decoded-content-length` is how an aws-chunked request declares its
+/// length: a request that carries neither `Content-Length` nor
+/// `Transfer-Encoding` but announces that length is not refused by the length
+/// requirement, and its decoded payload still reaches the implementation.
+#[tokio::test]
+async fn anonymous_unsigned_trailer_without_a_wire_length_is_not_length_required() {
+    let payload = Bytes::from_static(b"declared length, no wire length");
+    let framed = frames(&[b"declared ", b"length, no ", b"wire length"]);
+    let service = Arc::new(BodyRecordingS3::default());
+    let s3: Arc<dyn crate::s3_trait::S3> = service.clone();
+    let config = test_config();
+    let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
+    let access = AllowAllAccess;
+    let ccx = anonymous_ccx(&s3, &config, &auth, &access);
+
+    let mut req = anonymous_put_without_wire_length(framed, payload.len(), &[]);
+    let response = super::call(&mut req, &ccx).await.expect("the request should be dispatched");
+    assert_ne!(
+        response.status,
+        StatusCode::LENGTH_REQUIRED,
+        "a declared decoded length is a length declaration"
+    );
+    assert!(response.status.is_success(), "unexpected status: {}", response.status);
+
+    let received = service
+        .received
+        .lock()
+        .expect("test mutex")
+        .clone()
+        .expect("put_object should run")
+        .expect("the body should be readable");
+    assert_eq!(received, payload, "the decoded payload must reach the implementation");
 }
 
 /// A plain anonymous PUT stays untouched.

@@ -164,15 +164,18 @@ fn empty_body_signed_put(version: Version) -> Request {
 #[tokio::test]
 async fn backfills_known_content_length_for_zero_length_put() {
     // RFC 9112 §6.3: a PUT without `Content-Length` and without
-    // `Transfer-Encoding` has an empty body. The length is known (exact
-    // zero), so with the default `normalize_content_length` the `S3`
-    // implementation must observe `Some(0)` and an inserted
-    // `Content-Length: 0` header instead of an ambiguous `None`.
+    // `Transfer-Encoding` has an empty body. The default configuration
+    // refuses that shape (see
+    // `default_config_rejects_put_without_content_length_or_transfer_encoding`),
+    // so the backfill is exercised through the opt-out: with
+    // `normalize_content_length` enabled the `S3` implementation must observe
+    // `Some(0)` and an inserted `Content-Length: 0` header instead of an
+    // ambiguous `None`.
     let recording = Arc::new(ContentLengthRecordingS3 {
         received: Mutex::new(None),
     });
     let s3: Arc<dyn crate::s3_trait::S3> = recording.clone();
-    let config = test_config();
+    let config = without_length_requirement();
     let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
     let ccx = test_context(&s3, &config, &auth);
 
@@ -200,7 +203,9 @@ async fn ordinary_signed_put_ignores_unrelated_decoded_content_length() {
         received: Mutex::new(None),
     });
     let s3: Arc<dyn crate::s3_trait::S3> = recording.clone();
-    let config = test_config();
+    // The opt-out config: the default refuses a request that declares no
+    // length, which is what this request is.
+    let config = without_length_requirement();
     let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
     let ccx = test_context(&s3, &config, &auth);
 
@@ -216,30 +221,122 @@ async fn ordinary_signed_put_ignores_unrelated_decoded_content_length() {
     assert_eq!(header_len, Some(0));
 }
 
-#[tokio::test]
-async fn normalize_content_length_disabled_keeps_strict_header_semantics() {
-    let recording = Arc::new(ContentLengthRecordingS3 {
-        received: Mutex::new(None),
-    });
-    let s3: Arc<dyn crate::s3_trait::S3> = recording.clone();
-    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(S3Config {
+/// The opt-out: `require_content_length = false` keeps accepting a streaming
+/// upload that declares no length, with the length backfilled per
+/// `normalize_content_length`.
+fn without_length_requirement() -> Arc<dyn S3ConfigProvider> {
+    Arc::new(StaticConfigProvider::new(Arc::new(S3Config {
+        presigned_url_max_skew_time_secs: u32::MAX,
+        expected_region: Some(REGION.parse().expect("valid test region")),
+        require_content_length: false,
+        ..Default::default()
+    })))
+}
+
+/// No backfill either: the implementation observes the body without a
+/// `Content-Length` header. The length requirement stays at its default.
+fn without_backfill() -> Arc<dyn S3ConfigProvider> {
+    Arc::new(StaticConfigProvider::new(Arc::new(S3Config {
         presigned_url_max_skew_time_secs: u32::MAX,
         expected_region: Some(REGION.parse().expect("valid test region")),
         normalize_content_length: false,
         ..Default::default()
-    })));
+    })))
+}
+
+fn error_body(response: &crate::http::Response) -> String {
+    let bytes = response.body.bytes().expect("error responses carry an in-memory body");
+    String::from_utf8(bytes.to_vec()).unwrap()
+}
+
+#[tokio::test]
+async fn default_config_rejects_put_without_content_length_or_transfer_encoding() {
+    // A PUT that carries neither `Content-Length` nor `Transfer-Encoding`
+    // declares no body length (RFC 9112 §6.3 reads it as zero bytes); AWS
+    // answers 411 MissingContentLength for it, and the default configuration
+    // does the same. The requirement is independent of the backfill, and the
+    // opt-out restores the permissive handling.
+    let test_s3 = Arc::new(TestS3::default());
+    let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
+    let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
+
+    let config = test_config();
+    let ccx = test_context(&s3, &config, &auth);
+    let mut req = empty_body_signed_put(Version::HTTP_11);
+    assert!(req.headers.get(hyper::header::CONTENT_LENGTH).is_none());
+    assert!(req.headers.get(hyper::header::TRANSFER_ENCODING).is_none());
+
+    let response = super::call(&mut req, &ccx).await.unwrap();
+    assert_eq!(response.status, StatusCode::LENGTH_REQUIRED);
+    let body = error_body(&response);
+    assert!(body.contains("<Code>MissingContentLength</Code>"), "{body}");
+    assert!(
+        body.contains("<Message>You must provide the Content-Length HTTP header.</Message>"),
+        "{body}"
+    );
+    assert_eq!(test_s3.put_object.load(Ordering::SeqCst), 0, "the handler must not be invoked");
+
+    // Disabling the backfill does not relax the requirement.
+    let config = without_backfill();
+    let ccx = test_context(&s3, &config, &auth);
+    let mut req = empty_body_signed_put(Version::HTTP_11);
+    let response = super::call(&mut req, &ccx).await.unwrap();
+    assert_eq!(response.status, StatusCode::LENGTH_REQUIRED);
+    assert_eq!(test_s3.put_object.load(Ordering::SeqCst), 0);
+
+    let config = without_length_requirement();
+    let ccx = test_context(&s3, &config, &auth);
+    let mut req = empty_body_signed_put(Version::HTTP_11);
+    let response = super::call(&mut req, &ccx).await.unwrap();
+    assert_eq!(response.status, StatusCode::OK, "the opt-out keeps accepting the request");
+    assert_eq!(test_s3.put_object.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn default_config_accepts_put_with_explicit_content_length() {
+    let test_s3 = Arc::new(TestS3::default());
+    let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
+    let config = test_config();
     let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
     let ccx = test_context(&s3, &config, &auth);
 
     let mut req = empty_body_signed_put(Version::HTTP_11);
-    assert!(req.headers.get(hyper::header::CONTENT_LENGTH).is_none());
+    req.headers
+        .insert(hyper::header::CONTENT_LENGTH, HeaderValue::from_static("0"));
 
     let response = super::call(&mut req, &ccx).await.unwrap();
-    assert_eq!(response.status, StatusCode::OK, "s3s still accepts the request");
+    assert_eq!(response.status, StatusCode::OK);
+    assert_eq!(test_s3.put_object.load(Ordering::SeqCst), 1);
+}
 
-    let (input_len, header_len) = recording.received.lock().unwrap().take().expect("put_object was called");
-    assert_eq!(input_len, None, "dto content_length must reflect the wire headers when disabled");
-    assert_eq!(header_len, None, "no Content-Length may be inserted when disabled");
+#[tokio::test]
+async fn chunked_transfer_encoding_reports_length_required() {
+    // Current behavior for `Transfer-Encoding: chunked` uploads: the request is
+    // refused with 411 MissingContentLength before dispatch, in the default
+    // configuration and with the requirement disabled. AWS answers 501
+    // NotImplemented for this shape; that difference is recorded in the report
+    // and left to a separate change.
+    let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
+
+    for config in [test_config(), without_length_requirement()] {
+        let test_s3 = Arc::new(TestS3::default());
+        let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
+        let ccx = test_context(&s3, &config, &auth);
+
+        let mut req = signed_request(
+            Method::PUT,
+            Version::HTTP_11,
+            "http://localhost/test-bucket/test-key.txt",
+            EMPTY_SHA256,
+            &[],
+        );
+        req.headers
+            .insert(hyper::header::TRANSFER_ENCODING, HeaderValue::from_static("chunked"));
+
+        let response = super::call(&mut req, &ccx).await.unwrap();
+        assert_eq!(response.status, StatusCode::LENGTH_REQUIRED);
+        assert_eq!(test_s3.put_object.load(Ordering::SeqCst), 0, "the handler must not be invoked");
+    }
 }
 
 #[tokio::test]

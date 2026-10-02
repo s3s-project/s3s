@@ -15,10 +15,11 @@ use hyper::{Method, StatusCode, Uri, Version};
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-/// Sends a signed request with an exact empty body plus `extra_headers`.
+/// Sends a signed request with an empty body plus `extra_headers`.
 ///
-/// `Body::empty()` has an exact length of zero, which keeps payload-bearing
-/// operations such as `PutObject` clear of the missing-`Content-Length` path.
+/// The request declares `Content-Length: 0`, which is what the service requires
+/// of a payload-bearing operation such as `PutObject`; without it the request
+/// is refused before the headers under test are read.
 fn signed_empty_request(method: Method, extra_headers: &[(&'static str, &'static str)]) -> Request {
     signed_request_with_header_lists(method, extra_headers, extra_headers)
 }
@@ -43,7 +44,8 @@ fn signed_request_with_header_lists(
         .header(crate::header::HOST, uri.authority().unwrap().as_str())
         .header(crate::header::X_AMZ_CONTENT_SHA256, EMPTY_SHA256)
         .header(crate::header::X_AMZ_DATE, AMZ_DATE)
-        .header(crate::header::AUTHORIZATION, authorization);
+        .header(crate::header::AUTHORIZATION, authorization)
+        .header(hyper::header::CONTENT_LENGTH, "0");
 
     for &(name, value) in send_headers {
         builder = builder.header(name, value);

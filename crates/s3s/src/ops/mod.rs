@@ -393,13 +393,24 @@ fn prepare_streaming_body(req: &mut Request, config: &S3Config) -> S3Result {
         return Err(s3_error!(EntityTooLarge, "Request body exceeds the configured maximum object size."));
     }
     req.body.set_limit(config.put_object_max_size);
+    // A streaming upload has to declare its length: the service refuses a
+    // request that carries neither `Content-Length` nor `Transfer-Encoding`
+    // with 411 MissingContentLength, and such a request declares no body
+    // length at all (RFC 9112 §6.3 reads it as zero bytes). An aws-chunked
+    // request declares its length through `x-amz-decoded-content-length`, so
+    // it keeps its decoded body. The size limit above keeps its precedence.
+    if config.require_content_length
+        && content_length.is_none()
+        && req.s3ext.decoded_content_length.is_none()
+        && !req.headers.contains_key(hyper::header::TRANSFER_ENCODING)
+    {
+        return Err(s3_error!(MissingContentLength));
+    }
     // Backfill a known request-body length so that the `S3`
     // implementation never sees an ambiguous missing `Content-Length`.
     // Use the transformed body's length (aws-chunked uploads), or an
-    // exact remaining length (e.g. an empty body without
-    // `Content-Length`, which is empty by definition per RFC 9112 §6.3).
-    // Unknown-length bodies (chunked transfer-encoding without
-    // aws-chunked) stay untouched.
+    // exact remaining length. Unknown-length bodies (chunked
+    // transfer-encoding without aws-chunked) stay untouched.
     if config.normalize_content_length
         && content_length.is_none()
         && let Some(known) = known_length
