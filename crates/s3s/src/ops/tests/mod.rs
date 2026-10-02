@@ -36,6 +36,7 @@ mod decoded_content_length;
 mod error_response;
 mod generated_ops;
 mod host;
+mod key_length;
 #[cfg(feature = "minio")]
 mod listen_bucket_notification;
 mod oir;
