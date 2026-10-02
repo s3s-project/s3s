@@ -642,7 +642,14 @@ impl<'a> SignatureContext<'a> {
     pub async fn v4_check_presigned_url(&mut self) -> S3Result<CredentialsExt> {
         let config = self.config.snapshot();
 
-        let presigned_url = PresignedUrlV4::parse(self.query_pairs(), config.presigned_url_max_expires_secs).map_err(|err| {
+        // A configured maximum of zero disables the limit; the parser only accepts an upper bound.
+        let max_expires_secs = if config.presigned_url_max_expires_secs == 0 {
+            u32::MAX
+        } else {
+            config.presigned_url_max_expires_secs
+        };
+
+        let presigned_url = PresignedUrlV4::parse(self.query_pairs(), max_expires_secs).map_err(|err| {
             s3_error!(
                 err,
                 AuthorizationQueryParametersError,
@@ -1077,8 +1084,27 @@ impl<'a> SignatureContext<'a> {
         let presigned_url =
             PresignedUrlV2::parse(self.query_pairs()).map_err(|err| invalid_request!(err, "missing presigned url v2 fields"))?;
 
-        if jiff::Timestamp::now() > presigned_url.expires_time {
-            return Err(s3_error!(AccessDenied, "Request has expired"));
+        {
+            // check expiration
+            let now = jiff::Timestamp::now();
+
+            if now > presigned_url.expires_time {
+                return Err(s3_error!(AccessDenied, "Request has expired"));
+            }
+
+            // The configured maximum validity applies to SigV2 as well: it bounds how far in the
+            // future a presigned URL may expire. Exactly the configured maximum is allowed, and a
+            // configured maximum of zero disables the limit.
+            let max_expires_secs = self.config.snapshot().presigned_url_max_expires_secs;
+            if max_expires_secs != 0 {
+                let max_validity = jiff::SignedDuration::from_secs(i64::from(max_expires_secs));
+                if presigned_url.expires_time.duration_since(now) > max_validity {
+                    return Err(s3_error!(
+                        AuthorizationQueryParametersError,
+                        "The presigned URL expiration exceeds the server's maximum allowed validity period."
+                    ));
+                }
+            }
         }
 
         let auth = require_auth(self.auth)?;
