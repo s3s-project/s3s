@@ -3,7 +3,6 @@
 
 use crate::fs::FileSystem;
 use crate::fs::InternalInfo;
-use crate::fs::remove_file_if_exists;
 use crate::utils::*;
 
 use s3s::S3;
@@ -1090,8 +1089,15 @@ impl S3 for FileSystem {
             checksum_type,
         };
         obj_attrs.expires = input.expires;
-        self.save_object_attributes(&input.bucket, &input.key, &obj_attrs, Some(upload_id))
-            .await?;
+        if let Err(err) = self
+            .save_object_attributes(&input.bucket, &input.key, &obj_attrs, Some(upload_id))
+            .await
+        {
+            // The upload directory exists but carries no attributes, so the client could not complete
+            // the upload with the metadata it asked for. Drop the half-created upload instead.
+            let _ = self.delete_upload_id(&upload_id).await;
+            return Err(err.into());
+        }
 
         let output = CreateMultipartUploadOutput {
             bucket: Some(input.bucket),
@@ -1346,10 +1352,13 @@ impl S3 for FileSystem {
 
         let upload_uuid = Uuid::parse_str(&upload_id).map_err(|_| s3_error!(InvalidRequest))?;
 
-        let mut parts: Vec<Part> = Vec::new();
-        let mut iter = try_!(fs::read_dir(&self.root).await);
+        // The parts live in the directory that owns this upload, so the listing never walks the root.
+        let upload_dir_path = self.get_upload_dir_path(&upload_uuid)?;
+        let Some(mut iter) = try_!(skip_vanished(fs::read_dir(&upload_dir_path).await)) else {
+            return Err(s3_error!(NoSuchUpload));
+        };
 
-        let prefix = format!(".upload_id-{upload_id}");
+        let mut parts: Vec<Part> = Vec::new();
 
         while let Some(entry) = try_!(iter.next_entry().await) {
             let file_type = try_!(entry.file_type().await);
@@ -1360,9 +1369,10 @@ impl S3 for FileSystem {
             let file_name = entry.file_name();
             let Some(name) = file_name.to_str() else { continue };
 
-            let Some(part_segment) = name.strip_prefix(&prefix) else { continue };
-            let Some(part_number) = part_segment.strip_prefix(".part-") else { continue };
-            let part_number = part_number.parse::<i32>().unwrap();
+            // `part-<n>` is a part body; `part-<n>.json` and the upload's own files are not.
+            let Some(part_number) = name.strip_prefix("part-").and_then(|segment| segment.parse::<i32>().ok()) else {
+                continue;
+            };
 
             let file_meta = try_!(entry.metadata().await);
             let last_modified = Timestamp::from(try_!(file_meta.modified()));
@@ -1508,7 +1518,6 @@ impl S3 for FileSystem {
         let total_parts_cnt = i32::try_from(parts_count).expect("total number of parts must be <= 10000.");
 
         let mut part_md5_hashes: Vec<[u8; 16]> = Vec::new();
-        let mut completed_parts = Vec::with_capacity(parts_count);
         let mut buf = vec![0u8; 65536];
 
         for part in multipart_upload.parts.into_iter().flatten() {
@@ -1550,7 +1559,6 @@ impl S3 for FileSystem {
             }
 
             debug!(from = %part_path.display(), tmp = %file_writer.tmp_path().display(), to = %file_writer.dest_path().display(), ?size, "write file");
-            completed_parts.push((part_number, part_path));
         }
 
         // Compute multipart ETag: MD5 of concatenated part MD5 hashes, suffixed with part count
@@ -1581,38 +1589,12 @@ impl S3 for FileSystem {
             self.save_internal_info(&bucket, &key, &info).await?;
         }
 
-        // The object is committed. Keep the upload ID until residue is removed so an abort can retry
-        // cleanup after a failure, and never turn cleanup failure into an error response.
-        let mut cleanup_failed = false;
-        if let Err(err) = self.delete_metadata(&bucket, &key, Some(upload_id)) {
-            cleanup_failed = true;
-            warn!(%upload_id, error = ?err, "failed to delete completed multipart upload metadata");
-        }
-        for (part_number, part_path) in completed_parts {
-            if let Err(err) = remove_file_if_exists(&part_path).await {
-                cleanup_failed = true;
-                warn!(
-                    %upload_id,
-                    part_number,
-                    path = %part_path.display(),
-                    error = ?err,
-                    "failed to delete completed multipart upload part"
-                );
-            }
-            if let Err(err) = self.delete_upload_part_info(upload_id, part_number).await {
-                cleanup_failed = true;
-                warn!(
-                    %upload_id,
-                    part_number,
-                    error = ?err,
-                    "failed to delete completed multipart upload part metadata"
-                );
-            }
-        }
-        if cleanup_failed {
-            warn!(%upload_id, "retaining completed multipart upload ID because cleanup left residue");
-        } else if let Err(err) = self.delete_upload_id(&upload_id).await {
-            warn!(%upload_id, error = ?err, "failed to retire completed multipart upload");
+        // The object is committed. Its upload directory holds the parts, their metadata and the
+        // upload record, so removing the directory retires all of them at once; if that fails, the
+        // directory stays behind and a later abort retries the cleanup. Cleanup failure never turns
+        // into an error response, because the object is already committed.
+        if let Err(err) = self.delete_upload_id(&upload_id).await {
+            warn!(%upload_id, error = ?err, "failed to remove completed multipart upload state");
         }
 
         let output = CompleteMultipartUploadOutput {
@@ -1658,21 +1640,8 @@ impl S3 for FileSystem {
             return Err(s3_error!(AccessDenied));
         }
 
-        self.delete_metadata(&bucket, &key, Some(upload_id))?;
-
-        let prefix = format!(".upload_id-{upload_id}");
-        let info_prefix = format!(".upload_part_info-{upload_id}");
-        let mut iter = try_!(fs::read_dir(&self.root).await);
-        while let Some(entry) = try_!(iter.next_entry().await) {
-            let file_name = entry.file_name();
-            let Some(name) = file_name.to_str() else { continue };
-
-            if name.starts_with(&prefix) || name.starts_with(&info_prefix) {
-                let path = entry.path();
-                remove_file_if_exists(&path).await?;
-            }
-        }
-
+        // The upload directory owns the parts, their metadata and the upload record, so a single
+        // removal retires the whole upload. Removing an upload that is already gone is not an error.
         self.delete_upload_id(&upload_id).await?;
 
         debug!(bucket = %bucket, key = %key, upload_id = %upload_id, "multipart upload aborted");
