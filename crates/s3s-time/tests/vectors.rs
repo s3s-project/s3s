@@ -46,7 +46,7 @@ impl TestCase {
     }
 
     fn timestamp(&self) -> Timestamp {
-        Timestamp::from_unix_timestamp_nanos(self.nanos()).expect("the canonical instant is representable")
+        Timestamp::from_unix_nanos(self.nanos()).expect("the canonical instant is representable")
     }
 }
 
@@ -142,15 +142,12 @@ fn vectors_parse_epoch_seconds() {
         match (case.error, result) {
             (true, Err(_)) => section.expected_error(),
             (true, Ok(ts)) => {
-                section.fail(format!("{}: expected an error, parsed {} ns", case.value(), ts.unix_timestamp_nanos()));
+                section.fail(format!("{}: expected an error, parsed {} ns", case.value(), ts.unix_nanos()));
             }
-            (false, Ok(ts)) if ts.unix_timestamp_nanos() == case.nanos() => section.pass(),
-            (false, Ok(ts)) => section.fail(format!(
-                "{}: expected {} ns, got {} ns",
-                case.value(),
-                case.nanos(),
-                ts.unix_timestamp_nanos()
-            )),
+            (false, Ok(ts)) if ts.unix_nanos() == case.nanos() => section.pass(),
+            (false, Ok(ts)) => {
+                section.fail(format!("{}: expected {} ns, got {} ns", case.value(), case.nanos(), ts.unix_nanos()));
+            }
             (false, Err(err)) => section.fail(format!("{}: {err}", case.value())),
         }
     }
@@ -168,15 +165,12 @@ fn vectors_parse_date_time() {
         match (case.error, result) {
             (true, Err(_)) => section.expected_error(),
             (true, Ok(ts)) => {
-                section.fail(format!("{}: expected an error, parsed {} ns", case.value(), ts.unix_timestamp_nanos()));
+                section.fail(format!("{}: expected an error, parsed {} ns", case.value(), ts.unix_nanos()));
             }
-            (false, Ok(ts)) if ts.unix_timestamp_nanos() == case.nanos() => section.pass(),
-            (false, Ok(ts)) => section.fail(format!(
-                "{}: expected {} ns, got {} ns",
-                case.value(),
-                case.nanos(),
-                ts.unix_timestamp_nanos()
-            )),
+            (false, Ok(ts)) if ts.unix_nanos() == case.nanos() => section.pass(),
+            (false, Ok(ts)) => {
+                section.fail(format!("{}: expected {} ns, got {} ns", case.value(), case.nanos(), ts.unix_nanos()));
+            }
             (false, Err(err)) => section.fail(format!("{}: {err}", case.value())),
         }
     }
@@ -201,7 +195,7 @@ fn vectors_parse_http_date() {
             match result {
                 Err(ParseTimestampError::InvalidFormat | ParseTimestampError::OutOfRange) => section.pass(),
                 Err(err) => section.fail(format!("{value}: unexpected error class {err:?}")),
-                Ok(ts) => section.fail(format!("{value}: expected a rejection, parsed {} s", ts.unix_timestamp())),
+                Ok(ts) => section.fail(format!("{value}: expected a rejection, parsed {} s", ts.unix_seconds())),
             }
             continue;
         }
@@ -209,8 +203,8 @@ fn vectors_parse_http_date() {
         match (case.error, result) {
             (true, Err(_)) => section.expected_error(),
             (true, Ok(_)) => section.fail(format!("{value}: expected an error")),
-            (false, Ok(ts)) if ts.unix_timestamp() == case.seconds() => section.pass(),
-            (false, Ok(ts)) => section.fail(format!("{value}: expected {} s, got {} s", case.seconds(), ts.unix_timestamp())),
+            (false, Ok(ts)) if ts.unix_seconds() == case.seconds() => section.pass(),
+            (false, Ok(ts)) => section.fail(format!("{value}: expected {} s, got {} s", case.seconds(), ts.unix_seconds())),
             (false, Err(err)) => section.fail(format!("{value}: {err}")),
         }
     }

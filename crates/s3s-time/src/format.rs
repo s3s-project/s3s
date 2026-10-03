@@ -19,14 +19,14 @@ static DATE_TIME: temporal::DateTimePrinter = temporal::DateTimePrinter::new().p
 static HTTP_DATE: rfc2822::DateTimePrinter = rfc2822::DateTimePrinter::new();
 
 /// Writes an RFC 3339 date-time with exactly three fractional digits.
-pub(crate) fn date_time(ts: &Timestamp, w: &mut impl io::Write) -> Result<(), FormatTimestampError> {
+pub fn date_time(ts: &Timestamp, w: &mut impl io::Write) -> Result<(), FormatTimestampError> {
     check_year(ts)?;
     let mut wtr = IoWriter::new(w);
     DATE_TIME.print_timestamp(ts, &mut wtr).map_err(|_| wtr.error())
 }
 
 /// Writes an IMF-fixdate HTTP date, dropping the subsecond component.
-pub(crate) fn http_date(ts: &Timestamp, w: &mut impl io::Write) -> Result<(), FormatTimestampError> {
+pub fn http_date(ts: &Timestamp, w: &mut impl io::Write) -> Result<(), FormatTimestampError> {
     check_year(ts)?;
     let mut wtr = IoWriter::new(w);
     HTTP_DATE.print_timestamp_rfc9110(ts, &mut wtr).map_err(|_| wtr.error())
@@ -36,7 +36,7 @@ pub(crate) fn http_date(ts: &Timestamp, w: &mut impl io::Write) -> Result<(), Fo
 ///
 /// The fraction is always positive, so an instant before the epoch is written
 /// as the floor second plus the fraction: minus half a second is `-1.5`.
-pub(crate) fn epoch_seconds(ts: &Timestamp, w: &mut impl io::Write) -> Result<(), FormatTimestampError> {
+pub fn epoch_seconds(ts: &Timestamp, w: &mut impl io::Write) -> Result<(), FormatTimestampError> {
     let nanos = ts.as_nanosecond();
     let seconds = nanos.div_euclid(1_000_000_000);
     let subsecond = nanos.rem_euclid(1_000_000_000);

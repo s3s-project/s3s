@@ -12,17 +12,14 @@
 //! - `epoch-seconds`: seconds since the Unix epoch with an optional fraction,
 //!   written as the shortest exact decimal.
 //!
-//! # Stability
+//! # Conventions
 //!
-//! The stable surface is the wire format of each representation and the
-//! classification of the errors:
-//!
-//! - [`Timestamp`] and [`TimestampFormat`], including the variant names,
-//! - the accepted input and the emitted bytes of the three formats,
-//! - the variant names of [`ParseTimestampError`] and [`FormatTimestampError`].
-//!
-//! Everything else may change in a minor release: the internal representation,
-//! the error messages and the helper methods.
+//! [`Timestamp`] carries a UTC instant with nanosecond precision, and
+//! [`TimestampFormat`] selects one of the three representations; the variant
+//! names are the format names. The accepted input and the emitted bytes of each
+//! format are the ones recorded by the wire-format vectors of the model data and
+//! by the contract fixture of the migration. [`ParseTimestampError`] and
+//! [`FormatTimestampError`] classify the failures.
 //!
 //! # Example
 //!
@@ -43,7 +40,7 @@ mod format;
 mod parse;
 mod timestamp;
 
-pub use self::error::ComponentRangeError;
+pub use self::error::ConvertTimestampError;
 pub use self::error::FormatTimestampError;
 pub use self::error::ParseTimestampError;
 pub use self::timestamp::Timestamp;

@@ -24,7 +24,7 @@ const FRACTION_SCALE: [i128; 10] = [
 ];
 
 /// Parses an RFC 3339 date-time and normalizes it to UTC.
-pub(crate) fn date_time(s: &str) -> Result<Timestamp, ParseTimestampError> {
+pub fn date_time(s: &str) -> Result<Timestamp, ParseTimestampError> {
     temporal::DateTimeParser::new()
         .parse_timestamp(s)
         .map(Timestamp::from_inner)
@@ -35,7 +35,7 @@ pub(crate) fn date_time(s: &str) -> Result<Timestamp, ParseTimestampError> {
 ///
 /// The weekday carried by the input is not checked against the date: the
 /// instant does not depend on it, so an inconsistent weekday is accepted.
-pub(crate) fn http_date(s: &str) -> Result<Timestamp, ParseTimestampError> {
+pub fn http_date(s: &str) -> Result<Timestamp, ParseTimestampError> {
     rfc2822::DateTimeParser::new()
         .relaxed_weekday(true)
         .parse_timestamp(s)
@@ -49,7 +49,7 @@ pub(crate) fn http_date(s: &str) -> Result<Timestamp, ParseTimestampError> {
 /// optional dot followed by one to nine digits. The fraction is always
 /// positive: `-1.5` denotes minus one second plus five tenths, that is
 /// `-0.5` seconds.
-pub(crate) fn epoch_seconds(s: &str) -> Result<Timestamp, ParseTimestampError> {
+pub fn epoch_seconds(s: &str) -> Result<Timestamp, ParseTimestampError> {
     let (seconds, fraction) = match s.split_once('.') {
         Some((seconds, fraction)) => (seconds, Some(fraction)),
         None => (s, None),
@@ -66,7 +66,7 @@ pub(crate) fn epoch_seconds(s: &str) -> Result<Timestamp, ParseTimestampError> {
         .and_then(|nanos| nanos.checked_add(fraction))
         .ok_or(ParseTimestampError::Overflow)?;
 
-    Timestamp::from_unix_timestamp_nanos(nanos).map_err(|_| ParseTimestampError::OutOfRange)
+    Timestamp::from_unix_nanos(nanos).map_err(|_| ParseTimestampError::OutOfRange)
 }
 
 /// Parses the seconds field of an epoch-seconds value.
