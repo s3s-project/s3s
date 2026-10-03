@@ -17,10 +17,14 @@ rustdoc-args = ["--cfg", "docsrs"]
 [lints]
 workspace = true
 
+[features]
+serde = ["dep:serde"]
+
 [dependencies]
 jiff.workspace = true
-serde.workspace = true
+serde = { workspace = true, optional = true }
 thiserror.workspace = true
 
 [dev-dependencies]
+serde.workspace = true
 serde_json.workspace = true
