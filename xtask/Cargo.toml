@@ -13,6 +13,7 @@ workspace = true
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
+jiff.workspace = true
 quick-xml.workspace = true
 regex.workspace = true
 # `system-proxy` is part of the workspace default set, which is disabled

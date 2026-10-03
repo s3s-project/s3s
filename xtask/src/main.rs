@@ -12,6 +12,7 @@ mod crawl;
 mod link_license;
 mod report;
 mod spdx;
+mod watch_pr;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -40,6 +41,8 @@ enum Command {
     /// Check or insert SPDX license headers.
     #[command(subcommand)]
     Spdx(spdx::Spdx),
+    /// Watch a pull request until its state changes.
+    WatchPr(watch_pr::WatchPr),
 }
 
 fn main() -> ExitCode {
@@ -49,6 +52,7 @@ fn main() -> ExitCode {
         Command::LinkLicense(cmd) => cmd.run(),
         Command::Report(cmd) => cmd.run(),
         Command::Spdx(cmd) => cmd.run(),
+        Command::WatchPr(cmd) => cmd.run(),
     };
     match result {
         Ok(true) => ExitCode::SUCCESS,
