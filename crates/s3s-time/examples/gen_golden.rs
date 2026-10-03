@@ -5,7 +5,7 @@
 //!
 //! Run it with:
 //!
-//! cargo run -p s3s-time --example gen_golden
+//! `cargo run -p s3s-time --example gen_golden`
 //!
 //! The oracle is the timestamp type that the s3s crate ships today, the implementation
 //! that this crate is being cultivated to replace. Every case of the fixed corpus is
@@ -62,6 +62,9 @@ fn main() {
     let cases = generate(&specs);
     let text = render_fixture(&cases);
     let path = support::fixture_path();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).unwrap_or_else(|error| panic!("cannot create {}: {error}", parent.display()));
+    }
     fs::write(&path, &text).unwrap_or_else(|error| panic!("cannot write {}: {error}", path.display()));
     print_summary(&suite, &cases);
 }
@@ -139,7 +142,7 @@ fn suite_note(direction: Direction, case: &SuiteCase) -> String {
     if case.error {
         notes.push("error case".to_owned());
     }
-    if direction == Direction::Format && case.canonical_nanos % 1_000_000 != 0 {
+    if direction == Direction::Format && !case.canonical_nanos.is_multiple_of(1_000_000) {
         notes.push("sub-millisecond".to_owned());
     }
     notes.join(", ")
@@ -162,14 +165,16 @@ fn format_of(section: &str) -> Format {
 
 /// Adds the boundary corpus that the crate design records.
 fn boundary_corpus(specs: &mut Vec<Spec>) {
-    boundary_date_time(specs);
+    boundary_date_time_parse(specs);
+    boundary_date_time_format(specs);
     boundary_http_date(specs);
-    boundary_epoch_seconds(specs);
+    boundary_epoch_seconds_parse(specs);
+    boundary_epoch_seconds_format(specs);
 }
 
-/// The date-time boundaries of the design.
-fn boundary_date_time(specs: &mut Vec<Spec>) {
-    let parse_cases: [(&str, &str, &str); 42] = [
+/// The date-time inputs of the design.
+fn boundary_date_time_parse(specs: &mut Vec<Spec>) {
+    let parse_cases: [(&str, &str, &str); 46] = [
         ("design-4.1/canonical", "1985-04-12T23:20:50Z", "RFC 3339 without a fraction"),
         ("design-4.1/fraction-one-digit", "1985-04-12T23:20:50.5Z", "one fractional digit"),
         (
@@ -196,11 +201,26 @@ fn boundary_date_time(specs: &mut Vec<Spec>) {
         ("design-4.1/offset-hour-only", "1985-04-12T23:20:50+02", "an offset without minutes"),
         ("design-4.1/offset-out-of-range", "1985-04-12T23:20:50+24:00", "an offset beyond a day"),
         (
+            "design-4.1/offset-minute-out-of-range",
+            "1985-04-12T23:20:50+00:60",
+            "an offset minute beyond an hour",
+        ),
+        (
             "design-4.1/fraction-and-offset",
             "1985-04-12T23:20:50.5+01:00",
             "a fraction next to an offset",
         ),
         ("design-4.1/leap-second", "1990-12-31T23:59:60Z", "a leap second"),
+        (
+            "design-4.1/leap-second-fraction",
+            "1990-12-31T23:59:60.5Z",
+            "a leap second with a fraction",
+        ),
+        (
+            "design-4.1/leap-second-offset",
+            "1990-12-31T23:59:60+00:00",
+            "a leap second with a zero offset",
+        ),
         ("design-4.1/leap-day", "2020-02-29T12:00:00Z", "a leap day"),
         ("design-4.1/non-leap-day", "2021-02-29T12:00:00Z", "a leap day in a common year"),
         ("design-4.1/day-out-of-range", "1985-02-30T00:00:00Z", "day 30 in February"),
@@ -210,6 +230,7 @@ fn boundary_date_time(specs: &mut Vec<Spec>) {
         ("design-4.1/second-out-of-range", "1985-04-12T23:20:61Z", "second 61"),
         ("design-4.1/date-only", "1985-04-12", "a date without a time"),
         ("design-4.1/space-separator", "1985-04-12 23:20:50Z", "a space instead of the T separator"),
+        ("design-4.1/tab-separator", "1985-04-12\t23:20:50Z", "a tab instead of the T separator"),
         ("design-4.1/no-seconds", "1985-04-12T23:20Z", "a time without seconds"),
         ("design-4.1/no-zone", "1985-04-12T23:20:50", "a time without a zone"),
         ("design-4.1/comma-decimal", "1985-04-12T23:20:50,52Z", "a comma as the decimal separator"),
@@ -252,7 +273,10 @@ fn boundary_date_time(specs: &mut Vec<Spec>) {
     for (id, input, note) in parse_cases {
         specs.push(Spec::parse(Format::DateTime, input, id, note));
     }
+}
 
+/// The date-time instants of the design.
+fn boundary_date_time_format(specs: &mut Vec<Spec>) {
     let format_cases: [(&str, i64, u32, &str); 12] = [
         ("design-4.1/format-epoch", 0, 0, "the Unix epoch"),
         ("design-4.1/format-millisecond", 0, 1_000_000, "one millisecond"),
@@ -387,8 +411,8 @@ fn boundary_http_date(specs: &mut Vec<Spec>) {
     }
 }
 
-/// The epoch-seconds boundaries of the design.
-fn boundary_epoch_seconds(specs: &mut Vec<Spec>) {
+/// The epoch-seconds inputs of the design.
+fn boundary_epoch_seconds_parse(specs: &mut Vec<Spec>) {
     let parse_cases: [(&str, &str, &str); 37] = [
         ("design-4.3/zero", "0", "the epoch"),
         ("design-4.3/negative-zero", "-0", "a negative zero"),
@@ -455,7 +479,10 @@ fn boundary_epoch_seconds(specs: &mut Vec<Spec>) {
     for (id, input, note) in parse_cases {
         specs.push(Spec::parse(Format::EpochSeconds, input, id, note));
     }
+}
 
+/// The epoch-seconds instants of the design.
+fn boundary_epoch_seconds_format(specs: &mut Vec<Spec>) {
     let range_min = unix_seconds(-9999, 1, 2, 1, 59, 59);
     let range_max = unix_seconds(9999, 12, 30, 22, 0, 0);
     let computed: [(&str, String, &str); 4] = [
@@ -510,12 +537,37 @@ fn boundary_epoch_seconds(specs: &mut Vec<Spec>) {
 
 /// Rejects a format case whose instant the two implementations cannot both hold.
 fn check_format_range(specs: &[Spec]) {
+    let model = support::platform_model();
+    let mut carried = 0_usize;
+    let mut uncarried = Vec::new();
     for spec in specs.iter().filter(|spec| spec.direction == Direction::Format) {
         let instant = support::decode_instant(&spec.input).unwrap_or_else(|error| panic!("{}: {error}", spec.intent));
-        if instant < RANGE_MIN || instant > RANGE_MAX {
-            panic!("{}: the instant {instant:?} is outside the shared range", spec.intent);
+        assert!(
+            instant >= RANGE_MIN && instant <= RANGE_MAX,
+            "{}: the instant {instant:?} is outside the shared range",
+            spec.intent
+        );
+        if model.carries(instant.0, instant.1) {
+            carried += 1;
+        } else {
+            uncarried.push(spec.intent.clone());
         }
     }
+    // The fixture is frozen on a clock that carries the corpus: a format case the clock
+    // cannot keep would record a different instant. An injected model makes this fire on
+    // any machine, so the alignment of the corpus can be rehearsed without Windows.
+    assert!(
+        uncarried.is_empty(),
+        "the platform model (tick={}, floor={}) cannot carry {} format cases: {}",
+        model.tick_nanos,
+        model.floor_seconds,
+        uncarried.len(),
+        uncarried.join(", ")
+    );
+    println!(
+        "format cases: {carried} carried by the platform model (tick={}, floor={})",
+        model.tick_nanos, model.floor_seconds
+    );
 }
 
 /// Runs every corner of the corpus through the oracle.
@@ -523,7 +575,8 @@ fn generate(specs: &[Spec]) -> Vec<Case> {
     specs
         .iter()
         .map(|spec| {
-            let outcome = api::run::<Oracle>(spec.direction, spec.format, &spec.input);
+            let outcome = api::try_run::<Oracle>(spec.direction, spec.format, &spec.input)
+                .expect("the fixture is generated where the platform clock carries the corpus");
             Case::new(spec, outcome.expected()).unwrap_or_else(|error| panic!("{}: {error}", spec.intent))
         })
         .collect()
@@ -591,9 +644,11 @@ fn git(root: &Path, args: &[&str]) -> String {
         .args(args)
         .output()
         .unwrap_or_else(|error| panic!("cannot run git: {error}"));
-    if !output.status.success() {
-        panic!("git {args:?} failed: {}", String::from_utf8_lossy(&output.stderr).trim());
-    }
+    assert!(
+        output.status.success(),
+        "git {args:?} failed: {}",
+        String::from_utf8_lossy(&output.stderr).trim()
+    );
     String::from_utf8(output.stdout)
         .expect("git output is UTF-8")
         .trim()

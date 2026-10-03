@@ -14,8 +14,8 @@ use std::fmt;
 use std::hash::Hash;
 
 use crate::harness::support::{
-    Case, Direction, Expected, Format, carries_faithfully, decode_epoch_literal, decode_instant, platform_tick_nanos,
-    render_expected, system_time,
+    Case, Direction, Expected, Format, PlatformModel, checked_system_time, decode_epoch_literal, decode_instant, platform_model,
+    render_expected,
 };
 
 /// One wire-format operation, as the frozen fixture describes it.
@@ -23,8 +23,9 @@ pub trait TimeApi: Sized + Clone + Eq + Ord + Hash + fmt::Debug {
     /// The error type of the implementation.
     type Error: fmt::Debug;
 
-    /// Builds an instant from canonical seconds and a non-negative adjustment.
-    fn from_instant(secs: i64, nanos: u32) -> Self;
+    /// Builds an instant from canonical seconds and a non-negative adjustment, or
+    /// returns none when the implementation cannot represent the instant.
+    fn try_from_instant(secs: i64, nanos: u32) -> Option<Self>;
 
     /// Parses the text of the given format.
     fn parse(format: Format, text: &str) -> Result<Self, Self::Error>;
@@ -80,28 +81,33 @@ impl Outcome {
 ///
 /// Panics when a format case does not carry a canonical instant, which the fixture
 /// parser rejects before a test runs.
-pub fn run<T: TimeApi>(direction: Direction, format: Format, input: &str) -> Outcome {
+pub fn try_run<T: TimeApi>(direction: Direction, format: Format, input: &str) -> Option<Outcome> {
     match direction {
-        Direction::Parse => match T::parse(format, input) {
+        Direction::Parse => Some(match T::parse(format, input) {
             Ok(timestamp) => {
                 let (secs, nanos) = timestamp.canonical();
                 Outcome::Instant { secs, nanos }
             }
             Err(error) => Outcome::Error(T::error_name(&error)),
-        },
+        }),
         Direction::Format => {
             let (secs, nanos) = decode_instant(input).expect("a format case carries a canonical instant");
-            match T::from_instant(secs, nanos).format(format) {
+            // A format case crosses the platform bridge, whose clock fixes both the range
+            // and the precision of an instant. None means the platform cannot carry it,
+            // and the case belongs to the skipped side of a run rather than to a failure.
+            let timestamp = T::try_from_instant(secs, nanos)?;
+            Some(match timestamp.format(format) {
                 Ok(text) => Outcome::Text(text),
                 Err(error) => Outcome::Error(T::error_name(&error)),
-            }
+            })
         }
     }
 }
 
-/// Runs one fixture case against an implementation.
-pub fn run_case<T: TimeApi>(case: &Case) -> Outcome {
-    run::<T>(case.direction, case.format, &case.input)
+/// Runs one fixture case against an implementation, or nothing when the platform bridge
+/// cannot carry the instant of the case.
+pub fn run_case<T: TimeApi>(case: &Case) -> Option<Outcome> {
+    try_run::<T>(case.direction, case.format, &case.input)
 }
 
 /// The pre-migration implementation, taken from the data transfer objects of s3s.
@@ -111,8 +117,15 @@ pub struct Oracle(s3s::dto::Timestamp);
 impl TimeApi for Oracle {
     type Error = OracleError;
 
-    fn from_instant(secs: i64, nanos: u32) -> Self {
-        Self(s3s::dto::Timestamp::from(system_time(secs, nanos)))
+    fn try_from_instant(secs: i64, nanos: u32) -> Option<Self> {
+        // The bridge to the pre-migration type is a `SystemTime`, whose precision is the
+        // platform tick. A fraction the clock cannot carry would be truncated silently and
+        // the oracle would answer for a different instant, so the case is left out and the
+        // runs count it as skipped.
+        if !platform_model().carries(secs, nanos) {
+            return None;
+        }
+        Some(Self(s3s::dto::Timestamp::from(checked_system_time(secs, nanos)?)))
     }
 
     fn parse(format: Format, text: &str) -> Result<Self, Self::Error> {
@@ -180,6 +193,10 @@ impl OracleError {
 }
 
 /// Every instant that the fixture pins down, without duplicates and in order.
+///
+/// The corpus keeps the values of the fixture. Only the oracle side, which crosses a
+/// platform `SystemTime`, leaves out the instants the clock cannot carry; see
+/// `case_is_carried` for that rule and the runs for the counters.
 pub fn fixture_instants(cases: &[Case]) -> Vec<(i64, u32)> {
     let mut instants = BTreeSet::new();
     for case in cases {
@@ -216,12 +233,26 @@ pub fn property_failures<T: TimeApi>(cases: &[Case]) -> Vec<String> {
     failures
 }
 
+/// How many instants of the fixture the implementation can represent, and how many
+/// the property run skips because it cannot.
+pub fn property_coverage<T: TimeApi>(cases: &[Case]) -> (usize, usize) {
+    let instants = fixture_instants(cases);
+    let representable = instants
+        .iter()
+        .filter(|&&(secs, nanos)| T::try_from_instant(secs, nanos).is_some())
+        .count();
+    (representable, instants.len() - representable)
+}
+
 /// The canonical view must survive construction.
 fn check_canonical<T: TimeApi>(instants: &[(i64, u32)], failures: &mut Vec<String>) {
     for &(secs, nanos) in instants {
-        let read_back = T::from_instant(secs, nanos).canonical();
+        let Some(timestamp) = T::try_from_instant(secs, nanos) else {
+            continue;
+        };
+        let read_back = timestamp.canonical();
         if read_back != (secs, nanos) {
-            failures.push(format!("from_instant({secs}, {nanos}) reads back as {read_back:?}"));
+            failures.push(format!("try_from_instant({secs}, {nanos}) reads back as {read_back:?}"));
         }
     }
 }
@@ -229,7 +260,9 @@ fn check_canonical<T: TimeApi>(instants: &[(i64, u32)], failures: &mut Vec<Strin
 /// Parsing the output of a format must return the instant it can carry exactly.
 fn check_round_trip<T: TimeApi>(instants: &[(i64, u32)], failures: &mut Vec<String>) {
     for &(secs, nanos) in instants {
-        let timestamp = T::from_instant(secs, nanos);
+        let Some(timestamp) = T::try_from_instant(secs, nanos) else {
+            continue;
+        };
         for format in formats() {
             let Ok(text) = timestamp.format(format) else {
                 continue;
@@ -260,7 +293,9 @@ fn check_round_trip<T: TimeApi>(instants: &[(i64, u32)], failures: &mut Vec<Stri
 /// Writing the parse of a rendering must reproduce the rendering.
 fn check_idempotence<T: TimeApi>(instants: &[(i64, u32)], failures: &mut Vec<String>) {
     for &(secs, nanos) in instants {
-        let timestamp = T::from_instant(secs, nanos);
+        let Some(timestamp) = T::try_from_instant(secs, nanos) else {
+            continue;
+        };
         for format in formats() {
             let Ok(text) = timestamp.format(format) else {
                 continue;
@@ -281,7 +316,9 @@ fn check_idempotence<T: TimeApi>(instants: &[(i64, u32)], failures: &mut Vec<Str
 fn check_order<T: TimeApi>(instants: &[(i64, u32)], failures: &mut Vec<String>) {
     let mut values = BTreeMap::new();
     for &(secs, nanos) in instants {
-        values.insert((secs, nanos), T::from_instant(secs, nanos));
+        if let Some(timestamp) = T::try_from_instant(secs, nanos) {
+            values.insert((secs, nanos), timestamp);
+        }
     }
     let keys: Vec<(i64, u32)> = values.keys().copied().collect();
     for (index, key) in keys.iter().enumerate() {
@@ -324,9 +361,36 @@ pub const CANDIDATE_AVAILABLE: bool = true;
 
 /// Cases where the candidate diverges on purpose, with the recorded reason.
 ///
-/// An entry is only for a difference that the crate design accepts; an entry that
-/// stops diverging is reported as a problem, so the table cannot go stale.
-const KNOWN_DIVERGENCES: &[(&str, &str)] = &[];
+/// An entry is only for a difference that the migration accepts, either because the
+/// crate design decides it or because the strictness of the pre-migration parser is
+/// still being restored; an entry that stops diverging is reported as a problem, so
+/// the table cannot go stale.
+const KNOWN_DIVERGENCES: &[(&str, &str)] = &[
+    // The internal representation reserves the largest UTC offset at both ends of the
+    // four-digit year range, which narrows the accepted instants by 93599 seconds at
+    // each end.
+    ("design-4.1/year-max", "intended: outside the internal range"),
+    ("design-4.1/range-max-plus-one", "intended: outside the internal range"),
+    ("design-4.3/year-9999-end", "intended: outside the internal range"),
+    ("design-4.3/year-9999-end-fraction", "intended: outside the internal range"),
+    ("design-4.3/year-minus-9999-start", "intended: outside the internal range"),
+    ("design-4.3/year-minus-9999-fraction", "intended: outside the internal range"),
+    ("design-4.3/range-min-minus-one", "intended: outside the internal range"),
+    ("design-4.3/range-max-plus-one", "intended: outside the internal range"),
+    // An explicit plus sign is not part of the grammar of the format.
+    ("design-4.3/plus-prefix", "intended: no plus sign in the grammar"),
+    // Both parsers reject the input; only the name of the error changes, because a
+    // field outside its range reports the out-of-range variant.
+    ("design-4.1/non-leap-day", "intended: out-of-range reports OutOfRange"),
+    ("design-4.1/day-out-of-range", "intended: out-of-range reports OutOfRange"),
+    ("design-4.1/month-out-of-range", "intended: out-of-range reports OutOfRange"),
+    ("design-4.1/hour-out-of-range", "intended: out-of-range reports OutOfRange"),
+    ("design-4.1/minute-out-of-range", "intended: out-of-range reports OutOfRange"),
+    ("design-4.1/second-out-of-range", "intended: out-of-range reports OutOfRange"),
+    ("design-4.2/non-leap-day", "intended: out-of-range reports OutOfRange"),
+    ("design-4.2/day-out-of-range", "intended: out-of-range reports OutOfRange"),
+    ("design-4.2/hour-out-of-range", "intended: out-of-range reports OutOfRange"),
+];
 
 /// How many cases a side of a run replayed, and how many the platform clock kept it
 /// from carrying.
@@ -341,16 +405,17 @@ pub struct Coverage {
 /// The reason the oracle side leaves a case out on a platform whose clock is coarse.
 pub const BRIDGE_REASON: &str = "the platform clock cannot carry this fraction";
 
-/// Whether a case can be replayed through the platform `SystemTime` at `tick_nanos`.
+/// Whether a case can be replayed through the clock of the platform model.
 ///
 /// A parse case feeds text to an implementation and never crosses the bridge; a format
-/// case carries its instant in the input, so its fraction must be a multiple of the tick.
-pub fn case_is_carried(case: &Case, tick_nanos: u32) -> bool {
+/// case carries its instant in the input, so the clock must keep both its range and its
+/// fraction. The model is the only source of that rule.
+pub fn case_is_carried(case: &Case, model: PlatformModel) -> bool {
     match case.direction {
         Direction::Parse => true,
         Direction::Format => {
-            let (_, nanos) = decode_instant(&case.input).expect("a format case carries a canonical instant");
-            carries_faithfully(nanos, tick_nanos)
+            let (secs, nanos) = decode_instant(&case.input).expect("a format case carries a canonical instant");
+            model.carries(secs, nanos)
         }
     }
 }
@@ -360,16 +425,19 @@ pub fn case_is_carried(case: &Case, tick_nanos: u32) -> bool {
 ///
 /// The corpus keeps the values of the fixture; a case the platform clock cannot carry is
 /// counted as skipped rather than being silently truncated into another instant.
-pub fn oracle_replay(cases: &[Case], tick_nanos: u32) -> (Coverage, Vec<String>) {
+pub fn oracle_replay(cases: &[Case], model: PlatformModel) -> (Coverage, Vec<String>) {
     let mut coverage = Coverage::default();
     let mut failures = Vec::new();
     for case in cases {
-        if !case_is_carried(case, tick_nanos) {
+        if !case_is_carried(case, model) {
             coverage.skipped += 1;
             continue;
         }
+        let Some(outcome) = run_case::<Oracle>(case) else {
+            coverage.skipped += 1;
+            continue;
+        };
         coverage.checked += 1;
-        let outcome = run_case::<Oracle>(case);
         if !outcome.matches(&case.expected) {
             failures.push(format!(
                 "{}: fixture {} but oracle {}",
@@ -388,12 +456,14 @@ pub fn oracle_replay(cases: &[Case], tick_nanos: u32) -> (Coverage, Vec<String>)
 /// left out and the caller counts it as skipped. The candidate is lossless and runs
 /// every case; the differences are reported against both sides, so the message says
 /// which side moved.
-pub fn compare_case(case: &Case, tick_nanos: u32) -> Option<Vec<String>> {
-    if !case_is_carried(case, tick_nanos) {
+pub fn compare_case(case: &Case, model: PlatformModel) -> Option<Vec<String>> {
+    if !case_is_carried(case, model) {
         return None;
     }
-    let oracle = run_case::<Oracle>(case);
-    let candidate = run_case::<Candidate>(case);
+    let oracle = run_case::<Oracle>(case)?;
+    let Some(candidate) = run_case::<Candidate>(case) else {
+        return Some(vec!["the candidate cannot represent a case of the corpus".to_owned()]);
+    };
     let mut detail = Vec::new();
     if candidate.render() != oracle.render() {
         detail.push(format!("oracle {} but candidate {}", oracle.render(), candidate.render()));
@@ -413,14 +483,19 @@ pub fn compare_case(case: &Case, tick_nanos: u32) -> Option<Vec<String>> {
 /// The candidate runs on every case; the oracle runs only on the cases the platform
 /// clock can carry, and the rest are counted as skipped. The difference table is checked
 /// for stale entries at the end, because the table belongs to the frozen corpus.
-pub fn candidate_differential(cases: &[Case], tick_nanos: u32) -> Differential {
+pub fn candidate_differential(cases: &[Case], model: PlatformModel) -> Differential {
     let mut report = Differential::default();
     let mut recorded = BTreeSet::new();
     for case in cases {
+        let Some(candidate) = run_case::<Candidate>(case) else {
+            report
+                .problems
+                .push(format!("{}: the candidate cannot represent a case of the corpus", case.id()));
+            continue;
+        };
         report.candidate_checked += 1;
-        let Some(detail) = compare_case(case, tick_nanos) else {
+        let Some(detail) = compare_case(case, model) else {
             report.oracle_skipped += 1;
-            let candidate = run_case::<Candidate>(case);
             if !candidate.matches(&case.expected) {
                 report.problems.push(format!(
                     "{}: fixture {} but candidate {} (the oracle side is left out here: {BRIDGE_REASON})",
@@ -460,12 +535,17 @@ pub fn candidate_property_failures(cases: &[Case]) -> Vec<String> {
     property_failures::<Candidate>(cases)
 }
 
+/// The instants of the fixture that the candidate can represent.
+pub fn candidate_property_coverage(cases: &[Case]) -> (usize, usize) {
+    property_coverage::<Candidate>(cases)
+}
+
 /// The implementation that this crate ships.
 ///
 /// The adapter only uses the public surface: the value type, the format selector, the
 /// parse and format entry points, the canonical accessors, and the error enums.
 mod candidate {
-    use crate::harness::support::{Format, system_time};
+    use crate::harness::support::Format;
 
     use super::TimeApi;
 
@@ -476,8 +556,9 @@ mod candidate {
     impl TimeApi for Candidate {
         type Error = CandidateError;
 
-        fn from_instant(secs: i64, nanos: u32) -> Self {
-            Self(s3s_time::Timestamp::from(system_time(secs, nanos)))
+        fn try_from_instant(secs: i64, nanos: u32) -> Option<Self> {
+            let nanoseconds = i128::from(secs) * 1_000_000_000 + i128::from(nanos);
+            s3s_time::Timestamp::from_unix_nanos(nanoseconds).ok().map(Self)
         }
 
         fn parse(format: Format, text: &str) -> Result<Self, Self::Error> {
