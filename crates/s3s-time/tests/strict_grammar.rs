@@ -89,7 +89,7 @@ fn date_time_rejects_a_malformed_offset_without_panicking() {
     match outcome {
         Ok(Err(ParseTimestampError::InvalidFormat)) => {}
         Ok(other) => panic!("expected an InvalidFormat rejection, got {other:?}"),
-        Err(_) => panic!("the reader panicked on a malformed offset"),
+        Err(payload) => panic!("the reader panicked on a malformed offset: {payload:?}"),
     }
 }
 
@@ -102,7 +102,7 @@ fn date_time_rejects_a_truncated_clock_without_panicking() {
     match outcome {
         Ok(Err(ParseTimestampError::InvalidFormat)) => {}
         Ok(other) => panic!("expected an InvalidFormat rejection, got {other:?}"),
-        Err(_) => panic!("the reader panicked on a truncated clock"),
+        Err(payload) => panic!("the reader panicked on a truncated clock: {payload:?}"),
     }
 }
 
