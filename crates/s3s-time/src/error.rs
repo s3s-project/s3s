@@ -5,10 +5,20 @@
 
 use std::io;
 
-/// The error returned when a value is outside the range of a timestamp.
+/// The error returned when a value cannot be converted to or from a timestamp.
+///
+/// The conversion is rejected in both directions when the value falls outside
+/// the representable range: reading an instant from a Unix value, through
+/// [`Timestamp::from_unix_seconds`](crate::Timestamp::from_unix_seconds) or
+/// [`Timestamp::from_unix_nanos`](crate::Timestamp::from_unix_nanos), and
+/// converting a [`Timestamp`](crate::Timestamp) into a
+/// [`SystemTime`](std::time::SystemTime).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-#[error("timestamp component is out of range")]
-pub struct ComponentRangeError;
+pub enum ConvertTimestampError {
+    /// The value lies outside the representable range of [`Timestamp`](crate::Timestamp).
+    #[error("timestamp is out of range")]
+    OutOfRange,
+}
 
 /// The error returned when a timestamp cannot be parsed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]

@@ -7,7 +7,7 @@ use std::io;
 use std::time::Duration;
 use std::time::SystemTime;
 
-use crate::ComponentRangeError;
+use crate::ConvertTimestampError;
 use crate::FormatTimestampError;
 use crate::ParseTimestampError;
 use crate::parse;
@@ -41,8 +41,8 @@ impl Timestamp {
     /// # Errors
     ///
     /// Returns an error if the value is outside the representable range.
-    pub fn from_unix_timestamp(seconds: i64) -> Result<Self, ComponentRangeError> {
-        Self::from_unix_timestamp_nanos(i128::from(seconds) * 1_000_000_000)
+    pub fn from_unix_seconds(seconds: i64) -> Result<Self, ConvertTimestampError> {
+        Self::from_unix_nanos(i128::from(seconds) * 1_000_000_000)
     }
 
     /// Creates a timestamp from a number of nanoseconds since the Unix epoch.
@@ -53,14 +53,14 @@ impl Timestamp {
     /// range is narrower than the four-digit year range of the wire formats:
     /// it stops at `-9999-01-02T01:59:59Z` on the early side and at
     /// `9999-12-30T22:00:00.999999999Z` on the late side.
-    pub fn from_unix_timestamp_nanos(nanoseconds: i128) -> Result<Self, ComponentRangeError> {
+    pub fn from_unix_nanos(nanoseconds: i128) -> Result<Self, ConvertTimestampError> {
         if !in_range(nanoseconds) {
-            return Err(ComponentRangeError);
+            return Err(ConvertTimestampError::OutOfRange);
         }
 
         jiff::Timestamp::from_nanosecond(nanoseconds)
             .map(Self)
-            .map_err(|_| ComponentRangeError)
+            .map_err(|_| ConvertTimestampError::OutOfRange)
     }
 
     /// Wraps an instant of the internal representation.
@@ -108,10 +108,10 @@ impl Timestamp {
     /// epoch reports the second that its subsecond component belongs to: minus
     /// half a second is minus one second, with five hundred million nanoseconds
     /// of [`Timestamp::subsec_nanos`]. The identity
-    /// `unix_timestamp() * 1_000_000_000 + subsec_nanos() == unix_timestamp_nanos()`
+    /// `unix_seconds() * 1_000_000_000 + subsec_nanos() == unix_nanos()`
     /// therefore holds for every instant.
     #[must_use]
-    pub fn unix_timestamp(&self) -> i64 {
+    pub fn unix_seconds(&self) -> i64 {
         let seconds = self.0.as_second();
         if self.0.subsec_nanosecond() < 0 {
             return seconds - 1;
@@ -121,7 +121,7 @@ impl Timestamp {
 
     /// Returns the number of nanoseconds since the Unix epoch.
     #[must_use]
-    pub fn unix_timestamp_nanos(&self) -> i128 {
+    pub fn unix_nanos(&self) -> i128 {
         self.0.as_nanosecond()
     }
 
@@ -172,16 +172,16 @@ impl From<SystemTime> for Timestamp {
 }
 
 impl TryFrom<Timestamp> for SystemTime {
-    type Error = ComponentRangeError;
+    type Error = ConvertTimestampError;
 
     /// Converts the instant into a platform [`SystemTime`].
     ///
     /// The representable range is platform dependent: a Unix `SystemTime` counts signed
     /// seconds from the epoch, while a Windows one counts unsigned 100-nanosecond ticks
     /// from 1601. An instant the platform cannot represent is reported as
-    /// [`ComponentRangeError`] instead of panicking in the conversion.
+    /// [`ConvertTimestampError::OutOfRange`] instead of panicking in the conversion.
     fn try_from(value: Timestamp) -> Result<Self, Self::Error> {
-        let seconds = value.unix_timestamp();
+        let seconds = value.unix_seconds();
         let nanoseconds = value.subsec_nanos();
         let converted = if seconds >= 0 {
             let magnitude = u64::try_from(seconds).expect("a non-negative i64 fits in u64");
@@ -196,7 +196,7 @@ impl TryFrom<Timestamp> for SystemTime {
             SystemTime::UNIX_EPOCH.checked_sub(Duration::new(whole, part))
         };
 
-        converted.ok_or(ComponentRangeError)
+        converted.ok_or(ConvertTimestampError::OutOfRange)
     }
 }
 

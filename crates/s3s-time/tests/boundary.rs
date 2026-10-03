@@ -6,7 +6,7 @@
 use std::time::Duration;
 use std::time::SystemTime;
 
-use s3s_time::ComponentRangeError;
+use s3s_time::ConvertTimestampError;
 use s3s_time::FormatTimestampError;
 use s3s_time::ParseTimestampError;
 use s3s_time::Timestamp;
@@ -29,17 +29,17 @@ fn write_ok(ts: &Timestamp, format: TimestampFormat) -> String {
 #[test]
 fn default_is_the_unix_epoch() {
     assert_eq!(Timestamp::default(), Timestamp::UNIX_EPOCH);
-    assert_eq!(Timestamp::UNIX_EPOCH.unix_timestamp(), 0);
+    assert_eq!(Timestamp::UNIX_EPOCH.unix_seconds(), 0);
     assert_eq!(Timestamp::UNIX_EPOCH.subsec_nanos(), 0);
 }
 
 #[test]
 fn constructors_reject_out_of_range_values() {
-    assert!(Timestamp::from_unix_timestamp(i64::MAX).is_err());
-    assert!(Timestamp::from_unix_timestamp(i64::MIN).is_err());
-    assert!(Timestamp::from_unix_timestamp_nanos(i128::MAX).is_err());
-    assert!(Timestamp::from_unix_timestamp_nanos(i128::MIN).is_err());
-    assert!(Timestamp::from_unix_timestamp(0).is_ok());
+    assert!(Timestamp::from_unix_seconds(i64::MAX).is_err());
+    assert!(Timestamp::from_unix_seconds(i64::MIN).is_err());
+    assert!(Timestamp::from_unix_nanos(i128::MAX).is_err());
+    assert!(Timestamp::from_unix_nanos(i128::MIN).is_err());
+    assert!(Timestamp::from_unix_seconds(0).is_ok());
 }
 
 #[test]
@@ -59,14 +59,14 @@ fn the_representable_range_is_narrower_than_the_year_range() {
     // implementation covered the whole year range; the difference is recorded
     // for the parity stage.
     let last = 253_402_207_200_i64;
-    assert!(Timestamp::from_unix_timestamp(last).is_ok());
-    assert!(Timestamp::from_unix_timestamp(last + 1).is_err());
-    assert!(Timestamp::from_unix_timestamp_nanos(i128::from(last) * 1_000_000_000 + 999_999_999).is_ok());
-    assert!(Timestamp::from_unix_timestamp_nanos(i128::from(last + 1) * 1_000_000_000).is_err());
+    assert!(Timestamp::from_unix_seconds(last).is_ok());
+    assert!(Timestamp::from_unix_seconds(last + 1).is_err());
+    assert!(Timestamp::from_unix_nanos(i128::from(last) * 1_000_000_000 + 999_999_999).is_ok());
+    assert!(Timestamp::from_unix_nanos(i128::from(last + 1) * 1_000_000_000).is_err());
 
     let first = -377_705_023_201_i64;
-    assert!(Timestamp::from_unix_timestamp(first).is_ok());
-    assert!(Timestamp::from_unix_timestamp(first - 1).is_err());
+    assert!(Timestamp::from_unix_seconds(first).is_ok());
+    assert!(Timestamp::from_unix_seconds(first - 1).is_err());
 
     assert!(parse(TimestampFormat::DateTime, "9999-12-31T00:00:00Z").is_err());
     assert!(parse(TimestampFormat::EpochSeconds, "253402207201").is_err());
@@ -104,7 +104,7 @@ fn date_time_checks_the_calendar() {
 #[test]
 fn formatting_rejects_years_outside_the_wire_format() {
     // One second before 0000-01-01T00:00:00Z is in the year -1.
-    let ts = Timestamp::from_unix_timestamp(-62_167_219_201).unwrap();
+    let ts = Timestamp::from_unix_seconds(-62_167_219_201).unwrap();
     assert!(matches!(write(&ts, TimestampFormat::DateTime), Err(FormatTimestampError::OutOfRange)));
     assert!(matches!(write(&ts, TimestampFormat::HttpDate), Err(FormatTimestampError::OutOfRange)));
     assert_eq!(write_ok(&ts, TimestampFormat::EpochSeconds), "-62167219201");
@@ -148,7 +148,7 @@ fn epoch_seconds_accepts_one_to_nine_fraction_digits() {
 
     for (text, nanos) in cases {
         let ts = parse(TimestampFormat::EpochSeconds, text).unwrap();
-        assert_eq!(ts.unix_timestamp_nanos(), nanos, "{text}");
+        assert_eq!(ts.unix_nanos(), nanos, "{text}");
     }
 }
 
@@ -176,7 +176,7 @@ fn epoch_seconds_rejects_malformed_input() {
 #[test]
 fn epoch_seconds_accepts_leading_zeros_and_negative_zero() {
     let padded = parse(TimestampFormat::EpochSeconds, "007").unwrap();
-    assert_eq!(padded.unix_timestamp(), 7);
+    assert_eq!(padded.unix_seconds(), 7);
 
     let negative_zero = parse(TimestampFormat::EpochSeconds, "-0").unwrap();
     assert_eq!(negative_zero, Timestamp::UNIX_EPOCH);
@@ -185,8 +185,8 @@ fn epoch_seconds_accepts_leading_zeros_and_negative_zero() {
 #[test]
 fn epoch_seconds_fraction_is_always_positive() {
     let ts = parse(TimestampFormat::EpochSeconds, "-1.5").unwrap();
-    assert_eq!(ts.unix_timestamp_nanos(), -500_000_000);
-    assert_eq!(ts.unix_timestamp(), -1);
+    assert_eq!(ts.unix_nanos(), -500_000_000);
+    assert_eq!(ts.unix_seconds(), -1);
     assert_eq!(ts.subsec_nanos(), 500_000_000);
 }
 
@@ -204,21 +204,21 @@ fn epoch_seconds_writes_the_shortest_exact_decimal() {
     ];
 
     for (nanos, expected) in cases {
-        let ts = Timestamp::from_unix_timestamp_nanos(nanos).unwrap();
+        let ts = Timestamp::from_unix_nanos(nanos).unwrap();
         assert_eq!(write_ok(&ts, TimestampFormat::EpochSeconds), expected, "{nanos}");
     }
 }
 
 #[test]
 fn subsecond_component_is_never_negative() {
-    assert_eq!(Timestamp::from_unix_timestamp_nanos(-1).unwrap().subsec_nanos(), 999_999_999);
-    assert_eq!(Timestamp::from_unix_timestamp_nanos(1).unwrap().subsec_nanos(), 1);
-    assert_eq!(Timestamp::from_unix_timestamp_nanos(1_000_000_000).unwrap().subsec_nanos(), 0);
+    assert_eq!(Timestamp::from_unix_nanos(-1).unwrap().subsec_nanos(), 999_999_999);
+    assert_eq!(Timestamp::from_unix_nanos(1).unwrap().subsec_nanos(), 1);
+    assert_eq!(Timestamp::from_unix_nanos(1_000_000_000).unwrap().subsec_nanos(), 0);
 }
 
 #[test]
 fn the_three_formats_describe_the_same_instant() {
-    let ts = Timestamp::from_unix_timestamp(1_718_434_800).unwrap();
+    let ts = Timestamp::from_unix_seconds(1_718_434_800).unwrap();
     assert_eq!(write_ok(&ts, TimestampFormat::DateTime), "2024-06-15T07:00:00.000Z");
     assert_eq!(write_ok(&ts, TimestampFormat::HttpDate), "Sat, 15 Jun 2024 07:00:00 GMT");
     assert_eq!(write_ok(&ts, TimestampFormat::EpochSeconds), "1718434800");
@@ -239,7 +239,7 @@ fn system_time_round_trip() {
 
     let later = SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_000);
     let ts = Timestamp::from(later);
-    assert_eq!(ts.unix_timestamp(), 1_700_000_000);
+    assert_eq!(ts.unix_seconds(), 1_700_000_000);
     assert_eq!(SystemTime::try_from(ts).unwrap(), later);
 }
 
@@ -300,7 +300,7 @@ fn the_system_time_conversion_follows_the_platform_range() {
 
     for (seconds, nanoseconds) in cases {
         let nanos = i128::from(seconds) * 1_000_000_000 + i128::from(nanoseconds);
-        let ts = Timestamp::from_unix_timestamp_nanos(nanos).expect("the instant is representable");
+        let ts = Timestamp::from_unix_nanos(nanos).expect("the instant is representable");
         let expected = std_instant(seconds, nanoseconds);
 
         match (SystemTime::try_from(ts), expected) {
@@ -308,7 +308,7 @@ fn the_system_time_conversion_follows_the_platform_range() {
                 assert_eq!(got, want, "({seconds}, {nanoseconds}) must equal the instant std builds");
             }
             (Err(err), None) => {
-                assert_eq!(err, ComponentRangeError, "({seconds}, {nanoseconds}) must report the range");
+                assert_eq!(err, ConvertTimestampError::OutOfRange, "({seconds}, {nanoseconds}) must report the range");
             }
             (got, want) => {
                 panic!("({seconds}, {nanoseconds}): the conversion {got:?} disagrees with the platform range {want:?}")
@@ -320,9 +320,9 @@ fn the_system_time_conversion_follows_the_platform_range() {
         // The second before the Windows epoch is the first instant Windows cannot represent:
         // the conversion must report the range error rather than panic the way the library
         // conversion did.
-        let before_windows_epoch = Timestamp::from_unix_timestamp_nanos(i128::from(WINDOWS_EPOCH_SECONDS - 1) * 1_000_000_000)
+        let before_windows_epoch = Timestamp::from_unix_nanos(i128::from(WINDOWS_EPOCH_SECONDS - 1) * 1_000_000_000)
             .expect("the instant is representable");
-        assert_eq!(SystemTime::try_from(before_windows_epoch), Err(ComponentRangeError));
+        assert_eq!(SystemTime::try_from(before_windows_epoch), Err(ConvertTimestampError::OutOfRange));
     }
 }
 
@@ -331,8 +331,7 @@ fn the_windows_epoch_itself_is_representable_on_every_platform() {
     // 1601-01-01T00:00:00Z is the Windows epoch (`intervals: 0`) and a reachable negative
     // instant on Unix, so every platform converts it. Its predecessor is where Windows stops,
     // which the platform-range test above pins.
-    let ts = Timestamp::from_unix_timestamp_nanos(i128::from(WINDOWS_EPOCH_SECONDS) * 1_000_000_000)
-        .expect("the instant is representable");
+    let ts = Timestamp::from_unix_nanos(i128::from(WINDOWS_EPOCH_SECONDS) * 1_000_000_000).expect("the instant is representable");
     let expected = std_instant(WINDOWS_EPOCH_SECONDS, 0).expect("every platform reaches 1601-01-01");
     assert_eq!(SystemTime::try_from(ts).expect("the Windows epoch converts"), expected);
 }
