@@ -314,6 +314,15 @@ impl S3 for Proxy {
         let mut b = self.client.delete_bucket();
         b = b.set_bucket(Some(try_into_aws(input.bucket)?));
         b = b.set_expected_bucket_owner(try_into_aws(input.expected_bucket_owner)?);
+        #[cfg(feature = "minio")]
+        let b = {
+            let force_delete = input.force_delete;
+            b.customize().mutate_request(move |req| {
+                if let Some(value) = force_delete {
+                    req.headers_mut().insert("x-minio-force-delete", value.to_string());
+                }
+            })
+        };
         let result = b.send().await;
         match result {
             Ok(output) => {
@@ -656,6 +665,15 @@ impl S3 for Proxy {
         b = b.set_mfa(try_into_aws(input.mfa)?);
         b = b.set_request_payer(try_into_aws(input.request_payer)?);
         b = b.set_version_id(try_into_aws(input.version_id)?);
+        #[cfg(feature = "minio")]
+        let b = {
+            let force_delete = input.force_delete;
+            b.customize().mutate_request(move |req| {
+                if let Some(value) = force_delete {
+                    req.headers_mut().insert("x-minio-force-delete", value.to_string());
+                }
+            })
+        };
         let result = b.send().await;
         match result {
             Ok(output) => {
