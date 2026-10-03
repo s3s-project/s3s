@@ -934,6 +934,7 @@ dependencies = [
  "s3s-rfc2047",
  "s3s-sigv2",
  "s3s-sigv4",
+ "s3s-time",
  "serde",
  "serde_json",
  "serde_urlencoded",
@@ -1039,6 +1040,7 @@ name = "s3s-time"
 version = "0.18.0-alpha.1"
 dependencies = [
  "jiff",
+ "serde",
  "thiserror",
 ]
 

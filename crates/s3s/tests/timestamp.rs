@@ -1,222 +1,68 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
-//! Tests using the Smithy `date_time_format_test_suite.json`
-//! From: <https://github.com/smithy-lang/smithy-rs/blob/main/rust-runtime/aws-smithy-types/test_data/date_time_format_test_suite.json>
+//! Smoke coverage for the timestamp surface of `s3s::dto`.
+//!
+//! The wire-format vectors, the boundary corpus and the frozen contract live in the
+//! `s3s-time` crate; this file only pins that the re-exported path works and that the
+//! three formats still round trip through it.
 
-use s3s::dto::{Timestamp, TimestampFormat};
+use s3s::dto::FormatTimestampError;
+use s3s::dto::ParseTimestampError;
+use s3s::dto::Timestamp;
+use s3s::dto::TimestampFormat;
 
-use serde::Deserialize;
-
-#[derive(Deserialize)]
-struct TestSuite {
-    #[allow(dead_code)]
-    description: Vec<String>,
-    parse_epoch_seconds: Vec<TestCase>,
-    parse_http_date: Vec<TestCase>,
-    parse_date_time: Vec<TestCase>,
-    format_epoch_seconds: Vec<TestCase>,
-    format_http_date: Vec<TestCase>,
-    format_date_time: Vec<TestCase>,
-}
-
-#[derive(Deserialize)]
-struct TestCase {
-    iso8601: String,
-    canonical_seconds: String,
-    canonical_nanos: u32,
-    error: bool,
-    smithy_format_value: Option<String>,
-}
-
-fn load_test_suite() -> TestSuite {
-    let json = include_str!("../../../data/date_time_format_test_suite.json");
-    serde_json::from_str(json).expect("failed to parse test suite")
-}
-
-/// Converts `canonical_seconds` (as string) and `canonical_nanos` into total nanoseconds.
-fn canonical_to_nanos(canonical_seconds: &str, canonical_nanos: u32) -> i128 {
-    let secs: i64 = canonical_seconds.parse().expect("invalid canonical_seconds");
-    i128::from(secs) * 1_000_000_000 + i128::from(canonical_nanos)
+fn format_of(ts: &Timestamp, format: TimestampFormat) -> String {
+    let mut buf = Vec::new();
+    ts.format(format, &mut buf).expect("the instant is representable");
+    String::from_utf8(buf).expect("the wire formats are ASCII")
 }
 
 #[test]
-fn parse_epoch_seconds() {
-    let suite = load_test_suite();
+fn the_reexport_parses_and_formats_each_wire_format() {
+    let cases = [
+        (TimestampFormat::DateTime, "1985-04-12T23:20:50.520Z"),
+        (TimestampFormat::HttpDate, "Tue, 29 Apr 2014 18:30:38 GMT"),
+        (TimestampFormat::EpochSeconds, "1515531081.1234"),
+    ];
 
-    for case in suite.parse_epoch_seconds {
-        let Some(smithy_value) = case.smithy_format_value.as_ref() else {
-            // Error cases without smithy_format_value - skip
-            assert!(case.error, "non-error case should have smithy_format_value: {}", case.iso8601);
-            continue;
-        };
-
-        let result = Timestamp::parse(TimestampFormat::EpochSeconds, smithy_value);
-
-        if case.error {
-            assert!(result.is_err(), "expected error parsing '{}' (iso8601: {})", smithy_value, case.iso8601);
-        } else {
-            let ts = result.unwrap_or_else(|e| panic!("failed to parse '{}' (iso8601: {}): {}", smithy_value, case.iso8601, e));
-            let expected_nanos = canonical_to_nanos(&case.canonical_seconds, case.canonical_nanos);
-            let odt: time::OffsetDateTime = ts.into();
-            let actual_nanos = odt.unix_timestamp_nanos();
-
-            assert_eq!(
-                actual_nanos, expected_nanos,
-                "mismatch for '{}' (iso8601: {}): expected {} nanos, got {} nanos",
-                smithy_value, case.iso8601, expected_nanos, actual_nanos
-            );
-        }
+    for (format, text) in cases {
+        let ts = Timestamp::parse(format, text).expect("the vector parses");
+        assert_eq!(format_of(&ts, format), text, "{format:?}");
     }
 }
 
 #[test]
-fn parse_http_date() {
-    let suite = load_test_suite();
-
-    for case in suite.parse_http_date {
-        let Some(smithy_value) = case.smithy_format_value.as_ref() else {
-            // Error cases without smithy_format_value - skip
-            assert!(case.error, "non-error case should have smithy_format_value: {}", case.iso8601);
-            continue;
-        };
-
-        // s3s's RFC1123 format doesn't support fractional seconds, so skip those test cases
-        // that include fractional seconds (e.g., "Sat, 18 Jan 1969 11:47:31.01 GMT")
-        if smithy_value.contains('.') {
-            continue;
-        }
-
-        let result = Timestamp::parse(TimestampFormat::HttpDate, smithy_value);
-
-        if case.error {
-            assert!(result.is_err(), "expected error parsing '{}' (iso8601: {})", smithy_value, case.iso8601);
-        } else {
-            let ts = result.unwrap_or_else(|e| panic!("failed to parse '{}' (iso8601: {}): {}", smithy_value, case.iso8601, e));
-
-            // For http-date, fractional seconds are truncated, so we only compare whole seconds
-            let expected_secs: i64 = case.canonical_seconds.parse().expect("invalid canonical_seconds");
-            let odt: time::OffsetDateTime = ts.into();
-            let actual_secs = odt.unix_timestamp();
-
-            assert_eq!(
-                actual_secs, expected_secs,
-                "mismatch for '{}' (iso8601: {}): expected {} secs, got {} secs",
-                smithy_value, case.iso8601, expected_secs, actual_secs
-            );
-        }
-    }
+fn the_value_type_keeps_the_expected_semantics() {
+    // The fraction of an epoch-seconds value is always positive, so -1.5 is minus one
+    // second plus five tenths: the floor second is -1 with a positive fraction.
+    let ts = Timestamp::parse(TimestampFormat::EpochSeconds, "-1.5").expect("parse");
+    assert_eq!(ts.unix_seconds(), -1);
+    assert_eq!(ts.subsec_nanos(), 500_000_000);
+    assert_eq!(ts.unix_nanos(), -500_000_000);
+    assert_eq!(Timestamp::default(), Timestamp::UNIX_EPOCH);
+    assert_eq!(Timestamp::from(std::time::SystemTime::UNIX_EPOCH), Timestamp::UNIX_EPOCH);
 }
 
 #[test]
-fn parse_date_time() {
-    let suite = load_test_suite();
+fn the_four_reexported_names_stay_importable() {
+    // The pre-migration module exposed the value type, the format selector and the two
+    // error types from s3s::dto; the swap must keep all four paths working.
+    let refused = Timestamp::parse(TimestampFormat::DateTime, "not-a-date");
+    assert!(matches!(refused, Err(ParseTimestampError::InvalidFormat)));
 
-    for case in suite.parse_date_time {
-        let Some(smithy_value) = case.smithy_format_value.as_ref() else {
-            // Error cases without smithy_format_value - skip
-            assert!(case.error, "non-error case should have smithy_format_value: {}", case.iso8601);
-            continue;
-        };
-
-        let result = Timestamp::parse(TimestampFormat::DateTime, smithy_value);
-
-        if case.error {
-            assert!(result.is_err(), "expected error parsing '{}' (iso8601: {})", smithy_value, case.iso8601);
-        } else {
-            let ts = result.unwrap_or_else(|e| panic!("failed to parse '{}' (iso8601: {}): {}", smithy_value, case.iso8601, e));
-            let expected_nanos = canonical_to_nanos(&case.canonical_seconds, case.canonical_nanos);
-            let odt: time::OffsetDateTime = ts.into();
-            let actual_nanos = odt.unix_timestamp_nanos();
-
-            assert_eq!(
-                actual_nanos, expected_nanos,
-                "mismatch for '{}' (iso8601: {}): expected {} nanos, got {} nanos",
-                smithy_value, case.iso8601, expected_nanos, actual_nanos
-            );
-        }
-    }
-}
-
-/// Builds a `Timestamp` from the canonical seconds and nanoseconds of a case.
-fn timestamp_from_canonical(case: &TestCase) -> Result<Timestamp, String> {
-    let nanos = canonical_to_nanos(&case.canonical_seconds, case.canonical_nanos);
-    let odt = time::OffsetDateTime::from_unix_timestamp_nanos(nanos).map_err(|e| format!("{e}"))?;
-    Ok(Timestamp::from(odt))
-}
-
-/// Formats every case of one `format_*` section and compares the output with
-/// `smithy_format_value`; cases flagged `error` must fail to format.
-///
-/// Failures are collected and reported together, so a single run reports every
-/// mismatch instead of stopping at the first one.
-fn run_format_suite(name: &str, cases: &[TestCase], format: TimestampFormat) {
-    let mut passed = 0_usize;
-    let mut expected_errors = 0_usize;
-    let mut failures: Vec<String> = Vec::new();
-
-    for case in cases {
-        let ts = match timestamp_from_canonical(case) {
-            Ok(ts) => ts,
-            Err(err) => {
-                failures.push(format!("{}: cannot build timestamp: {err}", case.iso8601));
-                continue;
-            }
-        };
-
-        let mut buf = Vec::new();
-        let result = ts.format(format, &mut buf);
-
-        match (case.error, result) {
-            (true, Err(_)) => expected_errors += 1,
-            (true, Ok(())) => failures.push(format!(
-                "{}: expected a format error, got {:?}",
-                case.iso8601,
-                String::from_utf8_lossy(&buf)
-            )),
-            (false, Err(err)) => failures.push(format!("{}: format failed: {err}", case.iso8601)),
-            (false, Ok(())) => {
-                let actual = String::from_utf8_lossy(&buf).into_owned();
-                let expected = case.smithy_format_value.as_deref().unwrap_or_default();
-                if actual == expected {
-                    passed += 1;
-                } else {
-                    failures.push(format!("{}: expected {expected:?}, got {actual:?}", case.iso8601));
-                }
-            }
-        }
-    }
-
-    println!(
-        "{name}: total={} passed={passed} expected_error={expected_errors} failures={}",
-        cases.len(),
-        failures.len()
-    );
-
-    assert!(
-        failures.is_empty(),
-        "{name}: {} of {} cases failed:\n{}",
-        failures.len(),
-        cases.len(),
-        failures.join("\n")
-    );
+    // One second before 0000-01-01T00:00:00Z is in the year -1, which the date-time
+    // wire format cannot spell.
+    let before_year_zero = Timestamp::from_unix_seconds(-62_167_219_201).expect("representable");
+    let written = before_year_zero.format(TimestampFormat::DateTime, &mut Vec::new());
+    assert!(matches!(written, Err(FormatTimestampError::OutOfRange)));
 }
 
 #[test]
-fn format_epoch_seconds() {
-    let suite = load_test_suite();
-    run_format_suite("format_epoch_seconds", &suite.format_epoch_seconds, TimestampFormat::EpochSeconds);
-}
-
-#[test]
-fn format_http_date() {
-    let suite = load_test_suite();
-    run_format_suite("format_http_date", &suite.format_http_date, TimestampFormat::HttpDate);
-}
-
-#[test]
-#[ignore = "suite exception: the wire format is fixed to millisecond precision; 77 of 122 cases use a different width"]
-fn format_date_time() {
-    let suite = load_test_suite();
-    run_format_suite("format_date_time", &suite.format_date_time, TimestampFormat::DateTime);
+fn serde_round_trips_through_the_date_time_format() {
+    let ts = Timestamp::parse(TimestampFormat::DateTime, "1985-04-12T23:20:50.520Z").expect("parse");
+    let json = serde_json::to_string(&ts).expect("serialize");
+    assert_eq!(json, "\"1985-04-12T23:20:50.520Z\"");
+    let back: Timestamp = serde_json::from_str(&json).expect("deserialize");
+    assert_eq!(back, ts);
 }

@@ -5,7 +5,9 @@
 # suite: data/date_time_format_test_suite.json
 # suite blob: fea94cb6378da39a96ca82f4a8a0fd69ea44076b
 # jiff: 0.2.37
-# refresh with: cargo run -p s3s-time --example gen_golden
+# frozen at 3c50e48c: the pre-migration implementation and its generator were removed
+# by the swap, so this file is read-only and the recorded differences are listed in
+# POST_MIGRATION_DIVERGENCES (tests/harness/api.rs)
 #
 # columns (tab separated): <direction>/<format> | <input> | <expected> | <intent>
 # direction: parse (the input is text to parse) or format (the input is an instant)

@@ -634,10 +634,8 @@ fn parse_post_policy(multipart: &crate::http::Multipart) -> S3Result<Option<Post
         PostPolicy::from_base64(policy_b64).map_err(|e| s3_error!(e, InvalidPolicyDocument, "failed to parse POST policy"))?;
 
     // Check policy expiration early to avoid reading file if policy is expired
-    // Note: clone is necessary because Into<OffsetDateTime> consumes the Timestamp
-    let expiration_time: time::OffsetDateTime = policy.expiration.clone().into();
-    let now = time::OffsetDateTime::now_utc();
-    if now >= expiration_time {
+    let now = crate::dto::Timestamp::from(std::time::SystemTime::now());
+    if now >= policy.expiration {
         return Err(S3Error::with_message(S3ErrorCode::AccessDenied, "Request has expired"));
     }
 

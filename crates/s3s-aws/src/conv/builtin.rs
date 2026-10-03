@@ -62,13 +62,12 @@ impl AwsConversion for s3s::dto::Timestamp {
     type Error = S3Error;
 
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
-        use aws_smithy_types_convert::date_time::DateTimeExt;
-        Ok(Self::from(x.to_time().map_err(S3Error::internal_error)?))
+        let nanoseconds = i128::from(x.secs()) * 1_000_000_000 + i128::from(x.subsec_nanos());
+        Self::from_unix_nanos(nanoseconds).map_err(S3Error::internal_error)
     }
 
     fn try_into_aws(x: Self) -> S3Result<Self::Target> {
-        use aws_smithy_types_convert::date_time::DateTimeExt;
-        Ok(aws_sdk_s3::primitives::DateTime::from_time(x.into()))
+        Ok(Self::Target::from_secs_and_nanos(x.unix_seconds(), x.subsec_nanos()))
     }
 }
 
@@ -302,5 +301,23 @@ mod tests {
         let cond: ETagCondition = try_from_aws(wrong.to_owned()).expect("parse inbound if-match");
         let sent = try_into_aws(cond).expect("forward if-match");
         assert_eq!(sent, wrong);
+    }
+
+    #[test]
+    fn timestamp_negative_subsecond_round_trip() {
+        // The SDK type and the wire format share the floor-second convention: minus
+        // half a second is the second -1 with a positive fraction, which -1.5 spells
+        // because the fraction of the format is always positive. The bridge must keep
+        // that, so a naive sign-carrying conversion is caught here.
+        let ts = s3s::dto::Timestamp::parse(s3s::dto::TimestampFormat::EpochSeconds, "-1.5").expect("parse -1.5");
+        assert_eq!(ts.unix_seconds(), -1);
+        assert_eq!(ts.subsec_nanos(), 500_000_000);
+
+        let sdk = try_into_aws(ts.clone()).expect("into aws");
+        assert_eq!(sdk.secs(), -1);
+        assert_eq!(sdk.subsec_nanos(), 500_000_000);
+
+        let back: s3s::dto::Timestamp = try_from_aws(sdk).expect("from aws");
+        assert_eq!(back, ts);
     }
 }

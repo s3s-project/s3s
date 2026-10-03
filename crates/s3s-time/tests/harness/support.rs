@@ -5,8 +5,8 @@
 //!
 //! The fixture in tests/golden/contract.txt holds one line per case: the direction
 //! together with the wire format, the input, the expected result, and the intent of
-//! the case. The generator example and the integration tests compile this module, so
-//! the writer and the readers cannot drift apart.
+//! the case. It was written once by the generator, which went with the pre-migration
+//! implementation that produced it, so the fixture is read-only now.
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
@@ -86,50 +86,6 @@ pub enum Expected {
     Error(String),
 }
 
-/// One corner of the fixed corpus, before the oracle has produced its result.
-#[derive(Debug, Clone)]
-pub struct Spec {
-    /// The direction of the case.
-    pub direction: Direction,
-    /// The wire format of the case.
-    pub format: Format,
-    /// The input text; a format case spells an instant as "<seconds>:<nanoseconds>".
-    pub input: String,
-    /// The reason why the case belongs to the corpus.
-    pub intent: String,
-}
-
-impl Spec {
-    /// Builds a parse case.
-    pub fn parse(format: Format, input: &str, id: &str, note: &str) -> Self {
-        Self {
-            direction: Direction::Parse,
-            format,
-            input: input.to_owned(),
-            intent: intent_of(id, note),
-        }
-    }
-
-    /// Builds a format case from a canonical instant.
-    pub fn format(format: Format, secs: i64, nanos: u32, id: &str, note: &str) -> Self {
-        Self {
-            direction: Direction::Format,
-            format,
-            input: encode_instant(secs, nanos),
-            intent: intent_of(id, note),
-        }
-    }
-}
-
-/// Joins a case id and a note into the intent column.
-fn intent_of(id: &str, note: &str) -> String {
-    if note.is_empty() {
-        id.to_owned()
-    } else {
-        format!("{id} {note}")
-    }
-}
-
 /// One fixture line.
 #[derive(Debug, Clone)]
 pub struct Case {
@@ -146,29 +102,6 @@ pub struct Case {
 }
 
 impl Case {
-    /// Attaches an observed result to a corpus case.
-    ///
-    /// # Errors
-    ///
-    /// Returns the reason when the input of a format case is not a canonical instant,
-    /// which is a defect of the corpus.
-    pub fn new(spec: &Spec, expected: Expected) -> Result<Self, String> {
-        let input = match spec.direction {
-            Direction::Parse => spec.input.clone(),
-            Direction::Format => {
-                let (secs, nanos) = decode_instant(&spec.input)?;
-                encode_instant(secs, nanos)
-            }
-        };
-        Ok(Self {
-            direction: spec.direction,
-            format: spec.format,
-            input,
-            expected,
-            intent: spec.intent.clone(),
-        })
-    }
-
     /// The case identifier: the first token of the intent column.
     pub fn id(&self) -> &str {
         self.intent.split_whitespace().next().unwrap_or("")
@@ -195,16 +128,6 @@ pub fn render_expected(expected: &Expected) -> String {
         Expected::Text(text) => format!("text:{}", escape(text)),
         Expected::Error(name) => format!("error:{name}"),
     }
-}
-
-/// Renders one fixture line, without the trailing newline.
-pub fn render_line(case: &Case) -> String {
-    let column = format!("{}/{}", case.direction.name(), case.format.name());
-    let input = match case.direction {
-        Direction::Parse => escape(&case.input),
-        Direction::Format => case.input.clone(),
-    };
-    format!("{column}\t{input}\t{}\t{}", render_expected(&case.expected), case.intent)
 }
 
 /// Reads the fixture that is committed next to the tests.
@@ -418,7 +341,7 @@ pub const TICK_VARIABLE: &str = "S3S_TIME_TICK_NANOS";
 /// The variable that injects the earliest instant the clock can hold, in seconds.
 pub const FLOOR_VARIABLE: &str = "S3S_TIME_FLOOR_SECONDS";
 
-/// The clock that the bridge goes through: how fine it is and how far back it reaches.
+/// The clock of the platform model: how fine it is and how far back it reaches.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PlatformModel {
     /// The tick of the clock, in nanoseconds.
@@ -430,25 +353,6 @@ pub struct PlatformModel {
 }
 
 impl PlatformModel {
-    /// The Unix clock: every nanosecond, down to the smallest seconds value.
-    pub const UNIX: Self = Self {
-        tick_nanos: 1,
-        floor_seconds: i64::MIN,
-        injected: false,
-    };
-
-    /// The Windows clock: hundred-nanosecond ticks from 1601-01-01.
-    pub const WINDOWS: Self = Self {
-        tick_nanos: 100,
-        floor_seconds: WINDOWS_EPOCH_SECONDS,
-        injected: false,
-    };
-
-    /// Whether the clock keeps the instant exactly.
-    pub fn carries(&self, secs: i64, nanos: u32) -> bool {
-        secs >= self.floor_seconds && carries_faithfully(nanos, self.tick_nanos)
-    }
-
     /// Rounds an instant down to the tick of this clock.
     pub fn quantize(&self, secs: i64, nanos: u32) -> (i64, u32) {
         quantize_to_tick(secs, nanos, self.tick_nanos)
@@ -563,48 +467,6 @@ pub fn quantize_to_tick(secs: i64, nanos: u32, tick_nanos: u32) -> (i64, u32) {
     (secs, nanos)
 }
 
-/// Whether a clock that ticks every `tick_nanos` keeps the fraction of an instant.
-///
-/// The oracle is reached through a platform `SystemTime`, so its precision is the
-/// precision of that bridge: a fraction the clock cannot carry would be silently
-/// truncated and the oracle would answer for a different instant. Such a case is left
-/// out of the oracle side of a run and counted as skipped instead.
-pub fn carries_faithfully(nanos: u32, tick_nanos: u32) -> bool {
-    nanos.is_multiple_of(tick_nanos.max(1))
-}
-
-/// Reads the shortest exact decimal of an epoch-seconds value.
-///
-/// Both implementations write the integral part as the floor second and the fraction
-/// as a positive adjustment, so minus one point five denotes minus half a second.
-///
-/// # Errors
-///
-/// Returns the reason when the text is not such a decimal.
-pub fn decode_epoch_literal(text: &str) -> Result<(i64, u32), String> {
-    let (integral, fraction) = match text.split_once('.') {
-        Some((integral, fraction)) => (integral, Some(fraction)),
-        None => (text, None),
-    };
-    let secs: i64 = integral
-        .parse()
-        .map_err(|_| format!("invalid epoch-seconds literal {text:?}"))?;
-    let Some(fraction) = fraction else {
-        return Ok((secs, 0));
-    };
-    if fraction.is_empty() || fraction.len() > 9 || !fraction.bytes().all(|byte| byte.is_ascii_digit()) {
-        return Err(format!("invalid epoch-seconds fraction in {text:?}"));
-    }
-    if secs == 0 && text.starts_with('-') && fraction.bytes().any(|byte| byte != b'0') {
-        return Err(format!("a negative fraction needs a negative floor second: {text:?}"));
-    }
-    let padded = format!("{fraction:0<9}");
-    let nanos: u32 = padded
-        .parse()
-        .map_err(|_| format!("invalid epoch-seconds fraction in {text:?}"))?;
-    Ok((secs, nanos))
-}
-
 /// The crate root directory.
 pub fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -613,40 +475,4 @@ pub fn manifest_dir() -> PathBuf {
 /// The committed fixture.
 pub fn fixture_path() -> PathBuf {
     manifest_dir().join(FIXTURE_PATH)
-}
-
-/// The workspace root, two levels above the crate root.
-pub fn workspace_root() -> PathBuf {
-    let manifest = manifest_dir();
-    match manifest.parent().and_then(|path| path.parent()) {
-        Some(root) => root.to_path_buf(),
-        None => manifest,
-    }
-}
-
-/// The version of the time library that the workspace lock file resolved.
-///
-/// The lock file is the only place that knows the version at generation time, and the
-/// fixture header records it because the accepted input set follows the library
-/// version.
-pub fn locked_jiff_version() -> Option<String> {
-    let lock = std::fs::read_to_string(workspace_root().join("Cargo.lock")).ok()?;
-    let mut package: Option<&str> = None;
-    for line in lock.lines() {
-        let line = line.trim();
-        if line == "[[package]]" {
-            package = None;
-            continue;
-        }
-        if let Some(name) = line.strip_prefix("name = ") {
-            package = Some(name.trim_matches('"'));
-            continue;
-        }
-        if let Some(version) = line.strip_prefix("version = ")
-            && package == Some("jiff")
-        {
-            return Some(version.trim_matches('"').to_owned());
-        }
-    }
-    None
 }

@@ -62,6 +62,7 @@ s3s-multipart.workspace = true
 s3s-rfc2047.workspace = true
 s3s-sigv2.workspace = true
 s3s-sigv4.workspace = true
+s3s-time = { workspace = true, features = ["serde"] }
 serde.workspace = true
 serde_json.workspace = true
 serde_urlencoded.workspace = true

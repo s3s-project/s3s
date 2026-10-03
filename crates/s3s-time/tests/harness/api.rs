@@ -3,20 +3,17 @@
 
 //! The behaviour under test, behind one trait.
 //!
-//! The oracle is the pre-migration implementation that the s3s crate ships today: the
-//! fixture is generated from it and replayed against it. The candidate is this crate's
-//! own implementation, compiled in as the evaluation replaces the oracle dependency.
-//! The whole adapter, the oracle included, is development-only and is removed with the
-//! dependency once the migration is complete.
+//! The fixture was generated from the pre-migration implementation before it was
+//! deleted, and the generator and the oracle adapter went with it; the fixture is the
+//! only oracle now. The candidate is this crate's own implementation, and the replay
+//! compares it against the fixture case by case: every case must match byte for byte
+//! except the ids listed in the post-migration table below.
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt;
 use std::hash::Hash;
 
-use crate::harness::support::{
-    Case, Direction, Expected, Format, PlatformModel, checked_system_time, decode_epoch_literal, decode_instant, platform_model,
-    render_expected,
-};
+use crate::harness::support::{Case, Direction, Expected, Format, decode_instant, render_expected};
 
 /// One wire-format operation, as the frozen fixture describes it.
 pub trait TimeApi: Sized + Clone + Eq + Ord + Hash + fmt::Debug {
@@ -75,7 +72,8 @@ impl Outcome {
     }
 }
 
-/// Runs one case against an implementation.
+/// Runs one case against an implementation, or nothing when the implementation cannot
+/// represent the instant a format case carries.
 ///
 /// # Panics
 ///
@@ -92,9 +90,9 @@ pub fn try_run<T: TimeApi>(direction: Direction, format: Format, input: &str) ->
         }),
         Direction::Format => {
             let (secs, nanos) = decode_instant(input).expect("a format case carries a canonical instant");
-            // A format case crosses the platform bridge, whose clock fixes both the range
-            // and the precision of an instant. None means the platform cannot carry it,
-            // and the case belongs to the skipped side of a run rather than to a failure.
+            // The instant of a format case comes from the fixture, so a refusal is a
+            // property of the implementation rather than of the corpus: the case is
+            // reported instead of being written as a different instant.
             let timestamp = T::try_from_instant(secs, nanos)?;
             Some(match timestamp.format(format) {
                 Ok(text) => Outcome::Text(text),
@@ -104,99 +102,16 @@ pub fn try_run<T: TimeApi>(direction: Direction, format: Format, input: &str) ->
     }
 }
 
-/// Runs one fixture case against an implementation, or nothing when the platform bridge
-/// cannot carry the instant of the case.
+/// Runs one fixture case against an implementation, or nothing when the implementation
+/// cannot represent the instant of a format case.
 pub fn run_case<T: TimeApi>(case: &Case) -> Option<Outcome> {
     try_run::<T>(case.direction, case.format, &case.input)
 }
 
-/// The pre-migration implementation, taken from the data transfer objects of s3s.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Oracle(s3s::dto::Timestamp);
-
-impl TimeApi for Oracle {
-    type Error = OracleError;
-
-    fn try_from_instant(secs: i64, nanos: u32) -> Option<Self> {
-        // The bridge to the pre-migration type is a `SystemTime`, whose precision is the
-        // platform tick. A fraction the clock cannot carry would be truncated silently and
-        // the oracle would answer for a different instant, so the case is left out and the
-        // runs count it as skipped.
-        if !platform_model().carries(secs, nanos) {
-            return None;
-        }
-        Some(Self(s3s::dto::Timestamp::from(checked_system_time(secs, nanos)?)))
-    }
-
-    fn parse(format: Format, text: &str) -> Result<Self, Self::Error> {
-        s3s::dto::Timestamp::parse(oracle_format(format), text)
-            .map(Self)
-            .map_err(OracleError::Parse)
-    }
-
-    fn format(&self, format: Format) -> Result<String, Self::Error> {
-        let mut buf = Vec::new();
-        self.0.format(oracle_format(format), &mut buf).map_err(OracleError::Format)?;
-        Ok(String::from_utf8(buf).expect("the wire formats are ASCII"))
-    }
-
-    fn canonical(&self) -> (i64, u32) {
-        // The oracle exposes no accessor, so the instant is read back from its exact
-        // epoch-seconds rendering, which is the shortest decimal of the same instant.
-        let text = self.format(Format::EpochSeconds).expect("epoch-seconds always formats");
-        decode_epoch_literal(&text).expect("an epoch-seconds rendering decodes")
-    }
-
-    fn error_name(error: &Self::Error) -> &'static str {
-        error.contract_name()
-    }
-}
-
-/// Maps a fixture format onto the oracle format.
-fn oracle_format(format: Format) -> s3s::dto::TimestampFormat {
-    match format {
-        Format::DateTime => s3s::dto::TimestampFormat::DateTime,
-        Format::HttpDate => s3s::dto::TimestampFormat::HttpDate,
-        Format::EpochSeconds => s3s::dto::TimestampFormat::EpochSeconds,
-    }
-}
-
-/// The error of the oracle, keeping the contract classification.
-#[derive(Debug)]
-pub enum OracleError {
-    /// The parser rejected the input.
-    Parse(s3s::dto::ParseTimestampError),
-    /// The writer rejected the instant.
-    Format(s3s::dto::FormatTimestampError),
-}
-
-impl OracleError {
-    /// Maps the pre-migration variants onto the contract names of the fixture.
-    ///
-    /// The pre-migration parser reports a grammar mismatch and an unparsable integer
-    /// with two variants, both of which mean that the input does not match the
-    /// grammar; its only overflow is an epoch-seconds fraction that is too long, and
-    /// the component range carries every out-of-range field and instant.
-    fn contract_name(&self) -> &'static str {
-        match self {
-            Self::Parse(error) => match error {
-                s3s::dto::ParseTimestampError::Time(_) | s3s::dto::ParseTimestampError::Int(_) => "InvalidFormat",
-                s3s::dto::ParseTimestampError::Overflow => "FractionTooLong",
-                s3s::dto::ParseTimestampError::ComponentRange(_) => "OutOfRange",
-            },
-            Self::Format(error) => match error {
-                s3s::dto::FormatTimestampError::Time(_) => "OutOfRange",
-                s3s::dto::FormatTimestampError::Io(_) => "Io",
-            },
-        }
-    }
-}
-
 /// Every instant that the fixture pins down, without duplicates and in order.
 ///
-/// The corpus keeps the values of the fixture. Only the oracle side, which crosses a
-/// platform `SystemTime`, leaves out the instants the clock cannot carry; see
-/// `case_is_carried` for that rule and the runs for the counters.
+/// The corpus keeps the values of the fixture; an implementation that cannot represent
+/// an instant is counted rather than being dropped silently.
 pub fn fixture_instants(cases: &[Case]) -> Vec<(i64, u32)> {
     let mut instants = BTreeSet::new();
     for case in cases {
@@ -339,33 +254,30 @@ fn check_order<T: TimeApi>(instants: &[(i64, u32)], failures: &mut Vec<String>) 
     }
 }
 
-/// The result of the differential run of the candidate.
-#[derive(Debug, Default)]
-pub struct Differential {
-    /// Differences that are neither absent nor recorded: fix the candidate or record
-    /// the difference in the migration report and in the table below.
-    pub problems: Vec<String>,
-    /// The recorded divergences that were observed, with the reason of each.
-    pub recorded: Vec<String>,
-    /// The cases the oracle side replayed.
-    pub oracle_checked: usize,
-    /// The cases the oracle side left out because the platform clock cannot carry them.
-    pub oracle_skipped: usize,
-    /// The cases the candidate side replayed. The candidate never crosses the bridge, so
-    /// it runs every case on every platform.
-    pub candidate_checked: usize,
-}
-
 /// Whether the candidate side is compiled in.
 pub const CANDIDATE_AVAILABLE: bool = true;
 
-/// Cases where the candidate diverges on purpose, with the recorded reason.
+/// The result of replaying the frozen fixture against this crate.
+#[derive(Debug, Default)]
+pub struct Replay {
+    /// Differences that are neither absent nor recorded: fix the implementation or
+    /// record the difference here and in the migration report.
+    pub problems: Vec<String>,
+    /// The recorded divergences that were observed, with the reason of each.
+    pub recorded: Vec<String>,
+    /// The cases that were replayed against the implementation. The implementation does
+    /// not cross a platform clock, so it runs every case the corpus holds.
+    pub checked: usize,
+}
+
+/// Cases where this crate deliberately differs from the frozen fixture.
 ///
-/// An entry is only for a difference that the migration accepts, either because the
-/// crate design decides it or because the strictness of the pre-migration parser is
-/// still being restored; an entry that stops diverging is reported as a problem, so
-/// the table cannot go stale.
-const KNOWN_DIVERGENCES: &[(&str, &str)] = &[
+/// The fixture records what the pre-migration implementation produced, so a difference
+/// is expected exactly where the migration decided to change the behaviour. The id is
+/// the first token of the fixture intent column. An entry whose case stops diverging is
+/// a problem, and so is an entry whose id is not a case of the fixture, so the table
+/// cannot go stale and a typo cannot hide in it.
+pub const POST_MIGRATION_DIVERGENCES: &[(&str, &str)] = &[
     // The internal representation reserves the largest UTC offset at both ends of the
     // four-digit year range, which narrows the accepted instants by 93599 seconds at
     // each end.
@@ -392,141 +304,58 @@ const KNOWN_DIVERGENCES: &[(&str, &str)] = &[
     ("design-4.2/hour-out-of-range", "intended: out-of-range reports OutOfRange"),
 ];
 
-/// How many cases a side of a run replayed, and how many the platform clock kept it
-/// from carrying.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub struct Coverage {
-    /// The cases the side replayed.
-    pub checked: usize,
-    /// The cases the side left out because the platform clock cannot carry the instant.
-    pub skipped: usize,
-}
-
-/// The reason the oracle side leaves a case out on a platform whose clock is coarse.
-pub const BRIDGE_REASON: &str = "the platform clock cannot carry this fraction";
-
-/// Whether a case can be replayed through the clock of the platform model.
+/// Replays every case against this crate and the frozen fixture.
 ///
-/// A parse case feeds text to an implementation and never crosses the bridge; a format
-/// case carries its instant in the input, so the clock must keep both its range and its
-/// fraction. The model is the only source of that rule.
-pub fn case_is_carried(case: &Case, model: PlatformModel) -> bool {
-    match case.direction {
-        Direction::Parse => true,
-        Direction::Format => {
-            let (secs, nanos) = decode_instant(&case.input).expect("a format case carries a canonical instant");
-            model.carries(secs, nanos)
-        }
-    }
-}
-
-/// Replays the corpus through the oracle at a bridge tick and compares every carried
-/// case against the frozen expectation.
-///
-/// The corpus keeps the values of the fixture; a case the platform clock cannot carry is
-/// counted as skipped rather than being silently truncated into another instant.
-pub fn oracle_replay(cases: &[Case], model: PlatformModel) -> (Coverage, Vec<String>) {
-    let mut coverage = Coverage::default();
-    let mut failures = Vec::new();
-    for case in cases {
-        if !case_is_carried(case, model) {
-            coverage.skipped += 1;
-            continue;
-        }
-        let Some(outcome) = run_case::<Oracle>(case) else {
-            coverage.skipped += 1;
-            continue;
-        };
-        coverage.checked += 1;
-        if !outcome.matches(&case.expected) {
-            failures.push(format!(
-                "{}: fixture {} but oracle {}",
-                case.id(),
-                render_expected(&case.expected),
-                outcome.render()
-            ));
-        }
-    }
-    (coverage, failures)
-}
-
-/// Compares the oracle and the candidate against the frozen expectation of one case.
-///
-/// Returns none when the platform clock cannot carry the case, so the oracle side is
-/// left out and the caller counts it as skipped. The candidate is lossless and runs
-/// every case; the differences are reported against both sides, so the message says
-/// which side moved.
-pub fn compare_case(case: &Case, model: PlatformModel) -> Option<Vec<String>> {
-    if !case_is_carried(case, model) {
-        return None;
-    }
-    let oracle = run_case::<Oracle>(case)?;
-    let Some(candidate) = run_case::<Candidate>(case) else {
-        return Some(vec!["the candidate cannot represent a case of the corpus".to_owned()]);
-    };
-    let mut detail = Vec::new();
-    if candidate.render() != oracle.render() {
-        detail.push(format!("oracle {} but candidate {}", oracle.render(), candidate.render()));
-    }
-    if !candidate.matches(&case.expected) {
-        detail.push(format!(
-            "fixture {} but candidate {}",
-            render_expected(&case.expected),
-            candidate.render()
-        ));
-    }
-    Some(detail)
-}
-
-/// Runs every case against the oracle, the fixture and the candidate.
-///
-/// The candidate runs on every case; the oracle runs only on the cases the platform
-/// clock can carry, and the rest are counted as skipped. The difference table is checked
-/// for stale entries at the end, because the table belongs to the frozen corpus.
-pub fn candidate_differential(cases: &[Case], model: PlatformModel) -> Differential {
-    let mut report = Differential::default();
+/// A case outside the post-migration table must match the fixture exactly: for a parse
+/// case the parsed instant or the error name, for a format case the written bytes. A
+/// case the implementation cannot represent is reported instead of being counted.
+pub fn candidate_replay(cases: &[Case]) -> Replay {
+    let mut report = Replay::default();
     let mut recorded = BTreeSet::new();
+
     for case in cases {
-        let Some(candidate) = run_case::<Candidate>(case) else {
+        let Some(outcome) = run_case::<Candidate>(case) else {
             report
                 .problems
                 .push(format!("{}: the candidate cannot represent a case of the corpus", case.id()));
             continue;
         };
-        report.candidate_checked += 1;
-        let Some(detail) = compare_case(case, model) else {
-            report.oracle_skipped += 1;
-            if !candidate.matches(&case.expected) {
-                report.problems.push(format!(
-                    "{}: fixture {} but candidate {} (the oracle side is left out here: {BRIDGE_REASON})",
-                    case.id(),
-                    render_expected(&case.expected),
-                    candidate.render()
-                ));
-            }
-            continue;
-        };
-        report.oracle_checked += 1;
-        if detail.is_empty() {
+        report.checked += 1;
+        if outcome.matches(&case.expected) {
             continue;
         }
-        match KNOWN_DIVERGENCES.iter().find(|(id, _)| *id == case.id()) {
+        match POST_MIGRATION_DIVERGENCES.iter().find(|(id, _)| *id == case.id()) {
             Some((id, reason)) => {
                 recorded.insert(*id);
-                report.recorded.push(format!("{id}: {reason}: {}", detail.join("; ")));
+                report.recorded.push(format!(
+                    "{id}: {reason}: fixture {} but implementation {}",
+                    render_expected(&case.expected),
+                    outcome.render()
+                ));
             }
-            None => report
-                .problems
-                .push(format!("{}: unexplained difference: {}", case.id(), detail.join("; "))),
+            None => report.problems.push(format!(
+                "{}: unexpected difference from the frozen fixture: fixture {} but implementation {}",
+                case.id(),
+                render_expected(&case.expected),
+                outcome.render()
+            )),
         }
     }
-    for (id, reason) in KNOWN_DIVERGENCES {
-        if !recorded.contains(id) {
+
+    let fixture_ids: BTreeSet<&str> = cases.iter().map(Case::id).collect();
+
+    for (id, reason) in POST_MIGRATION_DIVERGENCES {
+        if !fixture_ids.contains(*id) {
+            report
+                .problems
+                .push(format!("{id}: the recorded divergence is not a case of the frozen fixture"));
+        } else if !recorded.contains(*id) {
             report
                 .problems
                 .push(format!("{id}: the recorded divergence ({reason}) no longer occurs"));
         }
     }
+
     report
 }
 

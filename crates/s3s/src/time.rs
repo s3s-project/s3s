@@ -6,7 +6,7 @@ use std::fmt;
 pub fn now_utc() -> impl fmt::Debug {
     #[cfg(not(target_arch = "wasm32"))]
     {
-        time::OffsetDateTime::now_utc()
+        jiff::Timestamp::now()
     }
     #[cfg(target_arch = "wasm32")]
     {
