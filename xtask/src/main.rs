@@ -9,6 +9,7 @@
 
 mod coverage;
 mod crawl;
+mod fuzz;
 mod link_license;
 mod report;
 mod spdx;
@@ -33,6 +34,9 @@ enum Command {
     /// Crawl the AWS Smithy models and the S3 error code documentation.
     #[command(subcommand)]
     Crawl(crawl::Crawl),
+    /// Plan and run the scheduled fuzzing.
+    #[command(subcommand)]
+    Fuzz(fuzz::Fuzz),
     /// Link the LICENSE file into every workspace member.
     LinkLicense(link_license::LinkLicense),
     /// Report gates for the end-to-end suites.
@@ -49,6 +53,7 @@ fn main() -> ExitCode {
     let result = match Cli::parse().command {
         Command::Coverage(cmd) => cmd.run(),
         Command::Crawl(cmd) => cmd.run(),
+        Command::Fuzz(cmd) => cmd.run(),
         Command::LinkLicense(cmd) => cmd.run(),
         Command::Report(cmd) => cmd.run(),
         Command::Spdx(cmd) => cmd.run(),

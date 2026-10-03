@@ -14,7 +14,7 @@ on:
       # touching fuzz/.
       - 'crates/**'
   schedule:
-    - cron: '0 0 * * 0' # weekly at 00:00 UTC on Sunday
+    - cron: '0 0 * * *' # daily at 00:00 UTC
   workflow_dispatch:
 
 permissions:
@@ -48,7 +48,7 @@ jobs:
       - name: Format and lint
         run: just -f fuzz/justfile ci-check
 
-  # Weekly actual fuzzing (schedule / manual dispatch only).
+  # Daily actual fuzzing (schedule / manual dispatch only).
   fuzz-run:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
@@ -64,7 +64,11 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: fuzz
+          # The scheduled step runs the `xtask` binary, so the root workspace is
+          # built as well and belongs in the cache next to the fuzz workspace.
+          workspaces: |
+            fuzz -> target
+            . -> target
 
       # Installs the latest cargo-fuzz release: `tool` is left unpinned on
       # purpose so it never goes stale. `with: tool:` keeps the name explicit,
@@ -108,24 +112,8 @@ jobs:
         run: cargo +nightly fuzz build --target x86_64-unknown-linux-gnu
         working-directory: fuzz
 
-      - name: Fuzz for 30 minutes
-        run: |
-          # One target per week in rotation, so every target is exercised
-          # instead of only the first one. The s3s-backed targets alternate
-          # between the default and the minio codegen variant by day-of-year
-          # parity; multipart_parser does not use s3s, so it has no variant.
-          targets=(xml_bodies aws_chunked syntax_parsers multipart_parser)
-          week=$(( $(date +%s) / 604800 ))
-          target=${targets[$(( week % ${#targets[@]} ))]}
-          echo "fuzzing $target"
-          if [ "$target" = multipart_parser ]; then
-            just ci-run "$target"
-          elif [ $(( $(date +%j) % 2 )) -eq 0 ]; then
-            just ci-run "$target" "--features minio"
-          else
-            just ci-run "$target"
-          fi
-        working-directory: fuzz
+      - name: Fuzz the target of the day
+        run: cargo run -q -p xtask -- fuzz run
 
       - name: Upload corpus
         uses: actions/upload-artifact@v7
@@ -134,8 +122,8 @@ jobs:
           name: fuzz-corpus
           path: fuzz/corpus
           # Only the latest corpus matters (next run restores it); 30-day
-          # retention bounds storage: one artifact per run, ~4 at steady
-          # state with the weekly schedule.
+          # retention bounds storage: one artifact per run, ~30 at steady
+          # state with the daily schedule.
           retention-days: 30
           if-no-files-found: ignore
 

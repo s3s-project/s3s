@@ -43,10 +43,11 @@ gen-corpus *ARGS:
     cargo +nightly run --release --bin gen_corpus -- seeds/xml_bodies {{ARGS}}
 
 # CI entry: compact the accumulated corpus (keep only coverage-increasing
-# inputs), re-seed, then fuzz for the full time budget. FEATURES is the
-# optional cargo-fuzz feature flag (e.g. "--features minio"). The per-input
-# timeout turns a hang into an artifact the job can upload.
-ci-run target FEATURES="" BUDGET="1800":
+# inputs), re-seed, then fuzz for the full time budget (15 minutes by default,
+# matching the daily scheduled run). FEATURES is the optional cargo-fuzz
+# feature flag (e.g. "--features minio"). The per-input timeout turns a hang
+# into an artifact the job can upload.
+ci-run target FEATURES="" BUDGET="900":
     #!/bin/bash -e
     mkdir -p "corpus/{{target}}" "merged/{{target}}"
     if [ -d "seeds/{{target}}" ]; then
