@@ -91,7 +91,14 @@ pub(super) fn extract_authorization_v4(hs: &HeaderMap) -> S3Result<Option<Author
 ///
 /// The signed-header list is client-supplied and not lowercased, so comparisons are
 /// case-insensitive; [`HeaderName`] is already lowercase. Headers listed in
-/// [`S3Config::unsigned_amz_header_allowlist`] are exempt.
+/// [`S3Config::unsigned_amz_header_allowlist`] are exempt, and `x-amz-content-sha256` is always
+/// exempt.
+///
+/// `x-amz-content-sha256` is exempt because its value is the payload-hash input of the request:
+/// the value read from the header becomes the payload line of the canonical request, so the
+/// signature covers it even when the header name is absent from the signed-header list. A client
+/// that needs the header covered by `CanonicalHeaders` itself can list it in `SignedHeaders`, or
+/// in `X-Amz-SignedHeaders` for a presigned URL.
 fn reject_unsigned_amz_headers(config: &S3Config, hs: &HeaderMap, signed_names: &[&str]) -> S3Result<()> {
     // S3 treats x-amz-content-sha256 as the request's payload-hash input rather than ordinary request metadata.
     // Every other exception belongs in the configurable `S3Config::unsigned_amz_header_allowlist`.
