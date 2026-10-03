@@ -73,11 +73,12 @@ fn the_representable_range_is_narrower_than_the_year_range() {
 }
 
 #[test]
-fn date_time_spells_an_expanded_year_with_six_digits() {
-    // The underlying parser requires a sign and six digits for a year outside
-    // the four-digit range; the previous implementation accepted the bare form.
+fn date_time_six_digit_expanded_year_is_rejected() {
+    // A year outside the four-digit range is rejected in both spellings, which is the
+    // behaviour of the pre-migration implementation. The cases are recorded in the
+    // fixture under the intents design-4.1/year-min and design-4.1/year-negative-extended.
     assert!(parse(TimestampFormat::DateTime, "-9999-01-20T23:47:31Z").is_err());
-    assert!(parse(TimestampFormat::DateTime, "-009999-01-20T23:47:31Z").is_ok());
+    assert!(parse(TimestampFormat::DateTime, "-009999-01-20T23:47:31Z").is_err());
 }
 
 #[test]
@@ -124,12 +125,12 @@ fn http_date_rejects_fractional_seconds() {
 }
 
 #[test]
-fn http_date_names_are_matched_case_insensitively() {
-    // The underlying parser accepts any case for the day name and for the zone,
-    // while the previous implementation required the exact IMF-fixdate
-    // spelling. The difference is recorded for the parity stage.
-    assert!(parse(TimestampFormat::HttpDate, "sat, 15 Jun 2024 07:00:00 GMT").is_ok());
-    assert!(parse(TimestampFormat::HttpDate, "Sat, 15 Jun 2024 07:00:00 gmt").is_ok());
+fn http_date_names_are_case_sensitive() {
+    // The weekday and the zone are matched exactly, which is the behaviour of the
+    // pre-migration implementation. The cases are recorded in the fixture under the
+    // intents design-4.2/weekday-lowercase and design-4.2/zone-lowercase.
+    assert!(parse(TimestampFormat::HttpDate, "sat, 15 Jun 2024 07:00:00 GMT").is_err());
+    assert!(parse(TimestampFormat::HttpDate, "Sat, 15 Jun 2024 07:00:00 gmt").is_err());
 }
 
 #[test]
