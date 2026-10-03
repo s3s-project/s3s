@@ -65,7 +65,7 @@ A pull request here is squash-merged into `main`, so its title becomes the commi
 
 ## Watching a pull request
 
-`cargo run -p xtask -- watch-pr <PR#>` polls a pull request, prints one state line per tick, appends it to `target/pr-watch/pr-<n>.log`, and takes the last line of that log as its baseline, so a watcher that is restarted does not miss a change. It exits when something decision-relevant changes — a new failure, a settled check set, a review, a label, a review request, a merge-queue entry, or the merge or close transition. Check-count churn, a flap between `BLOCKED` and `UNSTABLE`, and comments written by a bot are deliberately ignored. It ticks every 60 seconds — a fixed interval, because a stretched one only delays the moment a change is noticed. `--hours` bounds how long it runs, `--keep-running` keeps it alive across changes, and `--log` moves the log.
+`cargo run -p xtask -- watch-pr <PR#>` polls a pull request, prints one state line per tick, appends it to `target/pr-watch/pr-<n>.log`, and takes the last line of that log as its baseline, so a watcher that is restarted does not miss a change. It exits when something decision-relevant changes — a new failure, a settled check set, a review, a label, a review request, a merge-queue entry, or the merge or close transition. Check-count churn, a flap between `BLOCKED` and `UNSTABLE`, and comments written by a bot are deliberately ignored. It ticks every 60 seconds — a fixed interval, because a stretched one only delays the moment a change is noticed. `--hours` bounds how long it runs, and `--log` moves the log.
 
 ## What to reuse
 
