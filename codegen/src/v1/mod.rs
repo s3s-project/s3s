@@ -9,6 +9,7 @@ mod access;
 mod dto;
 mod error;
 mod fvr;
+mod gen_tests;
 mod headers;
 mod minio;
 mod oir;
@@ -57,6 +58,7 @@ pub fn run() {
 
     // ops 以 union（minio 全集）模型单次生成，base/minio 差异在 codegen 内内联门控。
     ops::codegen(&minio.ops, &base.rust_types, &minio.rust_types);
+    gen_tests::codegen(&minio.ops, &base.rust_types, &minio.rust_types);
     postprocess();
 }
 

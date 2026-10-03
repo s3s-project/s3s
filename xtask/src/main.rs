@@ -7,6 +7,7 @@
 //! human-facing entry point; recipes that need more than a single command line
 //! delegate their logic here.
 
+mod coverage;
 mod crawl;
 mod link_license;
 mod report;
@@ -26,6 +27,8 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Summarize a `cargo-llvm-cov` JSON export as a per-package table.
+    Coverage(coverage::Coverage),
     /// Crawl the AWS Smithy models and the S3 error code documentation.
     #[command(subcommand)]
     Crawl(crawl::Crawl),
@@ -41,6 +44,7 @@ enum Command {
 
 fn main() -> ExitCode {
     let result = match Cli::parse().command {
+        Command::Coverage(cmd) => cmd.run(),
         Command::Crawl(cmd) => cmd.run(),
         Command::LinkLicense(cmd) => cmd.run(),
         Command::Report(cmd) => cmd.run(),
