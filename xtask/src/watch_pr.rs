@@ -25,8 +25,8 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
 use clap::Parser;
+use jiff::{Timestamp, Unit};
 use serde::Deserialize;
-use time::OffsetDateTime;
 
 /// Keys of a state line, in the order they are rendered.
 const FIELDS: [&str; 15] = [
@@ -449,18 +449,13 @@ fn is_bot_author(value: &str) -> bool {
     inner.contains("[bot]") || inner.contains("codecov") || inner.contains("copilot")
 }
 
-/// Timestamp of a log line, in UTC.
+/// Timestamp of a log line, in UTC, to the second.
 fn stamp() -> String {
-    let now = OffsetDateTime::now_utc();
-    format!(
-        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
-        now.year(),
-        u8::from(now.month()),
-        now.day(),
-        now.hour(),
-        now.minute(),
-        now.second()
-    )
+    let now = Timestamp::now();
+    // The log is read by people: a whole second is enough, and it keeps the
+    // lines comparable with the ones already written.
+    let second = now.round(Unit::Second).unwrap_or(now);
+    second.to_string()
 }
 
 fn emit(text: &str) {
