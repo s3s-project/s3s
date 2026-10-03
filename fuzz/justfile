@@ -18,10 +18,16 @@ ci-check:
     RUSTFLAGS="${RUSTFLAGS:-} --cfg fuzzing" cargo +nightly clippy --workspace --all-targets -- -D warnings
     just check-seeds
 
-# Check the committed multipart_parser seeds against the outcome each one is
-# committed for (see bin/check_seeds.rs), so the corpus cannot rot silently.
+# Check the committed seeds against the outcome each one is committed for (see
+# bin/check_seeds.rs and bin/check_timestamp_seeds.rs), so the corpus cannot rot
+# silently.
 check-seeds:
     cargo +nightly run --quiet --bin check_seeds -- seeds/multipart_parser
+    just check-seeds-timestamp
+
+# Check the committed timestamp_parsers seeds (see bin/check_timestamp_seeds.rs).
+check-seeds-timestamp:
+    cargo +nightly run --quiet --bin check_timestamp_seeds -- seeds/timestamp_parsers
 
 # Run a fuzz target (requires cargo-fuzz; uses nightly + ASan).
 #
