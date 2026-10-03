@@ -26,5 +26,6 @@ serde = { workspace = true, optional = true }
 thiserror.workspace = true
 
 [dev-dependencies]
+s3s.workspace = true
 serde.workspace = true
 serde_json.workspace = true
