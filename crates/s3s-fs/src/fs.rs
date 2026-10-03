@@ -14,12 +14,14 @@ use std::env;
 use std::ops::Not;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::SystemTime;
 
 use tokio::fs;
 use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
 
 use path_absolutize::Absolutize;
+use tracing::warn;
 use uuid::Uuid;
 
 #[derive(Debug)]
@@ -65,6 +67,25 @@ pub(crate) struct ObjectAttributes {
 /// and their metadata. Bounding the state to a directory keeps listing the parts and aborting the
 /// upload off the file system root.
 const UPLOADS_DIR: &str = ".uploads";
+
+/// Identity of an object body: its size and modification time.
+///
+/// Hashing reads the file that was opened. When the object is replaced while that read runs, the
+/// digest describes the old body, so it must not be stored as the `ETag` of the new one.
+#[derive(PartialEq)]
+struct FileIdentity {
+    len: u64,
+    modified: Option<SystemTime>,
+}
+
+impl FileIdentity {
+    fn of(metadata: &std::fs::Metadata) -> Self {
+        Self {
+            len: metadata.len(),
+            modified: metadata.modified().ok(),
+        }
+    }
+}
 
 fn clean_old_tmp_files(root: &Path) -> std::io::Result<()> {
     let entries = match std::fs::read_dir(root) {
@@ -243,9 +264,19 @@ impl FileSystem {
     }
 
     /// get md5 sum
+    ///
+    /// The computed value is the object's `ETag` when nothing else is stored for it, so it is also
+    /// written back as `e_tag` and the next request reads it instead of hashing the whole body
+    /// again.
+    ///
+    /// The value is remembered only while the object keeps the size and modification time it had
+    /// when it was opened. Without that check a request racing with a replacement would pin an `ETag`
+    /// that never matches the new body, while an unremembered value only stays stale until the next
+    /// request, as it did before.
     pub(crate) async fn get_md5_sum(&self, bucket: &str, key: &str) -> Result<String> {
         let object_path = self.get_object_path(bucket, key)?;
         let mut file = File::open(&object_path).await?;
+        let opened_identity = FileIdentity::of(&file.metadata().await?);
         let mut buf = vec![0; 65536];
         let mut md5_hash = Md5::new();
         loop {
@@ -255,7 +286,49 @@ impl FileSystem {
             }
             md5_hash.update(&buf[..nread]);
         }
-        Ok(hex(md5_hash.finalize()))
+        let md5_sum = hex(md5_hash.finalize());
+
+        match fs::metadata(&object_path).await {
+            Ok(current) if FileIdentity::of(&current) == opened_identity => {
+                self.remember_e_tag(bucket, key, &md5_sum).await;
+            }
+            Ok(_) => {
+                warn!(bucket, key, "not remembering the ETag: the object changed while it was hashed");
+            }
+            Err(err) => {
+                warn!(bucket, key, error = ?err, "not remembering the ETag: the object could not be checked");
+            }
+        }
+
+        Ok(md5_sum)
+    }
+
+    /// Write a computed `e_tag` into the object's `internal.json`, best effort.
+    ///
+    /// The sidecar is re-read here and merged, so a checksum that a concurrent write stored in the
+    /// meantime is kept; only a missing `e_tag` is filled in. The caller already holds the value it
+    /// needed, so any failure is logged and ignored instead of changing the response. A concurrent
+    /// writer can still replace the sidecar between this read and the write, in which case the
+    /// later write wins, exactly as it does for two writers of the same object today.
+    async fn remember_e_tag(&self, bucket: &str, key: &str, e_tag: &str) {
+        let result: Result<()> = async {
+            let path = self.get_internal_info_path(bucket, key)?;
+            let mut info = match fs::read(&path).await {
+                Ok(content) => serde_json::from_slice::<InternalInfo>(&content)?,
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => InternalInfo::default(),
+                Err(err) => return Err(err.into()),
+            };
+            if crate::checksum::load_e_tag(&info).is_some() {
+                return Ok(());
+            }
+            crate::checksum::save_e_tag(&mut info, e_tag);
+            self.save_internal_info(bucket, key, &info).await
+        }
+        .await;
+
+        if let Err(err) = result {
+            warn!(bucket, key, error = ?err, "failed to remember the computed ETag");
+        }
     }
 
     pub(crate) async fn create_upload_id(&self, cred: Option<&Credentials>) -> Result<Uuid> {
@@ -500,6 +573,37 @@ mod tests {
             std::fs::set_permissions(&upload_dir, std::fs::Permissions::from_mode(0o755))?;
             file_system.delete_upload_id(&upload_id).await?;
             assert!(!upload_dir.exists(), "the retry must remove the upload directory");
+
+            Ok(())
+        })
+    }
+
+    /// A backfill that cannot read the sidecar must be swallowed, not turned into a failure.
+    #[test]
+    fn a_backfill_that_cannot_read_the_sidecar_is_ignored() -> Result<()> {
+        let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build()?;
+
+        runtime.block_on(async {
+            let root = env::temp_dir().join(format!("s3s-fs-etag-backfill-{}", Uuid::new_v4()));
+            std::fs::create_dir_all(&root)?;
+            let _root = TestRoot(root.clone());
+            let file_system = FileSystem::new(&root)?;
+
+            // A directory at the sidecar path fails the read with an error that is not `NotFound`,
+            // which the best-effort backfill has to swallow.
+            let sidecar = file_system.get_internal_info_path("bucket", "key")?;
+            std::fs::create_dir(&sidecar)?;
+            file_system.remember_e_tag("bucket", "key", "0123456789abcdef").await;
+            assert!(sidecar.is_dir(), "a failed backfill must leave the sidecar path alone");
+
+            std::fs::remove_dir(&sidecar)?;
+            file_system.remember_e_tag("bucket", "key", "0123456789abcdef").await;
+            let info: InternalInfo = serde_json::from_slice(&std::fs::read(&sidecar)?)?;
+            assert_eq!(
+                crate::checksum::load_e_tag(&info).as_deref(),
+                Some("0123456789abcdef"),
+                "the retry must store the ETag"
+            );
 
             Ok(())
         })
