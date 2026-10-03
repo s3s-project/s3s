@@ -79,11 +79,12 @@ const EXPECTED_FAILURES: &[(&str, &[(&str, usize)])] = &[
     (
         "minio-js",
         // The force-delete cases pass now that the `x-minio-force-delete` header
-        // is forwarded, so only one `listObjects` failure is left to cap.
+        // is forwarded, and `extensions.listObjectsV2WithMetadata` passes now that
+        // the proxy forwards the `metadata=true` extension; the remaining entries
+        // are client- or backend-owned.
         &[
             ("copyObject(bucketName, objectName, srcObject, conditions, cb)", 1),
             ("listObjects(bucketName, prefix, recursive)", 1),
-            ("extensions.listObjectsV2WithMetadata(bucketName, prefix, recursive)", 1),
             ("Put an object with assume role credentials:  bucket:", 1),
             ("\"after all\" hook in \"functional tests\"", 1),
         ],
@@ -382,7 +383,7 @@ mod tests {
         let mut errors = Vec::new();
         check_gate(&logs, &mut errors);
 
-        assert_eq!(errors.len(), 8, "one unexpected failure plus seven stale entries: {errors:?}");
+        assert_eq!(errors.len(), 7, "one unexpected failure plus six stale entries: {errors:?}");
         assert!(
             !errors
                 .iter()

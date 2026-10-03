@@ -1877,6 +1877,10 @@ impl S3 for Proxy {
         &self,
         req: S3Request<s3s::dto::ListObjectsV2Input>,
     ) -> S3Result<S3Response<s3s::dto::ListObjectsV2Output>> {
+        #[cfg(feature = "minio")]
+        if req.input.metadata == Some(true) {
+            return super::minio_list::list_objects_v2(&self.minio, req).await;
+        }
         let input = req.input;
         debug!(?input);
         let mut b = self.client.list_objects_v2();

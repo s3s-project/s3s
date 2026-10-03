@@ -205,6 +205,9 @@ fn provided_val(name: &str) -> Val {
         "Event" => Val::Opaque("s3s::dto::Event::from(String::from(\"s3:ObjectCreated:Put\"))".to_owned()),
         "CachedTags" => Val::Opaque("s3s::dto::CachedTags::default()".to_owned()),
         "ETag" => Val::Opaque("s3s::dto::ETag::Strong(String::from(\"etag\"))".to_owned()),
+        "ObjectUserMetadata" => Val::Opaque(
+            "s3s::dto::ObjectUserMetadata(vec![(String::from(\"sample-key\"), String::from(\"sample-value\"))])".to_owned(),
+        ),
         other => panic!("no sample value for the provided type: {other}"),
     }
 }

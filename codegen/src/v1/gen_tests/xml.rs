@@ -447,16 +447,13 @@ fn emit_goldens(surface: &Surface) {
         g!("        marker: None,");
         g!("        max_keys: Some(2),");
         g!("        is_truncated: Some(true),");
+        // Only the fields the golden exercises are set: `Object` carries members
+        // that exist in one model variant only, and a complete literal would not
+        // compile in both feature configurations.
         g!("        contents: Some(vec![dto::Object {{");
-        g!("            checksum_algorithm: None,");
-        g!("            checksum_type: None,");
-        g!("            e_tag: None,");
         g!("            key: Some(String::from(\"a.txt\")),");
-        g!("            last_modified: None,");
-        g!("            owner: None,");
-        g!("            restore_status: None,");
         g!("            size: Some(3),");
-        g!("            storage_class: None,");
+        g!("            ..Default::default()");
         g!("        }}]),");
         g!("        common_prefixes: None,");
         g!("        delimiter: Some(String::from(\"/\")),");
@@ -991,6 +988,7 @@ fn minimal_content(types: &RustTypes, name: &str) -> Option<String> {
         },
         rust::Type::Provided(provided) => match provided.name.as_str() {
             "ETag" | "Event" => Some(SAMPLE_TEXT.to_owned()),
+            "ObjectUserMetadata" => Some(format!("<{SAMPLE_TEXT}>{SAMPLE_TEXT}</{SAMPLE_TEXT}>")),
             _ => None,
         },
         rust::Type::Timestamp(timestamp) => Some(
@@ -1134,6 +1132,9 @@ impl Values<'_> {
             rust::Type::Provided(provided) => match provided.name.as_str() {
                 "ETag" => Ok(format!("dto::ETag::Strong(String::from({SAMPLE_TEXT:?}))")),
                 "Event" => Ok(format!("dto::Event::from(String::from({SAMPLE_TEXT:?}))")),
+                "ObjectUserMetadata" => Ok(format!(
+                    "dto::ObjectUserMetadata(vec![(String::from({SAMPLE_TEXT:?}), String::from({SAMPLE_TEXT:?}))])"
+                )),
                 other => Err(format!("no sample value for the provided type {other}")),
             },
             rust::Type::Timestamp(timestamp) => {

@@ -5227,6 +5227,7 @@ fn debug_struct_list_objects_input() {
     );
 }
 
+#[cfg(not(feature = "minio"))]
 pub(super) fn sample_list_objects_output() -> s3s::dto::ListObjectsOutput {
     s3s::dto::ListObjectsOutput {
         name: Some(String::from("name-a<&>\"中")),
@@ -5243,6 +5244,7 @@ pub(super) fn sample_list_objects_output() -> s3s::dto::ListObjectsOutput {
     }
 }
 
+#[cfg(not(feature = "minio"))]
 #[test]
 fn debug_struct_list_objects_output() {
     let value = sample_list_objects_output();
@@ -5274,6 +5276,60 @@ fn debug_struct_list_objects_output() {
     );
 }
 
+#[cfg(feature = "minio")]
+pub(super) fn sample_list_objects_output() -> s3s::dto::ListObjectsOutput {
+    s3s::dto::ListObjectsOutput {
+        name: Some(String::from("name-a<&>\"中")),
+        prefix: Some(String::from("prefix-a<&>\"中")),
+        marker: Some(String::from("marker-a<&>\"中")),
+        max_keys: Some(1),
+        is_truncated: Some(false),
+        contents: Some(vec![super::debug::sample_object()]),
+        common_prefixes: Some(vec![super::debug::sample_common_prefix()]),
+        delimiter: Some(String::from("delimiter-a<&>\"中")),
+        next_marker: Some(String::from("next_marker-a<&>\"中")),
+        encoding_type: Some(s3s::dto::EncodingType::from_static("url")),
+        request_charged: Some(s3s::dto::RequestCharged::from_static("requester")),
+    }
+}
+
+#[cfg(feature = "minio")]
+#[test]
+fn debug_struct_list_objects_output() {
+    let value = sample_list_objects_output();
+    assert_eq!(
+        format!("{value:?}"),
+        format!(
+            "ListObjectsOutput {{ name: \"name-a<&>\\\"中\", prefix: \"prefix-a<&>\\\"中\", marker: \"marker-a<&>\\\"中\", max_keys: 1, is_truncated: false, contents: {0}, common_prefixes: [CommonPrefix {{ prefix: \"prefix-a<&>\\\"中\", .. }}], delimiter: \"delimiter-a<&>\\\"中\", next_marker: \"next_marker-a<&>\\\"中\", encoding_type: EncodingType(\"url\"), request_charged: RequestCharged(\"requester\"), .. }}",
+            format!(
+                "[{0}]",
+                format!(
+                    "Object {{ checksum_algorithm: [ChecksumAlgorithm(\"SHA512\")], checksum_type: ChecksumType(\"COMPOSITE\"), e_tag: {0}, key: \"key-a<&>\\\"中\", last_modified: {1}, owner: Owner {{ display_name: \"display_name-a<&>\\\"中\", id: \"id-a<&>\\\"中\", .. }}, restore_status: {2}, size: 1, storage_class: ObjectStorageClass(\"GLACIER\"), user_metadata: {3}, user_tags: \"user_tags-a<&>\\\"中\", .. }}",
+                    format!("{:?}", s3s::dto::ETag::Strong(String::from("etag"))),
+                    format!(
+                        "{:?}",
+                        s3s::dto::Timestamp::parse(s3s::dto::TimestampFormat::DateTime, "1985-04-12T23:20:50.520Z")
+                            .expect("valid timestamp")
+                    ),
+                    format!(
+                        "RestoreStatus {{ is_restore_in_progress: true, restore_expiry_date: {0}, .. }}",
+                        format!(
+                            "{:?}",
+                            s3s::dto::Timestamp::parse(s3s::dto::TimestampFormat::DateTime, "1985-04-12T23:20:50.520Z")
+                                .expect("valid timestamp")
+                        )
+                    ),
+                    format!(
+                        "{:?}",
+                        s3s::dto::ObjectUserMetadata(vec![(String::from("sample-key"), String::from("sample-value"))])
+                    )
+                )
+            )
+        )
+    );
+}
+
+#[cfg(not(feature = "minio"))]
 pub(super) fn sample_list_objects_v2_input() -> s3s::dto::ListObjectsV2Input {
     s3s::dto::ListObjectsV2Input {
         bucket: String::from("bucket-a<&>\"中"),
@@ -5290,6 +5346,7 @@ pub(super) fn sample_list_objects_v2_input() -> s3s::dto::ListObjectsV2Input {
     }
 }
 
+#[cfg(not(feature = "minio"))]
 #[test]
 fn debug_struct_list_objects_v2_input() {
     let value = sample_list_objects_v2_input();
@@ -5299,6 +5356,35 @@ fn debug_struct_list_objects_v2_input() {
     );
 }
 
+#[cfg(feature = "minio")]
+pub(super) fn sample_list_objects_v2_input() -> s3s::dto::ListObjectsV2Input {
+    s3s::dto::ListObjectsV2Input {
+        bucket: String::from("bucket-a<&>\"中"),
+        continuation_token: Some(String::from("continuation_token-a<&>\"中")),
+        delimiter: Some(String::from("delimiter-a<&>\"中")),
+        encoding_type: Some(s3s::dto::EncodingType::from_static("url")),
+        expected_bucket_owner: Some(String::from("expected_bucket_owner-a<&>\"中")),
+        fetch_owner: Some(true),
+        max_keys: Some(1),
+        metadata: Some(true),
+        optional_object_attributes: Some(vec![s3s::dto::OptionalObjectAttributes::from_static("RestoreStatus")]),
+        prefix: Some(String::from("prefix-a<&>\"中")),
+        request_payer: Some(s3s::dto::RequestPayer::from_static("requester")),
+        start_after: Some(String::from("start_after-a<&>\"中")),
+    }
+}
+
+#[cfg(feature = "minio")]
+#[test]
+fn debug_struct_list_objects_v2_input() {
+    let value = sample_list_objects_v2_input();
+    assert_eq!(
+        format!("{value:?}"),
+        "ListObjectsV2Input { bucket: \"bucket-a<&>\\\"中\", continuation_token: \"continuation_token-a<&>\\\"中\", delimiter: \"delimiter-a<&>\\\"中\", encoding_type: EncodingType(\"url\"), expected_bucket_owner: \"expected_bucket_owner-a<&>\\\"中\", fetch_owner: true, max_keys: 1, metadata: true, optional_object_attributes: [OptionalObjectAttributes(\"RestoreStatus\")], prefix: \"prefix-a<&>\\\"中\", request_payer: RequestPayer(\"requester\"), start_after: \"start_after-a<&>\\\"中\", .. }"
+    );
+}
+
+#[cfg(not(feature = "minio"))]
 pub(super) fn sample_list_objects_v2_output() -> s3s::dto::ListObjectsV2Output {
     s3s::dto::ListObjectsV2Output {
         name: Some(String::from("name-a<&>\"中")),
@@ -5317,6 +5403,7 @@ pub(super) fn sample_list_objects_v2_output() -> s3s::dto::ListObjectsV2Output {
     }
 }
 
+#[cfg(not(feature = "minio"))]
 #[test]
 fn debug_struct_list_objects_v2_output() {
     let value = sample_list_objects_v2_output();
@@ -5341,6 +5428,61 @@ fn debug_struct_list_objects_v2_output() {
                             s3s::dto::Timestamp::parse(s3s::dto::TimestampFormat::DateTime, "1985-04-12T23:20:50.520Z")
                                 .expect("valid timestamp")
                         )
+                    )
+                )
+            )
+        )
+    );
+}
+
+#[cfg(feature = "minio")]
+pub(super) fn sample_list_objects_v2_output() -> s3s::dto::ListObjectsV2Output {
+    s3s::dto::ListObjectsV2Output {
+        name: Some(String::from("name-a<&>\"中")),
+        prefix: Some(String::from("prefix-a<&>\"中")),
+        max_keys: Some(1),
+        key_count: Some(i32::MAX),
+        continuation_token: Some(String::from("continuation_token-a<&>\"中")),
+        is_truncated: Some(false),
+        next_continuation_token: Some(String::from("next_continuation_token-a<&>\"中")),
+        contents: Some(vec![super::debug::sample_object()]),
+        common_prefixes: Some(vec![super::debug::sample_common_prefix()]),
+        delimiter: Some(String::from("delimiter-a<&>\"中")),
+        encoding_type: Some(s3s::dto::EncodingType::from_static("url")),
+        start_after: Some(String::from("start_after-a<&>\"中")),
+        request_charged: Some(s3s::dto::RequestCharged::from_static("requester")),
+    }
+}
+
+#[cfg(feature = "minio")]
+#[test]
+fn debug_struct_list_objects_v2_output() {
+    let value = sample_list_objects_v2_output();
+    assert_eq!(
+        format!("{value:?}"),
+        format!(
+            "ListObjectsV2Output {{ name: \"name-a<&>\\\"中\", prefix: \"prefix-a<&>\\\"中\", max_keys: 1, key_count: 2147483647, continuation_token: \"continuation_token-a<&>\\\"中\", is_truncated: false, next_continuation_token: \"next_continuation_token-a<&>\\\"中\", contents: {0}, common_prefixes: [CommonPrefix {{ prefix: \"prefix-a<&>\\\"中\", .. }}], delimiter: \"delimiter-a<&>\\\"中\", encoding_type: EncodingType(\"url\"), start_after: \"start_after-a<&>\\\"中\", request_charged: RequestCharged(\"requester\"), .. }}",
+            format!(
+                "[{0}]",
+                format!(
+                    "Object {{ checksum_algorithm: [ChecksumAlgorithm(\"SHA512\")], checksum_type: ChecksumType(\"COMPOSITE\"), e_tag: {0}, key: \"key-a<&>\\\"中\", last_modified: {1}, owner: Owner {{ display_name: \"display_name-a<&>\\\"中\", id: \"id-a<&>\\\"中\", .. }}, restore_status: {2}, size: 1, storage_class: ObjectStorageClass(\"GLACIER\"), user_metadata: {3}, user_tags: \"user_tags-a<&>\\\"中\", .. }}",
+                    format!("{:?}", s3s::dto::ETag::Strong(String::from("etag"))),
+                    format!(
+                        "{:?}",
+                        s3s::dto::Timestamp::parse(s3s::dto::TimestampFormat::DateTime, "1985-04-12T23:20:50.520Z")
+                            .expect("valid timestamp")
+                    ),
+                    format!(
+                        "RestoreStatus {{ is_restore_in_progress: true, restore_expiry_date: {0}, .. }}",
+                        format!(
+                            "{:?}",
+                            s3s::dto::Timestamp::parse(s3s::dto::TimestampFormat::DateTime, "1985-04-12T23:20:50.520Z")
+                                .expect("valid timestamp")
+                        )
+                    ),
+                    format!(
+                        "{:?}",
+                        s3s::dto::ObjectUserMetadata(vec![(String::from("sample-key"), String::from("sample-value"))])
                     )
                 )
             )
@@ -5833,6 +5975,7 @@ fn debug_struct_notification_configuration_filter() {
     );
 }
 
+#[cfg(not(feature = "minio"))]
 pub(super) fn sample_object() -> s3s::dto::Object {
     s3s::dto::Object {
         checksum_algorithm: Some(vec![s3s::dto::ChecksumAlgorithm::from_static("SHA512")]),
@@ -5849,6 +5992,7 @@ pub(super) fn sample_object() -> s3s::dto::Object {
     }
 }
 
+#[cfg(not(feature = "minio"))]
 #[test]
 fn debug_struct_object() {
     let value = sample_object();
@@ -5869,6 +6013,58 @@ fn debug_struct_object() {
                     s3s::dto::Timestamp::parse(s3s::dto::TimestampFormat::DateTime, "1985-04-12T23:20:50.520Z")
                         .expect("valid timestamp")
                 )
+            )
+        )
+    );
+}
+
+#[cfg(feature = "minio")]
+pub(super) fn sample_object() -> s3s::dto::Object {
+    s3s::dto::Object {
+        checksum_algorithm: Some(vec![s3s::dto::ChecksumAlgorithm::from_static("SHA512")]),
+        checksum_type: Some(s3s::dto::ChecksumType::from_static("COMPOSITE")),
+        e_tag: Some(s3s::dto::ETag::Strong(String::from("etag"))),
+        key: Some(String::from("key-a<&>\"中")),
+        last_modified: Some(
+            s3s::dto::Timestamp::parse(s3s::dto::TimestampFormat::DateTime, "1985-04-12T23:20:50.520Z").expect("valid timestamp"),
+        ),
+        owner: Some(super::debug::sample_owner()),
+        restore_status: Some(super::debug::sample_restore_status()),
+        size: Some(1),
+        storage_class: Some(s3s::dto::ObjectStorageClass::from_static("GLACIER")),
+        user_metadata: Some(s3s::dto::ObjectUserMetadata(vec![(
+            String::from("sample-key"),
+            String::from("sample-value"),
+        )])),
+        user_tags: Some(String::from("user_tags-a<&>\"中")),
+    }
+}
+
+#[cfg(feature = "minio")]
+#[test]
+fn debug_struct_object() {
+    let value = sample_object();
+    assert_eq!(
+        format!("{value:?}"),
+        format!(
+            "Object {{ checksum_algorithm: [ChecksumAlgorithm(\"SHA512\")], checksum_type: ChecksumType(\"COMPOSITE\"), e_tag: {0}, key: \"key-a<&>\\\"中\", last_modified: {1}, owner: Owner {{ display_name: \"display_name-a<&>\\\"中\", id: \"id-a<&>\\\"中\", .. }}, restore_status: {2}, size: 1, storage_class: ObjectStorageClass(\"GLACIER\"), user_metadata: {3}, user_tags: \"user_tags-a<&>\\\"中\", .. }}",
+            format!("{:?}", s3s::dto::ETag::Strong(String::from("etag"))),
+            format!(
+                "{:?}",
+                s3s::dto::Timestamp::parse(s3s::dto::TimestampFormat::DateTime, "1985-04-12T23:20:50.520Z")
+                    .expect("valid timestamp")
+            ),
+            format!(
+                "RestoreStatus {{ is_restore_in_progress: true, restore_expiry_date: {0}, .. }}",
+                format!(
+                    "{:?}",
+                    s3s::dto::Timestamp::parse(s3s::dto::TimestampFormat::DateTime, "1985-04-12T23:20:50.520Z")
+                        .expect("valid timestamp")
+                )
+            ),
+            format!(
+                "{:?}",
+                s3s::dto::ObjectUserMetadata(vec![(String::from("sample-key"), String::from("sample-value"))])
             )
         )
     );

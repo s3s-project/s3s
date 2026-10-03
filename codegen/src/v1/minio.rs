@@ -188,6 +188,42 @@ impl super::ReplicationRuleFilter {
     }
 }
 
+/// The `UserMetadata` element of a `ListObjectsV2` response: the object
+/// metadata that the `MinIO` `metadata=true` extension adds.
+///
+/// The element is a map whose keys are element names, so it has no Smithy list
+/// representation; the entries keep the order and any duplicates of the response.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ObjectUserMetadata(pub Vec<(String, String)>);
+
+impl DtoExt for ObjectUserMetadata {
+    fn ignore_empty_strings(&mut self) {}
+}
+
+impl crate::xml::SerializeContent for ObjectUserMetadata {
+    fn serialize_content<W: std::io::Write>(&self, s: &mut crate::xml::Serializer<W>) -> crate::xml::SerResult {
+        for (name, value) in &self.0 {
+            s.content(name, value)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'xml> crate::xml::DeserializeContent<'xml> for ObjectUserMetadata {
+    fn deserialize_content(d: &mut crate::xml::Deserializer<'xml>) -> crate::xml::DeResult<Self> {
+        let mut entries = Vec::new();
+        d.for_each_element(|d, name| {
+            // The element name becomes the map key, so it must be representable as
+            // text; the backend only emits header-derived names here.
+            let name = std::str::from_utf8(name).map_err(|_| crate::xml::DeError::InvalidContent)?;
+            let value = d.content::<String>()?;
+            entries.push((name.to_owned(), value));
+            Ok(())
+        })?;
+        Ok(Self(entries))
+    }
+}
+
 #[cfg(test)]
 mod minio_tests {
     use super::*;

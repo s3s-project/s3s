@@ -77,6 +77,9 @@ impl From<ListObjectsInput> for ListObjectsV2Input {
             request_payer,
             start_after: marker,
             optional_object_attributes,
+            // The MinIO extension is not part of the V1 request.
+            #[cfg(feature = "minio")]
+            metadata: None,
         }
     }
 }

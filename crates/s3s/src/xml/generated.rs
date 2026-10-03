@@ -9561,6 +9561,7 @@ impl<'xml> DeserializeContent<'xml> for NotificationConfigurationFilter {
 }
 
 impl SerializeContent for Object {
+    #[cfg(not(feature = "minio"))]
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
         if let Some(iter) = &self.checksum_algorithm {
             s.flattened_list("ChecksumAlgorithm", iter)?;
@@ -9591,9 +9592,48 @@ impl SerializeContent for Object {
         }
         Ok(())
     }
+
+    #[cfg(feature = "minio")]
+    fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        if let Some(iter) = &self.checksum_algorithm {
+            s.flattened_list("ChecksumAlgorithm", iter)?;
+        }
+        if let Some(ref val) = self.checksum_type {
+            s.content("ChecksumType", val)?;
+        }
+        if let Some(ref val) = self.e_tag {
+            s.content("ETag", val)?;
+        }
+        if let Some(ref val) = self.key {
+            s.content("Key", val)?;
+        }
+        if let Some(ref val) = self.last_modified {
+            s.timestamp("LastModified", val, TimestampFormat::DateTime)?;
+        }
+        if let Some(ref val) = self.owner {
+            s.content("Owner", val)?;
+        }
+        if let Some(ref val) = self.restore_status {
+            s.content("RestoreStatus", val)?;
+        }
+        if let Some(ref val) = self.size {
+            s.content("Size", val)?;
+        }
+        if let Some(ref val) = self.storage_class {
+            s.content("StorageClass", val)?;
+        }
+        if let Some(ref val) = self.user_metadata {
+            s.content("UserMetadata", val)?;
+        }
+        if let Some(ref val) = self.user_tags {
+            s.content("UserTags", val)?;
+        }
+        Ok(())
+    }
 }
 
 impl<'xml> DeserializeContent<'xml> for Object {
+    #[cfg(not(feature = "minio"))]
     fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
         let mut checksum_algorithm: Option<ChecksumAlgorithmList> = None;
         let mut checksum_type: Option<ChecksumType> = None;
@@ -9678,6 +9718,112 @@ impl<'xml> DeserializeContent<'xml> for Object {
             restore_status,
             size,
             storage_class,
+        })
+    }
+
+    #[cfg(feature = "minio")]
+    fn deserialize_content(d: &mut Deserializer<'xml>) -> DeResult<Self> {
+        let mut checksum_algorithm: Option<ChecksumAlgorithmList> = None;
+        let mut checksum_type: Option<ChecksumType> = None;
+        let mut e_tag: Option<ETag> = None;
+        let mut key: Option<ObjectKey> = None;
+        let mut last_modified: Option<LastModified> = None;
+        let mut owner: Option<Owner> = None;
+        let mut restore_status: Option<RestoreStatus> = None;
+        let mut size: Option<Size> = None;
+        let mut storage_class: Option<ObjectStorageClass> = None;
+        let mut user_metadata: Option<ObjectUserMetadata> = None;
+        let mut user_tags: Option<UserTags> = None;
+        d.for_each_element(|d, x| match x {
+            b"ChecksumAlgorithm" => {
+                let ans: ChecksumAlgorithm = d.content()?;
+                checksum_algorithm.get_or_insert_with(List::new).push(ans);
+                Ok(())
+            }
+            b"ChecksumType" => {
+                if checksum_type.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                checksum_type = Some(d.content()?);
+                Ok(())
+            }
+            b"ETag" => {
+                if e_tag.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                e_tag = Some(d.content()?);
+                Ok(())
+            }
+            b"Key" => {
+                if key.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                key = Some(d.content()?);
+                Ok(())
+            }
+            b"LastModified" => {
+                if last_modified.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                last_modified = Some(d.timestamp(TimestampFormat::DateTime)?);
+                Ok(())
+            }
+            b"Owner" => {
+                if owner.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                owner = Some(d.content()?);
+                Ok(())
+            }
+            b"RestoreStatus" => {
+                if restore_status.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                restore_status = Some(d.content()?);
+                Ok(())
+            }
+            b"Size" => {
+                if size.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                size = Some(d.content()?);
+                Ok(())
+            }
+            b"StorageClass" => {
+                if storage_class.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                storage_class = Some(d.content()?);
+                Ok(())
+            }
+            b"UserMetadata" => {
+                if user_metadata.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                user_metadata = Some(d.content()?);
+                Ok(())
+            }
+            b"UserTags" => {
+                if user_tags.is_some() {
+                    return Err(DeError::DuplicateField);
+                }
+                user_tags = Some(d.content()?);
+                Ok(())
+            }
+            _ => Err(DeError::UnexpectedTagName),
+        })?;
+        Ok(Self {
+            checksum_algorithm,
+            checksum_type,
+            e_tag,
+            key,
+            last_modified,
+            owner,
+            restore_status,
+            size,
+            storage_class,
+            user_metadata,
+            user_tags,
         })
     }
 }

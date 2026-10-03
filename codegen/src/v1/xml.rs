@@ -175,6 +175,11 @@ fn collect_xml_types<'a>(
                 "ETag" => {
                     field_type_names.insert(ty.name.as_str());
                 }
+                // Implemented by hand in the injected MinIO block, so it needs no
+                // generated content impl (see v1::minio::codegen_in_dto).
+                "ObjectUserMetadata" => {
+                    // ignore
+                }
                 _ => panic!(),
             },
             rust::Type::Map(_) => unimplemented!(),

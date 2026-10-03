@@ -56,6 +56,13 @@ pub fn run() {
     let flagged: std::collections::BTreeSet<_> = minio.ops.iter().filter(|(_, op)| op.is_minio).map(|(name, _)| name).collect();
     assert_eq!(flagged, minio_only, "is_minio flag must mark exactly the minio-only operations");
 
+    // The proxy is generated from the union (MinIO) model only: it forwards the
+    // SDK-backed operations and the MinIO-only ones from one file, and carries its
+    // own `#[cfg(feature = "minio")]` gates.
+    write_file("crates/s3s-aws/src/proxy/generated.rs", || {
+        aws_proxy::codegen(&minio.ops, &minio.rust_types);
+    });
+
     // ops 以 union（minio 全集）模型单次生成，base/minio 差异在 codegen 内内联门控。
     ops::codegen(&minio.ops, &base.rust_types, &minio.rust_types);
     gen_tests::codegen(&minio.ops, &base.rust_types, &minio.rust_types);
@@ -123,11 +130,6 @@ fn inner_run(code_patch: Option<Patch>) -> ModelData {
     {
         let path = format!("crates/s3s-aws/src/conv/generated{suffix}.rs");
         write_file(&path, || aws_conv::codegen(&ops, &rust_types));
-    }
-
-    {
-        let path = "crates/s3s-aws/src/proxy/generated.rs";
-        write_file(path, || aws_proxy::codegen(&ops, &rust_types));
     }
 
     ModelData { ops, rust_types }
