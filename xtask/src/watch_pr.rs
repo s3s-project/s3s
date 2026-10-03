@@ -5,11 +5,14 @@
 //!
 //! One tick prints a state line, appends it to a log when it differs from the
 //! last logged line, and restores its baseline from that log, so a restart does
-//! not miss a change. The watcher exits on a
-//! material change, on the merge or close transition, or when its time budget
-//! runs out; `--keep-running` turns the first case into "keep going".
+//! not miss a change. The watcher exits on a material change, on the merge or
+//! close transition, or when its time budget runs out — **the exit is the
+//! signal**, so nothing may keep the process alive past a change: a watcher that
+//! never returns watches nothing, because its caller is never woken.
 //!
-//! The log is bookkeeping, not the watch: its directory is recreated before
+//! The log is bookkeeping, not the watch: it is the bookmark a restarted watcher
+//! resumes from, and to observe a long run, read the log while the watcher runs
+//! instead of asking the watcher to stay alive. Its directory is recreated before
 //! every write, because the build directory it lives under can be cleaned while
 //! the watcher runs, and a write that fails is reported instead of ending the
 //! watch.
@@ -74,9 +77,6 @@ pub(crate) struct WatchPr {
     /// Stop after this many hours.
     #[arg(long, value_name = "HOURS", default_value_t = 24)]
     hours: u64,
-    /// Keep watching after a change instead of exiting.
-    #[arg(long)]
-    keep_running: bool,
     /// Where to append the state lines; defaults to `target/pr-watch/pr-<n>.log`.
     #[arg(long, value_name = "PATH")]
     log: Option<PathBuf>,
@@ -89,7 +89,7 @@ impl WatchPr {
             fs::create_dir_all(parent).with_context(|| format!("failed to create {}", parent.display()))?;
         }
         let queue = Repository::resolve();
-        let mut baseline = last_logged_line(&log);
+        let baseline = last_logged_line(&log);
         let deadline = Instant::now() + Duration::from_secs(self.hours.saturating_mul(3600));
         let mut failures = 0_u32;
         let mut ticks = 0_u64;
@@ -107,12 +107,11 @@ impl WatchPr {
                     if snapshot.terminal() {
                         return Ok(true);
                     }
-                    if changed && !self.keep_running {
+                    if changed {
+                        // The exit is the signal: the caller learns about the change
+                        // because this process returns, not because the log moved.
                         return Ok(true);
                     }
-                    // A change always moves the baseline, so a watcher that keeps
-                    // running after one change does not report it again on every tick.
-                    baseline = next_baseline(baseline, line, changed);
                 }
                 Err(error) => {
                     failures += 1;
@@ -376,12 +375,6 @@ fn short_sha(sha: &str) -> String {
 /// `value`, or `-` when it is empty.
 fn non_empty(value: &str) -> String {
     if value.is_empty() { "-".to_owned() } else { value.to_owned() }
-}
-
-/// The baseline for the next tick: the current line once it differs from the
-/// baseline, and the baseline itself otherwise.
-fn next_baseline(baseline: Option<String>, line: String, changed: bool) -> Option<String> {
-    if changed || baseline.is_none() { Some(line) } else { baseline }
 }
 
 /// `Some(value)` when the field carries text, `None` when it is absent or empty.
@@ -661,21 +654,6 @@ mod tests {
         assert!(text.contains("state=OPEN"));
         assert!(text.contains("state=MERGED"));
         std::fs::remove_dir_all(&directory).expect("the test cleans up after itself");
-    }
-
-    #[test]
-    fn a_change_moves_the_baseline_in_keep_running_mode() {
-        // Without this, a watcher that keeps running reports the same change on
-        // every tick and keeps appending the line to its log.
-        assert_eq!(next_baseline(None, "first".to_owned(), true), Some("first".to_owned()));
-        assert_eq!(
-            next_baseline(Some("first".to_owned()), "second".to_owned(), true),
-            Some("second".to_owned())
-        );
-        assert_eq!(
-            next_baseline(Some("second".to_owned()), "second".to_owned(), false),
-            Some("second".to_owned())
-        );
     }
 
     #[test]
