@@ -4050,6 +4050,12 @@ dependencies = [
 [[package]]
 name = "s3s-time"
 version = "0.18.0-alpha.1"
+dependencies = [
+ "jiff",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
 
 [[package]]
 name = "s3s-wasm"
