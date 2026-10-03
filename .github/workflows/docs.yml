@@ -1,9 +1,12 @@
 name: Docs
 
 on:
-  push:
-    branches:
-      - main
+  # Publish the documentation at most once per day, and only when the default
+  # branch has moved since the last successful deployment. Use the manual
+  # dispatch below to publish immediately.
+  schedule:
+    # 05:00 UTC+8 (21:00 UTC) every day.
+    - cron: '0 21 * * *'
   workflow_dispatch:
 
 permissions:
@@ -16,7 +19,56 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      deployments: read
+    outputs:
+      deploy: ${{ steps.check.outputs.deploy }}
+    steps:
+      - name: Check whether the published documentation is up to date
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          skip() {
+            echo "${1}"
+            echo "deploy=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          }
+
+          # github.sha is fixed when the run is created: a re-run of an old
+          # run must not publish an old commit over a newer site.
+          head=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_REF_NAME}" --jq .sha 2>/dev/null) || head=""
+          if [ -n "${head}" ] && [ "${head}" != "${GITHUB_SHA}" ]; then
+            skip "${GITHUB_REF_NAME} is at ${head}, but this run publishes ${GITHUB_SHA}: nothing to do"
+          fi
+
+          # Newest github-pages deployment whose latest status is success.
+          deployed=""
+          mapfile -t ids < <(gh api "repos/${GITHUB_REPOSITORY}/deployments?environment=github-pages&per_page=20" \
+                  --jq 'sort_by(.created_at) | reverse | .[].id' 2>/dev/null)
+          for id in "${ids[@]}"; do
+            state=$(gh api "repos/${GITHUB_REPOSITORY}/deployments/${id}/statuses?per_page=1" \
+                      --jq '.[0].state // ""' 2>/dev/null) || state=""
+            if [ "${state}" = "success" ]; then
+              deployed=$(gh api "repos/${GITHUB_REPOSITORY}/deployments/${id}" --jq .sha 2>/dev/null) || deployed=""
+              break
+            fi
+          done
+          echo "last successful deployment: ${deployed:-unknown}"
+          echo "commit to publish: ${GITHUB_SHA}"
+          if [ -n "${deployed}" ] && [ "${deployed}" = "${GITHUB_SHA}" ]; then
+            skip "the site already serves ${GITHUB_SHA}"
+          fi
+          echo "deploy=true" >> "${GITHUB_OUTPUT}"
+
   build:
+    needs: check
+    if: github.event_name == 'workflow_dispatch' || needs.check.outputs.deploy == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
