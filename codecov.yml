@@ -6,3 +6,74 @@ coverage:
     patch:
       default:
         informational: true
+
+component_management:
+  individual_components:
+    - component_id: s3s
+      name: s3s
+      paths:
+        - crates/s3s/**
+    - component_id: s3s-aws
+      name: s3s-aws
+      paths:
+        - crates/s3s-aws/**
+    - component_id: s3s-chunked
+      name: s3s-chunked
+      paths:
+        - crates/s3s-chunked/**
+    - component_id: s3s-e2e
+      name: s3s-e2e
+      paths:
+        - crates/s3s-e2e/**
+    - component_id: s3s-fs
+      name: s3s-fs
+      paths:
+        - crates/s3s-fs/**
+    - component_id: s3s-http3
+      name: s3s-http3
+      paths:
+        - crates/s3s-http3/**
+    - component_id: s3s-model
+      name: s3s-model
+      paths:
+        - crates/s3s-model/**
+    - component_id: s3s-multipart
+      name: s3s-multipart
+      paths:
+        - crates/s3s-multipart/**
+    - component_id: s3s-policy
+      name: s3s-policy
+      paths:
+        - crates/s3s-policy/**
+    - component_id: s3s-proxy
+      name: s3s-proxy
+      paths:
+        - crates/s3s-proxy/**
+    - component_id: s3s-rfc2047
+      name: s3s-rfc2047
+      paths:
+        - crates/s3s-rfc2047/**
+    - component_id: s3s-sigv2
+      name: s3s-sigv2
+      paths:
+        - crates/s3s-sigv2/**
+    - component_id: s3s-sigv4
+      name: s3s-sigv4
+      paths:
+        - crates/s3s-sigv4/**
+    - component_id: s3s-test
+      name: s3s-test
+      paths:
+        - crates/s3s-test/**
+    - component_id: s3s-wasm
+      name: s3s-wasm
+      paths:
+        - crates/s3s-wasm/**
+    - component_id: s3s-codegen
+      name: s3s-codegen
+      paths:
+        - codegen/**
+    - component_id: xtask
+      name: xtask
+      paths:
+        - xtask/**

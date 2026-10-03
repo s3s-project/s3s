@@ -2,6 +2,7 @@
 
 [![Apache 2.0 licensed][license-badge]][license-url]
 [![Unsafe Forbidden][unsafe-forbidden-badge]][unsafe-forbidden-url]
+[![codecov](https://codecov.io/gh/s3s-project/s3s/branch/main/graph/badge.svg)](https://codecov.io/gh/s3s-project/s3s)
 
 [license-badge]: https://img.shields.io/badge/license-Apache--2.0-blue.svg
 [license-url]: ./LICENSE
@@ -11,23 +12,25 @@
 S3 Service Adapter
 
 
-| crate                                    |                                                  version                                                  |                                        docs                                        |
-| :--------------------------------------- | :-------------------------------------------------------------------------------------------------------: | :--------------------------------------------------------------------------------: |
-| [s3s](./crates/s3s/)                     |           [![Crates.io](https://img.shields.io/crates/v/s3s.svg)](https://crates.io/crates/s3s)           |           [![Docs](https://docs.rs/s3s/badge.svg)](https://docs.rs/s3s/)           |
-| [s3s-aws](./crates/s3s-aws/)             |       [![Crates.io](https://img.shields.io/crates/v/s3s-aws.svg)](https://crates.io/crates/s3s-aws)       |       [![Docs](https://docs.rs/s3s-aws/badge.svg)](https://docs.rs/s3s-aws/)       |
-| [s3s-multipart](./crates/s3s-multipart/) | [![Crates.io](https://img.shields.io/crates/v/s3s-multipart.svg)](https://crates.io/crates/s3s-multipart) | [![Docs](https://docs.rs/s3s-multipart/badge.svg)](https://docs.rs/s3s-multipart/) |
-| [s3s-chunked](./crates/s3s-chunked/)     |   [![Crates.io](https://img.shields.io/crates/v/s3s-chunked.svg)](https://crates.io/crates/s3s-chunked)   |   [![Docs](https://docs.rs/s3s-chunked/badge.svg)](https://docs.rs/s3s-chunked/)   |
-| [s3s-sigv2](./crates/s3s-sigv2/)         |     [![Crates.io](https://img.shields.io/crates/v/s3s-sigv2.svg)](https://crates.io/crates/s3s-sigv2)     |     [![Docs](https://docs.rs/s3s-sigv2/badge.svg)](https://docs.rs/s3s-sigv2/)     |
-| [s3s-sigv4](./crates/s3s-sigv4/)         |     [![Crates.io](https://img.shields.io/crates/v/s3s-sigv4.svg)](https://crates.io/crates/s3s-sigv4)     |     [![Docs](https://docs.rs/s3s-sigv4/badge.svg)](https://docs.rs/s3s-sigv4/)     |
-| [s3s-rfc2047](./crates/s3s-rfc2047/)     |   [![Crates.io](https://img.shields.io/crates/v/s3s-rfc2047.svg)](https://crates.io/crates/s3s-rfc2047)   |   [![Docs](https://docs.rs/s3s-rfc2047/badge.svg)](https://docs.rs/s3s-rfc2047/)   |
-| [s3s-fs](./crates/s3s-fs/)               |        [![Crates.io](https://img.shields.io/crates/v/s3s-fs.svg)](https://crates.io/crates/s3s-fs)        |        [![Docs](https://docs.rs/s3s-fs/badge.svg)](https://docs.rs/s3s-fs/)        |
-| [s3s-http3](./crates/s3s-http3/)         |     [![Crates.io](https://img.shields.io/crates/v/s3s-http3.svg)](https://crates.io/crates/s3s-http3)     |     [![Docs](https://docs.rs/s3s-http3/badge.svg)](https://docs.rs/s3s-http3/)     |
-| [s3s-model](./crates/s3s-model/)         |     [![Crates.io](https://img.shields.io/crates/v/s3s-model.svg)](https://crates.io/crates/s3s-model)     |     [![Docs](https://docs.rs/s3s-model/badge.svg)](https://docs.rs/s3s-model/)     |
-| [s3s-policy](./crates/s3s-policy/)       |    [![Crates.io](https://img.shields.io/crates/v/s3s-policy.svg)](https://crates.io/crates/s3s-policy)    |    [![Docs](https://docs.rs/s3s-policy/badge.svg)](https://docs.rs/s3s-policy/)    |
-| [s3s-proxy](./crates/s3s-proxy/)         |     [![Crates.io](https://img.shields.io/crates/v/s3s-proxy.svg)](https://crates.io/crates/s3s-proxy)     |                                 n/a (binary crate)                                 |
-| [s3s-test](./crates/s3s-test/)           |      [![Crates.io](https://img.shields.io/crates/v/s3s-test.svg)](https://crates.io/crates/s3s-test)      |      [![Docs](https://docs.rs/s3s-test/badge.svg)](https://docs.rs/s3s-test/)      |
-| [s3s-e2e](./crates/s3s-e2e/)             |       [![Crates.io](https://img.shields.io/crates/v/s3s-e2e.svg)](https://crates.io/crates/s3s-e2e)       |                                 n/a (binary crate)                                 |
-| [s3s-wasm](./crates/s3s-wasm/)           |                                         not published (internal)                                          |                                        n/a                                         |
+| crate                                    |                                                  version                                                  |                                        docs                                        | coverage |
+| :--------------------------------------- | :-------------------------------------------------------------------------------------------------------: | :--------------------------------------------------------------------------------: | :------: |
+| [s3s](./crates/s3s/)                     |           [![Crates.io](https://img.shields.io/crates/v/s3s.svg)](https://crates.io/crates/s3s)           |           [![Docs](https://docs.rs/s3s/badge.svg)](https://docs.rs/s3s/)           | [![codecov](https://codecov.io/gh/s3s-project/s3s/graph/badge.svg?component=s3s)](https://codecov.io/gh/s3s-project/s3s) |
+| [s3s-aws](./crates/s3s-aws/)             |       [![Crates.io](https://img.shields.io/crates/v/s3s-aws.svg)](https://crates.io/crates/s3s-aws)       |       [![Docs](https://docs.rs/s3s-aws/badge.svg)](https://docs.rs/s3s-aws/)       | n/a |
+| [s3s-multipart](./crates/s3s-multipart/) | [![Crates.io](https://img.shields.io/crates/v/s3s-multipart.svg)](https://crates.io/crates/s3s-multipart) | [![Docs](https://docs.rs/s3s-multipart/badge.svg)](https://docs.rs/s3s-multipart/) | [![codecov](https://codecov.io/gh/s3s-project/s3s/graph/badge.svg?component=s3s-multipart)](https://codecov.io/gh/s3s-project/s3s) |
+| [s3s-chunked](./crates/s3s-chunked/)     |   [![Crates.io](https://img.shields.io/crates/v/s3s-chunked.svg)](https://crates.io/crates/s3s-chunked)   |   [![Docs](https://docs.rs/s3s-chunked/badge.svg)](https://docs.rs/s3s-chunked/)   | [![codecov](https://codecov.io/gh/s3s-project/s3s/graph/badge.svg?component=s3s-chunked)](https://codecov.io/gh/s3s-project/s3s) |
+| [s3s-sigv2](./crates/s3s-sigv2/)         |     [![Crates.io](https://img.shields.io/crates/v/s3s-sigv2.svg)](https://crates.io/crates/s3s-sigv2)     |     [![Docs](https://docs.rs/s3s-sigv2/badge.svg)](https://docs.rs/s3s-sigv2/)     | [![codecov](https://codecov.io/gh/s3s-project/s3s/graph/badge.svg?component=s3s-sigv2)](https://codecov.io/gh/s3s-project/s3s) |
+| [s3s-sigv4](./crates/s3s-sigv4/)         |     [![Crates.io](https://img.shields.io/crates/v/s3s-sigv4.svg)](https://crates.io/crates/s3s-sigv4)     |     [![Docs](https://docs.rs/s3s-sigv4/badge.svg)](https://docs.rs/s3s-sigv4/)     | [![codecov](https://codecov.io/gh/s3s-project/s3s/graph/badge.svg?component=s3s-sigv4)](https://codecov.io/gh/s3s-project/s3s) |
+| [s3s-rfc2047](./crates/s3s-rfc2047/)     |   [![Crates.io](https://img.shields.io/crates/v/s3s-rfc2047.svg)](https://crates.io/crates/s3s-rfc2047)   |   [![Docs](https://docs.rs/s3s-rfc2047/badge.svg)](https://docs.rs/s3s-rfc2047/)   | [![codecov](https://codecov.io/gh/s3s-project/s3s/graph/badge.svg?component=s3s-rfc2047)](https://codecov.io/gh/s3s-project/s3s) |
+| [s3s-fs](./crates/s3s-fs/)               |        [![Crates.io](https://img.shields.io/crates/v/s3s-fs.svg)](https://crates.io/crates/s3s-fs)        |        [![Docs](https://docs.rs/s3s-fs/badge.svg)](https://docs.rs/s3s-fs/)        | n/a |
+| [s3s-http3](./crates/s3s-http3/)         |     [![Crates.io](https://img.shields.io/crates/v/s3s-http3.svg)](https://crates.io/crates/s3s-http3)     |     [![Docs](https://docs.rs/s3s-http3/badge.svg)](https://docs.rs/s3s-http3/)     | n/a |
+| [s3s-model](./crates/s3s-model/)         |     [![Crates.io](https://img.shields.io/crates/v/s3s-model.svg)](https://crates.io/crates/s3s-model)     |     [![Docs](https://docs.rs/s3s-model/badge.svg)](https://docs.rs/s3s-model/)     | n/a |
+| [s3s-policy](./crates/s3s-policy/)       |    [![Crates.io](https://img.shields.io/crates/v/s3s-policy.svg)](https://crates.io/crates/s3s-policy)    |    [![Docs](https://docs.rs/s3s-policy/badge.svg)](https://docs.rs/s3s-policy/)    | n/a |
+| [s3s-proxy](./crates/s3s-proxy/)         |     [![Crates.io](https://img.shields.io/crates/v/s3s-proxy.svg)](https://crates.io/crates/s3s-proxy)     |                                 n/a (binary crate)                                 | n/a |
+| [s3s-test](./crates/s3s-test/)           |      [![Crates.io](https://img.shields.io/crates/v/s3s-test.svg)](https://crates.io/crates/s3s-test)      |      [![Docs](https://docs.rs/s3s-test/badge.svg)](https://docs.rs/s3s-test/)      | [![codecov](https://codecov.io/gh/s3s-project/s3s/graph/badge.svg?component=s3s-test)](https://codecov.io/gh/s3s-project/s3s) |
+| [s3s-e2e](./crates/s3s-e2e/)             |       [![Crates.io](https://img.shields.io/crates/v/s3s-e2e.svg)](https://crates.io/crates/s3s-e2e)       |                                 n/a (binary crate)                                 | n/a |
+| [s3s-wasm](./crates/s3s-wasm/)           |                                         not published (internal)                                          |                                        n/a                                         | n/a |
+
+Coverage badges come from the CI coverage run and link to [Codecov](https://codecov.io/gh/s3s-project/s3s); crates outside that run show `n/a`.
 
 📚 **[Development documentation](https://s3s-project.github.io/s3s/)** for the `main` branch is available on GitHub Pages.
 
