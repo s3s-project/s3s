@@ -44,6 +44,7 @@ s3s-rfc2047 = { path = "crates/s3s-rfc2047", version = "0.17.0" }
 s3s-sigv2 = { path = "crates/s3s-sigv2", version = "0.17.0" }
 s3s-sigv4 = { path = "crates/s3s-sigv4", version = "0.17.0" }
 s3s-test = { path = "crates/s3s-test", version = "0.17.0" }
+s3s-time = { path = "crates/s3s-time", version = "0.18.0-alpha.1" }
 s3s-wasm = { path = "crates/s3s-wasm", version = "0.0.0" }
 
 # Data structures
