@@ -359,31 +359,6 @@ pub fn decode_instant(text: &str) -> Result<(i64, u32), String> {
     Ok((secs, nanos))
 }
 
-/// Builds a system time from canonical seconds and a non-negative adjustment.
-///
-/// The seconds value is the floor second and the adjustment is always positive, which
-/// is the epoch-seconds convention: minus one second and five hundred million
-/// nanoseconds is half a second before the epoch, not one and a half seconds before it.
-///
-/// # Panics
-///
-/// Panics when the adjustment is not below one second.
-pub fn system_time(secs: i64, nanos: u32) -> SystemTime {
-    assert!(nanos < 1_000_000_000, "the nanosecond adjustment must be below one second");
-    if secs >= 0 {
-        let magnitude = u64::try_from(secs).expect("a non-negative i64 fits in u64");
-        SystemTime::UNIX_EPOCH + Duration::new(magnitude, nanos)
-    } else {
-        let magnitude = secs.unsigned_abs();
-        let (whole, part) = if nanos == 0 {
-            (magnitude, 0)
-        } else {
-            (magnitude - 1, 1_000_000_000 - nanos)
-        };
-        SystemTime::UNIX_EPOCH - Duration::new(whole, part)
-    }
-}
-
 /// Builds a system time from canonical seconds and a non-negative adjustment, when the
 /// platform can represent the instant.
 ///
@@ -433,23 +408,145 @@ pub fn read_back_system_time(time: SystemTime) -> Option<(i64, u32)> {
     }
 }
 
-/// The tick of the platform `SystemTime`, in nanoseconds.
+/// The earliest instant a Windows system clock can hold, in canonical seconds:
+/// 1601-01-01T00:00:00Z.
+pub const WINDOWS_EPOCH_SECONDS: i64 = -11_644_473_600;
+
+/// The variable that injects the tick of the clock, in nanoseconds.
+pub const TICK_VARIABLE: &str = "S3S_TIME_TICK_NANOS";
+
+/// The variable that injects the earliest instant the clock can hold, in seconds.
+pub const FLOOR_VARIABLE: &str = "S3S_TIME_FLOOR_SECONDS";
+
+/// The clock that the bridge goes through: how fine it is and how far back it reaches.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PlatformModel {
+    /// The tick of the clock, in nanoseconds.
+    pub tick_nanos: u32,
+    /// The earliest instant the clock can hold, in canonical seconds.
+    pub floor_seconds: i64,
+    /// Whether the model came from the environment instead of the machine.
+    pub injected: bool,
+}
+
+impl PlatformModel {
+    /// The Unix clock: every nanosecond, down to the smallest seconds value.
+    pub const UNIX: Self = Self {
+        tick_nanos: 1,
+        floor_seconds: i64::MIN,
+        injected: false,
+    };
+
+    /// The Windows clock: hundred-nanosecond ticks from 1601-01-01.
+    pub const WINDOWS: Self = Self {
+        tick_nanos: 100,
+        floor_seconds: WINDOWS_EPOCH_SECONDS,
+        injected: false,
+    };
+
+    /// Whether the clock keeps the instant exactly.
+    pub fn carries(&self, secs: i64, nanos: u32) -> bool {
+        secs >= self.floor_seconds && carries_faithfully(nanos, self.tick_nanos)
+    }
+
+    /// Rounds an instant down to the tick of this clock.
+    pub fn quantize(&self, secs: i64, nanos: u32) -> (i64, u32) {
+        quantize_to_tick(secs, nanos, self.tick_nanos)
+    }
+}
+
+/// The platform model of this run.
 ///
-/// The property run carries every instant through a `SystemTime`, so its precision is
-/// the precision of that bridge: a Unix clock counts nanoseconds, a Windows one counts
-/// 100-nanosecond ticks from 1601 and drops anything finer. The tick is probed on the
-/// platform itself instead of assumed, so both the corpus alignment and its test follow
-/// the platform.
+/// Without the environment the model is probed from the machine: the tick is the smallest
+/// adjustment the clock keeps, and the floor is the earliest instant it holds. The two
+/// variables inject a model instead, which lets a Linux run rehearse another clock:
+///
+/// `S3S_TIME_TICK_NANOS=100 S3S_TIME_FLOOR_SECONDS=-11644473600 cargo test -p s3s-time --all-features`
+///
+/// A value that does not parse stops the run: a typo must never fall back to the machine
+/// silently. An injected model is announced on stdout, so a log shows which platform a
+/// run rehearsed.
+///
+/// # Panics
+///
+/// Panics when an injected value is not a positive tick or a signed number of seconds.
+pub fn platform_model() -> PlatformModel {
+    static MODEL: std::sync::OnceLock<PlatformModel> = std::sync::OnceLock::new();
+    *MODEL.get_or_init(|| {
+        let tick = std::env::var(TICK_VARIABLE).ok();
+        let floor = std::env::var(FLOOR_VARIABLE).ok();
+        if tick.is_none() && floor.is_none() {
+            let model = probe_platform_model();
+            println!(
+                "platform model: tick={} floor={} (probed on this machine)",
+                model.tick_nanos, model.floor_seconds
+            );
+            return model;
+        }
+        let probed = probe_platform_model();
+        let model = PlatformModel {
+            tick_nanos: parse_tick(tick.as_deref()).unwrap_or(probed.tick_nanos),
+            floor_seconds: parse_floor(floor.as_deref()).unwrap_or(probed.floor_seconds),
+            injected: true,
+        };
+        println!(
+            "simulated platform: tick={} floor={} (injected through {TICK_VARIABLE}/{FLOOR_VARIABLE})",
+            model.tick_nanos, model.floor_seconds
+        );
+        model
+    })
+}
+
+/// The tick of the platform clock, in nanoseconds, from the model of this run.
 pub fn platform_tick_nanos() -> u32 {
+    platform_model().tick_nanos
+}
+
+/// Reads a tick from an injected value, or stops the run when it does not parse.
+fn parse_tick(value: Option<&str>) -> Option<u32> {
+    let text = value?;
+    match text.parse::<u32>() {
+        Ok(tick) if tick > 0 => Some(tick),
+        _ => panic!("{TICK_VARIABLE}={text} is not a positive number of nanoseconds"),
+    }
+}
+
+/// Reads a floor from an injected value, or stops the run when it does not parse.
+fn parse_floor(value: Option<&str>) -> Option<i64> {
+    let text = value?;
+    match text.parse::<i64>() {
+        Ok(seconds) => Some(seconds),
+        Err(error) => panic!("{FLOOR_VARIABLE}={text} is not a number of seconds: {error}"),
+    }
+}
+
+/// Probes the machine: the tick it keeps and the earliest instant it holds.
+fn probe_platform_model() -> PlatformModel {
+    let reaches_before_windows = SystemTime::UNIX_EPOCH
+        .checked_sub(Duration::from_secs(WINDOWS_EPOCH_SECONDS.unsigned_abs() + 1))
+        .is_some();
+    let floor_seconds = if reaches_before_windows {
+        i64::MIN
+    } else {
+        WINDOWS_EPOCH_SECONDS
+    };
     for tick in [1_u32, 100, 1_000, 10_000, 100_000, 1_000_000] {
         let Some(time) = checked_system_time(0, tick) else {
             continue;
         };
         if read_back_system_time(time) == Some((0, tick)) {
-            return tick;
+            return PlatformModel {
+                tick_nanos: tick,
+                floor_seconds,
+                injected: false,
+            };
         }
     }
-    1_000_000_000
+    PlatformModel {
+        tick_nanos: 1_000_000_000,
+        floor_seconds,
+        injected: false,
+    }
 }
 
 /// Rounds an instant down to a multiple of `tick_nanos`.
@@ -545,10 +642,10 @@ pub fn locked_jiff_version() -> Option<String> {
             package = Some(name.trim_matches('"'));
             continue;
         }
-        if let Some(version) = line.strip_prefix("version = ") {
-            if package == Some("jiff") {
-                return Some(version.trim_matches('"').to_owned());
-            }
+        if let Some(version) = line.strip_prefix("version = ")
+            && package == Some("jiff")
+        {
+            return Some(version.trim_matches('"').to_owned());
         }
     }
     None

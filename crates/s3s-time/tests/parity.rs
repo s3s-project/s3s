@@ -26,6 +26,19 @@ fn fixture_cases() -> Vec<support::Case> {
     support::read_fixture().unwrap_or_else(|error| panic!("the frozen fixture is not usable: {error}"))
 }
 
+/// The cases the replay covers on a known platform model, pinned from the audit of the
+/// corpus instead of being recomputed from the rule under test: the Unix clock carries
+/// every case, and the Windows clock (100 nanoseconds from 1601-01-01) leaves out the 234
+/// format cases whose fraction or range it cannot keep. A model that is neither one stops
+/// the run, so its numbers have to be added deliberately.
+fn pinned_replay(cases: usize, model: support::PlatformModel) -> (usize, usize) {
+    match (model.tick_nanos, model.floor_seconds) {
+        (1, i64::MIN) => (cases, 0),
+        (100, -11_644_473_600) => (cases - 234, 234),
+        (tick, floor) => panic!("the platform model (tick={tick}, floor={floor}) has no pinned replay numbers yet"),
+    }
+}
+
 #[test]
 fn the_fixture_covers_the_documented_corpus() {
     let cases = fixture_cases();
@@ -57,8 +70,8 @@ fn the_fixture_covers_the_documented_corpus() {
 #[test]
 fn the_oracle_replays_the_frozen_fixture() {
     let cases = fixture_cases();
-    let tick = support::platform_tick_nanos();
-    let (coverage, failures) = api::oracle_replay(&cases, tick);
+    let model = support::platform_model();
+    let (coverage, failures) = api::oracle_replay(&cases, model);
     assert!(coverage.checked > 0, "the oracle must replay the cases the corpus pins");
     assert_eq!(
         coverage.checked + coverage.skipped,
@@ -66,9 +79,9 @@ fn the_oracle_replays_the_frozen_fixture() {
         "every case is either replayed or left out"
     );
     assert_eq!(
-        coverage.checked,
-        cases.iter().filter(|case| api::case_is_carried(case, tick)).count(),
-        "the oracle must replay every case this platform clock can carry"
+        (coverage.checked, coverage.skipped),
+        pinned_replay(cases.len(), model),
+        "the replay must cover the cases the clock of the model carries, and only those"
     );
     assert!(
         failures.is_empty(),
@@ -86,7 +99,7 @@ fn the_oracle_replays_the_frozen_fixture() {
         );
     }
     println!(
-        "the oracle replays {} of {} cases at a tick of {tick} ns ({} skipped)",
+        "the oracle replays {} of {} cases on {model:?} ({} skipped)",
         coverage.checked,
         cases.len(),
         coverage.skipped
@@ -101,8 +114,8 @@ fn the_candidate_agrees_with_the_oracle_and_the_fixture() {
         return;
     }
 
-    let tick = support::platform_tick_nanos();
-    let report = api::candidate_differential(&cases, tick);
+    let model = support::platform_model();
+    let report = api::candidate_differential(&cases, model);
     assert_eq!(
         report.candidate_checked,
         cases.len(),
@@ -114,9 +127,9 @@ fn the_candidate_agrees_with_the_oracle_and_the_fixture() {
         "every case is either checked or skipped on the oracle side"
     );
     assert_eq!(
-        report.oracle_checked,
-        cases.iter().filter(|case| api::case_is_carried(case, tick)).count(),
-        "the oracle side must run every case this platform clock can carry"
+        (report.oracle_checked, report.oracle_skipped),
+        pinned_replay(cases.len(), model),
+        "the differential must cover the cases the clock of the model carries, and only those"
     );
     for line in &report.recorded {
         println!("recorded divergence: {line}");
@@ -149,7 +162,9 @@ fn the_oracle_panics_on_system_times_outside_its_range() {
     // hold, because the pre-migration conversion adds a duration to the epoch and
     // panics when the result leaves its representable range. Pinning the behaviour here
     // means that a change of the oracle is noticed before the corpus is regenerated.
-    let after_the_last_year = SystemTime::UNIX_EPOCH + Duration::from_secs(253_402_300_800);
+    // 70389528 hours is 253402300800 seconds, one second past the last instant that
+    // the wire formats can express.
+    let after_the_last_year = SystemTime::UNIX_EPOCH + Duration::from_hours(70_389_528);
     let outcome = std::panic::catch_unwind(|| {
         let _ = s3s::dto::Timestamp::from(after_the_last_year);
     });
