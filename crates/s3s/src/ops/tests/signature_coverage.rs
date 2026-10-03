@@ -640,3 +640,194 @@ data\r\n\
         "an anonymous form must not be rejected by the POST signature switch, got: {body:?}"
     );
 }
+
+/// Builds a header-authenticated request whose `SignedHeaders` is exactly `host;x-amz-date`: the
+/// canonical request carries `payload_sha256` as its payload line while the request also sends
+/// `x-amz-content-sha256: header_value`, which is deliberately left out of the signed-header list.
+#[allow(clippy::too_many_arguments)]
+fn header_auth_without_signed_content_sha256(
+    method: Method,
+    version: Version,
+    uri: &str,
+    payload_sha256: &str,
+    header_value: &str,
+    content_length: u64,
+    body: Body,
+) -> Request {
+    let uri = uri.parse::<Uri>().unwrap();
+    let amz_date = s3s_sigv4::AmzDate::parse(AMZ_DATE).unwrap();
+    let amz_date_str = amz_date.fmt_iso8601();
+    let host = uri.authority().unwrap().as_str();
+    let signed_headers = vec![("host", host), ("x-amz-date", amz_date_str.as_str())];
+    let signed_header_names = signed_headers.iter().map(|(name, _)| *name).collect::<Vec<_>>().join(";");
+    let payload = if payload_sha256 == UNSIGNED_PAYLOAD {
+        s3s_sigv4::Payload::Unsigned
+    } else {
+        s3s_sigv4::Payload::SingleChunk(payload_sha256)
+    };
+    let empty_query = &[] as &[(String, String)];
+    let canonical_request =
+        s3s_sigv4::create_canonical_request(method.as_str(), uri.path(), empty_query, signed_headers, payload);
+    let string_to_sign = s3s_sigv4::create_string_to_sign(&canonical_request, &amz_date, REGION, SERVICE);
+    let signature = s3s_sigv4::calculate_signature(&string_to_sign, SECRET_KEY, &amz_date, REGION, SERVICE);
+    let authorization = format!(
+        "AWS4-HMAC-SHA256 Credential={ACCESS_KEY}/{}/{REGION}/{SERVICE}/aws4_request, SignedHeaders={signed_header_names}, Signature={}",
+        amz_date.fmt_date(),
+        signature.as_str()
+    );
+    let mut builder = hyper::Request::builder()
+        .method(method)
+        .version(version)
+        .uri(uri.clone())
+        .header(crate::header::X_AMZ_CONTENT_SHA256, header_value)
+        .header(crate::header::X_AMZ_DATE, AMZ_DATE)
+        .header(crate::header::AUTHORIZATION, authorization)
+        .header(hyper::header::CONTENT_LENGTH, content_length);
+    if version == Version::HTTP_11 {
+        builder = builder.header(crate::header::HOST, host);
+    }
+    Request::from(builder.body(body).unwrap())
+}
+
+/// Digest of `hello`, used as a value that differs from the signed payload line.
+fn other_body_digest() -> String {
+    crate::utils::crypto::hex_sha256(b"hello", str::to_owned)
+}
+
+/// `x-amz-content-sha256` is exempt from the unsigned-header check, and the exemption is safe:
+/// the value is bound through the payload line of the canonical request, not through
+/// `SignedHeaders`. This pins the accepted shape.
+#[tokio::test]
+async fn unsigned_content_sha256_is_still_accepted_on_header_auth() {
+    const URI: &str = "http://localhost/test-bucket/test-key.txt";
+    let test_s3 = Arc::new(TestS3::default());
+    let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
+    let config = test_config();
+    let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
+    let ccx = test_context(&s3, &config, &auth);
+
+    // Control: the same request with the header listed in SignedHeaders.
+    let mut signed = signed_request(Method::PUT, Version::HTTP_11, URI, EMPTY_SHA256, &[]);
+    signed
+        .headers
+        .insert(hyper::header::CONTENT_LENGTH, hyper::header::HeaderValue::from_static("0"));
+    let response = super::call(&mut signed, &ccx).await.expect("ops::call serializes errors");
+    assert!(response.status.is_success(), "signed control got {:?}", response.status);
+
+    let mut unsigned = header_auth_without_signed_content_sha256(
+        Method::PUT,
+        Version::HTTP_11,
+        URI,
+        EMPTY_SHA256,
+        EMPTY_SHA256,
+        0,
+        empty_unknown_length_body(),
+    );
+    let response = super::call(&mut unsigned, &ccx).await.expect("ops::call serializes errors");
+    assert!(
+        response.status.is_success(),
+        "an x-amz-content-sha256 outside SignedHeaders must be accepted while it matches the payload line, got {:?}",
+        response.status
+    );
+    assert_eq!(test_s3.put_object.load(Ordering::SeqCst), 2, "both requests must reach PutObject");
+}
+
+/// The exemption cannot be used to swap the declared payload hash: changing the value changes the
+/// payload line, so the signature stops verifying.
+#[tokio::test]
+async fn changed_content_sha256_is_rejected_on_header_auth() {
+    const URI: &str = "http://localhost/test-bucket/test-key.txt";
+    let test_s3 = Arc::new(TestS3::default());
+    let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
+    let config = test_config();
+    let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
+    let ccx = test_context(&s3, &config, &auth);
+
+    let changed = other_body_digest();
+    let mut req = header_auth_without_signed_content_sha256(
+        Method::PUT,
+        Version::HTTP_11,
+        URI,
+        EMPTY_SHA256,
+        changed.as_str(),
+        0,
+        empty_unknown_length_body(),
+    );
+    let response = super::call(&mut req, &ccx).await.expect("ops::call serializes errors");
+    assert_eq!(response.status, StatusCode::FORBIDDEN);
+    let body = response.body.bytes().expect("error body is buffered");
+    assert!(
+        std::str::from_utf8(&body)
+            .expect("error body is UTF-8")
+            .contains("<Code>SignatureDoesNotMatch</Code>"),
+        "expected SignatureDoesNotMatch: {body:?}"
+    );
+    assert_eq!(test_s3.put_object.load(Ordering::SeqCst), 0, "the request must not be routed");
+}
+
+/// A presigned URL that lists `x-amz-content-sha256` in `X-Amz-SignedHeaders` binds the value:
+/// the declared value is accepted, a different value and a missing header are both rejected.
+#[tokio::test]
+async fn presigned_content_sha256_is_bound_when_listed_in_signed_headers() {
+    let test_s3 = Arc::new(TestS3::default());
+    let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
+    let config = test_config();
+    let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
+    let ccx = test_context(&s3, &config, &auth);
+    let uri = presigned_put_uri_with_headers(&[("x-amz-content-sha256", EMPTY_SHA256)]);
+
+    let mut declared = presigned_request(Version::HTTP_11, uri.clone(), &[("x-amz-content-sha256", EMPTY_SHA256)]);
+    let response = super::call(&mut declared, &ccx).await.expect("ops::call serializes errors");
+    assert!(response.status.is_success(), "the declared value must verify, got {:?}", response.status);
+    assert_eq!(test_s3.put_object.load(Ordering::SeqCst), 1);
+
+    let changed = other_body_digest();
+    let mut tampered = presigned_request(Version::HTTP_11, uri.clone(), &[("x-amz-content-sha256", changed.as_str())]);
+    let response = super::call(&mut tampered, &ccx).await.expect("ops::call serializes errors");
+    assert_eq!(response.status, StatusCode::FORBIDDEN);
+    let body = response.body.bytes().expect("error body is buffered");
+    assert!(
+        std::str::from_utf8(&body)
+            .expect("error body is UTF-8")
+            .contains("<Code>SignatureDoesNotMatch</Code>"),
+        "a changed value must not verify: {body:?}"
+    );
+
+    let mut removed = presigned_request(Version::HTTP_11, uri, &[]);
+    let response = super::call(&mut removed, &ccx).await.expect("ops::call serializes errors");
+    assert_eq!(response.status, StatusCode::FORBIDDEN);
+    let body = response.body.bytes().expect("error body is buffered");
+    let body = String::from_utf8_lossy(&body);
+    assert!(body.contains("<Code>SignatureDoesNotMatch</Code>"), "{body}");
+    assert!(body.contains("missing signed header: x-amz-content-sha256"), "{body}");
+    assert_eq!(test_s3.put_object.load(Ordering::SeqCst), 1, "only the declared request may upload");
+}
+
+/// The unsigned `UNSIGNED-PAYLOAD` marker is accepted as well, and the non-empty body reaches the
+/// operation without a digest check, because the marker itself is bound through the payload line.
+#[tokio::test]
+async fn unsigned_unsigned_payload_marker_is_accepted_on_header_auth() {
+    const URI: &str = "http://localhost/test-bucket/test-key.txt";
+    let test_s3 = Arc::new(TestS3::default());
+    let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
+    let config = test_config();
+    let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
+    let ccx = test_context(&s3, &config, &auth);
+
+    let mut req = header_auth_without_signed_content_sha256(
+        Method::PUT,
+        Version::HTTP_11,
+        URI,
+        UNSIGNED_PAYLOAD,
+        UNSIGNED_PAYLOAD,
+        5,
+        Body::from(b"hello".to_vec()),
+    );
+    let response = super::call(&mut req, &ccx).await.expect("ops::call serializes errors");
+    assert!(
+        response.status.is_success(),
+        "the unsigned marker must be accepted, got {:?}",
+        response.status
+    );
+    assert_eq!(test_s3.put_object.load(Ordering::SeqCst), 1);
+}

@@ -367,6 +367,11 @@ pub struct S3Config {
     /// case-sensitive, so an entry copied from documentation in another casing
     /// does not take effect.
     ///
+    /// `x-amz-content-sha256` never needs an entry: its value is the payload line of the
+    /// canonical request, so the signature covers it even when the header is not listed in
+    /// `SignedHeaders`. A client that needs the header covered by `CanonicalHeaders` itself can
+    /// list it in `SignedHeaders`, or in `X-Amz-SignedHeaders` for a presigned URL.
+    ///
     /// Default: empty (no `x-amz-*` header may be unsigned)
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub unsigned_amz_header_allowlist: Vec<String>,
