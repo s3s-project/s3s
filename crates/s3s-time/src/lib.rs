@@ -14,12 +14,31 @@
 //!
 //! # Conventions
 //!
+//! - `date-time` is written in UTC with exactly three fractional digits, for
+//!   example `2024-06-15T07:00:00.123Z`. The fraction is truncated, not rounded.
+//! - `http-date` is IMF-fixdate with second precision, for example
+//!   `Sat, 15 Jun 2024 07:00:00 GMT`; the subsecond component is dropped.
+//! - `epoch-seconds` is written as the shortest exact decimal, for example
+//!   `1718434800.123`. A fraction is always positive, so half a second before
+//!   the epoch is `-1.5`.
+//!
 //! [`Timestamp`] carries a UTC instant with nanosecond precision, and
 //! [`TimestampFormat`] selects one of the three representations; the variant
 //! names are the format names. The accepted input and the emitted bytes of each
 //! format are the ones recorded by the wire-format vectors of the model data and
 //! by the contract fixture of the migration. [`ParseTimestampError`] and
 //! [`FormatTimestampError`] classify the failures.
+//!
+//! The date-time and the HTTP date carry a four-digit year, so writing an
+//! instant outside `0..=9999` fails instead of writing an expanded year. The
+//! representable instant range is narrower than that year range: instants before
+//! `-9999-01-02T01:59:59Z` and after `9999-12-30T22:00:00.999999999Z` are
+//! rejected.
+//!
+//! [`ParseTimestampError::Overflow`] is defensive: an epoch-seconds seconds field
+//! is a 64-bit integer and a fraction is less than one second, so combining them
+//! cannot overflow the intermediate representation. The variant stays for that
+//! defence, not because an input reaches it.
 //!
 //! # Features
 //!
