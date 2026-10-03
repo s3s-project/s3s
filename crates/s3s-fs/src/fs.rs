@@ -58,6 +58,14 @@ pub(crate) struct ObjectAttributes {
     pub checksum_type: Option<String>,
 }
 
+/// Name of the directory that owns the state of every in-progress multipart upload.
+///
+/// One upload occupies one directory, named after its upload ID: `info.json` records the upload,
+/// `attributes.json` holds its object attributes, and `part-<n>` / `part-<n>.json` hold the parts
+/// and their metadata. Bounding the state to a directory keeps listing the parts and aborting the
+/// upload off the file system root.
+const UPLOADS_DIR: &str = ".uploads";
+
 fn clean_old_tmp_files(root: &Path) -> std::io::Result<()> {
     let entries = match std::fs::read_dir(root) {
         Ok(entries) => Ok(entries),
@@ -76,14 +84,6 @@ fn clean_old_tmp_files(root: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-pub(crate) async fn remove_file_if_exists(path: &Path) -> Result<()> {
-    match fs::remove_file(path).await {
-        Ok(()) => Ok(()),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(err) => Err(err.into()),
-    }
-}
-
 impl FileSystem {
     pub fn new(root: impl AsRef<Path>) -> Result<Self> {
         let root = env::current_dir()?.join(root).canonicalize()?;
@@ -96,8 +96,23 @@ impl FileSystem {
         Ok(path.as_ref().absolutize_virtually(&self.root)?.into_owned())
     }
 
+    /// resolve the directory that owns all state of one multipart upload
+    pub(crate) fn get_upload_dir_path(&self, upload_id: &Uuid) -> Result<PathBuf> {
+        self.resolve_abs_path(format!("{UPLOADS_DIR}/{upload_id}"))
+    }
+
+    /// resolve the upload record path under the virtual root
+    fn get_upload_info_path(&self, upload_id: &Uuid) -> Result<PathBuf> {
+        self.resolve_abs_path(format!("{UPLOADS_DIR}/{upload_id}/info.json"))
+    }
+
+    /// resolve the upload-scoped object attributes path under the virtual root
+    fn get_upload_attributes_path(&self, upload_id: &Uuid) -> Result<PathBuf> {
+        self.resolve_abs_path(format!("{UPLOADS_DIR}/{upload_id}/attributes.json"))
+    }
+
     pub(crate) fn resolve_upload_part_path(&self, upload_id: Uuid, part_number: PartNumber) -> Result<PathBuf> {
-        self.resolve_abs_path(format!(".upload_id-{upload_id}.part-{part_number}"))
+        self.resolve_abs_path(format!("{UPLOADS_DIR}/{upload_id}/part-{part_number}"))
     }
 
     /// resolve object path under the virtual root
@@ -114,10 +129,15 @@ impl FileSystem {
     }
 
     /// resolve metadata path under the virtual root (custom format)
+    ///
+    /// Upload-scoped attributes live in the upload directory, so an upload ID maps to one attributes
+    /// file regardless of the bucket and key the caller passes.
     pub(crate) fn get_metadata_path(&self, bucket: &str, key: &str, upload_id: Option<Uuid>) -> Result<PathBuf> {
+        if let Some(upload_id) = upload_id {
+            return self.get_upload_attributes_path(&upload_id);
+        }
         let encode = |s: &str| base64_simd::URL_SAFE_NO_PAD.encode_to_string(s);
-        let u_ext = upload_id.map(|u| format!(".upload-{u}")).unwrap_or_default();
-        let file_path = format!(".bucket-{}.object-{}{u_ext}.metadata.json", encode(bucket), encode(key));
+        let file_path = format!(".bucket-{}.object-{}.metadata.json", encode(bucket), encode(key));
         self.resolve_abs_path(file_path)
     }
 
@@ -128,7 +148,7 @@ impl FileSystem {
     }
 
     pub(crate) fn get_upload_part_info_path(&self, upload_id: Uuid, part_number: PartNumber) -> Result<PathBuf> {
-        self.resolve_abs_path(format!(".upload_part_info-{upload_id}.part-{part_number}.json"))
+        self.resolve_abs_path(format!("{UPLOADS_DIR}/{upload_id}/part-{part_number}.json"))
     }
 
     /// load object attributes from fs (with backward compatibility)
@@ -177,16 +197,6 @@ impl FileSystem {
         Ok(())
     }
 
-    /// remove metadata from fs
-    pub(crate) fn delete_metadata(&self, bucket: &str, key: &str, upload_id: Option<Uuid>) -> Result<()> {
-        let path = self.get_metadata_path(bucket, key, upload_id)?;
-        match std::fs::remove_file(path) {
-            Ok(()) => Ok(()),
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(err) => Err(err.into()),
-        }
-    }
-
     pub(crate) async fn load_internal_info(&self, bucket: &str, key: &str) -> Result<Option<InternalInfo>> {
         let path = self.get_internal_info_path(bucket, key)?;
         if path.exists().not() {
@@ -232,11 +242,6 @@ impl FileSystem {
         Ok(())
     }
 
-    pub(crate) async fn delete_upload_part_info(&self, upload_id: Uuid, part_number: PartNumber) -> Result<()> {
-        let path = self.get_upload_part_info_path(upload_id, part_number)?;
-        remove_file_if_exists(&path).await
-    }
-
     /// get md5 sum
     pub(crate) async fn get_md5_sum(&self, bucket: &str, key: &str) -> Result<String> {
         let object_path = self.get_object_path(bucket, key)?;
@@ -253,21 +258,29 @@ impl FileSystem {
         Ok(hex(md5_hash.finalize()))
     }
 
-    fn get_upload_info_path(&self, upload_id: &Uuid) -> Result<PathBuf> {
-        self.resolve_abs_path(format!(".upload-{upload_id}.json"))
-    }
-
     pub(crate) async fn create_upload_id(&self, cred: Option<&Credentials>) -> Result<Uuid> {
         let upload_id = Uuid::new_v4();
+        let upload_dir_path = self.get_upload_dir_path(&upload_id)?;
+        fs::create_dir_all(&upload_dir_path).await?;
+
         let upload_info_path = self.get_upload_info_path(&upload_id)?;
-
         let ak: Option<&str> = cred.map(|c| c.access_key.as_str());
-
         let content = serde_json::to_vec(&ak)?;
-        let mut file_writer = self.prepare_file_write(&upload_info_path).await?;
-        file_writer.writer().write_all(&content).await?;
-        file_writer.writer().flush().await?;
-        file_writer.done().await?;
+
+        // An upload directory without its record is not a live upload. Remove the directory again
+        // when writing the record fails, so a failed create leaves nothing behind.
+        let write_result: Result<()> = async {
+            let mut file_writer = self.prepare_file_write(&upload_info_path).await?;
+            file_writer.writer().write_all(&content).await?;
+            file_writer.writer().flush().await?;
+            file_writer.done().await?;
+            Ok(())
+        }
+        .await;
+        if let Err(err) = write_result {
+            let _ = fs::remove_dir_all(&upload_dir_path).await;
+            return Err(err);
+        }
 
         Ok(upload_id)
     }
@@ -284,9 +297,51 @@ impl FileSystem {
         Ok(ak.as_deref() == cred.map(|c| c.access_key.as_str()))
     }
 
+    /// Remove the directory that owns an upload, if it still exists.
+    ///
+    /// The upload record is removed last: a cleanup that fails half-way leaves an upload that
+    /// [`FileSystem::verify_upload_id`] still accepts, so aborting again can finish the job instead of
+    /// stranding the directory. Removing an upload that is already gone is not an error either, so a
+    /// cleanup can be retried.
     pub(crate) async fn delete_upload_id(&self, upload_id: &Uuid) -> Result<()> {
+        let upload_dir_path = self.get_upload_dir_path(upload_id)?;
+        let mut iter = match fs::read_dir(&upload_dir_path).await {
+            Ok(iter) => iter,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(err) => return Err(err.into()),
+        };
+
         let upload_info_path = self.get_upload_info_path(upload_id)?;
-        remove_file_if_exists(&upload_info_path).await
+
+        while let Some(entry) = iter.next_entry().await? {
+            let path = entry.path();
+            if path == upload_info_path {
+                continue;
+            }
+            let removed = if entry.file_type().await?.is_dir() {
+                fs::remove_dir_all(&path).await
+            } else {
+                fs::remove_file(&path).await
+            };
+            match removed {
+                Ok(()) => {}
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+                Err(err) => return Err(err.into()),
+            }
+        }
+        drop(iter);
+
+        match fs::remove_file(&upload_info_path).await {
+            Ok(()) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => return Err(err.into()),
+        }
+
+        match fs::remove_dir(&upload_dir_path).await {
+            Ok(()) => Ok(()),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(err) => Err(err.into()),
+        }
     }
 
     /// Write to the filesystem atomically.
@@ -359,24 +414,20 @@ mod tests {
     }
 
     #[test]
-    fn concurrent_upload_part_info_deletion_is_idempotent() -> Result<()> {
+    fn concurrent_upload_directory_deletion_is_idempotent() -> Result<()> {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .max_blocking_threads(1)
             .build()?;
 
         runtime.block_on(async {
-            let root = env::temp_dir().join(format!("s3s-fs-part-info-cleanup-{}", Uuid::new_v4()));
+            let root = env::temp_dir().join(format!("s3s-fs-upload-cleanup-{}", Uuid::new_v4()));
             std::fs::create_dir_all(&root)?;
             let _root = TestRoot(root.clone());
             let file_system = FileSystem::new(&root)?;
-            let upload_id = Uuid::new_v4();
-            let part_number = 1;
-            file_system
-                .save_upload_part_info(upload_id, part_number, &InternalInfo::default())
-                .await?;
+            let upload_id = file_system.create_upload_id(None).await?;
 
-            // Occupy the sole blocking worker so both deletions reach `remove_file` before either runs.
+            // Occupy the sole blocking worker so both deletions reach the file system before either runs.
             let barrier = Arc::new(Barrier::new(2));
             let worker_barrier = Arc::clone(&barrier);
             let blocker = tokio::task::spawn_blocking(move || {
@@ -385,8 +436,8 @@ mod tests {
             });
             barrier.wait();
 
-            let first = file_system.delete_upload_part_info(upload_id, part_number);
-            let second = file_system.delete_upload_part_info(upload_id, part_number);
+            let first = file_system.delete_upload_id(&upload_id);
+            let second = file_system.delete_upload_id(&upload_id);
             tokio::pin!(first);
             tokio::pin!(second);
             let first_pending = futures::poll!(first.as_mut()).is_pending();
@@ -400,6 +451,57 @@ mod tests {
             blocker.await.expect("blocking worker should finish");
             first_result?;
             second_result
+        })
+    }
+
+    /// The upload record must survive a cleanup that fails, or the retry cannot find the upload.
+    #[cfg(unix)]
+    #[test]
+    fn failed_upload_cleanup_keeps_the_record_for_a_retry() -> Result<()> {
+        use std::os::unix::fs::PermissionsExt;
+
+        let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build()?;
+
+        runtime.block_on(async {
+            let root = env::temp_dir().join(format!("s3s-fs-upload-retry-{}", Uuid::new_v4()));
+            std::fs::create_dir_all(&root)?;
+            let _root = TestRoot(root.clone());
+            let file_system = FileSystem::new(&root)?;
+            let upload_id = file_system.create_upload_id(None).await?;
+            file_system
+                .save_upload_part_info(upload_id, 1, &InternalInfo::default())
+                .await?;
+
+            let upload_dir = file_system.get_upload_dir_path(&upload_id)?;
+            let upload_info_path = file_system.get_upload_info_path(&upload_id)?;
+            assert!(upload_info_path.is_file(), "the upload record must exist before the cleanup");
+
+            // A read-only directory keeps its entries readable but refuses to remove them, which is
+            // exactly how removing an upload fails.
+            std::fs::set_permissions(&upload_dir, std::fs::Permissions::from_mode(0o555))?;
+            let probe = upload_dir.join(".permission-probe");
+            if std::fs::File::create(&probe).is_ok() {
+                // This user bypasses file permissions, so the failure cannot be injected. Leave the
+                // upload for the retry check below instead of asserting what the environment cannot do.
+                std::fs::remove_file(&probe)?;
+                std::fs::set_permissions(&upload_dir, std::fs::Permissions::from_mode(0o755))?;
+                return Ok(());
+            }
+
+            file_system
+                .delete_upload_id(&upload_id)
+                .await
+                .expect_err("a cleanup that cannot remove an entry must fail");
+            assert!(
+                upload_info_path.is_file(),
+                "a failed cleanup must keep the upload record so that a retry can find the upload"
+            );
+
+            std::fs::set_permissions(&upload_dir, std::fs::Permissions::from_mode(0o755))?;
+            file_system.delete_upload_id(&upload_id).await?;
+            assert!(!upload_dir.exists(), "the retry must remove the upload directory");
+
+            Ok(())
         })
     }
 }

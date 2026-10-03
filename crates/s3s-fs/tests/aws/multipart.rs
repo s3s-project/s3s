@@ -237,14 +237,22 @@ async fn assert_multipart_xxhash_checksums(
 }
 
 async fn assert_completed_upload_state_removed(client: &Client, bucket: &str, key: &str, upload_id: &str) -> Result<()> {
-    let listed = client
+    let err = client
         .list_parts()
         .bucket(bucket)
         .key(key)
         .upload_id(upload_id)
         .send()
-        .await?;
-    assert_eq!(listed.parts(), []);
+        .await
+        .expect_err("listing the parts of a retired upload should fail");
+    assert_eq!(
+        err.into_service_error().code(),
+        Some("NoSuchUpload"),
+        "listing the parts of a retired upload should report NoSuchUpload"
+    );
+
+    let upload_dir = Path::new(FS_ROOT).join(".uploads").join(upload_id);
+    assert!(!upload_dir.exists(), "retired upload directory remains: {}", upload_dir.display());
 
     let upload_residue: Vec<_> = fs::read_dir(FS_ROOT)?
         .filter_map(Result::ok)
@@ -259,7 +267,6 @@ pub fn register(tcx: &mut TestContext) {
     case!(tcx, FsServer, Multipart, test_multipart);
     case!(tcx, FsServer, Multipart, test_upload_part_checksum_failure_preserves_existing_part);
     case!(tcx, FsServer, Multipart, test_complete_checksum_failure_preserves_object_and_upload);
-    case!(tcx, FsServer, Multipart, test_abort_cleanup_failure_preserves_upload_id);
     case!(tcx, FsServer, Multipart, test_multipart_xxhash_checksums);
     case!(tcx, FsServer, Multipart, test_multipart_checksum_type_composite_not_implemented);
     case!(tcx, FsServer, Multipart, test_multipart_etag_format);
@@ -271,6 +278,12 @@ pub fn register(tcx: &mut TestContext) {
     case!(tcx, FsServer, Multipart, test_complete_multipart_if_match);
     case!(tcx, FsServer, Multipart, test_complete_multipart_if_match_wildcard);
     case!(tcx, FsServer, Multipart, test_upload_part_copy_empty_source);
+    case!(tcx, FsServer, Multipart, test_upload_state_lives_in_upload_directory);
+    case!(tcx, FsServer, Multipart, test_complete_multipart_upload_removes_upload_directory);
+    case!(tcx, FsServer, Multipart, test_abort_multipart_upload_removes_upload_directory);
+    case!(tcx, FsServer, Multipart, test_concurrent_uploads_keep_isolated_part_directories);
+    #[cfg(unix)]
+    case!(tcx, FsServer, Multipart, test_abort_cleanup_failure_preserves_upload_id);
 }
 
 impl Multipart {
@@ -537,7 +550,11 @@ impl Multipart {
         Ok(())
     }
 
+    /// A cleanup that fails must keep the upload record so a later abort can retry it.
+    #[cfg(unix)]
     async fn test_abort_cleanup_failure_preserves_upload_id(self: Arc<Self>) -> Result<()> {
+        use std::os::unix::fs::PermissionsExt;
+
         let c = &self.s3;
         let bucket = format!("test-abort-cleanup-{}", Uuid::new_v4());
         let bucket = bucket.as_str();
@@ -553,14 +570,32 @@ impl Multipart {
             .upload_id
             .expect("create_multipart_upload should return an upload ID");
 
-        let encode = |s: &str| base64_simd::URL_SAFE_NO_PAD.encode_to_string(s);
-        let upload_metadata_path = Path::new(FS_ROOT).join(format!(
-            ".bucket-{}.object-{}.upload-{upload_id}.metadata.json",
-            encode(bucket),
-            encode(key)
-        ));
-        fs::remove_file(&upload_metadata_path)?;
-        fs::create_dir(&upload_metadata_path)?;
+        let upload_dir = Path::new(FS_ROOT).join(".uploads").join(&upload_id);
+        assert!(
+            upload_dir.is_dir(),
+            "an in-progress upload must own a directory: {}",
+            upload_dir.display()
+        );
+
+        // The record stays readable from a read-only directory, but removing the entries inside it
+        // fails, which is exactly how removing the whole upload directory fails.
+        fs::set_permissions(&upload_dir, fs::Permissions::from_mode(0o555))?;
+        let probe = upload_dir.join(".permission-probe");
+        if fs::File::create(&probe).is_ok() {
+            // This user bypasses file permissions, so the failure cannot be injected here. Abort
+            // normally instead of asserting something the environment cannot produce.
+            fs::remove_file(&probe)?;
+            fs::set_permissions(&upload_dir, fs::Permissions::from_mode(0o755))?;
+            c.abort_multipart_upload()
+                .bucket(bucket)
+                .key(key)
+                .upload_id(upload_id.as_str())
+                .send()
+                .await?;
+            assert!(!upload_dir.exists(), "abort must remove the upload directory");
+            delete_bucket(c, bucket).await?;
+            return Ok(());
+        }
 
         let err = c
             .abort_multipart_upload()
@@ -569,20 +604,19 @@ impl Multipart {
             .upload_id(upload_id.as_str())
             .send()
             .await
-            .expect_err("metadata cleanup failure should reject abort");
+            .expect_err("directory cleanup failure should reject abort");
         assert_eq!(err.into_service_error().code(), Some("InternalError"));
 
-        let upload_info_path = Path::new(FS_ROOT).join(format!(".upload-{upload_id}.json"));
-        assert!(upload_info_path.exists(), "failed abort must retain the upload ID");
+        assert!(upload_dir.join("info.json").is_file(), "failed abort must retain the upload record");
 
-        fs::remove_dir(upload_metadata_path)?;
+        fs::set_permissions(&upload_dir, fs::Permissions::from_mode(0o755))?;
         c.abort_multipart_upload()
             .bucket(bucket)
             .key(key)
             .upload_id(upload_id.as_str())
             .send()
             .await?;
-        assert!(!upload_info_path.exists());
+        assert!(!upload_dir.exists(), "the retried abort must remove the upload directory");
 
         delete_bucket(c, bucket).await?;
 
@@ -1498,6 +1532,256 @@ impl Multipart {
             .await?;
 
         delete_object(c, bucket, src_key).await?;
+        delete_bucket(c, bucket).await?;
+
+        Ok(())
+    }
+
+    async fn test_upload_state_lives_in_upload_directory(self: Arc<Self>) -> Result<()> {
+        let c = &self.s3;
+        let bucket = format!("test-upload-dir-{}", Uuid::new_v4());
+        let bucket = bucket.as_str();
+        let key = "upload-directory.txt";
+
+        create_bucket(c, bucket).await?;
+        let upload_id = c
+            .create_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .send()
+            .await?
+            .upload_id
+            .expect("create_multipart_upload should return an upload ID");
+
+        c.upload_part()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(upload_id.as_str())
+            .part_number(1)
+            .body(ByteStream::from_static(b"part one"))
+            .send()
+            .await?;
+
+        let upload_dir = Path::new(FS_ROOT).join(".uploads").join(&upload_id);
+        assert!(
+            upload_dir.is_dir(),
+            "an in-progress upload must own a directory: {}",
+            upload_dir.display()
+        );
+        assert!(
+            upload_dir.join("info.json").is_file(),
+            "the upload record must live in the upload directory"
+        );
+        assert!(
+            upload_dir.join("attributes.json").is_file(),
+            "the upload attributes must live in the upload directory"
+        );
+        assert!(upload_dir.join("part-1").is_file(), "the part body must live in the upload directory");
+        assert!(
+            upload_dir.join("part-1.json").is_file(),
+            "the part metadata must live in the upload directory"
+        );
+
+        // A flat layout leaves `.upload_id-<id>.part-1`, `.upload_part_info-<id>.part-1.json` and
+        // `.upload-<id>.json` in the root, so any root entry that names this upload fails the test.
+        let residue: Vec<_> = fs::read_dir(FS_ROOT)?
+            .filter_map(Result::ok)
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .filter(|name| name.contains(&upload_id))
+            .collect();
+        assert!(residue.is_empty(), "multipart state must not be flat in the root: {residue:?}");
+
+        c.abort_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(upload_id.as_str())
+            .send()
+            .await?;
+        delete_bucket(c, bucket).await?;
+
+        Ok(())
+    }
+
+    async fn test_complete_multipart_upload_removes_upload_directory(self: Arc<Self>) -> Result<()> {
+        let c = &self.s3;
+        let bucket = format!("test-complete-dir-{}", Uuid::new_v4());
+        let bucket = bucket.as_str();
+        let key = "complete-removes-directory.txt";
+        let content = b"a multipart object completed from one part";
+
+        create_bucket(c, bucket).await?;
+        let (upload_id, parts) = do_multipart_upload(c, bucket, key, content).await?;
+
+        let upload_dir = Path::new(FS_ROOT).join(".uploads").join(&upload_id);
+        assert!(
+            upload_dir.is_dir(),
+            "an in-progress upload must own a directory: {}",
+            upload_dir.display()
+        );
+
+        let upload = CompletedMultipartUpload::builder().set_parts(Some(parts)).build();
+        c.complete_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(upload_id.as_str())
+            .multipart_upload(upload)
+            .send()
+            .await?;
+
+        assert!(!upload_dir.exists(), "completing an upload must remove its directory");
+        assert_completed_upload_state_removed(c, bucket, key, &upload_id).await?;
+
+        let get = c.get_object().bucket(bucket).key(key).send().await?;
+        let body = get.body.collect().await?.into_bytes();
+        assert_eq!(body.as_ref(), content, "the completed object must hold every part");
+
+        delete_object(c, bucket, key).await?;
+        delete_bucket(c, bucket).await?;
+
+        Ok(())
+    }
+
+    async fn test_abort_multipart_upload_removes_upload_directory(self: Arc<Self>) -> Result<()> {
+        let c = &self.s3;
+        let bucket = format!("test-abort-dir-{}", Uuid::new_v4());
+        let bucket = bucket.as_str();
+        let key = "abort-removes-directory.txt";
+
+        create_bucket(c, bucket).await?;
+        let upload_id = c
+            .create_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .send()
+            .await?
+            .upload_id
+            .expect("create_multipart_upload should return an upload ID");
+
+        c.upload_part()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(upload_id.as_str())
+            .part_number(1)
+            .body(ByteStream::from_static(b"discarded part"))
+            .send()
+            .await?;
+
+        let upload_dir = Path::new(FS_ROOT).join(".uploads").join(&upload_id);
+        assert!(
+            upload_dir.is_dir(),
+            "an in-progress upload must own a directory: {}",
+            upload_dir.display()
+        );
+
+        c.abort_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(upload_id.as_str())
+            .send()
+            .await?;
+        assert!(!upload_dir.exists(), "aborting an upload must remove its directory");
+
+        // A repeated abort changes nothing: the upload is gone and stays gone.
+        let err = c
+            .abort_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(upload_id.as_str())
+            .send()
+            .await
+            .expect_err("aborting a retired upload should fail");
+        assert_eq!(err.into_service_error().code(), Some("AccessDenied"));
+        assert!(!upload_dir.exists(), "a repeated abort must not recreate the upload directory");
+
+        let residue: Vec<_> = fs::read_dir(FS_ROOT)?
+            .filter_map(Result::ok)
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .filter(|name| name.contains(&upload_id))
+            .collect();
+        assert!(residue.is_empty(), "aborted upload state remains in the root: {residue:?}");
+
+        delete_bucket(c, bucket).await?;
+
+        Ok(())
+    }
+
+    async fn test_concurrent_uploads_keep_isolated_part_directories(self: Arc<Self>) -> Result<()> {
+        let c = &self.s3;
+        let bucket = format!("test-upload-isolation-{}", Uuid::new_v4());
+        let bucket = bucket.as_str();
+        create_bucket(c, bucket).await?;
+
+        let mut uploads = Vec::new();
+        for index in 0..3_u8 {
+            let key = format!("isolation-{index}.txt");
+            let upload_id = c
+                .create_multipart_upload()
+                .bucket(bucket)
+                .key(key.as_str())
+                .send()
+                .await?
+                .upload_id
+                .expect("create_multipart_upload should return an upload ID");
+            uploads.push((key, upload_id));
+        }
+
+        for (index, (key, upload_id)) in uploads.iter().enumerate() {
+            for part_number in 1..=2 {
+                let body = format!("upload-{index}-part-{part_number}").into_bytes();
+                c.upload_part()
+                    .bucket(bucket)
+                    .key(key.as_str())
+                    .upload_id(upload_id.as_str())
+                    .part_number(part_number)
+                    .body(ByteStream::from(body))
+                    .send()
+                    .await?;
+            }
+        }
+
+        for (key, upload_id) in &uploads {
+            let listed = c
+                .list_parts()
+                .bucket(bucket)
+                .key(key.as_str())
+                .upload_id(upload_id.as_str())
+                .send()
+                .await?;
+            let mut part_numbers: Vec<i32> = listed
+                .parts()
+                .iter()
+                .filter_map(aws_sdk_s3::types::Part::part_number)
+                .collect();
+            part_numbers.sort_unstable();
+            assert_eq!(part_numbers, [1, 2], "list_parts must return the parts of this upload only");
+
+            let mut entries: Vec<String> = fs::read_dir(Path::new(FS_ROOT).join(".uploads").join(upload_id))?
+                .filter_map(Result::ok)
+                .map(|entry| entry.file_name().to_string_lossy().into_owned())
+                .collect();
+            entries.sort_unstable();
+            assert_eq!(
+                entries,
+                [
+                    "attributes.json",
+                    "info.json",
+                    "part-1",
+                    "part-1.json",
+                    "part-2",
+                    "part-2.json"
+                ],
+                "one upload directory must hold exactly its own state"
+            );
+        }
+
+        for (key, upload_id) in &uploads {
+            c.abort_multipart_upload()
+                .bucket(bucket)
+                .key(key.as_str())
+                .upload_id(upload_id.as_str())
+                .send()
+                .await?;
+        }
         delete_bucket(c, bucket).await?;
 
         Ok(())
