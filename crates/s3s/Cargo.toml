@@ -73,7 +73,6 @@ std-next.workspace = true
 subtle.workspace = true
 sync_wrapper.workspace = true
 thiserror.workspace = true
-time = { workspace = true, features = ["formatting", "parsing", "macros"] }
 tokio = { workspace = true, features = ["time"], optional = true }
 xxhash-rust = { workspace = true }
 tower.workspace = true
