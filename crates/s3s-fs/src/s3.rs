@@ -35,6 +35,13 @@ use stdx::default::default;
 use tracing::{debug, warn};
 use uuid::Uuid;
 
+/// Read chunk size for streaming an object body out of the file system.
+///
+/// Larger chunks amortize the per-chunk syscall, poll and framing overhead over more bytes. The
+/// buffer is held per in-flight request, so peak memory is roughly concurrent requests × this
+/// size; 64 KiB is a stable point to pair with connection limiting later on.
+const READ_CHUNK_SIZE: usize = 64 * 1024;
+
 /// Maps a path that no longer exists to `None`, leaving every other error intact.
 ///
 /// A listing walks the tree entry by entry, so an object deleted while the walk runs can be gone
@@ -489,7 +496,7 @@ impl S3 for FileSystem {
             None => {}
         }
 
-        let body = bytes_stream(ReaderStream::with_capacity(file, 4096), content_length_usize);
+        let body = bytes_stream(ReaderStream::with_capacity(file, READ_CHUNK_SIZE), content_length_usize);
 
         let obj_attrs = self.load_object_attributes(&input.bucket, &input.key, None).await?;
 
@@ -1275,7 +1282,8 @@ impl S3 for FileSystem {
         let content_length_usize = try_!(usize::try_from(content_length));
 
         let _ = try_!(src_file.seek(io::SeekFrom::Start(start)).await);
-        let body = StreamingBlob::wrap(bytes_stream(ReaderStream::with_capacity(src_file, 4096), content_length_usize));
+        let body =
+            StreamingBlob::wrap(bytes_stream(ReaderStream::with_capacity(src_file, READ_CHUNK_SIZE), content_length_usize));
 
         let expected_checksum: s3s::dto::Checksum = default();
 
