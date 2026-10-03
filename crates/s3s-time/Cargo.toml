@@ -1,0 +1,18 @@
+[package]
+name = "s3s-time"
+version = "0.18.0-alpha.1"
+description = "Date and time wire formats for the S3 API"
+readme = "../../README.md"
+keywords = ["aws", "s3", "time", "date", "datetime"]
+categories = ["date-and-time", "web-programming"]
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
