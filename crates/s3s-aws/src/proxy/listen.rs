@@ -58,39 +58,10 @@ pub async fn listen_bucket_notification(
     let mut s3_request = value
         .to_s3request()
         .map_err(|e| s3_error!(e, InternalError, "failed to build request"))?;
-    let resp = match s3_request.execute().await {
-        Ok(resp) => resp,
-        // minio-rs wraps non-2xx responses into `S3Server` errors. Map the
-        // MinIO error code to an S3 error code so the s3s protocol derives
-        // the correct HTTP status.
-        Err(minio::s3::error::Error::S3Server(minio::s3::error::S3ServerError::S3Error(e))) => {
-            let mut err = s3s::S3Error::new(s3s::S3ErrorCode::InternalError);
-            if let Some(code) = s3s::S3ErrorCode::from_bytes(e.code().to_string().as_bytes()) {
-                err.set_code(code);
-            }
-            if let Some(message) = e.message() {
-                err.set_message(message.clone());
-            }
-            err.set_request_id(e.request_id().to_owned());
-            return Err(err);
-        }
-        Err(minio::s3::error::Error::S3Server(minio::s3::error::S3ServerError::InvalidServerResponse {
-            http_status_code,
-            ..
-        })) => {
-            let mut err = s3_error!(InternalError, "invalid upstream response");
-            err.set_status_code(
-                hyper::StatusCode::from_u16(http_status_code).unwrap_or(hyper::StatusCode::INTERNAL_SERVER_ERROR),
-            );
-            return Err(err);
-        }
-        Err(minio::s3::error::Error::S3Server(minio::s3::error::S3ServerError::HttpError(status, _))) => {
-            let mut err = s3_error!(InternalError, "upstream http error");
-            err.set_status_code(hyper::StatusCode::from_u16(status).unwrap_or(hyper::StatusCode::INTERNAL_SERVER_ERROR));
-            return Err(err);
-        }
-        Err(e) => return Err(s3_error!(e, InternalError, "failed to send request: {e}")),
-    };
+    let resp = s3_request
+        .execute()
+        .await
+        .map_err(|e| super::minio_error::map_error("failed to send request", e))?;
 
     let status = resp.status();
     if !status.is_success() {

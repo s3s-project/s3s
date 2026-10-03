@@ -48,6 +48,9 @@ pub fn collect_rust_types(model: &smithy::Model, ops: &Operations) -> RustTypes 
             "Event",         //
             "CachedTags",    //
             "ETag",          //
+            // The MinIO ListObjectsV2 metadata=true map of arbitrary element names;
+            // implemented by hand in v1::minio::codegen_in_dto.
+            "ObjectUserMetadata", //
         ];
 
         // ETag-related header types that should be aliased to ETagCondition instead of String

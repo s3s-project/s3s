@@ -720,4 +720,39 @@ mod tests {
             "nested Tag should reject unknown element, got {err:?}"
         );
     }
+
+    /// `ObjectUserMetadata` is a map whose keys are element names, which the
+    /// generic emitters cannot describe; its hand-written impls must round-trip
+    /// the entries and accept an empty element.
+    #[cfg(feature = "minio")]
+    #[test]
+    fn object_user_metadata_roundtrip() {
+        use crate::dto::ObjectUserMetadata;
+
+        let value = ObjectUserMetadata(vec![
+            ("X-Amz-Meta-Test".to_owned(), "test-value".to_owned()),
+            ("content-type".to_owned(), "application/x-www-form-urlencoded".to_owned()),
+        ]);
+
+        let mut buf = Vec::new();
+        let mut ser = Serializer::new(Cursor::new(&mut buf));
+        ser.element("UserMetadata", |s| value.serialize_content(s)).unwrap();
+        let xml = String::from_utf8(buf).unwrap();
+        assert!(xml.starts_with("<UserMetadata>") && xml.ends_with("</UserMetadata>"), "{xml}");
+        assert!(xml.contains("<X-Amz-Meta-Test>test-value</X-Amz-Meta-Test>"), "{xml}");
+        assert!(xml.contains("<content-type>application/x-www-form-urlencoded</content-type>"), "{xml}");
+
+        let mut d = Deserializer::new(xml.as_bytes());
+        let parsed = d
+            .named_element("UserMetadata", ObjectUserMetadata::deserialize_content)
+            .unwrap();
+        assert_eq!(parsed, value);
+
+        // An empty element decodes to an empty map instead of failing.
+        let mut d = Deserializer::new(b"<UserMetadata></UserMetadata>");
+        let empty = d
+            .named_element("UserMetadata", ObjectUserMetadata::deserialize_content)
+            .unwrap();
+        assert_eq!(empty, ObjectUserMetadata(vec![]));
+    }
 }

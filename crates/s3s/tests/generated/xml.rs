@@ -108,15 +108,9 @@ fn xml_golden_list_objects_output() {
         max_keys: Some(2),
         is_truncated: Some(true),
         contents: Some(vec![dto::Object {
-            checksum_algorithm: None,
-            checksum_type: None,
-            e_tag: None,
             key: Some(String::from("a.txt")),
-            last_modified: None,
-            owner: None,
-            restore_status: None,
             size: Some(3),
-            storage_class: None,
+            ..Default::default()
         }]),
         common_prefixes: None,
         delimiter: Some(String::from("/")),
@@ -11786,6 +11780,7 @@ fn xml_minimal_list_object_versions_output() {
     );
 }
 
+#[cfg(not(feature = "minio"))]
 #[test]
 fn xml_roundtrip_list_objects_output() {
     let value = dto::ListObjectsOutput {
@@ -11839,6 +11834,7 @@ fn xml_roundtrip_list_objects_output() {
     assert!(xml.contains("<EncodingType>url</EncodingType>"), "missing element: {xml}");
 }
 
+#[cfg(not(feature = "minio"))]
 #[test]
 fn xml_minimal_list_objects_output() {
     let value = dto::ListObjectsOutput {
@@ -11902,6 +11898,130 @@ fn xml_minimal_list_objects_output() {
     );
 }
 
+#[cfg(feature = "minio")]
+#[test]
+fn xml_roundtrip_list_objects_output() {
+    let value = dto::ListObjectsOutput {
+        name: Some(String::from("s3s-xml-sample")),
+        prefix: Some(String::from("s3s-xml-sample")),
+        marker: Some(String::from("s3s-xml-sample")),
+        max_keys: Some(42),
+        is_truncated: Some(true),
+        contents: Some(vec![dto::Object {
+            checksum_algorithm: Some(vec![dto::ChecksumAlgorithm::from_static("CRC32")]),
+            checksum_type: Some(dto::ChecksumType::from_static("COMPOSITE")),
+            e_tag: Some(dto::ETag::Strong(String::from("s3s-xml-sample"))),
+            key: Some(String::from("s3s-xml-sample")),
+            last_modified: Some(dto::Timestamp::parse(dto::TimestampFormat::DateTime, "2024-01-02T03:04:05.000Z").unwrap()),
+            owner: Some(dto::Owner {
+                display_name: Some(String::from("s3s-xml-sample")),
+                id: Some(String::from("s3s-xml-sample")),
+            }),
+            restore_status: Some(dto::RestoreStatus {
+                is_restore_in_progress: Some(true),
+                restore_expiry_date: Some(
+                    dto::Timestamp::parse(dto::TimestampFormat::DateTime, "2024-01-02T03:04:05.000Z").unwrap(),
+                ),
+            }),
+            size: Some(42),
+            storage_class: Some(dto::ObjectStorageClass::from_static("AWS_BACKUP_LOW_COST_WARM")),
+            user_metadata: Some(dto::ObjectUserMetadata(vec![(
+                String::from("s3s-xml-sample"),
+                String::from("s3s-xml-sample"),
+            )])),
+            user_tags: Some(String::from("s3s-xml-sample")),
+        }]),
+        common_prefixes: Some(vec![dto::CommonPrefix {
+            prefix: Some(String::from("s3s-xml-sample")),
+        }]),
+        delimiter: Some(String::from("s3s-xml-sample")),
+        next_marker: Some(String::from("s3s-xml-sample")),
+        encoding_type: Some(dto::EncodingType::from_static("url")),
+        request_charged: None,
+    };
+    let xml = xml_serialize(&value);
+    assert!(
+        xml.starts_with("<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">"),
+        "root element: {xml}"
+    );
+    assert!(xml.ends_with("</ListBucketResult>"), "root element: {xml}");
+    assert!(xml.contains("<Name>s3s-xml-sample</Name>"), "missing element: {xml}");
+    assert!(xml.contains("<Prefix>s3s-xml-sample</Prefix>"), "missing element: {xml}");
+    assert!(xml.contains("<Marker>s3s-xml-sample</Marker>"), "missing element: {xml}");
+    assert!(xml.contains("<MaxKeys>42</MaxKeys>"), "missing element: {xml}");
+    assert!(xml.contains("<IsTruncated>true</IsTruncated>"), "missing element: {xml}");
+    assert!(xml.contains("<Contents>"), "missing element: {xml}");
+    assert!(xml.contains("<CommonPrefixes>"), "missing element: {xml}");
+    assert!(xml.contains("<Delimiter>s3s-xml-sample</Delimiter>"), "missing element: {xml}");
+    assert!(xml.contains("<NextMarker>s3s-xml-sample</NextMarker>"), "missing element: {xml}");
+    assert!(xml.contains("<EncodingType>url</EncodingType>"), "missing element: {xml}");
+}
+
+#[cfg(feature = "minio")]
+#[test]
+fn xml_minimal_list_objects_output() {
+    let value = dto::ListObjectsOutput {
+        name: None,
+        prefix: None,
+        marker: None,
+        max_keys: None,
+        is_truncated: None,
+        contents: None,
+        common_prefixes: None,
+        delimiter: None,
+        next_marker: None,
+        encoding_type: None,
+        request_charged: None,
+    };
+    let xml = xml_serialize(&value);
+    assert!(
+        xml.starts_with("<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">"),
+        "root element: {xml}"
+    );
+    assert!(xml.ends_with("</ListBucketResult>"), "root element: {xml}");
+    assert!(
+        !xml.contains("<Name>") && !xml.contains("<Name "),
+        "optional element in the default value: {xml}"
+    );
+    assert!(
+        !xml.contains("<Prefix>") && !xml.contains("<Prefix "),
+        "optional element in the default value: {xml}"
+    );
+    assert!(
+        !xml.contains("<Marker>") && !xml.contains("<Marker "),
+        "optional element in the default value: {xml}"
+    );
+    assert!(
+        !xml.contains("<MaxKeys>") && !xml.contains("<MaxKeys "),
+        "optional element in the default value: {xml}"
+    );
+    assert!(
+        !xml.contains("<IsTruncated>") && !xml.contains("<IsTruncated "),
+        "optional element in the default value: {xml}"
+    );
+    assert!(
+        !xml.contains("<Contents>") && !xml.contains("<Contents "),
+        "optional element in the default value: {xml}"
+    );
+    assert!(
+        !xml.contains("<CommonPrefixes>") && !xml.contains("<CommonPrefixes "),
+        "optional element in the default value: {xml}"
+    );
+    assert!(
+        !xml.contains("<Delimiter>") && !xml.contains("<Delimiter "),
+        "optional element in the default value: {xml}"
+    );
+    assert!(
+        !xml.contains("<NextMarker>") && !xml.contains("<NextMarker "),
+        "optional element in the default value: {xml}"
+    );
+    assert!(
+        !xml.contains("<EncodingType>") && !xml.contains("<EncodingType "),
+        "optional element in the default value: {xml}"
+    );
+}
+
+#[cfg(not(feature = "minio"))]
 #[test]
 fn xml_roundtrip_list_objects_v2_output() {
     let value = dto::ListObjectsV2Output {
@@ -11965,6 +12085,150 @@ fn xml_roundtrip_list_objects_v2_output() {
     assert!(xml.contains("<StartAfter>s3s-xml-sample</StartAfter>"), "missing element: {xml}");
 }
 
+#[cfg(not(feature = "minio"))]
+#[test]
+fn xml_minimal_list_objects_v2_output() {
+    let value = dto::ListObjectsV2Output {
+        name: None,
+        prefix: None,
+        max_keys: None,
+        key_count: None,
+        continuation_token: None,
+        is_truncated: None,
+        next_continuation_token: None,
+        contents: None,
+        common_prefixes: None,
+        delimiter: None,
+        encoding_type: None,
+        start_after: None,
+        request_charged: None,
+    };
+    let xml = xml_serialize(&value);
+    assert!(
+        xml.starts_with("<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">"),
+        "root element: {xml}"
+    );
+    assert!(xml.ends_with("</ListBucketResult>"), "root element: {xml}");
+    assert!(
+        !xml.contains("<Name>") && !xml.contains("<Name "),
+        "optional element in the default value: {xml}"
+    );
+    assert!(
+        !xml.contains("<Prefix>") && !xml.contains("<Prefix "),
+        "optional element in the default value: {xml}"
+    );
+    assert!(
+        !xml.contains("<MaxKeys>") && !xml.contains("<MaxKeys "),
+        "optional element in the default value: {xml}"
+    );
+    assert!(
+        !xml.contains("<KeyCount>") && !xml.contains("<KeyCount "),
+        "optional element in the default value: {xml}"
+    );
+    assert!(
+        !xml.contains("<ContinuationToken>") && !xml.contains("<ContinuationToken "),
+        "optional element in the default value: {xml}"
+    );
+    assert!(
+        !xml.contains("<IsTruncated>") && !xml.contains("<IsTruncated "),
+        "optional element in the default value: {xml}"
+    );
+    assert!(
+        !xml.contains("<NextContinuationToken>") && !xml.contains("<NextContinuationToken "),
+        "optional element in the default value: {xml}"
+    );
+    assert!(
+        !xml.contains("<Contents>") && !xml.contains("<Contents "),
+        "optional element in the default value: {xml}"
+    );
+    assert!(
+        !xml.contains("<CommonPrefixes>") && !xml.contains("<CommonPrefixes "),
+        "optional element in the default value: {xml}"
+    );
+    assert!(
+        !xml.contains("<Delimiter>") && !xml.contains("<Delimiter "),
+        "optional element in the default value: {xml}"
+    );
+    assert!(
+        !xml.contains("<EncodingType>") && !xml.contains("<EncodingType "),
+        "optional element in the default value: {xml}"
+    );
+    assert!(
+        !xml.contains("<StartAfter>") && !xml.contains("<StartAfter "),
+        "optional element in the default value: {xml}"
+    );
+}
+
+#[cfg(feature = "minio")]
+#[test]
+fn xml_roundtrip_list_objects_v2_output() {
+    let value = dto::ListObjectsV2Output {
+        name: Some(String::from("s3s-xml-sample")),
+        prefix: Some(String::from("s3s-xml-sample")),
+        max_keys: Some(42),
+        key_count: Some(42),
+        continuation_token: Some(String::from("s3s-xml-sample")),
+        is_truncated: Some(true),
+        next_continuation_token: Some(String::from("s3s-xml-sample")),
+        contents: Some(vec![dto::Object {
+            checksum_algorithm: Some(vec![dto::ChecksumAlgorithm::from_static("CRC32")]),
+            checksum_type: Some(dto::ChecksumType::from_static("COMPOSITE")),
+            e_tag: Some(dto::ETag::Strong(String::from("s3s-xml-sample"))),
+            key: Some(String::from("s3s-xml-sample")),
+            last_modified: Some(dto::Timestamp::parse(dto::TimestampFormat::DateTime, "2024-01-02T03:04:05.000Z").unwrap()),
+            owner: Some(dto::Owner {
+                display_name: Some(String::from("s3s-xml-sample")),
+                id: Some(String::from("s3s-xml-sample")),
+            }),
+            restore_status: Some(dto::RestoreStatus {
+                is_restore_in_progress: Some(true),
+                restore_expiry_date: Some(
+                    dto::Timestamp::parse(dto::TimestampFormat::DateTime, "2024-01-02T03:04:05.000Z").unwrap(),
+                ),
+            }),
+            size: Some(42),
+            storage_class: Some(dto::ObjectStorageClass::from_static("AWS_BACKUP_LOW_COST_WARM")),
+            user_metadata: Some(dto::ObjectUserMetadata(vec![(
+                String::from("s3s-xml-sample"),
+                String::from("s3s-xml-sample"),
+            )])),
+            user_tags: Some(String::from("s3s-xml-sample")),
+        }]),
+        common_prefixes: Some(vec![dto::CommonPrefix {
+            prefix: Some(String::from("s3s-xml-sample")),
+        }]),
+        delimiter: Some(String::from("s3s-xml-sample")),
+        encoding_type: Some(dto::EncodingType::from_static("url")),
+        start_after: Some(String::from("s3s-xml-sample")),
+        request_charged: None,
+    };
+    let xml = xml_serialize(&value);
+    assert!(
+        xml.starts_with("<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">"),
+        "root element: {xml}"
+    );
+    assert!(xml.ends_with("</ListBucketResult>"), "root element: {xml}");
+    assert!(xml.contains("<Name>s3s-xml-sample</Name>"), "missing element: {xml}");
+    assert!(xml.contains("<Prefix>s3s-xml-sample</Prefix>"), "missing element: {xml}");
+    assert!(xml.contains("<MaxKeys>42</MaxKeys>"), "missing element: {xml}");
+    assert!(xml.contains("<KeyCount>42</KeyCount>"), "missing element: {xml}");
+    assert!(
+        xml.contains("<ContinuationToken>s3s-xml-sample</ContinuationToken>"),
+        "missing element: {xml}"
+    );
+    assert!(xml.contains("<IsTruncated>true</IsTruncated>"), "missing element: {xml}");
+    assert!(
+        xml.contains("<NextContinuationToken>s3s-xml-sample</NextContinuationToken>"),
+        "missing element: {xml}"
+    );
+    assert!(xml.contains("<Contents>"), "missing element: {xml}");
+    assert!(xml.contains("<CommonPrefixes>"), "missing element: {xml}");
+    assert!(xml.contains("<Delimiter>s3s-xml-sample</Delimiter>"), "missing element: {xml}");
+    assert!(xml.contains("<EncodingType>url</EncodingType>"), "missing element: {xml}");
+    assert!(xml.contains("<StartAfter>s3s-xml-sample</StartAfter>"), "missing element: {xml}");
+}
+
+#[cfg(feature = "minio")]
 #[test]
 fn xml_minimal_list_objects_v2_output() {
     let value = dto::ListObjectsV2Output {
@@ -13714,6 +13978,7 @@ fn xml_minimal_notification_configuration_filter() {
     );
 }
 
+#[cfg(not(feature = "minio"))]
 #[test]
 fn xml_roundtrip_object() {
     let value = dto::Object {
@@ -13750,6 +14015,7 @@ fn xml_roundtrip_object() {
     assert!(parsed == value, "xml round trip mismatch: {xml}");
 }
 
+#[cfg(not(feature = "minio"))]
 #[test]
 fn xml_errors_object() {
     {
@@ -13820,6 +14086,7 @@ fn xml_errors_object() {
     }
 }
 
+#[cfg(not(feature = "minio"))]
 #[test]
 fn xml_minimal_object() {
     let value = dto::Object {
@@ -13868,6 +14135,194 @@ fn xml_minimal_object() {
     );
     assert!(
         !xml.contains("<StorageClass>") && !xml.contains("<StorageClass "),
+        "optional element in the default value: {xml}"
+    );
+}
+
+#[cfg(feature = "minio")]
+#[test]
+fn xml_roundtrip_object() {
+    let value = dto::Object {
+        checksum_algorithm: Some(vec![dto::ChecksumAlgorithm::from_static("CRC32")]),
+        checksum_type: Some(dto::ChecksumType::from_static("COMPOSITE")),
+        e_tag: Some(dto::ETag::Strong(String::from("s3s-xml-sample"))),
+        key: Some(String::from("s3s-xml-sample")),
+        last_modified: Some(dto::Timestamp::parse(dto::TimestampFormat::DateTime, "2024-01-02T03:04:05.000Z").unwrap()),
+        owner: Some(dto::Owner {
+            display_name: Some(String::from("s3s-xml-sample")),
+            id: Some(String::from("s3s-xml-sample")),
+        }),
+        restore_status: Some(dto::RestoreStatus {
+            is_restore_in_progress: Some(true),
+            restore_expiry_date: Some(dto::Timestamp::parse(dto::TimestampFormat::DateTime, "2024-01-02T03:04:05.000Z").unwrap()),
+        }),
+        size: Some(42),
+        storage_class: Some(dto::ObjectStorageClass::from_static("AWS_BACKUP_LOW_COST_WARM")),
+        user_metadata: Some(dto::ObjectUserMetadata(vec![(
+            String::from("s3s-xml-sample"),
+            String::from("s3s-xml-sample"),
+        )])),
+        user_tags: Some(String::from("s3s-xml-sample")),
+    };
+    let xml = xml_serialize_content(&value);
+    assert!(xml.contains("<ChecksumAlgorithm>"), "missing element: {xml}");
+    assert!(xml.contains("<ChecksumType>COMPOSITE</ChecksumType>"), "missing element: {xml}");
+    assert!(xml.contains("<ETag>"), "missing element: {xml}");
+    assert!(xml.contains("<Key>s3s-xml-sample</Key>"), "missing element: {xml}");
+    assert!(xml.contains("<LastModified>"), "missing element: {xml}");
+    assert!(xml.contains("<Owner>"), "missing element: {xml}");
+    assert!(xml.contains("<RestoreStatus>"), "missing element: {xml}");
+    assert!(xml.contains("<Size>42</Size>"), "missing element: {xml}");
+    assert!(
+        xml.contains("<StorageClass>AWS_BACKUP_LOW_COST_WARM</StorageClass>"),
+        "missing element: {xml}"
+    );
+    assert!(xml.contains("<UserMetadata>"), "missing element: {xml}");
+    assert!(xml.contains("<UserTags>s3s-xml-sample</UserTags>"), "missing element: {xml}");
+    let parsed = xml_deserialize_content::<dto::Object>(xml.as_bytes()).unwrap();
+    assert!(parsed == value, "xml round trip mismatch: {xml}");
+}
+
+#[cfg(feature = "minio")]
+#[test]
+fn xml_errors_object() {
+    {
+        let input = "<ChecksumType>COMPOSITE</ChecksumType><ChecksumType>COMPOSITE</ChecksumType>";
+        let err = xml_deserialize_content::<dto::Object>(input.as_bytes()).unwrap_err();
+        assert!(matches!(err, xml::DeError::DuplicateField), "duplicate field: {err:?}, input: {input}");
+    }
+    {
+        let input = "<ETag>s3s-xml-sample</ETag><ETag>s3s-xml-sample</ETag>";
+        let err = xml_deserialize_content::<dto::Object>(input.as_bytes()).unwrap_err();
+        assert!(matches!(err, xml::DeError::DuplicateField), "duplicate field: {err:?}, input: {input}");
+    }
+    {
+        let input = "<Key>s3s-xml-sample</Key><Key>s3s-xml-sample</Key>";
+        let err = xml_deserialize_content::<dto::Object>(input.as_bytes()).unwrap_err();
+        assert!(matches!(err, xml::DeError::DuplicateField), "duplicate field: {err:?}, input: {input}");
+    }
+    {
+        let input = "<LastModified>2024-01-02T03:04:05.000Z</LastModified><LastModified>2024-01-02T03:04:05.000Z</LastModified>";
+        let err = xml_deserialize_content::<dto::Object>(input.as_bytes()).unwrap_err();
+        assert!(matches!(err, xml::DeError::DuplicateField), "duplicate field: {err:?}, input: {input}");
+    }
+    {
+        let input = "<Owner></Owner><Owner></Owner>";
+        let err = xml_deserialize_content::<dto::Object>(input.as_bytes()).unwrap_err();
+        assert!(matches!(err, xml::DeError::DuplicateField), "duplicate field: {err:?}, input: {input}");
+    }
+    {
+        let input = "<RestoreStatus></RestoreStatus><RestoreStatus></RestoreStatus>";
+        let err = xml_deserialize_content::<dto::Object>(input.as_bytes()).unwrap_err();
+        assert!(matches!(err, xml::DeError::DuplicateField), "duplicate field: {err:?}, input: {input}");
+    }
+    {
+        let input = "<Size>42</Size><Size>42</Size>";
+        let err = xml_deserialize_content::<dto::Object>(input.as_bytes()).unwrap_err();
+        assert!(matches!(err, xml::DeError::DuplicateField), "duplicate field: {err:?}, input: {input}");
+    }
+    {
+        let input = "<StorageClass>AWS_BACKUP_LOW_COST_WARM</StorageClass><StorageClass>AWS_BACKUP_LOW_COST_WARM</StorageClass>";
+        let err = xml_deserialize_content::<dto::Object>(input.as_bytes()).unwrap_err();
+        assert!(matches!(err, xml::DeError::DuplicateField), "duplicate field: {err:?}, input: {input}");
+    }
+    {
+        let input = "<UserMetadata><s3s-xml-sample>s3s-xml-sample</s3s-xml-sample></UserMetadata><UserMetadata><s3s-xml-sample>s3s-xml-sample</s3s-xml-sample></UserMetadata>";
+        let err = xml_deserialize_content::<dto::Object>(input.as_bytes()).unwrap_err();
+        assert!(matches!(err, xml::DeError::DuplicateField), "duplicate field: {err:?}, input: {input}");
+    }
+    {
+        let input = "<UserTags>s3s-xml-sample</UserTags><UserTags>s3s-xml-sample</UserTags>";
+        let err = xml_deserialize_content::<dto::Object>(input.as_bytes()).unwrap_err();
+        assert!(matches!(err, xml::DeError::DuplicateField), "duplicate field: {err:?}, input: {input}");
+    }
+    {
+        let input = "<S3sUnknown>x</S3sUnknown>";
+        let err = xml_deserialize_content::<dto::Object>(input.as_bytes()).unwrap_err();
+        assert!(matches!(err, xml::DeError::UnexpectedTagName), "unknown element: {err:?}, input: {input}");
+    }
+    {
+        let input = "";
+        let ans = xml_deserialize_content::<dto::Object>(input.as_bytes());
+        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+    }
+    {
+        let input = "<Key><S3sNested/></Key>";
+        let err = xml_deserialize_content::<dto::Object>(input.as_bytes()).unwrap_err();
+        assert!(
+            matches!(err, xml::DeError::UnexpectedStart),
+            "element where text is expected: {err:?}, input: {input}"
+        );
+    }
+    {
+        let input = "<LastModified>s3s-not-a-value</LastModified>";
+        let err = xml_deserialize_content::<dto::Object>(input.as_bytes()).unwrap_err();
+        assert!(
+            matches!(err, xml::DeError::InvalidContent),
+            "malformed scalar content: {err:?}, input: {input}"
+        );
+    }
+}
+
+#[cfg(feature = "minio")]
+#[test]
+fn xml_minimal_object() {
+    let value = dto::Object {
+        checksum_algorithm: None,
+        checksum_type: None,
+        e_tag: None,
+        key: None,
+        last_modified: None,
+        owner: None,
+        restore_status: None,
+        size: None,
+        storage_class: None,
+        user_metadata: None,
+        user_tags: None,
+    };
+    let xml = xml_serialize_content(&value);
+    assert!(
+        !xml.contains("<ChecksumAlgorithm>") && !xml.contains("<ChecksumAlgorithm "),
+        "optional element in the default value: {xml}"
+    );
+    assert!(
+        !xml.contains("<ChecksumType>") && !xml.contains("<ChecksumType "),
+        "optional element in the default value: {xml}"
+    );
+    assert!(
+        !xml.contains("<ETag>") && !xml.contains("<ETag "),
+        "optional element in the default value: {xml}"
+    );
+    assert!(
+        !xml.contains("<Key>") && !xml.contains("<Key "),
+        "optional element in the default value: {xml}"
+    );
+    assert!(
+        !xml.contains("<LastModified>") && !xml.contains("<LastModified "),
+        "optional element in the default value: {xml}"
+    );
+    assert!(
+        !xml.contains("<Owner>") && !xml.contains("<Owner "),
+        "optional element in the default value: {xml}"
+    );
+    assert!(
+        !xml.contains("<RestoreStatus>") && !xml.contains("<RestoreStatus "),
+        "optional element in the default value: {xml}"
+    );
+    assert!(
+        !xml.contains("<Size>") && !xml.contains("<Size "),
+        "optional element in the default value: {xml}"
+    );
+    assert!(
+        !xml.contains("<StorageClass>") && !xml.contains("<StorageClass "),
+        "optional element in the default value: {xml}"
+    );
+    assert!(
+        !xml.contains("<UserMetadata>") && !xml.contains("<UserMetadata "),
+        "optional element in the default value: {xml}"
+    );
+    assert!(
+        !xml.contains("<UserTags>") && !xml.contains("<UserTags "),
         "optional element in the default value: {xml}"
     );
 }

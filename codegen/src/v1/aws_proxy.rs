@@ -12,6 +12,7 @@ use std::format as f;
 use heck::ToSnakeCase;
 use scoped_writer::g;
 
+#[allow(clippy::too_many_lines)]
 pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
     declare_codegen!();
 
@@ -56,6 +57,8 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
 
         g!("#[tracing::instrument(skip(self, req))]");
         g!("async fn {method_name}(&self, req: S3Request<{s3s_input}>) -> S3Result<S3Response<{s3s_output}>> {{");
+
+        codegen_minio_query_delegate(&op.name, op.input.as_str(), rust_types);
 
         g!("let input = req.input;");
         g!("debug!(?input);");
@@ -144,6 +147,50 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
     }
 
     g!("}}");
+}
+
+/// Emits the `MinIO` query-extension delegate of an operation, if it has one.
+///
+/// The delegate must run before the input is moved out of the request, and it
+/// replaces the `aws-sdk-s3` path only when the client asked for the extension.
+fn codegen_minio_query_delegate(op_name: &str, input_type: &str, rust_types: &RustTypes) {
+    let Some(member) = minio_query_delegate(op_name) else { return };
+    let rust::Type::Struct(ty) = &rust_types[input_type] else { panic!() };
+    let field_name = member.to_snake_case();
+    let field = ty
+        .fields
+        .iter()
+        .find(|field| field.name == field_name)
+        .unwrap_or_else(|| panic!("{op_name} has no input member {field_name:?}"));
+    assert!(field.is_custom_extension, "{op_name}.{field_name} is not a MinIO extension");
+    assert_eq!(field.position, "query", "{op_name}.{field_name} is not a query member");
+    assert!(field.option_type, "{op_name}.{field_name} is not optional");
+    let rust::Type::Alias(alias) = &rust_types[field.type_.as_str()] else {
+        panic!("{op_name}.{field_name} is not a boolean alias")
+    };
+    assert_eq!(alias.type_, "bool", "{op_name}.{field_name} is not a boolean");
+
+    let method_name = op_name.to_snake_case();
+    g!("#[cfg(feature = \"minio\")]");
+    g!("if req.input.{field_name} == Some(true) {{");
+    g!("    return super::minio_list::{method_name}(&self.minio, req).await;");
+    g!("}}");
+}
+
+/// The `MinIO` extension members that the `aws-sdk-s3` path cannot forward and
+/// that a hand-written helper in `proxy::minio_list` serves instead.
+///
+/// Entries are `(operation, input member)`. A member must be a boolean query
+/// parameter: the delegate replaces the SDK path only when the client sets it to
+/// `true`, so every other request keeps the `aws-sdk-s3` path byte for byte.
+const MINIO_QUERY_DELEGATES: &[(&str, &str)] = &[("ListObjectsV2", "Metadata")];
+
+/// The delegated member of an operation, if it has one.
+fn minio_query_delegate(op_name: &str) -> Option<&'static str> {
+    MINIO_QUERY_DELEGATES
+        .iter()
+        .find(|(name, _)| *name == op_name)
+        .map(|(_, member)| *member)
 }
 
 /// The `MinIO` extension members of an operation that are declared as HTTP

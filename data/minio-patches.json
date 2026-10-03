@@ -150,6 +150,61 @@
                 "s3s#minio": ""
             }
         },
+        "com.amazonaws.s3#MinioMetadata": {
+            "type": "boolean",
+            "traits": {
+                "s3s#minio": ""
+            }
+        },
+        "com.amazonaws.s3#ListObjectsV2Request": {
+            "type": "structure",
+            "members": {
+                "Metadata": {
+                    "target": "com.amazonaws.s3#MinioMetadata",
+                    "traits": {
+                        "smithy.api#httpQuery": "metadata",
+                        "s3s#minio": ""
+                    }
+                }
+            }
+        },
+        "com.amazonaws.s3#UserTags": {
+            "type": "string",
+            "traits": {
+                "s3s#minio": ""
+            }
+        },
+        "com.amazonaws.s3#ObjectUserMetadata": {
+            "type": "map",
+            "key": {
+                "target": "com.amazonaws.s3#MetadataKey"
+            },
+            "value": {
+                "target": "com.amazonaws.s3#MetadataValue"
+            },
+            "traits": {
+                "s3s#minio": ""
+            }
+        },
+        "com.amazonaws.s3#Object": {
+            "type": "structure",
+            "members": {
+                "UserTags": {
+                    "target": "com.amazonaws.s3#UserTags",
+                    "traits": {
+                        "smithy.api#xmlName": "UserTags",
+                        "s3s#minio": ""
+                    }
+                },
+                "UserMetadata": {
+                    "target": "com.amazonaws.s3#ObjectUserMetadata",
+                    "traits": {
+                        "smithy.api#xmlName": "UserMetadata",
+                        "s3s#minio": ""
+                    }
+                }
+            }
+        },
         "com.amazonaws.s3#PutObjectRequest": {
             "type": "structure",
             "members": {

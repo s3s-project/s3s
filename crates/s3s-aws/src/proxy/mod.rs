@@ -6,6 +6,12 @@ mod generated;
 #[cfg(feature = "minio")]
 mod listen;
 
+#[cfg(feature = "minio")]
+mod minio_error;
+
+#[cfg(feature = "minio")]
+mod minio_list;
+
 mod meta;
 
 #[cfg(feature = "minio")]

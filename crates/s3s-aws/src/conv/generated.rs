@@ -6317,6 +6317,7 @@ impl AwsConversion for s3s::dto::ListObjectsV2Input {
     type Target = aws_sdk_s3::operation::list_objects_v2::ListObjectsV2Input;
     type Error = S3Error;
 
+    #[cfg(not(feature = "minio"))]
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
         Ok(Self {
             bucket: unwrap_from_aws(x.bucket, "bucket")?,
@@ -6326,6 +6327,24 @@ impl AwsConversion for s3s::dto::ListObjectsV2Input {
             expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
             fetch_owner: try_from_aws(x.fetch_owner)?,
             max_keys: try_from_aws(x.max_keys)?,
+            optional_object_attributes: try_from_aws(x.optional_object_attributes)?,
+            prefix: try_from_aws(x.prefix)?,
+            request_payer: try_from_aws(x.request_payer)?,
+            start_after: try_from_aws(x.start_after)?,
+        })
+    }
+
+    #[cfg(feature = "minio")]
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            bucket: unwrap_from_aws(x.bucket, "bucket")?,
+            continuation_token: try_from_aws(x.continuation_token)?,
+            delimiter: try_from_aws(x.delimiter)?,
+            encoding_type: try_from_aws(x.encoding_type)?,
+            expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
+            fetch_owner: try_from_aws(x.fetch_owner)?,
+            max_keys: try_from_aws(x.max_keys)?,
+            metadata: None,
             optional_object_attributes: try_from_aws(x.optional_object_attributes)?,
             prefix: try_from_aws(x.prefix)?,
             request_payer: try_from_aws(x.request_payer)?,
@@ -6995,6 +7014,7 @@ impl AwsConversion for s3s::dto::Object {
     type Target = aws_sdk_s3::types::Object;
     type Error = S3Error;
 
+    #[cfg(not(feature = "minio"))]
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
         Ok(Self {
             checksum_algorithm: try_from_aws(x.checksum_algorithm)?,
@@ -7006,6 +7026,23 @@ impl AwsConversion for s3s::dto::Object {
             restore_status: try_from_aws(x.restore_status)?,
             size: try_from_aws(x.size)?,
             storage_class: try_from_aws(x.storage_class)?,
+        })
+    }
+
+    #[cfg(feature = "minio")]
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            checksum_algorithm: try_from_aws(x.checksum_algorithm)?,
+            checksum_type: try_from_aws(x.checksum_type)?,
+            e_tag: try_from_aws(x.e_tag)?,
+            key: try_from_aws(x.key)?,
+            last_modified: try_from_aws(x.last_modified)?,
+            owner: try_from_aws(x.owner)?,
+            restore_status: try_from_aws(x.restore_status)?,
+            size: try_from_aws(x.size)?,
+            storage_class: try_from_aws(x.storage_class)?,
+            user_metadata: None,
+            user_tags: None,
         })
     }
 

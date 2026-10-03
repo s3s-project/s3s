@@ -19923,6 +19923,7 @@ impl DtoExt for ListObjectsOutput {
 }
 
 #[derive(Clone, Default, PartialEq)]
+#[cfg(not(feature = "minio"))]
 pub struct ListObjectsV2Input {
     /// <p>
     /// <b>Directory buckets</b> - When you use this operation with a directory bucket, you must use virtual-hosted-style requests in the format <code>
@@ -20019,7 +20020,106 @@ pub struct ListObjectsV2Input {
     pub start_after: Option<StartAfter>,
 }
 
+#[derive(Clone, Default, PartialEq)]
+#[cfg(feature = "minio")]
+pub struct ListObjectsV2Input {
+    /// <p>
+    /// <b>Directory buckets</b> - When you use this operation with a directory bucket, you must use virtual-hosted-style requests in the format <code>
+    /// <i>Bucket-name</i>.s3express-<i>zone-id</i>.<i>region-code</i>.amazonaws.com</code>. Path-style requests are not supported.  Directory bucket names must be unique in the chosen Zone (Availability Zone or Local Zone). Bucket names must follow the format <code>
+    /// <i>bucket-base-name</i>--<i>zone-id</i>--x-s3</code> (for example, <code>
+    /// <i>amzn-s3-demo-bucket</i>--<i>usw2-az1</i>--x-s3</code>). For information about bucket naming
+    /// restrictions, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/directory-bucket-naming-rules.html">Directory bucket naming
+    /// rules</a> in the <i>Amazon S3 User Guide</i>.</p>
+    /// <p>
+    /// <b>Access points</b> - When you use this action with an access point for general purpose buckets, you must provide the alias of the access point in place of the bucket name or specify the access point ARN. When you use this action with an access point for directory buckets, you must provide the access point name in place of the bucket name. When using the access point ARN, you must direct requests to the access point hostname. The access point hostname takes the form <i>AccessPointName</i>-<i>AccountId</i>.s3-accesspoint.<i>Region</i>.amazonaws.com. When using this action with an access point through the Amazon Web Services SDKs, you provide the access point ARN in place of the bucket name. For more information about access point ARNs, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-access-points.html">Using access points</a> in the <i>Amazon S3 User Guide</i>.</p>
+    /// <note>
+    /// <p>Object Lambda access points are not supported by directory buckets.</p>
+    /// </note>
+    /// <p>
+    /// <b>S3 on Outposts</b> - When you use this action with S3 on Outposts, you must direct requests to the S3 on Outposts hostname. The S3 on Outposts hostname takes the
+    /// form <code>
+    /// <i>AccessPointName</i>-<i>AccountId</i>.<i>outpostID</i>.s3-outposts.<i>Region</i>.amazonaws.com</code>. When you use this action with S3 on Outposts, the destination bucket must be the Outposts access point ARN or the access point alias. For more information about S3 on Outposts, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/S3onOutposts.html">What is S3 on Outposts?</a> in the <i>Amazon S3 User Guide</i>.</p>
+    pub bucket: BucketName,
+    /// <p>
+    /// <code>ContinuationToken</code> indicates to Amazon S3 that the list is being continued on this bucket
+    /// with a token. <code>ContinuationToken</code> is obfuscated and is not a real key. You can use this
+    /// <code>ContinuationToken</code> for pagination of the list results. </p>
+    pub continuation_token: Option<Token>,
+    /// <p>A delimiter is a character that you use to group keys.</p>
+    /// <p>
+    /// <code>CommonPrefixes</code> is filtered out from results if it is not lexicographically greater than
+    /// the <code>StartAfter</code> value.</p>
+    /// <note>
+    /// <ul>
+    /// <li>
+    /// <p>
+    /// <b>Directory buckets</b> - For directory buckets, <code>/</code> is the only supported delimiter.</p>
+    /// </li>
+    /// <li>
+    /// <p>
+    /// <b>Directory buckets </b> - When you query
+    /// <code>ListObjectsV2</code> with a delimiter during in-progress multipart uploads, the
+    /// <code>CommonPrefixes</code> response parameter contains the prefixes that are associated with
+    /// the in-progress multipart uploads. For more information about multipart uploads, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/mpuoverview.html">Multipart Upload
+    /// Overview</a> in the <i>Amazon S3 User Guide</i>.</p>
+    /// </li>
+    /// </ul>
+    /// </note>
+    pub delimiter: Option<Delimiter>,
+    /// <p>Encoding type used by Amazon S3 to encode the <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html">object keys</a> in the response. Responses are
+    /// encoded only in UTF-8. An object key can contain any Unicode character. However, the XML 1.0 parser
+    /// can't parse certain characters, such as characters with an ASCII value from 0 to 10. For characters that
+    /// aren't supported in XML 1.0, you can add this parameter to request that Amazon S3 encode the keys in the
+    /// response. For more information about characters to avoid in object key names, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html#object-key-guidelines">Object key
+    /// naming guidelines</a>.</p>
+    /// <note>
+    /// <p>When using the URL encoding type, non-ASCII characters that are used in an object's key name will
+    /// be percent-encoded according to UTF-8 code values. For example, the object
+    /// <code>test_file(3).png</code> will appear as <code>test_file%283%29.png</code>.</p>
+    /// </note>
+    pub encoding_type: Option<EncodingType>,
+    /// <p>The account ID of the expected bucket owner. If the account ID that you provide does not match the actual owner of the bucket, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).</p>
+    pub expected_bucket_owner: Option<AccountId>,
+    /// <p>The owner field is not present in <code>ListObjectsV2</code> by default. If you want to return the
+    /// owner field with each key in the result, then set the <code>FetchOwner</code> field to
+    /// <code>true</code>.</p>
+    /// <note>
+    /// <p>
+    /// <b>Directory buckets</b> - For directory buckets, the bucket
+    /// owner is returned as the object owner for all objects.</p>
+    /// </note>
+    pub fetch_owner: Option<FetchOwner>,
+    /// <p>Sets the maximum number of keys returned in the response. By default, the action returns up to 1,000
+    /// key names. The response might contain fewer keys but will never contain more.</p>
+    pub max_keys: Option<MaxKeys>,
+    pub metadata: Option<MinioMetadata>,
+    /// <p>Specifies the optional fields that you want returned in the response. Fields that you do not specify
+    /// are not returned.</p>
+    /// <note>
+    /// <p>This functionality is not supported for directory buckets.</p>
+    /// </note>
+    pub optional_object_attributes: Option<OptionalObjectAttributesList>,
+    /// <p>Limits the response to keys that begin with the specified prefix.</p>
+    /// <note>
+    /// <p>
+    /// <b>Directory buckets</b> - For directory buckets, only prefixes that end in a delimiter (<code>/</code>) are supported.</p>
+    /// </note>
+    pub prefix: Option<Prefix>,
+    /// <p>Confirms that the requester knows that she or he will be charged for the list objects request in V2
+    /// style. Bucket owners need not specify this parameter in their requests.</p>
+    /// <note>
+    /// <p>This functionality is not supported for directory buckets.</p>
+    /// </note>
+    pub request_payer: Option<RequestPayer>,
+    /// <p>StartAfter is where you want Amazon S3 to start listing from. Amazon S3 starts listing after this specified
+    /// key. StartAfter can be any key in the bucket.</p>
+    /// <note>
+    /// <p>This functionality is not supported for directory buckets.</p>
+    /// </note>
+    pub start_after: Option<StartAfter>,
+}
 impl fmt::Debug for ListObjectsV2Input {
+    #[cfg(not(feature = "minio"))]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut d = f.debug_struct("ListObjectsV2Input");
         d.field("bucket", &self.bucket);
@@ -20040,6 +20140,46 @@ impl fmt::Debug for ListObjectsV2Input {
         }
         if let Some(ref val) = self.max_keys {
             d.field("max_keys", val);
+        }
+        if let Some(ref val) = self.optional_object_attributes {
+            d.field("optional_object_attributes", val);
+        }
+        if let Some(ref val) = self.prefix {
+            d.field("prefix", val);
+        }
+        if let Some(ref val) = self.request_payer {
+            d.field("request_payer", val);
+        }
+        if let Some(ref val) = self.start_after {
+            d.field("start_after", val);
+        }
+        d.finish_non_exhaustive()
+    }
+
+    #[cfg(feature = "minio")]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("ListObjectsV2Input");
+        d.field("bucket", &self.bucket);
+        if let Some(ref val) = self.continuation_token {
+            d.field("continuation_token", val);
+        }
+        if let Some(ref val) = self.delimiter {
+            d.field("delimiter", val);
+        }
+        if let Some(ref val) = self.encoding_type {
+            d.field("encoding_type", val);
+        }
+        if let Some(ref val) = self.expected_bucket_owner {
+            d.field("expected_bucket_owner", val);
+        }
+        if let Some(ref val) = self.fetch_owner {
+            d.field("fetch_owner", val);
+        }
+        if let Some(ref val) = self.max_keys {
+            d.field("max_keys", val);
+        }
+        if let Some(ref val) = self.metadata {
+            d.field("metadata", val);
         }
         if let Some(ref val) = self.optional_object_attributes {
             d.field("optional_object_attributes", val);
@@ -21281,6 +21421,9 @@ impl FromStr for MetricsStatus {
     }
 }
 
+#[cfg(feature = "minio")]
+pub type MinioMetadata = bool;
+
 pub type Minutes = i32;
 
 pub type MissingMeta = i32;
@@ -21625,6 +21768,7 @@ pub type NotificationEvents = String;
 pub type NotificationId = String;
 
 /// <p>An object consists of data and its descriptive metadata.</p>
+#[cfg(not(feature = "minio"))]
 #[derive(Clone, Default, PartialEq)]
 pub struct Object {
     /// <p>The algorithm that was used to create a checksum of the object.</p>
@@ -21689,7 +21833,75 @@ pub struct Object {
     pub storage_class: Option<ObjectStorageClass>,
 }
 
+/// <p>An object consists of data and its descriptive metadata.</p>
+#[cfg(feature = "minio")]
+#[derive(Clone, Default, PartialEq)]
+pub struct Object {
+    /// <p>The algorithm that was used to create a checksum of the object.</p>
+    pub checksum_algorithm: Option<ChecksumAlgorithmList>,
+    /// <p>The checksum type that is used to calculate the object’s checksum value. For more information, see
+    /// <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking
+    /// object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>
+    pub checksum_type: Option<ChecksumType>,
+    /// <p>The entity tag is a hash of the object. The ETag reflects changes only to the contents of an object,
+    /// not its metadata. The ETag may or may not be an MD5 digest of the object data. Whether or not it is
+    /// depends on how the object was created and how it is encrypted as described below:</p>
+    /// <ul>
+    /// <li>
+    /// <p>Objects created by the PUT Object, POST Object, or Copy operation, or through the Amazon Web Services
+    /// Management Console, and are encrypted by SSE-S3 or plaintext, have ETags that are an MD5 digest of
+    /// their object data.</p>
+    /// </li>
+    /// <li>
+    /// <p>Objects created by the PUT Object, POST Object, or Copy operation, or through the Amazon Web Services
+    /// Management Console, and are encrypted by SSE-C or SSE-KMS, have ETags that are not an MD5 digest of
+    /// their object data.</p>
+    /// </li>
+    /// <li>
+    /// <p>If an object is created by either the Multipart Upload or Part Copy operation, the ETag is not
+    /// an MD5 digest, regardless of the method of encryption. If an object is larger than 16 MB, the Amazon Web Services
+    /// Management Console will upload or copy that object as a Multipart Upload, and therefore the ETag
+    /// will not be an MD5 digest.</p>
+    /// </li>
+    /// </ul>
+    /// <note>
+    /// <p>
+    /// <b>Directory buckets</b> - MD5 is not supported by directory buckets.</p>
+    /// </note>
+    pub e_tag: Option<ETag>,
+    /// <p>The name that you assign to an object. You use the object key to retrieve the object.</p>
+    pub key: Option<ObjectKey>,
+    /// <p>Creation date of the object.</p>
+    pub last_modified: Option<LastModified>,
+    /// <p>The owner of the object</p>
+    /// <note>
+    /// <p>
+    /// <b>Directory buckets</b> - The bucket owner is returned as the
+    /// object owner.</p>
+    /// </note>
+    pub owner: Option<Owner>,
+    /// <p>Specifies the restoration status of an object. Objects in certain storage classes must be restored
+    /// before they can be retrieved. For more information about these storage classes and how to work with
+    /// archived objects, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/archived-objects.html">
+    /// Working with archived objects</a> in the <i>Amazon S3 User Guide</i>.</p>
+    /// <note>
+    /// <p>This functionality is not supported for directory buckets. Directory buckets only support <code>EXPRESS_ONEZONE</code> (the S3 Express One Zone storage class) in Availability Zones and <code>ONEZONE_IA</code> (the S3 One Zone-Infrequent Access storage class) in Dedicated Local Zones.</p>
+    /// </note>
+    pub restore_status: Option<RestoreStatus>,
+    /// <p>Size in bytes of the object</p>
+    pub size: Option<Size>,
+    /// <p>The class of storage used to store the object.</p>
+    /// <note>
+    /// <p>
+    /// <b>Directory buckets</b> -
+    /// Directory buckets only support <code>EXPRESS_ONEZONE</code> (the S3 Express One Zone storage class) in Availability Zones and <code>ONEZONE_IA</code> (the S3 One Zone-Infrequent Access storage class) in Dedicated Local Zones.</p>
+    /// </note>
+    pub storage_class: Option<ObjectStorageClass>,
+    pub user_metadata: Option<ObjectUserMetadata>,
+    pub user_tags: Option<UserTags>,
+}
 impl fmt::Debug for Object {
+    #[cfg(not(feature = "minio"))]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut d = f.debug_struct("Object");
         if let Some(ref val) = self.checksum_algorithm {
@@ -21721,8 +21933,49 @@ impl fmt::Debug for Object {
         }
         d.finish_non_exhaustive()
     }
+
+    #[cfg(feature = "minio")]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("Object");
+        if let Some(ref val) = self.checksum_algorithm {
+            d.field("checksum_algorithm", val);
+        }
+        if let Some(ref val) = self.checksum_type {
+            d.field("checksum_type", val);
+        }
+        if let Some(ref val) = self.e_tag {
+            d.field("e_tag", val);
+        }
+        if let Some(ref val) = self.key {
+            d.field("key", val);
+        }
+        if let Some(ref val) = self.last_modified {
+            d.field("last_modified", val);
+        }
+        if let Some(ref val) = self.owner {
+            d.field("owner", val);
+        }
+        if let Some(ref val) = self.restore_status {
+            d.field("restore_status", val);
+        }
+        if let Some(ref val) = self.size {
+            d.field("size", val);
+        }
+        if let Some(ref val) = self.storage_class {
+            d.field("storage_class", val);
+        }
+        if let Some(ref val) = self.user_metadata {
+            d.field("user_metadata", val);
+        }
+        if let Some(ref val) = self.user_tags {
+            d.field("user_tags", val);
+        }
+        d.finish_non_exhaustive()
+    }
 }
+
 impl DtoExt for Object {
+    #[cfg(not(feature = "minio"))]
     fn ignore_empty_strings(&mut self) {
         if let Some(ref val) = self.checksum_type
             && val.as_str() == ""
@@ -21742,6 +21995,32 @@ impl DtoExt for Object {
             && val.as_str() == ""
         {
             self.storage_class = None;
+        }
+    }
+
+    #[cfg(feature = "minio")]
+    fn ignore_empty_strings(&mut self) {
+        if let Some(ref val) = self.checksum_type
+            && val.as_str() == ""
+        {
+            self.checksum_type = None;
+        }
+        if self.key.as_deref() == Some("") {
+            self.key = None;
+        }
+        if let Some(ref mut val) = self.owner {
+            val.ignore_empty_strings();
+        }
+        if let Some(ref mut val) = self.restore_status {
+            val.ignore_empty_strings();
+        }
+        if let Some(ref val) = self.storage_class
+            && val.as_str() == ""
+        {
+            self.storage_class = None;
+        }
+        if self.user_tags.as_deref() == Some("") {
+            self.user_tags = None;
         }
     }
 }
@@ -33594,6 +33873,9 @@ impl DtoExt for UploadPartOutput {
 }
 
 pub type UserMetadata = List<MetadataEntry>;
+
+#[cfg(feature = "minio")]
+pub type UserTags = String;
 
 pub type Value = String;
 
@@ -55159,6 +55441,8 @@ pub mod builders {
 
         max_keys: Option<MaxKeys>,
 
+        metadata: Option<MinioMetadata>,
+
         optional_object_attributes: Option<OptionalObjectAttributesList>,
 
         prefix: Option<Prefix>,
@@ -55201,6 +55485,11 @@ pub mod builders {
 
         pub fn set_max_keys(&mut self, field: Option<MaxKeys>) -> &mut Self {
             self.max_keys = field;
+            self
+        }
+
+        pub fn set_metadata(&mut self, field: Option<MinioMetadata>) -> &mut Self {
+            self.metadata = field;
             self
         }
 
@@ -55267,6 +55556,12 @@ pub mod builders {
         }
 
         #[must_use]
+        pub fn metadata(mut self, field: Option<MinioMetadata>) -> Self {
+            self.metadata = field;
+            self
+        }
+
+        #[must_use]
         pub fn optional_object_attributes(mut self, field: Option<OptionalObjectAttributesList>) -> Self {
             self.optional_object_attributes = field;
             self
@@ -55298,6 +55593,7 @@ pub mod builders {
             let expected_bucket_owner = self.expected_bucket_owner;
             let fetch_owner = self.fetch_owner;
             let max_keys = self.max_keys;
+            let metadata = self.metadata;
             let optional_object_attributes = self.optional_object_attributes;
             let prefix = self.prefix;
             let request_payer = self.request_payer;
@@ -55310,6 +55606,7 @@ pub mod builders {
                 expected_bucket_owner,
                 fetch_owner,
                 max_keys,
+                metadata,
                 optional_object_attributes,
                 prefix,
                 request_payer,
@@ -62455,6 +62752,46 @@ impl CachedTags {
         }
 
         false
+    }
+}
+
+/// The `UserMetadata` element of a `ListObjectsV2` response: the object
+/// metadata that the `MinIO` `metadata=true` extension adds.
+///
+/// The element is a map whose keys are element names, so it has no Smithy list
+/// representation; the entries keep the order and any duplicates of the response.
+#[cfg(feature = "minio")]
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ObjectUserMetadata(pub Vec<(String, String)>);
+
+#[cfg(feature = "minio")]
+impl DtoExt for ObjectUserMetadata {
+    fn ignore_empty_strings(&mut self) {}
+}
+
+#[cfg(feature = "minio")]
+impl crate::xml::SerializeContent for ObjectUserMetadata {
+    fn serialize_content<W: std::io::Write>(&self, s: &mut crate::xml::Serializer<W>) -> crate::xml::SerResult {
+        for (name, value) in &self.0 {
+            s.content(name, value)?;
+        }
+        Ok(())
+    }
+}
+
+#[cfg(feature = "minio")]
+impl<'xml> crate::xml::DeserializeContent<'xml> for ObjectUserMetadata {
+    fn deserialize_content(d: &mut crate::xml::Deserializer<'xml>) -> crate::xml::DeResult<Self> {
+        let mut entries = Vec::new();
+        d.for_each_element(|d, name| {
+            // The element name becomes the map key, so it must be representable as
+            // text; the backend only emits header-derived names here.
+            let name = std::str::from_utf8(name).map_err(|_| crate::xml::DeError::InvalidContent)?;
+            let value = d.content::<String>()?;
+            entries.push((name.to_owned(), value));
+            Ok(())
+        })?;
+        Ok(Self(entries))
     }
 }
 

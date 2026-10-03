@@ -14,6 +14,7 @@ use crate::ops::CallContext;
 pub struct ListObjectsV2;
 
 impl ListObjectsV2 {
+    #[cfg(not(feature = "minio"))]
     pub fn deserialize_http(req: &mut http::Request) -> S3Result<ListObjectsV2Input> {
         let bucket = http::unwrap_bucket(req);
 
@@ -46,6 +47,49 @@ impl ListObjectsV2 {
             expected_bucket_owner,
             fetch_owner,
             max_keys,
+            optional_object_attributes,
+            prefix,
+            request_payer,
+            start_after,
+        })
+    }
+
+    #[cfg(feature = "minio")]
+    pub fn deserialize_http(req: &mut http::Request) -> S3Result<ListObjectsV2Input> {
+        let bucket = http::unwrap_bucket(req);
+
+        let continuation_token: Option<Token> = http::parse_opt_query(req, "continuation-token")?;
+
+        let delimiter: Option<Delimiter> = http::parse_opt_query(req, "delimiter")?;
+
+        let encoding_type: Option<EncodingType> = http::parse_opt_query(req, "encoding-type")?;
+
+        let expected_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_EXPECTED_BUCKET_OWNER)?;
+
+        let fetch_owner: Option<FetchOwner> = http::parse_opt_query(req, "fetch-owner")?;
+
+        let max_keys: Option<MaxKeys> = http::parse_opt_query(req, "max-keys")?;
+
+        let metadata: Option<MinioMetadata> = http::parse_opt_query(req, "metadata")?;
+
+        let optional_object_attributes: Option<OptionalObjectAttributesList> =
+            http::parse_opt_list_header(req, &X_AMZ_OPTIONAL_OBJECT_ATTRIBUTES)?;
+
+        let prefix: Option<Prefix> = http::parse_opt_query(req, "prefix")?;
+
+        let request_payer: Option<RequestPayer> = http::parse_opt_header(req, &X_AMZ_REQUEST_PAYER)?;
+
+        let start_after: Option<StartAfter> = http::parse_opt_query(req, "start-after")?;
+
+        Ok(ListObjectsV2Input {
+            bucket,
+            continuation_token,
+            delimiter,
+            encoding_type,
+            expected_bucket_owner,
+            fetch_owner,
+            max_keys,
+            metadata,
             optional_object_attributes,
             prefix,
             request_payer,
