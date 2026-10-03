@@ -707,8 +707,11 @@ async fn v4_presigned_url_put_with_valid_content_sha256() {
     assert_eq!(stored, &body_data[..]);
 }
 
+/// A streaming marker that the client did not commit to: the URL is signed over
+/// \`UNSIGNED-PAYLOAD\` while the request carries the marker, so the payload line no longer matches
+/// and the request fails with the signature error S3 returns for the same shape.
 #[tokio::test]
-async fn v4_presigned_url_put_rejects_streaming_content_sha256() {
+async fn v4_presigned_url_put_rejects_an_unsigned_streaming_marker() {
     use crate::auth::SecretKey;
     use crate::auth::SimpleAuth;
     use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
@@ -775,7 +778,82 @@ async fn v4_presigned_url_put_rejects_streaming_content_sha256() {
     let err = cx
         .v4_check_presigned_url()
         .await
-        .expect_err("streaming content-sha256 should be rejected");
+        .expect_err("an unsigned streaming marker must not verify");
+    assert_eq!(err.code(), &S3ErrorCode::SignatureDoesNotMatch);
+}
+
+/// A streaming marker the client did commit to (the marker itself is the payload line) passes
+/// verification and is then rejected, because a presigned request is not decoded as aws-chunked.
+/// The check sits after verification, so this shape is the only one that reaches it.
+#[tokio::test]
+async fn v4_presigned_url_put_rejects_a_signed_streaming_marker() {
+    use crate::auth::SecretKey;
+    use crate::auth::SimpleAuth;
+    use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
+    use bytes::Bytes;
+    use std::sync::Arc;
+
+    const STREAMING_MARKER: &str = "STREAMING-AWS4-HMAC-SHA256-PAYLOAD";
+
+    let access_key = "AKIAIOSFODNN7EXAMPLE";
+    let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+    let auth = SimpleAuth::from_single(access_key, secret_key.clone());
+    let s3_config = S3Config {
+        presigned_url_max_skew_time_secs: u32::MAX,
+        ..Default::default()
+    };
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(s3_config)));
+
+    let body_data = b"hello";
+    let method = Method::PUT;
+    let uri = Uri::from_static("https://s3.amazonaws.com/test-bucket/test-key");
+    let amz_date = AmzDate::parse(&fmt_current_amz_date(time::OffsetDateTime::now_utc()))
+        .expect("current time should produce a valid x-amz-date");
+    let headers_for_signing = [("host", "s3.amazonaws.com")];
+    let query_strings_for_signing = presigned_query_fields(&amz_date, "s3");
+
+    let canonical_request = s3s_sigv4::create_presigned_canonical_request_with_payload(
+        method.as_str(),
+        "/test-bucket/test-key",
+        &query_strings_for_signing,
+        headers_for_signing,
+        STREAMING_MARKER,
+    );
+    let string_to_sign = s3s_sigv4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
+    let signature = s3s_sigv4::calculate_signature(&string_to_sign, secret_key.expose(), &amz_date, "us-east-1", "s3");
+
+    let mut signed_query_strings = query_strings_for_signing;
+    signed_query_strings.push(("X-Amz-Signature".to_owned(), signature.as_str().to_owned()));
+    let qs = OrderedQs::from_vec_unchecked(signed_query_strings);
+
+    let headers = headers_from_slice(&[("host", "s3.amazonaws.com"), ("x-amz-content-sha256", STREAMING_MARKER)]);
+
+    let mut body = Body::from(Bytes::from_static(body_data));
+    let mut cx = SignatureContext {
+        path_encoding: crate::auth::SigV4PathEncoding::S3,
+        auth: Some(&auth),
+        config: &config,
+        req_version: ::http::Version::HTTP_11,
+        req_method: &method,
+        req_uri: &uri,
+        req_body: &mut body,
+        qs: Some(&qs),
+        hs: &headers,
+        decoded_uri_path: "/test-bucket/test-key",
+        raw_uri_path: "/test-bucket/test-key",
+        vh_bucket: None,
+        content_length: Some(body_data.len() as u64),
+        mime: None,
+        decoded_content_length: None,
+        transformed_body: None,
+        multipart: None,
+        trailing_headers: None,
+    };
+
+    let err = cx
+        .v4_check_presigned_url()
+        .await
+        .expect_err("a signed streaming marker must be rejected after verification");
     assert_eq!(err.code(), &S3ErrorCode::NotImplemented);
 }
 
