@@ -980,6 +980,7 @@ dependencies = [
  "s3s-chunked",
  "s3s-multipart",
  "s3s-sigv4",
+ "s3s-time",
 ]
 
 [[package]]
@@ -1031,6 +1032,15 @@ dependencies = [
  "subtle",
  "thiserror",
  "zeroize",
+]
+
+[[package]]
+name = "s3s-time"
+version = "0.18.0-alpha.1"
+dependencies = [
+ "jiff",
+ "serde",
+ "thiserror",
 ]
 
 [[package]]
