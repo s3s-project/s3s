@@ -20,3 +20,4 @@ regex.workspace = true
 reqwest = { workspace = true, features = ["blocking", "system-proxy"] }
 serde.workspace = true
 serde_json = { workspace = true, features = ["preserve_order"] }
+time.workspace = true
