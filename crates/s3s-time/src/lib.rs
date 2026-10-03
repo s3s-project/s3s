@@ -21,6 +21,13 @@
 //! by the contract fixture of the migration. [`ParseTimestampError`] and
 //! [`FormatTimestampError`] classify the failures.
 //!
+//! # Features
+//!
+//! `serde` — off by default. When it is enabled, [`Timestamp`] implements
+//! `serde::Serialize` and `serde::Deserialize`: serialization writes the
+//! date-time form, and deserialization parses it. The documentation build
+//! enables every feature.
+//!
 //! # Example
 //!
 //! ```

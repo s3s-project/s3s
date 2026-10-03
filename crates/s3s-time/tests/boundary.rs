@@ -243,6 +243,7 @@ fn system_time_round_trip() {
     assert_eq!(SystemTime::try_from(ts).unwrap(), later);
 }
 
+#[cfg(feature = "serde")]
 #[test]
 fn serde_uses_the_date_time_format() {
     let ts = parse(TimestampFormat::DateTime, "2024-06-15T07:00:00.123Z").unwrap();
