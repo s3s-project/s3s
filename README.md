@@ -32,7 +32,7 @@ S3 Service Adapter
 
 Coverage badges come from the CI coverage run and link to [Codecov](https://codecov.io/gh/s3s-project/s3s); crates outside that run show `n/a`.
 
-📚 **[Development documentation](https://s3s-project.github.io/s3s/)** for the `main` branch is available on GitHub Pages.
+📚 **[Development documentation](https://s3s-project.github.io/s3s/)** for the `main` branch is available on GitHub Pages and is rebuilt once a day.
 
 This experimental project intends to offer an ergonomic adapter for building S3-compatible services.
 
