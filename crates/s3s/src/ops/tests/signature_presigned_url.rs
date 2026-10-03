@@ -80,8 +80,8 @@ async fn v4_presigned_url_rejects_invalid_expires_as_authorization_query_error()
 async fn v4_presigned_url_accepts_expires_beyond_aws_default_when_configured() {
     use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
 
-    let amz_date = AmzDate::parse(&fmt_current_amz_date(time::OffsetDateTime::now_utc()))
-        .expect("current time should produce a valid x-amz-date");
+    let amz_date =
+        AmzDate::parse(&fmt_current_amz_date(jiff::Timestamp::now())).expect("current time should produce a valid x-amz-date");
     let mut query_strings = presigned_query_fields(&amz_date, "s3");
     query_strings[3] = ("X-Amz-Expires".to_owned(), "604801".to_owned());
     query_strings.push((
@@ -219,8 +219,8 @@ async fn v4_presigned_url_rejects_unknown_service() {
     use crate::config::{S3ConfigProvider, StaticConfigProvider};
     use std::sync::Arc;
 
-    let amz_date = AmzDate::parse(&fmt_current_amz_date(time::OffsetDateTime::now_utc()))
-        .expect("current time should produce a valid x-amz-date");
+    let amz_date =
+        AmzDate::parse(&fmt_current_amz_date(jiff::Timestamp::now())).expect("current time should produce a valid x-amz-date");
     let mut query_strings = presigned_query_fields(&amz_date, "custom-svc");
     query_strings.push((
         "X-Amz-Signature".to_owned(),
@@ -340,8 +340,8 @@ async fn v4_presigned_url_accepts_standard_and_raw_uri_path_signatures() {
     let uri = Uri::from_static("https://s3.amazonaws.com/test-bucket/path/sitemap.xmlage=");
     let decoded_uri_path = "/test-bucket/path/sitemap.xmlage=";
     let raw_uri_path = "/test-bucket/path/sitemap.xmlage=";
-    let amz_date = AmzDate::parse(&fmt_current_amz_date(time::OffsetDateTime::now_utc()))
-        .expect("current time should produce a valid x-amz-date");
+    let amz_date =
+        AmzDate::parse(&fmt_current_amz_date(jiff::Timestamp::now())).expect("current time should produce a valid x-amz-date");
     let headers_for_signing = [("host", "s3.amazonaws.com")];
     let query_strings_for_signing = presigned_query_fields(&amz_date, "s3");
 
@@ -415,8 +415,8 @@ async fn v4_presigned_url_uses_http2_authority_for_signed_host() {
     let uri = Uri::from_static("https://s3.amazonaws.com/test-bucket/path/sitemap.xmlage=");
     let decoded_uri_path = "/test-bucket/path/sitemap.xmlage=";
     let raw_uri_path = "/test-bucket/path/sitemap.xmlage=";
-    let amz_date = AmzDate::parse(&fmt_current_amz_date(time::OffsetDateTime::now_utc()))
-        .expect("current time should produce a valid x-amz-date");
+    let amz_date =
+        AmzDate::parse(&fmt_current_amz_date(jiff::Timestamp::now())).expect("current time should produce a valid x-amz-date");
     let headers_for_signing = [("host", "s3.amazonaws.com")];
     let query_strings_for_signing = presigned_query_fields(&amz_date, "s3");
     let canonical_request = s3s_sigv4::create_presigned_canonical_request(
@@ -480,8 +480,8 @@ async fn v4_presigned_url_with_port_in_signed_host() {
     let uri = Uri::from_static("https://user.fs.example.com:19000/test.txt");
     let decoded_uri_path = "/test.txt";
     let raw_uri_path = "/test.txt";
-    let amz_date = AmzDate::parse(&fmt_current_amz_date(time::OffsetDateTime::now_utc()))
-        .expect("current time should produce a valid x-amz-date");
+    let amz_date =
+        AmzDate::parse(&fmt_current_amz_date(jiff::Timestamp::now())).expect("current time should produce a valid x-amz-date");
     let host = "user.fs.example.com:19000";
     let headers_for_signing = [("host", host)];
     let query_strings_for_signing = presigned_query_fields(&amz_date, "s3");
@@ -644,8 +644,8 @@ async fn v4_presigned_url_put_with_valid_content_sha256() {
     let content_sha256 = hex_sha256(body_data, str::to_owned);
     let method = Method::PUT;
     let uri = Uri::from_static("https://s3.amazonaws.com/test-bucket/test-key");
-    let amz_date = AmzDate::parse(&fmt_current_amz_date(time::OffsetDateTime::now_utc()))
-        .expect("current time should produce a valid x-amz-date");
+    let amz_date =
+        AmzDate::parse(&fmt_current_amz_date(jiff::Timestamp::now())).expect("current time should produce a valid x-amz-date");
     let headers_for_signing = [("host", "s3.amazonaws.com")];
     let query_strings_for_signing = presigned_query_fields(&amz_date, "s3");
 
@@ -730,8 +730,8 @@ async fn v4_presigned_url_put_rejects_an_unsigned_streaming_marker() {
     let body_data = b"hello";
     let method = Method::PUT;
     let uri = Uri::from_static("https://s3.amazonaws.com/test-bucket/test-key");
-    let amz_date = AmzDate::parse(&fmt_current_amz_date(time::OffsetDateTime::now_utc()))
-        .expect("current time should produce a valid x-amz-date");
+    let amz_date =
+        AmzDate::parse(&fmt_current_amz_date(jiff::Timestamp::now())).expect("current time should produce a valid x-amz-date");
     let headers_for_signing = [("host", "s3.amazonaws.com")];
     let query_strings_for_signing = presigned_query_fields(&amz_date, "s3");
 
@@ -807,8 +807,8 @@ async fn v4_presigned_url_put_rejects_a_signed_streaming_marker() {
     let body_data = b"hello";
     let method = Method::PUT;
     let uri = Uri::from_static("https://s3.amazonaws.com/test-bucket/test-key");
-    let amz_date = AmzDate::parse(&fmt_current_amz_date(time::OffsetDateTime::now_utc()))
-        .expect("current time should produce a valid x-amz-date");
+    let amz_date =
+        AmzDate::parse(&fmt_current_amz_date(jiff::Timestamp::now())).expect("current time should produce a valid x-amz-date");
     let headers_for_signing = [("host", "s3.amazonaws.com")];
     let query_strings_for_signing = presigned_query_fields(&amz_date, "s3");
 
@@ -977,8 +977,8 @@ async fn v4_presigned_url_accepts_expires_beyond_default_when_limit_is_zero() {
     let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
     let decoded_uri_path = "/test.txt";
     let raw_uri_path = "/test.txt";
-    let amz_date = AmzDate::parse(&fmt_current_amz_date(time::OffsetDateTime::now_utc()))
-        .expect("current time should produce a valid x-amz-date");
+    let amz_date =
+        AmzDate::parse(&fmt_current_amz_date(jiff::Timestamp::now())).expect("current time should produce a valid x-amz-date");
     let headers_for_signing = [("host", "s3.amazonaws.com")];
     let mut query_strings_for_signing = presigned_query_fields(&amz_date, "s3");
     query_strings_for_signing[3] = ("X-Amz-Expires".to_owned(), "604801".to_owned());

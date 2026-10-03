@@ -107,8 +107,8 @@ async fn v4_post_signature_rejects_stale_request_time() {
     let auth = SimpleAuth::from_single(access_key, secret_key.clone());
     let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
 
-    let skew = time::Duration::seconds(i64::from(config.snapshot().presigned_url_max_skew_time_secs));
-    let request_time = time::OffsetDateTime::now_utc() - skew - time::Duration::minutes(1);
+    let skew = jiff::SignedDuration::from_secs(i64::from(config.snapshot().presigned_url_max_skew_time_secs));
+    let request_time = jiff::Timestamp::now() - skew - jiff::SignedDuration::from_mins(1);
     let amz_date_str = fmt_current_amz_date(request_time);
     let amz_date = AmzDate::parse(&amz_date_str).unwrap();
 

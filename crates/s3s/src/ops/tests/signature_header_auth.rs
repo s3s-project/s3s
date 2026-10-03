@@ -111,7 +111,7 @@ async fn sig_v2_passes_gate_when_enabled() {
     // signature verification; without an auth provider it fails at the auth
     // lookup with NotImplemented, not AccessDenied. The date must be fresh
     // to pass the freshness check first.
-    let date = fmt_rfc1123(time::OffsetDateTime::now_utc());
+    let date = fmt_rfc1123(jiff::Timestamp::now());
     let headers = headers_from_slice(&[
         ("authorization", "AWS AKIAIOSFODNN7EXAMPLE:qgk2+6Sv9/oM7G3qLEjTH1a1l1g="),
         ("date", &date),
@@ -135,7 +135,7 @@ async fn sig_v2_header_auth_accepts_fresh_date() {
     let secret_key: crate::auth::SecretKey = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".into();
     let auth = SimpleAuth::from_single(access_key, secret_key.clone());
 
-    let date = fmt_rfc1123(time::OffsetDateTime::now_utc());
+    let date = fmt_rfc1123(jiff::Timestamp::now());
     let signature = sig_v2_header_auth_signature(&secret_key, &date);
     let headers = headers_from_slice(&[("authorization", &format!("AWS {access_key}:{signature}")), ("date", &date)]);
 
@@ -161,7 +161,7 @@ async fn sig_v2_header_auth_rejects_stale_date() {
     let secret_key: crate::auth::SecretKey = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".into();
     let auth = SimpleAuth::from_single(access_key, secret_key.clone());
 
-    let stale = time::OffsetDateTime::now_utc() - time::Duration::hours(2);
+    let stale = jiff::Timestamp::now() - jiff::SignedDuration::from_hours(2);
     let date = fmt_rfc1123(stale);
     let signature = sig_v2_header_auth_signature(&secret_key, &date);
     let headers = headers_from_slice(&[("authorization", &format!("AWS {access_key}:{signature}")), ("date", &date)]);
@@ -188,7 +188,7 @@ async fn sig_v2_rejects_an_appended_unsigned_amz_header() {
     let secret_key: crate::auth::SecretKey = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".into();
     let auth = SimpleAuth::from_single(access_key, secret_key.clone());
 
-    let date = fmt_rfc1123(time::OffsetDateTime::now_utc());
+    let date = fmt_rfc1123(jiff::Timestamp::now());
     let signature = sig_v2_header_auth_signature(&secret_key, &date);
     let authorization = format!("AWS {access_key}:{signature}");
     let config = sig_v2_test_config(true);
@@ -228,7 +228,7 @@ async fn sig_v2_header_auth_rejects_future_date() {
     let secret_key: crate::auth::SecretKey = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".into();
     let auth = SimpleAuth::from_single(access_key, secret_key.clone());
 
-    let future = time::OffsetDateTime::now_utc() + time::Duration::hours(2);
+    let future = jiff::Timestamp::now() + jiff::SignedDuration::from_hours(2);
     let date = fmt_rfc1123(future);
     let signature = sig_v2_header_auth_signature(&secret_key, &date);
     let headers = headers_from_slice(&[("authorization", &format!("AWS {access_key}:{signature}")), ("date", &date)]);
@@ -282,8 +282,8 @@ async fn sig_v2_header_auth_prefers_x_amz_date() {
 
     // x-amz-date is authoritative: a stale `Date` header must be ignored
     // when x-amz-date is present and fresh.
-    let x_amz_date = fmt_current_amz_date(time::OffsetDateTime::now_utc());
-    let stale_date = fmt_rfc1123(time::OffsetDateTime::now_utc() - time::Duration::hours(2));
+    let x_amz_date = fmt_current_amz_date(jiff::Timestamp::now());
+    let stale_date = fmt_rfc1123(jiff::Timestamp::now() - jiff::SignedDuration::from_hours(2));
     let string_to_sign = s3s_sigv2::create_string_to_sign(
         s3s_sigv2::Mode::HeaderAuth,
         "GET",
@@ -313,12 +313,8 @@ async fn sig_v2_header_auth_prefers_x_amz_date() {
     assert_eq!(cred.access_key, access_key);
 }
 
-fn fmt_rfc1123(odt: time::OffsetDateTime) -> String {
-    use time::format_description::FormatItem;
-    use time::macros::format_description;
-    const RFC1123: &[FormatItem<'_>] =
-        format_description!("[weekday repr:short], [day] [month repr:short] [year] [hour]:[minute]:[second] GMT");
-    odt.format(RFC1123).expect("valid RFC 1123 date")
+fn fmt_rfc1123(dt: jiff::Timestamp) -> String {
+    dt.strftime("%a, %d %b %Y %H:%M:%S GMT").to_string()
 }
 
 fn sig_v2_header_auth_signature(secret_key: &crate::auth::SecretKey, date: &str) -> String {
@@ -344,8 +340,8 @@ async fn v4_header_auth_with_port_in_signed_host() {
     let uri = Uri::from_static("https://user.fs.example.com:19000/test.txt");
     let decoded_uri_path = "/test.txt";
     let raw_uri_path = "/test.txt";
-    let amz_date = AmzDate::parse(&fmt_current_amz_date(time::OffsetDateTime::now_utc()))
-        .expect("current time should produce a valid x-amz-date");
+    let amz_date =
+        AmzDate::parse(&fmt_current_amz_date(jiff::Timestamp::now())).expect("current time should produce a valid x-amz-date");
     let amz_date_str = amz_date.fmt_iso8601();
     let host = "user.fs.example.com:19000";
     let payload_hash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
@@ -971,7 +967,7 @@ async fn v2_header_auth_returns_no_region() {
     };
     let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(config)));
 
-    let date = fmt_rfc1123(time::OffsetDateTime::now_utc());
+    let date = fmt_rfc1123(jiff::Timestamp::now());
     let hs = headers_from_slice(&[("date", &date), ("host", "s3.amazonaws.com")]);
 
     let method = Method::GET;
@@ -1037,8 +1033,8 @@ async fn v4_header_auth_rejects_stale_request_time() {
     let auth = SimpleAuth::from_single(access_key, secret_key.clone());
     let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
 
-    let skew = time::Duration::seconds(i64::from(config.snapshot().presigned_url_max_skew_time_secs));
-    let request_time = time::OffsetDateTime::now_utc() - skew - time::Duration::minutes(1);
+    let skew = jiff::SignedDuration::from_secs(i64::from(config.snapshot().presigned_url_max_skew_time_secs));
+    let request_time = jiff::Timestamp::now() - skew - jiff::SignedDuration::from_mins(1);
     let amz_date_str = fmt_current_amz_date(request_time);
     let amz_date = AmzDate::parse(&amz_date_str).unwrap();
 
