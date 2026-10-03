@@ -94,6 +94,19 @@ fn date_time_rejects_a_malformed_offset_without_panicking() {
 }
 
 #[test]
+fn date_time_rejects_a_truncated_clock_without_panicking() {
+    // A clock that is too short to carry a zone must be a rejection and never an
+    // index underflow in the zone splitter; the assertion is written with
+    // `catch_unwind` so a panic is a failure of this test rather than a green run.
+    let outcome = std::panic::catch_unwind(|| Timestamp::parse(TimestampFormat::DateTime, "1985-04-12T2"));
+    match outcome {
+        Ok(Err(ParseTimestampError::InvalidFormat)) => {}
+        Ok(other) => panic!("expected an InvalidFormat rejection, got {other:?}"),
+        Err(_) => panic!("the reader panicked on a truncated clock"),
+    }
+}
+
+#[test]
 fn date_time_truncates_a_fraction_longer_than_nine_digits() {
     // The pre-migration implementation truncates such an input instead of rejecting
     // it, so the profile keeps it and the reader cuts the fraction before the library
