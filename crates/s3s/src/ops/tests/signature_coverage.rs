@@ -112,6 +112,12 @@ fn presigned_put_uri() -> Uri {
 }
 
 fn presigned_put_uri_with_headers(extra_headers: &[(&str, &str)]) -> Uri {
+    presigned_put_uri_with_headers_and_payload(extra_headers, UNSIGNED_PAYLOAD)
+}
+
+/// Builds a presigned `PUT` URL signed over `host` plus `extra_headers`, with `payload_line` as the
+/// canonical payload line, so a test can sign a URL the way a client that declares a body digest does.
+fn presigned_put_uri_with_headers_and_payload(extra_headers: &[(&str, &str)], payload_line: &str) -> Uri {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .expect("system clock after epoch")
@@ -140,8 +146,13 @@ fn presigned_put_uri_with_headers(extra_headers: &[(&str, &str)]) -> Uri {
     ];
     let pairs_ref: Vec<(&str, &str)> = pairs.iter().map(|(name, value)| (*name, value.as_str())).collect();
     let amz_date = s3s_sigv4::AmzDate::parse(&amz_date_str).expect("valid amz date");
-    let canonical_request =
-        s3s_sigv4::create_presigned_canonical_request("PUT", "/test-bucket/test-key.txt", &pairs_ref, signed_headers);
+    let canonical_request = s3s_sigv4::create_presigned_canonical_request_with_payload(
+        "PUT",
+        "/test-bucket/test-key.txt",
+        &pairs_ref,
+        signed_headers,
+        payload_line,
+    );
     let string_to_sign = s3s_sigv4::create_string_to_sign(&canonical_request, &amz_date, REGION, SERVICE);
     let signature = s3s_sigv4::calculate_signature(&string_to_sign, SECRET_KEY, &amz_date, REGION, SERVICE);
     let mut query = pairs
@@ -295,6 +306,9 @@ async fn unsigned_acl_is_rejected_and_not_parsed() {
     assert_eq!(*test_s3.last_put_acl.lock().unwrap(), None, "an unsigned acl must never be parsed");
 }
 
+/// A presigned URL signed over `UNSIGNED-PAYLOAD` keeps accepting an unsigned
+/// `x-amz-content-sha256` header, because the header value is the payload line and the marker
+/// reproduces the one the URL was signed with. This is the shape every default client produces.
 #[tokio::test]
 async fn unsigned_content_sha256_is_still_accepted_on_presigned_requests() {
     let test_s3 = Arc::new(TestS3::default());
@@ -303,7 +317,7 @@ async fn unsigned_content_sha256_is_still_accepted_on_presigned_requests() {
     let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
     let ccx = test_context(&s3, &config, &auth);
 
-    let mut req = presigned_request(Version::HTTP_11, presigned_put_uri(), &[("x-amz-content-sha256", EMPTY_SHA256)]);
+    let mut req = presigned_request(Version::HTTP_11, presigned_put_uri(), &[("x-amz-content-sha256", UNSIGNED_PAYLOAD)]);
     let response = super::call(&mut req, &ccx).await.expect("presigned PUT must be routed");
     assert!(
         response.status.is_success(),
@@ -311,6 +325,35 @@ async fn unsigned_content_sha256_is_still_accepted_on_presigned_requests() {
         response.status
     );
     assert_eq!(test_s3.put_object.load(Ordering::SeqCst), 1, "the upload must still be routed");
+}
+
+/// The header value is the payload line, so a digest sent over a URL signed with
+/// `UNSIGNED-PAYLOAD` breaks the signature instead of installing a body check. S3 rejects the same
+/// shape, so the unsigned-header exemption does not widen what a presigned URL accepts.
+#[tokio::test]
+async fn presigned_content_sha256_that_is_not_the_payload_line_is_rejected() {
+    let test_s3 = Arc::new(TestS3::default());
+    let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
+    let config = test_config();
+    let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
+    let ccx = test_context(&s3, &config, &auth);
+
+    let digest = other_body_digest();
+    let mut req = presigned_request(Version::HTTP_11, presigned_put_uri(), &[("x-amz-content-sha256", digest.as_str())]);
+    let response = super::call(&mut req, &ccx).await.expect("presigned PUT must be answered");
+    assert_eq!(
+        response.status,
+        StatusCode::FORBIDDEN,
+        "a digest outside the signed payload line must not verify"
+    );
+    let body = response.body.bytes().expect("error body is buffered");
+    assert!(
+        std::str::from_utf8(&body)
+            .expect("error body is UTF-8")
+            .contains("<Code>SignatureDoesNotMatch</Code>"),
+        "expected SignatureDoesNotMatch"
+    );
+    assert_eq!(test_s3.put_object.load(Ordering::SeqCst), 0, "a rejected request must not be routed");
 }
 
 const REQUEST_METADATA_HEADERS: &[(&str, &str)] = &[
@@ -765,8 +808,9 @@ async fn changed_content_sha256_is_rejected_on_header_auth() {
     assert_eq!(test_s3.put_object.load(Ordering::SeqCst), 0, "the request must not be routed");
 }
 
-/// A presigned URL that lists `x-amz-content-sha256` in `X-Amz-SignedHeaders` binds the value:
-/// the declared value is accepted, a different value and a missing header are both rejected.
+/// A presigned URL that lists `x-amz-content-sha256` in `X-Amz-SignedHeaders` and signs the digest
+/// as its payload line binds the value: the declared value is accepted, a different value and a
+/// missing header are both rejected.
 #[tokio::test]
 async fn presigned_content_sha256_is_bound_when_listed_in_signed_headers() {
     let test_s3 = Arc::new(TestS3::default());
@@ -774,7 +818,7 @@ async fn presigned_content_sha256_is_bound_when_listed_in_signed_headers() {
     let config = test_config();
     let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
     let ccx = test_context(&s3, &config, &auth);
-    let uri = presigned_put_uri_with_headers(&[("x-amz-content-sha256", EMPTY_SHA256)]);
+    let uri = presigned_put_uri_with_headers_and_payload(&[("x-amz-content-sha256", EMPTY_SHA256)], EMPTY_SHA256);
 
     let mut declared = presigned_request(Version::HTTP_11, uri.clone(), &[("x-amz-content-sha256", EMPTY_SHA256)]);
     let response = super::call(&mut declared, &ccx).await.expect("ops::call serializes errors");
@@ -801,6 +845,36 @@ async fn presigned_content_sha256_is_bound_when_listed_in_signed_headers() {
     assert!(body.contains("<Code>SignatureDoesNotMatch</Code>"), "{body}");
     assert!(body.contains("missing signed header: x-amz-content-sha256"), "{body}");
     assert_eq!(test_s3.put_object.load(Ordering::SeqCst), 1, "only the declared request may upload");
+}
+
+/// Listing the header in `X-Amz-SignedHeaders` does not change the payload line: a URL signed over
+/// `UNSIGNED-PAYLOAD` whose header lists a digest is rejected, as S3 rejects it. The shape comes
+/// from presigners that put the header in the signed-header list while keeping the unsigned marker
+/// in the payload line.
+#[tokio::test]
+async fn presigned_content_sha256_listed_but_not_the_payload_line_is_rejected() {
+    let test_s3 = Arc::new(TestS3::default());
+    let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
+    let config = test_config();
+    let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
+    let ccx = test_context(&s3, &config, &auth);
+
+    let uri = presigned_put_uri_with_headers(&[("x-amz-content-sha256", EMPTY_SHA256)]);
+    let mut req = presigned_request(Version::HTTP_11, uri, &[("x-amz-content-sha256", EMPTY_SHA256)]);
+    let response = super::call(&mut req, &ccx).await.expect("ops::call serializes errors");
+    assert_eq!(
+        response.status,
+        StatusCode::FORBIDDEN,
+        "the payload line must decide the signature, not the signed-header list"
+    );
+    let body = response.body.bytes().expect("error body is buffered");
+    assert!(
+        std::str::from_utf8(&body)
+            .expect("error body is UTF-8")
+            .contains("<Code>SignatureDoesNotMatch</Code>"),
+        "expected SignatureDoesNotMatch"
+    );
+    assert_eq!(test_s3.put_object.load(Ordering::SeqCst), 0, "a rejected request must not be routed");
 }
 
 /// The unsigned `UNSIGNED-PAYLOAD` marker is accepted as well, and the non-empty body reaches the

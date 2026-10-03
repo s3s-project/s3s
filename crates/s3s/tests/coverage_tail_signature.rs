@@ -98,9 +98,9 @@ fn header_auth_value(method: &str, uri_path: &str, amz_date: &AmzDate, payload: 
     )
 }
 
-fn presigned_signature(method: &str, uri_path: &str, query: &[(String, String)], amz_date: &AmzDate) -> String {
+fn presigned_signature(method: &str, uri_path: &str, query: &[(String, String)], amz_date: &AmzDate, payload: &str) -> String {
     let headers = [("host", HOST)];
-    let canonical_request = s3s_sigv4::create_presigned_canonical_request(method, uri_path, query, headers);
+    let canonical_request = s3s_sigv4::create_presigned_canonical_request_with_payload(method, uri_path, query, headers, payload);
     let string_to_sign = s3s_sigv4::create_string_to_sign(&canonical_request, amz_date, REGION, SERVICE);
     s3s_sigv4::calculate_signature(&string_to_sign, SECRET_KEY, amz_date, REGION, SERVICE)
         .as_str()
@@ -444,7 +444,7 @@ async fn presigned_url_without_content_length_is_rejected_for_a_streaming_body()
         ("X-Amz-Expires".to_owned(), "900".to_owned()),
         ("X-Amz-SignedHeaders".to_owned(), "host".to_owned()),
     ];
-    let signature = presigned_signature("GET", "/bucket/key", &query, &amz_date);
+    let signature = presigned_signature("GET", "/bucket/key", &query, &amz_date, PAYLOAD_SHA256_X);
     query.push(("X-Amz-Signature".to_owned(), signature.clone()));
 
     let query_string = query
