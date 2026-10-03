@@ -134,23 +134,26 @@ impl AwsChunkedStreamError {
     /// error code's default message.
     ///
     /// AWS reports the same code with different messages depending on the shape of
-    /// the failure: an empty trailer section is `IncompleteBody` with "The request
-    /// body terminated unexpectedly", while the code's default message describes a
-    /// body shorter than its `Content-Length`. Implementations should prefer this
-    /// message over [`S3ErrorCode::default_message`] when it is present.
+    /// the failure: a body that terminated early (an incomplete stream, a decoded
+    /// length mismatch, an empty trailer section) is `IncompleteBody` with "The
+    /// request body terminated unexpectedly", while the code's default message
+    /// describes a body shorter than its `Content-Length`. Implementations should
+    /// prefer this message over [`S3ErrorCode::default_message`] when it is present.
+    /// A malformed frame keeps the code default: its AWS message was not measured.
     #[must_use]
     pub fn message(&self) -> Option<&'static str> {
         match self {
-            Self::TrailersEmpty => Some(EMPTY_TRAILER_SECTION_MESSAGE),
+            Self::Incomplete | Self::LengthMismatch | Self::TrailersEmpty => Some(BODY_TERMINATED_MESSAGE),
             _ => None,
         }
     }
 }
 
-/// The message AWS returns when an announced trailer section is present but empty.
+/// The message AWS returns when the request body terminated before it was complete.
 ///
-/// Verbatim from the AWS response for `IncompleteBody` in that shape.
-const EMPTY_TRAILER_SECTION_MESSAGE: &str = "The request body terminated unexpectedly";
+/// Verbatim from the AWS responses for an incomplete stream, a decoded length
+/// mismatch and an empty trailer section; all three report `IncompleteBody`.
+const BODY_TERMINATED_MESSAGE: &str = "The request body terminated unexpectedly";
 
 impl From<s3s_chunked::Error> for AwsChunkedStreamError {
     fn from(error: s3s_chunked::Error) -> Self {
@@ -330,17 +333,20 @@ mod tests {
         }
     }
 
-    /// Only the shapes whose AWS message differs from the code default expose one.
+    /// Only the shapes whose AWS message differs from the code default expose one:
+    /// the body-terminated shapes share "The request body terminated unexpectedly".
     #[test]
     fn message_is_shape_specific() {
-        assert_eq!(
-            AwsChunkedStreamError::TrailersEmpty.message(),
-            Some("The request body terminated unexpectedly")
-        );
+        for error in [
+            AwsChunkedStreamError::Incomplete,
+            AwsChunkedStreamError::LengthMismatch,
+            AwsChunkedStreamError::TrailersEmpty,
+        ] {
+            assert_eq!(error.message(), Some("The request body terminated unexpectedly"), "{error:?}");
+        }
         for error in [
             AwsChunkedStreamError::TrailersMissing,
             AwsChunkedStreamError::FormatError,
-            AwsChunkedStreamError::Incomplete,
             AwsChunkedStreamError::SignatureMismatch,
         ] {
             assert_eq!(error.message(), None, "{error:?} keeps the code default message");
@@ -818,6 +824,76 @@ mod tests {
             .expect("the stream yields an error")
             .expect_err("the empty trailer section fails the stream");
         assert!(matches!(error, AwsChunkedStreamError::TrailersEmpty), "got {error:?}");
+        assert_eq!(error.to_s3_error_code(), S3ErrorCode::IncompleteBody);
+        assert_eq!(error.message(), Some("The request body terminated unexpectedly"));
+    }
+
+    /// A body without its completion chunk is incomplete, with the AWS message for
+    /// that shape, on the unsigned (anonymous) path.
+    #[tokio::test]
+    async fn unsigned_body_without_the_completion_chunk_is_incomplete() {
+        let body = futures::stream::iter(vec![Ok::<Bytes, crate::error::StdError>(Bytes::from_static(b"3\r\nabc\r\n"))]);
+        let mut stream = AwsChunkedStream::new(
+            body,
+            Sha256Sum::from_hex(SEED).unwrap(),
+            AmzDate::parse(TIMESTAMP).unwrap(),
+            REGION.into(),
+            SERVICE.into(),
+            SECRET_KEY.into(),
+            3,
+            true,
+            crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
+        );
+
+        let mut last = None;
+        while let Some(item) = stream.next().await {
+            last = Some(item);
+        }
+        let error = last
+            .expect("the stream yields an error")
+            .expect_err("a missing completion chunk fails the stream");
+        assert!(matches!(error, AwsChunkedStreamError::Incomplete), "got {error:?}");
+        assert_eq!(error.to_s3_error_code(), S3ErrorCode::IncompleteBody);
+        assert_eq!(error.message(), Some("The request body terminated unexpectedly"));
+    }
+
+    /// The same on the signed path, using the AWS example chunks without the
+    /// completion chunk.
+    #[tokio::test]
+    async fn signed_body_without_the_completion_chunk_is_incomplete() {
+        let chunk1_meta = b"10000;chunk-signature=b474d8862b1487a5145d686f57f013e54db672cee1c953b3010fb58501ef5aa2\r\n";
+        let chunk2_meta = b"400;chunk-signature=1c1344b170168f8e65b41376b44b20fe354e373826ccbbe2c1d40a8cae51e5c7\r\n";
+
+        let chunk1_data = vec![b'a'; 0x10000];
+        let chunk2_data = vec![b'a'; 1024];
+        let decoded_content_length = chunk1_data.len() + chunk2_data.len();
+
+        let chunk_results: Vec<Result<Bytes, _>> = vec![
+            Ok(join(&[chunk1_meta, &chunk1_data, b"\r\n"])),
+            Ok(join(&[chunk2_meta, &chunk2_data, b"\r\n"])),
+        ];
+
+        let stream = futures::stream::iter(chunk_results);
+        let mut stream = AwsChunkedStream::new(
+            stream,
+            Sha256Sum::from_hex("106e2a8a18243abcf37539882f36619c00e2dfc72633413f02d3b74544bfeb8e").unwrap(),
+            AmzDate::parse(TIMESTAMP).unwrap(),
+            REGION.into(),
+            SERVICE.into(),
+            SECRET_KEY.into(),
+            decoded_content_length,
+            false,
+            crate::config::DEFAULT_AWS_CHUNKED_STREAM_MAX_CHUNK_SIZE,
+        );
+
+        let mut last = None;
+        while let Some(item) = stream.next().await {
+            last = Some(item);
+        }
+        let error = last
+            .expect("the stream yields an error")
+            .expect_err("a missing completion chunk fails the stream");
+        assert!(matches!(error, AwsChunkedStreamError::Incomplete), "got {error:?}");
         assert_eq!(error.to_s3_error_code(), S3ErrorCode::IncompleteBody);
         assert_eq!(error.message(), Some("The request body terminated unexpectedly"));
     }

@@ -50,17 +50,24 @@ fn empty_fragments_are_skipped() {
 }
 
 #[test]
-fn eof_variants_are_accepted() {
-    for wire in [
-        b"5\r\nhello\r\n0\r\n\r\n".as_slice(),
-        b"5\r\nhello\r\n0\r\n".as_slice(),
-        b"5\r\nhello\r\n0".as_slice(),
-    ] {
+fn eof_after_the_completion_chunk_is_accepted() {
+    for wire in [b"5\r\nhello\r\n0\r\n\r\n".as_slice(), b"5\r\nhello\r\n0\r\n".as_slice()] {
         let stream = ChunkedStream::unsigned(futures::stream::iter(items(&[wire])), 5, Limits::default());
         let (payload, error) = drain(stream);
         assert_eq!(payload, b"hello", "{wire:?}");
         assert!(error.is_none(), "{wire:?}: {error:?}");
     }
+}
+
+/// The completion chunk line itself must be terminated: EOF in the middle of it is
+/// an incomplete body (AWS answers 400 `IncompleteBody`).
+#[test]
+fn eof_inside_the_completion_chunk_is_incomplete() {
+    let wire = b"5\r\nhello\r\n0".as_slice();
+    let stream = ChunkedStream::unsigned(futures::stream::iter(items(&[wire])), 5, Limits::default());
+    let (payload, error) = drain(stream);
+    assert_eq!(payload, b"hello", "{wire:?}");
+    assert!(matches!(error, Some(Error::Incomplete)), "{wire:?}: {error:?}");
 }
 
 #[test]

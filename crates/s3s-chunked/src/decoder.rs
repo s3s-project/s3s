@@ -254,9 +254,12 @@ where
         Poll::Pending => return Step::Pending,
         Poll::Ready(Err(error)) => return Step::Fail(error),
         Poll::Ready(Ok(MetaOutcome::End)) => {
-            if state.remaining == 0 {
-                return Step::Done;
-            }
+            // The stream ended while the decoder was waiting for the next chunk
+            // metadata line. A chunked body is only complete after the zero-length
+            // completion chunk, so EOF here is an incomplete body even when every
+            // declared payload byte arrived: accepting it stores a truncated object
+            // as a complete one. AWS answers 400 IncompleteBody for this shape. The
+            // trailer phase has its own EOF handling and is not affected.
             return Step::Fail(Error::Incomplete);
         }
         Poll::Ready(Ok(MetaOutcome::Line)) => {}
@@ -719,6 +722,60 @@ mod fragment_and_trailer_tests {
         assert!(matches!(error, Some(Error::TrailersEmpty)), "{error:?}");
     }
 
+    /// A chunked body is only complete after its zero-length completion chunk: a
+    /// stream that ends after a complete data chunk is an incomplete body.
+    #[test]
+    fn a_body_without_the_completion_chunk_is_incomplete() {
+        let mut stream = ChunkedStream::unsigned(
+            stream::iter(vec![Ok::<Bytes, crate::StdError>(Bytes::from_static(b"3\r\nabc\r\n"))]),
+            3,
+            Limits::default(),
+        );
+        let items = futures::executor::block_on(stream.by_ref().collect::<Vec<_>>());
+        assert!(matches!(items.last(), Some(Err(Error::Incomplete))), "got {:?}", items.last());
+    }
+
+    /// The same for a signed stream: valid chunk signatures do not make a body
+    /// without its completion chunk complete.
+    #[test]
+    fn a_signed_body_without_the_completion_chunk_is_incomplete() {
+        use crate::test_utils::{chunk_signature, drain, seed_signature, sign_context, signed_chunk_line, single};
+
+        let seed = seed_signature();
+        let signature = chunk_signature(&seed, b"abc");
+        let mut body = signed_chunk_line(3, &signature);
+        body.extend_from_slice(b"abc\r\n"); // no completion chunk
+
+        let stream = ChunkedStream::signed(futures::stream::iter(single(&body)), sign_context(), seed, 3, Limits::default());
+        let (out, error) = drain(stream);
+        assert_eq!(out, b"abc", "the complete chunk is still yielded");
+        assert!(matches!(error, Some(Error::Incomplete)), "{error:?}");
+    }
+
+    /// A chunk whose data stops mid-way is incomplete.
+    #[test]
+    fn a_body_truncated_inside_a_chunk_is_incomplete() {
+        let mut stream = ChunkedStream::unsigned(
+            stream::iter(vec![Ok::<Bytes, crate::StdError>(Bytes::from_static(b"3\r\nab"))]),
+            3,
+            Limits::default(),
+        );
+        let items = futures::executor::block_on(stream.by_ref().collect::<Vec<_>>());
+        assert!(matches!(items.last(), Some(Err(Error::Incomplete))), "got {:?}", items.last());
+    }
+
+    /// A declared decoded length longer than the payload is incomplete, even when
+    /// the completion chunk arrived.
+    #[test]
+    fn a_declared_length_longer_than_the_payload_is_incomplete() {
+        let mut stream = ChunkedStream::unsigned(
+            stream::iter(vec![Ok::<Bytes, crate::StdError>(Bytes::from_static(b"3\r\nabc\r\n0\r\n\r\n"))]),
+            8, // five bytes more than the three that arrive
+            Limits::default(),
+        );
+        let items = futures::executor::block_on(stream.by_ref().collect::<Vec<_>>());
+        assert!(matches!(items.last(), Some(Err(Error::Incomplete))), "got {:?}", items.last());
+    }
     /// The default stays permissive: a body without trailers is valid when the
     /// request did not announce any.
     #[test]

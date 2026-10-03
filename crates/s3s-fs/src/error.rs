@@ -141,6 +141,14 @@ mod tests {
     }
 
     #[test]
+    fn incomplete_body_uses_the_aws_message() {
+        let e = Error::new(Box::new(s3s::stream::aws_chunked_stream::AwsChunkedStreamError::Incomplete));
+        let s3err: S3Error = e.into();
+        assert_eq!(s3err.code(), &S3ErrorCode::IncompleteBody);
+        assert_eq!(s3err.message(), Some("The request body terminated unexpectedly"));
+    }
+
+    #[test]
     fn empty_trailer_section_uses_the_aws_message() {
         let e = Error::new(Box::new(s3s::stream::aws_chunked_stream::AwsChunkedStreamError::TrailersEmpty));
         let s3err: S3Error = e.into();
