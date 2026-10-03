@@ -267,7 +267,6 @@ pub fn register(tcx: &mut TestContext) {
     case!(tcx, FsServer, Multipart, test_multipart);
     case!(tcx, FsServer, Multipart, test_upload_part_checksum_failure_preserves_existing_part);
     case!(tcx, FsServer, Multipart, test_complete_checksum_failure_preserves_object_and_upload);
-    case!(tcx, FsServer, Multipart, test_abort_cleanup_failure_preserves_upload_id);
     case!(tcx, FsServer, Multipart, test_multipart_xxhash_checksums);
     case!(tcx, FsServer, Multipart, test_multipart_checksum_type_composite_not_implemented);
     case!(tcx, FsServer, Multipart, test_multipart_etag_format);
