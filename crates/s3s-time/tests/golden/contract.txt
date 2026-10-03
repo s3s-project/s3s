@@ -20,7 +20,7 @@
 # as \\ \t \n \r; an empty field is the empty string
 # format cases use instants that both the pre-migration implementation and the
 # jiff-backed implementation can represent; parse inputs are not restricted
-# cases: 799 (parse 403, format 396)
+# cases: 803 (parse 407, format 396)
 #
 format/epoch-seconds	-377703389549:10000	text:-377703389549.00001	smithy/format_epoch_seconds/000 sub-millisecond
 format/epoch-seconds	-377700707496:100000	text:-377700707496.0001	smithy/format_epoch_seconds/001 sub-millisecond
@@ -695,8 +695,11 @@ parse/date-time	1985-04-12T23:20:50-00:00	instant:482196050:0	design-4.1/offset-
 parse/date-time	1985-04-12T23:20:50+0200	error:InvalidFormat	design-4.1/offset-without-colon an offset without a colon
 parse/date-time	1985-04-12T23:20:50+02	error:InvalidFormat	design-4.1/offset-hour-only an offset without minutes
 parse/date-time	1985-04-12T23:20:50+24:00	error:InvalidFormat	design-4.1/offset-out-of-range an offset beyond a day
+parse/date-time	1985-04-12T23:20:50+00:60	error:InvalidFormat	design-4.1/offset-minute-out-of-range an offset minute beyond an hour
 parse/date-time	1985-04-12T23:20:50.5+01:00	instant:482192450:500000000	design-4.1/fraction-and-offset a fraction next to an offset
 parse/date-time	1990-12-31T23:59:60Z	instant:662687999:999999999	design-4.1/leap-second a leap second
+parse/date-time	1990-12-31T23:59:60.5Z	instant:662687999:999999999	design-4.1/leap-second-fraction a leap second with a fraction
+parse/date-time	1990-12-31T23:59:60+00:00	instant:662687999:999999999	design-4.1/leap-second-offset a leap second with a zero offset
 parse/date-time	2020-02-29T12:00:00Z	instant:1582977600:0	design-4.1/leap-day a leap day
 parse/date-time	2021-02-29T12:00:00Z	error:InvalidFormat	design-4.1/non-leap-day a leap day in a common year
 parse/date-time	1985-02-30T00:00:00Z	error:InvalidFormat	design-4.1/day-out-of-range day 30 in February
@@ -706,6 +709,7 @@ parse/date-time	1985-04-12T23:60:00Z	error:InvalidFormat	design-4.1/minute-out-o
 parse/date-time	1985-04-12T23:20:61Z	error:InvalidFormat	design-4.1/second-out-of-range second 61
 parse/date-time	1985-04-12	error:InvalidFormat	design-4.1/date-only a date without a time
 parse/date-time	1985-04-12 23:20:50Z	instant:482196050:0	design-4.1/space-separator a space instead of the T separator
+parse/date-time	1985-04-12\t23:20:50Z	instant:482196050:0	design-4.1/tab-separator a tab instead of the T separator
 parse/date-time	1985-04-12T23:20Z	error:InvalidFormat	design-4.1/no-seconds a time without seconds
 parse/date-time	1985-04-12T23:20:50	error:InvalidFormat	design-4.1/no-zone a time without a zone
 parse/date-time	1985-04-12T23:20:50,52Z	error:InvalidFormat	design-4.1/comma-decimal a comma as the decimal separator
