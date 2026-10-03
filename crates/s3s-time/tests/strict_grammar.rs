@@ -39,6 +39,10 @@ fn date_time_accepts_the_profile() {
         ("1985-04-12T23:20:50-00:00", (482_196_050, 0)),
         ("1985-04-12T23:20:50+02:00", (482_188_850, 0)),
         ("1985-04-12T23:20:50-05:30", (482_215_850, 0)),
+        // Interior values of the offset fields: a two-digit hour at the high end
+        // of its range, and a minute that ends in a digit other than zero.
+        ("1985-04-12T23:20:50+19:00", (482_127_650, 0)),
+        ("1985-04-12T23:20:50+00:05", (482_195_750, 0)),
         ("1985-04-12T23:20:50.5+01:00", (482_192_450, 500_000_000)),
         ("2020-02-29T12:00:00Z", (1_582_977_600, 0)),
         ("0000-01-01T00:00:00Z", (-62_167_219_200, 0)),
@@ -72,6 +76,20 @@ fn date_time_rejects_the_spellings_outside_the_profile() {
     ];
     for text in cases {
         assert_eq!(error_name(text, TimestampFormat::DateTime), "InvalidFormat", "{text:?}");
+    }
+}
+
+#[test]
+fn date_time_rejects_a_malformed_offset_without_panicking() {
+    // Both offset fields are checked field by field before they are combined, so a
+    // non-digit in one of them must be a rejection and never an arithmetic
+    // overflow; the assertion is written with `catch_unwind` so a panic is a
+    // failure of this test rather than a green run.
+    let outcome = std::panic::catch_unwind(|| Timestamp::parse(TimestampFormat::DateTime, "1985-04-12T23:20:50+0/:00"));
+    match outcome {
+        Ok(Err(ParseTimestampError::InvalidFormat)) => {}
+        Ok(other) => panic!("expected an InvalidFormat rejection, got {other:?}"),
+        Err(_) => panic!("the reader panicked on a malformed offset"),
     }
 }
 
