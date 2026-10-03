@@ -64,6 +64,7 @@ base64-simd = "0.8.0"
 hex-simd = "0.8.0"
 itoa = "1.0.18"
 nom = "8.0.0"
+rlimit = "0.11"
 regex = "1.13.1"
 
 # Date & time
