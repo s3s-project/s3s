@@ -78,14 +78,13 @@ const EXPECTED_FAILURES: &[(&str, &[(&str, usize)])] = &[
     ),
     (
         "minio-js",
+        // The force-delete cases pass now that the `x-minio-force-delete` header
+        // is forwarded, so only one `listObjects` failure is left to cap.
         &[
             ("copyObject(bucketName, objectName, srcObject, conditions, cb)", 1),
-            ("listObjects(bucketName, prefix, recursive)", 3),
+            ("listObjects(bucketName, prefix, recursive)", 1),
             ("extensions.listObjectsV2WithMetadata(bucketName, prefix, recursive)", 1),
             ("Put an object with assume role credentials:  bucket:", 1),
-            ("\"after all\" hook in \"Force Deletion of objects with versions\"", 1),
-            ("\"after all\" hook in \"Force Deletion of prefix with versions\"", 1),
-            ("\"after all\" hook in \"Force Deletion of prefix\"", 1),
             ("\"after all\" hook in \"functional tests\"", 1),
         ],
     ),
@@ -383,7 +382,13 @@ mod tests {
         let mut errors = Vec::new();
         check_gate(&logs, &mut errors);
 
-        assert_eq!(errors.len(), 11, "one unexpected failure plus ten stale entries: {errors:?}");
+        assert_eq!(errors.len(), 8, "one unexpected failure plus seven stale entries: {errors:?}");
+        assert!(
+            !errors
+                .iter()
+                .any(|error| error.contains("Force Deletion") || error.contains("\"listObjects(bucketName, prefix, recursive)\"")),
+            "the fixed force-delete cases must have no expected-failure entry left: {errors:?}"
+        );
         assert!(
             errors
                 .iter()

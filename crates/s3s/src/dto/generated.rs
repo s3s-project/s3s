@@ -8674,6 +8674,7 @@ impl DtoExt for DeleteObjectAnnotationOutput {
 }
 
 #[derive(Clone, Default, PartialEq)]
+#[cfg(not(feature = "minio"))]
 pub struct DeleteObjectInput {
     /// <p>The bucket name of the bucket containing the object. </p>
     /// <p>
@@ -8745,7 +8746,81 @@ pub struct DeleteObjectInput {
     pub version_id: Option<ObjectVersionId>,
 }
 
+#[derive(Clone, Default, PartialEq)]
+#[cfg(feature = "minio")]
+pub struct DeleteObjectInput {
+    /// <p>The bucket name of the bucket containing the object. </p>
+    /// <p>
+    /// <b>Directory buckets</b> - When you use this operation with a directory bucket, you must use virtual-hosted-style requests in the format <code>
+    /// <i>Bucket-name</i>.s3express-<i>zone-id</i>.<i>region-code</i>.amazonaws.com</code>. Path-style requests are not supported.  Directory bucket names must be unique in the chosen Zone (Availability Zone or Local Zone). Bucket names must follow the format <code>
+    /// <i>bucket-base-name</i>--<i>zone-id</i>--x-s3</code> (for example, <code>
+    /// <i>amzn-s3-demo-bucket</i>--<i>usw2-az1</i>--x-s3</code>). For information about bucket naming
+    /// restrictions, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/directory-bucket-naming-rules.html">Directory bucket naming
+    /// rules</a> in the <i>Amazon S3 User Guide</i>.</p>
+    /// <p>
+    /// <b>Access points</b> - When you use this action with an access point for general purpose buckets, you must provide the alias of the access point in place of the bucket name or specify the access point ARN. When you use this action with an access point for directory buckets, you must provide the access point name in place of the bucket name. When using the access point ARN, you must direct requests to the access point hostname. The access point hostname takes the form <i>AccessPointName</i>-<i>AccountId</i>.s3-accesspoint.<i>Region</i>.amazonaws.com. When using this action with an access point through the Amazon Web Services SDKs, you provide the access point ARN in place of the bucket name. For more information about access point ARNs, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-access-points.html">Using access points</a> in the <i>Amazon S3 User Guide</i>.</p>
+    /// <note>
+    /// <p>Object Lambda access points are not supported by directory buckets.</p>
+    /// </note>
+    /// <p>
+    /// <b>S3 on Outposts</b> - When you use this action with S3 on Outposts, you must direct requests to the S3 on Outposts hostname. The S3 on Outposts hostname takes the
+    /// form <code>
+    /// <i>AccessPointName</i>-<i>AccountId</i>.<i>outpostID</i>.s3-outposts.<i>Region</i>.amazonaws.com</code>. When you use this action with S3 on Outposts, the destination bucket must be the Outposts access point ARN or the access point alias. For more information about S3 on Outposts, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/S3onOutposts.html">What is S3 on Outposts?</a> in the <i>Amazon S3 User Guide</i>.</p>
+    pub bucket: BucketName,
+    /// <p>Indicates whether S3 Object Lock should bypass Governance-mode restrictions to process this
+    /// operation. To use this header, you must have the <code>s3:BypassGovernanceRetention</code>
+    /// permission.</p>
+    /// <note>
+    /// <p>This functionality is not supported for directory buckets.</p>
+    /// </note>
+    pub bypass_governance_retention: Option<BypassGovernanceRetention>,
+    /// <p>The account ID of the expected bucket owner. If the account ID that you provide does not match the actual owner of the bucket, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).</p>
+    pub expected_bucket_owner: Option<AccountId>,
+    pub force_delete: Option<ForceDelete>,
+    /// <p>Deletes the object if the ETag (entity tag) value provided during the delete operation matches the ETag of the object in S3.
+    /// If the ETag values do not match, the operation returns a <code>412 Precondition Failed</code> error.</p>
+    /// <p>Expects the ETag value as a string. <code>If-Match</code> does accept a string value of an '*' (asterisk) character to denote a match of any ETag.</p>
+    /// <p>For more information about conditional requests, see <a href="https://tools.ietf.org/html/rfc7232">RFC 7232</a>.</p>
+    pub if_match: Option<IfMatch>,
+    /// <p>If present, the object is deleted only if its modification times matches the provided
+    /// <code>Timestamp</code>. If the <code>Timestamp</code> values do not match, the operation returns a
+    /// <code>412 Precondition Failed</code> error. If the <code>Timestamp</code> matches or if the object
+    /// doesn’t exist, the operation returns a <code>204 Success (No Content)</code> response.</p>
+    /// <note>
+    /// <p>This functionality is only supported for directory buckets.</p>
+    /// </note>
+    pub if_match_last_modified_time: Option<IfMatchLastModifiedTime>,
+    /// <p>If present, the object is deleted only if its size matches the provided size in bytes. If the
+    /// <code>Size</code> value does not match, the operation returns a <code>412 Precondition Failed</code>
+    /// error. If the <code>Size</code> matches or if the object doesn’t exist, the operation returns a
+    /// <code>204 Success (No Content)</code> response.</p>
+    /// <note>
+    /// <p>This functionality is only supported for directory buckets.</p>
+    /// </note>
+    /// <important>
+    /// <p>You can use the <code>If-Match</code>, <code>x-amz-if-match-last-modified-time</code> and
+    /// <code>x-amz-if-match-size</code> conditional headers in conjunction with each-other or
+    /// individually.</p>
+    /// </important>
+    pub if_match_size: Option<IfMatchSize>,
+    /// <p>Key name of the object to delete.</p>
+    pub key: ObjectKey,
+    /// <p>The concatenation of the authentication device's serial number, a space, and the value that is
+    /// displayed on your authentication device. Required to permanently delete a versioned object if versioning
+    /// is configured with MFA delete enabled.</p>
+    /// <note>
+    /// <p>This functionality is not supported for directory buckets.</p>
+    /// </note>
+    pub mfa: Option<MFA>,
+    pub request_payer: Option<RequestPayer>,
+    /// <p>Version ID used to reference a specific version of the object.</p>
+    /// <note>
+    /// <p>For directory buckets in this API operation, only the <code>null</code> value of the version ID is supported.</p>
+    /// </note>
+    pub version_id: Option<ObjectVersionId>,
+}
 impl fmt::Debug for DeleteObjectInput {
+    #[cfg(not(feature = "minio"))]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut d = f.debug_struct("DeleteObjectInput");
         d.field("bucket", &self.bucket);
@@ -8754,6 +8829,41 @@ impl fmt::Debug for DeleteObjectInput {
         }
         if let Some(ref val) = self.expected_bucket_owner {
             d.field("expected_bucket_owner", val);
+        }
+        if let Some(ref val) = self.if_match {
+            d.field("if_match", val);
+        }
+        if let Some(ref val) = self.if_match_last_modified_time {
+            d.field("if_match_last_modified_time", val);
+        }
+        if let Some(ref val) = self.if_match_size {
+            d.field("if_match_size", val);
+        }
+        d.field("key", &self.key);
+        if let Some(ref val) = self.mfa {
+            d.field("mfa", val);
+        }
+        if let Some(ref val) = self.request_payer {
+            d.field("request_payer", val);
+        }
+        if let Some(ref val) = self.version_id {
+            d.field("version_id", val);
+        }
+        d.finish_non_exhaustive()
+    }
+
+    #[cfg(feature = "minio")]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("DeleteObjectInput");
+        d.field("bucket", &self.bucket);
+        if let Some(ref val) = self.bypass_governance_retention {
+            d.field("bypass_governance_retention", val);
+        }
+        if let Some(ref val) = self.expected_bucket_owner {
+            d.field("expected_bucket_owner", val);
+        }
+        if let Some(ref val) = self.force_delete {
+            d.field("force_delete", val);
         }
         if let Some(ref val) = self.if_match {
             d.field("if_match", val);
@@ -51097,6 +51207,8 @@ pub mod builders {
 
         expected_bucket_owner: Option<AccountId>,
 
+        force_delete: Option<ForceDelete>,
+
         if_match: Option<IfMatch>,
 
         if_match_last_modified_time: Option<IfMatchLastModifiedTime>,
@@ -51125,6 +51237,11 @@ pub mod builders {
 
         pub fn set_expected_bucket_owner(&mut self, field: Option<AccountId>) -> &mut Self {
             self.expected_bucket_owner = field;
+            self
+        }
+
+        pub fn set_force_delete(&mut self, field: Option<ForceDelete>) -> &mut Self {
+            self.force_delete = field;
             self
         }
 
@@ -51182,6 +51299,12 @@ pub mod builders {
         }
 
         #[must_use]
+        pub fn force_delete(mut self, field: Option<ForceDelete>) -> Self {
+            self.force_delete = field;
+            self
+        }
+
+        #[must_use]
         pub fn if_match(mut self, field: Option<IfMatch>) -> Self {
             self.if_match = field;
             self
@@ -51227,6 +51350,7 @@ pub mod builders {
             let bucket = self.bucket.ok_or_else(|| BuildError::missing_field("bucket"))?;
             let bypass_governance_retention = self.bypass_governance_retention;
             let expected_bucket_owner = self.expected_bucket_owner;
+            let force_delete = self.force_delete;
             let if_match = self.if_match;
             let if_match_last_modified_time = self.if_match_last_modified_time;
             let if_match_size = self.if_match_size;
@@ -51238,6 +51362,7 @@ pub mod builders {
                 bucket,
                 bypass_governance_retention,
                 expected_bucket_owner,
+                force_delete,
                 if_match,
                 if_match_last_modified_time,
                 if_match_size,

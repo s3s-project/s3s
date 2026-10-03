@@ -16,6 +16,18 @@
                 }
             }
         },
+        "com.amazonaws.s3#DeleteObjectRequest": {
+            "type": "structure",
+            "members": {
+                "ForceDelete": {
+                    "target": "com.amazonaws.s3#ForceDelete",
+                    "traits": {
+                        "smithy.api#httpHeader": "x-minio-force-delete",
+                        "s3s#minio": ""
+                    }
+                }
+            }
+        },
         "com.amazonaws.s3#ExcludeFolders": {
             "type": "boolean"
         },

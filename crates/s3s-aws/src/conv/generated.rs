@@ -2553,11 +2553,29 @@ impl AwsConversion for s3s::dto::DeleteObjectInput {
     type Target = aws_sdk_s3::operation::delete_object::DeleteObjectInput;
     type Error = S3Error;
 
+    #[cfg(not(feature = "minio"))]
     fn try_from_aws(x: Self::Target) -> S3Result<Self> {
         Ok(Self {
             bucket: unwrap_from_aws(x.bucket, "bucket")?,
             bypass_governance_retention: try_from_aws(x.bypass_governance_retention)?,
             expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
+            if_match: try_from_aws(x.if_match)?,
+            if_match_last_modified_time: try_from_aws(x.if_match_last_modified_time)?,
+            if_match_size: try_from_aws(x.if_match_size)?,
+            key: unwrap_from_aws(x.key, "key")?,
+            mfa: try_from_aws(x.mfa)?,
+            request_payer: try_from_aws(x.request_payer)?,
+            version_id: try_from_aws(x.version_id)?,
+        })
+    }
+
+    #[cfg(feature = "minio")]
+    fn try_from_aws(x: Self::Target) -> S3Result<Self> {
+        Ok(Self {
+            bucket: unwrap_from_aws(x.bucket, "bucket")?,
+            bypass_governance_retention: try_from_aws(x.bypass_governance_retention)?,
+            expected_bucket_owner: try_from_aws(x.expected_bucket_owner)?,
+            force_delete: None,
             if_match: try_from_aws(x.if_match)?,
             if_match_last_modified_time: try_from_aws(x.if_match_last_modified_time)?,
             if_match_size: try_from_aws(x.if_match_size)?,

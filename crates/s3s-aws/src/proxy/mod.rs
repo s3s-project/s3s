@@ -63,3 +63,113 @@ impl ProxyBuilder {
         }
     }
 }
+
+#[cfg(all(test, feature = "minio"))]
+mod tests {
+    use super::Proxy;
+
+    use std::net::SocketAddr;
+    use std::sync::{Arc, Mutex};
+
+    use hyper::http::{Extensions, HeaderMap, Method, Uri};
+    use s3s::S3;
+    use s3s::S3Request;
+    use s3s::dto::DeleteObjectInput;
+    use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+    use tokio::net::TcpListener;
+
+    /// Serves exactly one request: records its head and answers `204 No Content`.
+    async fn record_one_request() -> (SocketAddr, Arc<Mutex<String>>, tokio::task::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let addr = listener.local_addr().expect("local addr");
+        let seen = Arc::new(Mutex::new(String::new()));
+        let recorder = Arc::clone(&seen);
+
+        let handle = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.expect("accept");
+            let mut head = Vec::new();
+            let mut chunk = [0_u8; 1024];
+            while !head.windows(4).any(|w| w == b"\r\n\r\n") {
+                let read = socket.read(&mut chunk).await.expect("read");
+                if read == 0 {
+                    break;
+                }
+                head.extend_from_slice(&chunk[..read]);
+            }
+            *recorder.lock().expect("lock") = String::from_utf8_lossy(&head).into_owned();
+            socket
+                .write_all(b"HTTP/1.1 204 No Content\r\ncontent-length: 0\r\n\r\n")
+                .await
+                .expect("write response");
+        });
+
+        (addr, seen, handle)
+    }
+
+    fn proxy_for(addr: SocketAddr) -> Proxy {
+        let config = aws_sdk_s3::Config::builder()
+            .behavior_version(aws_sdk_s3::config::BehaviorVersion::latest())
+            .credentials_provider(aws_sdk_s3::config::Credentials::new("test", "test", None, None, "test"))
+            .region(aws_sdk_s3::config::Region::new("us-east-1"))
+            .endpoint_url(format!("http://{addr}"))
+            .force_path_style(true)
+            .build();
+        let provider = minio::s3::creds::StaticProvider::new("test", "test", None);
+        let minio = minio::s3::MinioClient::new("http://127.0.0.1:1".parse().expect("url"), Some(provider), None, None)
+            .expect("minio client");
+        Proxy::builder(aws_sdk_s3::Client::from_conf(config))
+            .minio_client(minio)
+            .build()
+    }
+
+    fn delete_object_request(bucket: &str, key: &str) -> S3Request<DeleteObjectInput> {
+        let input = DeleteObjectInput {
+            bucket: bucket.to_owned(),
+            key: key.to_owned(),
+            ..Default::default()
+        };
+        S3Request {
+            input,
+            method: Method::DELETE,
+            uri: Uri::from_static("/"),
+            headers: HeaderMap::new(),
+            extensions: Extensions::default(),
+            credentials: None,
+            region: None,
+            service: None,
+            trailing_headers: None,
+        }
+    }
+
+    /// The `MinIO` extension member has no `aws-sdk-s3` counterpart, so the header
+    /// has to reach the backend through the operation customization hook.
+    #[tokio::test]
+    async fn delete_object_forwards_the_force_delete_header() {
+        let (addr, seen, server) = record_one_request().await;
+        let proxy = proxy_for(addr);
+
+        let mut req = delete_object_request("bucket", "key");
+        req.input.force_delete = Some(true);
+        proxy.delete_object(req).await.expect("delete object");
+
+        server.await.expect("server task");
+        let head = seen.lock().expect("lock").clone().to_ascii_lowercase();
+        assert!(head.contains("\r\nx-minio-force-delete: true\r\n"), "{head}");
+    }
+
+    /// Negative control: without the extension member the header must not be sent.
+    #[tokio::test]
+    async fn delete_object_omits_the_force_delete_header() {
+        let (addr, seen, server) = record_one_request().await;
+        let proxy = proxy_for(addr);
+
+        proxy
+            .delete_object(delete_object_request("bucket", "key"))
+            .await
+            .expect("delete object");
+
+        server.await.expect("server task");
+        let head = seen.lock().expect("lock").clone().to_ascii_lowercase();
+        assert!(!head.contains("x-minio-force-delete"), "{head}");
+    }
+}

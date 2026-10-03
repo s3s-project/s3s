@@ -14,6 +14,7 @@ use crate::ops::CallContext;
 pub struct DeleteObject;
 
 impl DeleteObject {
+    #[cfg(not(feature = "minio"))]
     pub fn deserialize_http(req: &mut http::Request) -> S3Result<DeleteObjectInput> {
         let (bucket, key) = http::unwrap_object(req);
 
@@ -39,6 +40,45 @@ impl DeleteObject {
             bucket,
             bypass_governance_retention,
             expected_bucket_owner,
+            if_match,
+            if_match_last_modified_time,
+            if_match_size,
+            key,
+            mfa,
+            request_payer,
+            version_id,
+        })
+    }
+
+    #[cfg(feature = "minio")]
+    pub fn deserialize_http(req: &mut http::Request) -> S3Result<DeleteObjectInput> {
+        let (bucket, key) = http::unwrap_object(req);
+
+        let bypass_governance_retention: Option<BypassGovernanceRetention> =
+            http::parse_opt_header(req, &X_AMZ_BYPASS_GOVERNANCE_RETENTION)?;
+
+        let expected_bucket_owner: Option<AccountId> = http::parse_opt_header(req, &X_AMZ_EXPECTED_BUCKET_OWNER)?;
+
+        let force_delete: Option<ForceDelete> = http::parse_opt_header(req, &X_MINIO_FORCE_DELETE)?;
+
+        let if_match: Option<IfMatch> = http::parse_opt_header(req, &IF_MATCH)?;
+
+        let if_match_last_modified_time: Option<IfMatchLastModifiedTime> =
+            http::parse_opt_header_timestamp(req, &X_AMZ_IF_MATCH_LAST_MODIFIED_TIME, TimestampFormat::HttpDate)?;
+
+        let if_match_size: Option<IfMatchSize> = http::parse_opt_header(req, &X_AMZ_IF_MATCH_SIZE)?;
+
+        let mfa: Option<MFA> = http::parse_opt_header(req, &X_AMZ_MFA)?;
+
+        let request_payer: Option<RequestPayer> = http::parse_opt_header(req, &X_AMZ_REQUEST_PAYER)?;
+
+        let version_id: Option<ObjectVersionId> = http::parse_opt_query(req, "versionId")?;
+
+        Ok(DeleteObjectInput {
+            bucket,
+            bypass_governance_retention,
+            expected_bucket_owner,
+            force_delete,
             if_match,
             if_match_last_modified_time,
             if_match_size,

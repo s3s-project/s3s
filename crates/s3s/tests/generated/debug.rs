@@ -2058,6 +2058,7 @@ fn debug_struct_delete_object_annotation_output() {
     );
 }
 
+#[cfg(not(feature = "minio"))]
 pub(super) fn sample_delete_object_input() -> s3s::dto::DeleteObjectInput {
     s3s::dto::DeleteObjectInput {
         bucket: String::from("bucket-a<&>\"中"),
@@ -2075,6 +2076,7 @@ pub(super) fn sample_delete_object_input() -> s3s::dto::DeleteObjectInput {
     }
 }
 
+#[cfg(not(feature = "minio"))]
 #[test]
 fn debug_struct_delete_object_input() {
     let value = sample_delete_object_input();
@@ -2082,6 +2084,43 @@ fn debug_struct_delete_object_input() {
         format!("{value:?}"),
         format!(
             "DeleteObjectInput {{ bucket: \"bucket-a<&>\\\"中\", bypass_governance_retention: true, expected_bucket_owner: \"expected_bucket_owner-a<&>\\\"中\", if_match: {0}, if_match_last_modified_time: {1}, if_match_size: -1, key: \"key-a<&>\\\"中\", mfa: \"mfa-a<&>\\\"中\", request_payer: RequestPayer(\"requester\"), version_id: \"version_id-a<&>\\\"中\", .. }}",
+            format!("{:?}", s3s::dto::ETagCondition::Any),
+            format!(
+                "{:?}",
+                s3s::dto::Timestamp::parse(s3s::dto::TimestampFormat::DateTime, "1985-04-12T23:20:50.520Z")
+                    .expect("valid timestamp")
+            )
+        )
+    );
+}
+
+#[cfg(feature = "minio")]
+pub(super) fn sample_delete_object_input() -> s3s::dto::DeleteObjectInput {
+    s3s::dto::DeleteObjectInput {
+        bucket: String::from("bucket-a<&>\"中"),
+        bypass_governance_retention: Some(true),
+        expected_bucket_owner: Some(String::from("expected_bucket_owner-a<&>\"中")),
+        force_delete: Some(true),
+        if_match: Some(s3s::dto::ETagCondition::Any),
+        if_match_last_modified_time: Some(
+            s3s::dto::Timestamp::parse(s3s::dto::TimestampFormat::DateTime, "1985-04-12T23:20:50.520Z").expect("valid timestamp"),
+        ),
+        if_match_size: Some(-1),
+        key: String::from("key-a<&>\"中"),
+        mfa: Some(String::from("mfa-a<&>\"中")),
+        request_payer: Some(s3s::dto::RequestPayer::from_static("requester")),
+        version_id: Some(String::from("version_id-a<&>\"中")),
+    }
+}
+
+#[cfg(feature = "minio")]
+#[test]
+fn debug_struct_delete_object_input() {
+    let value = sample_delete_object_input();
+    assert_eq!(
+        format!("{value:?}"),
+        format!(
+            "DeleteObjectInput {{ bucket: \"bucket-a<&>\\\"中\", bypass_governance_retention: true, expected_bucket_owner: \"expected_bucket_owner-a<&>\\\"中\", force_delete: true, if_match: {0}, if_match_last_modified_time: {1}, if_match_size: -1, key: \"key-a<&>\\\"中\", mfa: \"mfa-a<&>\\\"中\", request_payer: RequestPayer(\"requester\"), version_id: \"version_id-a<&>\\\"中\", .. }}",
             format!("{:?}", s3s::dto::ETagCondition::Any),
             format!(
                 "{:?}",

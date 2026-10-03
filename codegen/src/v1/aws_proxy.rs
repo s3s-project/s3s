@@ -73,6 +73,8 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
                 &[]
             };
 
+            let extension_headers = extension_header_fields(ty, flattened_fields);
+
             for field in ty.fields.iter().chain(flattened_fields) {
                 if field.is_custom_extension {
                     continue;
@@ -119,6 +121,9 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
                     g!("b = b.set_{aws_field_name}(Some(try_into_aws(input.{s3s_field_name})?));");
                 }
             }
+            if !extension_headers.is_empty() {
+                codegen_extension_headers(&extension_headers);
+            }
             g!("let result = b.send().await;");
         }
 
@@ -139,4 +144,42 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
     }
 
     g!("}}");
+}
+
+/// The `MinIO` extension members of an operation that are declared as HTTP
+/// headers; they have no `aws-sdk-s3` counterpart and are forwarded verbatim.
+fn extension_header_fields<'a>(ty: &'a rust::Struct, flattened: &'a [rust::StructField]) -> Vec<&'a rust::StructField> {
+    ty.fields
+        .iter()
+        .chain(flattened)
+        .filter(|field| field.is_custom_extension && field.http_header.is_some())
+        .collect()
+}
+
+/// Emits the request customization that forwards `MinIO` extension members
+/// declared as HTTP headers (for example `x-minio-force-delete`).
+///
+/// The proxy file is generated from the `MinIO` model only and compiled in both
+/// feature configurations, so the block carries its own feature gate.
+fn codegen_extension_headers(fields: &[&rust::StructField]) {
+    g!("#[cfg(feature = \"minio\")]");
+    g!("let b = {{");
+    for field in fields {
+        let name = &field.name;
+        g!("    let {name} = input.{name};");
+    }
+    g!("    b.customize().mutate_request(move |req| {{");
+    for field in fields {
+        let header = field.http_header.as_deref().unwrap();
+        let name = &field.name;
+        if field.option_type {
+            g!("        if let Some(value) = {name} {{");
+            g!("            req.headers_mut().insert(\"{header}\", value.to_string());");
+            g!("        }}");
+        } else {
+            g!("        req.headers_mut().insert(\"{header}\", {name}.to_string());");
+        }
+    }
+    g!("    }})");
+    g!("}};");
 }
