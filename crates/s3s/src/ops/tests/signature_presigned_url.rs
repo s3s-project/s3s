@@ -649,11 +649,14 @@ async fn v4_presigned_url_put_with_valid_content_sha256() {
     let headers_for_signing = [("host", "s3.amazonaws.com")];
     let query_strings_for_signing = presigned_query_fields(&amz_date, "s3");
 
-    let canonical_request = s3s_sigv4::create_presigned_canonical_request(
+    // The digest is the payload line of the URL: a presigned request may commit to a body digest,
+    // and the signature then covers the value the request must send in x-amz-content-sha256.
+    let canonical_request = s3s_sigv4::create_presigned_canonical_request_with_payload(
         method.as_str(),
         "/test-bucket/test-key",
         &query_strings_for_signing,
         headers_for_signing,
+        content_sha256.as_str(),
     );
     let string_to_sign = s3s_sigv4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
     let signature = s3s_sigv4::calculate_signature(&string_to_sign, secret_key.expose(), &amz_date, "us-east-1", "s3");
