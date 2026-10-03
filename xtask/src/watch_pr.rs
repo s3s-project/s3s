@@ -9,6 +9,11 @@
 //! material change, on the merge or close transition, or when its time budget
 //! runs out; `--keep-running` turns the first case into "keep going".
 //!
+//! The log is bookkeeping, not the watch: its directory is recreated before
+//! every write, because the build directory it lives under can be cleaned while
+//! the watcher runs, and a write that fails is reported instead of ending the
+//! watch.
+//!
 //! Check churn is deliberately quiet: a pull request that only changes the
 //! number of pending checks, or that flaps between `BLOCKED` and `UNSTABLE`,
 //! is not worth waking anybody for. A new failure, a settled check set, a
@@ -18,7 +23,7 @@
 use std::collections::BTreeMap;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
@@ -97,7 +102,7 @@ impl WatchPr {
                     emit(&line);
                     let changed = material_change(baseline.as_deref(), &line);
                     if changed || ticks.is_multiple_of(HEARTBEAT_TICKS) {
-                        append(&log, &line)?;
+                        append(&log, &line);
                     }
                     if snapshot.terminal() {
                         return Ok(true);
@@ -462,7 +467,23 @@ fn emit(text: &str) {
     println!("[{}] {text}", stamp());
 }
 
-fn append(path: &PathBuf, line: &str) -> Result<()> {
+/// Append one line to the log.
+///
+/// The log lives under the build directory, which `cargo clean` removes while
+/// the watcher is running, so the directory is recreated here. A log that still
+/// cannot be written is reported and the watch continues: noticing a change
+/// matters more than the record of it.
+fn append(path: &Path, line: &str) {
+    if let Err(error) = write_line(path, line) {
+        emit(&format!("log write failed: {error:#}"));
+    }
+}
+
+/// Write one line to the log, creating its directory when it is missing.
+fn write_line(path: &Path, line: &str) -> Result<()> {
+    if let Some(parent) = path.parent().filter(|parent| !parent.as_os_str().is_empty()) {
+        fs::create_dir_all(parent).with_context(|| format!("failed to create {}", parent.display()))?;
+    }
     let mut file = OpenOptions::new()
         .create(true)
         .append(true)
@@ -628,6 +649,18 @@ mod tests {
             rendered,
             "state=OPEN | draft=false | merge=UNSTABLE | auto=off | base=main | head=ec0a1b1 | review=- | reviews=1(COMMENTED/copilot-pull-request-reviewer) | comments=1(codecov) | labels=tests | reqs=1 | checks=IN_PROGRESS:1,SUCCESS:1 | fail=- | title=a title | queue=QUEUED/1"
         );
+    }
+
+    #[test]
+    fn the_log_directory_is_recreated_before_a_write() {
+        let directory = std::env::temp_dir().join(format!("pr-watch-test-{}", std::process::id()));
+        let path = directory.join("nested").join("pr-1.log");
+        write_line(&path, "state=OPEN").expect("the first write creates the directory");
+        write_line(&path, "state=MERGED").expect("the second write appends");
+        let text = std::fs::read_to_string(&path).expect("the log is readable");
+        assert!(text.contains("state=OPEN"));
+        assert!(text.contains("state=MERGED"));
+        std::fs::remove_dir_all(&directory).expect("the test cleans up after itself");
     }
 
     #[test]
