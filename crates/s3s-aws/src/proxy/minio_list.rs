@@ -80,9 +80,10 @@ pub async fn list_objects_v2(
     };
     let page = page.map_err(|e| super::minio_error::map_error("failed to list objects", e))?;
 
-    // The `minio` crate decodes the listing values it parses, so the wire form has
-    // to be restored before the client sees it: the client decodes unconditionally
-    // whatever it receives.
+    // The `minio` crate decodes the keys, the common prefixes, the request
+    // prefix and `start-after` when the response carries `EncodingType`, so their wire
+    // form has to be restored before the client sees it: the client decodes
+    // unconditionally whatever it receives.
     let encode = is_url_encoded(page.encoding_type.as_deref());
 
     let mut contents = Vec::with_capacity(page.contents.len());
@@ -100,8 +101,10 @@ pub async fn list_objects_v2(
     let output = ListObjectsV2Output {
         name: Some(page.name.clone()),
         prefix: page.prefix.as_deref().map(|value| convert_value(value, encode)),
-        // `MinIO` does not escape the delimiter, so neither does the crate.
-        delimiter: page.delimiter.clone(),
+        // The backend escapes the delimiter on the wire and the crate hands it back
+        // verbatim, so it is already in the form the `aws-sdk-s3` path forwards;
+        // re-encoding it would escape the escapes.
+        delimiter: page.delimiter.as_deref().map(wire_value),
         max_keys: page.max_keys.map(i32::from),
         key_count: page.key_count.map(i32::from),
         continuation_token: page.continuation_token.clone(),
@@ -109,7 +112,7 @@ pub async fn list_objects_v2(
         next_continuation_token: page.next_continuation_token.clone(),
         contents: Some(contents),
         common_prefixes: Some(common_prefixes),
-        start_after: page.start_after.clone(),
+        start_after: page.start_after.as_deref().map(|value| convert_value(value, encode)),
         // Mirrors the encoding the backend reported, like the `aws-sdk-s3` path.
         encoding_type: page.encoding_type.clone().map(EncodingType::from),
         request_charged: page
@@ -159,9 +162,17 @@ fn is_url_encoded(encoding_type: Option<&str>) -> bool {
     encoding_type == Some("url")
 }
 
-/// Restores the wire form of a listing value when the response is url-encoded.
+/// Restores the wire form of a listing value the crate decoded, when the response
+/// is url-encoded.
 fn convert_value(value: &str, encode: bool) -> String {
     if encode { encode_url(value) } else { value.to_owned() }
+}
+
+/// A listing value the crate hands back exactly as the backend sent it: the wire
+/// form already matches the `aws-sdk-s3` path, so it must not go through
+/// [`convert_value`], which would escape the escapes (`%2F` becomes `%252F`).
+fn wire_value(value: &str) -> String {
+    value.to_owned()
 }
 
 /// Escapes a listing value the way `MinIO` escapes it for `encoding-type=url`:
@@ -300,6 +311,23 @@ mod tests {
     fn requests_a_flat_listing_without_a_delimiter() {
         assert!(recursive_listing(None));
         assert!(!recursive_listing(Some("/")));
+    }
+
+    /// `start-after` is one of the values the crate decodes, so its wire form has to
+    /// be restored exactly like a key.
+    #[test]
+    fn start_after_is_reencoded() {
+        assert_eq!(convert_value("pct%20name.txt", true), "pct%2520name.txt");
+        assert_eq!(convert_value("a b/c+ünïcode.txt", true), "a+b/c%2B%C3%BCn%C3%AFcode.txt");
+        assert_eq!(convert_value("a b/c+ünïcode.txt", false), "a b/c+ünïcode.txt");
+    }
+
+    /// The delimiter is the one escaped value the crate hands back verbatim, so it
+    /// must not go through `convert_value`, which would escape the escapes.
+    #[test]
+    fn delimiter_is_not_reencoded() {
+        assert_eq!(wire_value("%2F"), "%2F");
+        assert_eq!(convert_value("%2F", true), "%252F");
     }
 
     /// Both request shapes: with `encoding-type=url` the values are escaped and the
