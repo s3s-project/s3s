@@ -50,17 +50,11 @@ impl Boundary {
     }
 
     /// Returns the length of the boundary in bytes, without the leading `--`.
+    // No `is_empty`: [`Boundary::new`] rejects empty input, so it would be constant false.
+    #[allow(clippy::len_without_is_empty)]
     #[must_use]
     pub fn len(&self) -> usize {
         self.0.len()
-    }
-
-    /// Returns `true` if the boundary is empty.
-    ///
-    /// This is always `false`: [`Boundary::new`] rejects empty input.
-    #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
     }
 }
 
@@ -101,7 +95,6 @@ mod tests {
             let parsed = Boundary::new(boundary).unwrap();
             assert_eq!(parsed.as_bytes(), boundary);
             assert_eq!(parsed.len(), boundary.len());
-            assert!(!parsed.is_empty());
             assert_ne!(parsed.to_string(), "");
             assert_ne!(format!("{parsed:?}"), "");
         }
