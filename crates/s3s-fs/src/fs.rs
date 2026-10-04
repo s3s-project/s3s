@@ -32,6 +32,19 @@ pub struct FileSystem {
 
 pub(crate) type InternalInfo = serde_json::Map<String, serde_json::Value>;
 
+/// Read a sidecar file, treating a missing one as absent and every other failure as an error.
+///
+/// A caller used to check `exists()` before reading, which cost a `stat` on every lookup and turned
+/// every read failure into `None`. Reading once maps `NotFound` to `None` and lets a real failure
+/// (a permission problem, a directory in the way) surface as an error instead of a silent absence.
+async fn read_sidecar(path: &Path) -> Result<Option<Vec<u8>>> {
+    match fs::read(path).await {
+        Ok(content) => Ok(Some(content)),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(err) => Err(err.into()),
+    }
+}
+
 /// Stores standard object attributes alongside user metadata
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub(crate) struct ObjectAttributes {
@@ -180,10 +193,9 @@ impl FileSystem {
         upload_id: Option<Uuid>,
     ) -> Result<Option<ObjectAttributes>> {
         let path = self.get_metadata_path(bucket, key, upload_id)?;
-        if path.exists().not() {
+        let Some(content) = read_sidecar(&path).await? else {
             return Ok(None);
-        }
-        let content = fs::read(&path).await?;
+        };
 
         // Try to deserialize as ObjectAttributes first (new format)
         if let Ok(attrs) = serde_json::from_slice::<ObjectAttributes>(&content) {
@@ -220,10 +232,9 @@ impl FileSystem {
 
     pub(crate) async fn load_internal_info(&self, bucket: &str, key: &str) -> Result<Option<InternalInfo>> {
         let path = self.get_internal_info_path(bucket, key)?;
-        if path.exists().not() {
+        let Some(content) = read_sidecar(&path).await? else {
             return Ok(None);
-        }
-        let content = fs::read(&path).await?;
+        };
         let map = serde_json::from_slice(&content)?;
         Ok(Some(map))
     }
