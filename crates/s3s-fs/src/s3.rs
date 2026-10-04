@@ -45,6 +45,15 @@ use uuid::Uuid;
 /// size; 64 KiB is a stable point to pair with connection limiting later on.
 const READ_CHUNK_SIZE: usize = 64 * 1024;
 
+/// Copy chunk size for assembling a multipart object out of its parts.
+///
+/// One buffer is reused for every read from a part and every write to the temporary object, so
+/// copying an object of `n` bytes costs roughly `2n / COPY_CHUNK_SIZE` syscalls and the buffer is
+/// held per in-flight `CompleteMultipartUpload`. 256 KiB is four times fewer syscalls than
+/// [`READ_CHUNK_SIZE`] while keeping that per-request footprint small. The two are separate
+/// constants because the read path streams an object to a client and this one copies between files.
+const COPY_CHUNK_SIZE: usize = 256 * 1024;
+
 /// Maps a path that no longer exists to `None`, leaving every other error intact.
 ///
 /// A listing walks the tree entry by entry, so an object deleted while the walk runs can be gone
@@ -1447,7 +1456,7 @@ impl S3 for FileSystem {
         let total_parts_cnt = i32::try_from(parts_count).expect("total number of parts must be <= 10000.");
 
         let mut part_md5_hashes: Vec<[u8; 16]> = Vec::new();
-        let mut buf = vec![0u8; 65536];
+        let mut buf = vec![0u8; COPY_CHUNK_SIZE];
 
         for part in multipart_upload.parts.into_iter().flatten() {
             let part_number = part
@@ -1480,7 +1489,7 @@ impl S3 for FileSystem {
                 try_!(file_writer.writer().write_all(&buf[..nread]).await);
                 size += nread as u64;
             }
-            try_!(file_writer.writer().flush().await);
+            // No flush per part: `done` flushes once, before it renames the temporary object.
             part_md5_hashes.push(part_md5.finalize());
 
             if part_number != total_parts_cnt && size < 5 * 1024 * 1024 {
