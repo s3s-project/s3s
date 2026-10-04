@@ -86,16 +86,8 @@ fn presigned_put_uri(signed_headers: &[(&'static str, &'static str)]) -> Uri {
         .duration_since(std::time::UNIX_EPOCH)
         .expect("system clock after epoch")
         .as_secs();
-    let datetime = time::OffsetDateTime::from_unix_timestamp(i64::try_from(now).expect("fits i64")).expect("valid timestamp");
-    let amz_date_str = format!(
-        "{:04}{:02}{:02}T{:02}{:02}{:02}Z",
-        datetime.year(),
-        u8::from(datetime.month()),
-        datetime.day(),
-        datetime.hour(),
-        datetime.minute(),
-        datetime.second()
-    );
+    let datetime = jiff::Timestamp::from_second(i64::try_from(now).expect("fits i64")).expect("valid timestamp");
+    let amz_date_str = datetime.strftime("%Y%m%dT%H%M%SZ").to_string();
     let date_stamp = &amz_date_str[..8];
 
     let mut signed_headers = signed_headers.to_vec();

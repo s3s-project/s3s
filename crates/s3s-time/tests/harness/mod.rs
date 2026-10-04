@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
-//! The machinery that the generator and the tests share.
+//! The machinery that the integration tests share.
 //!
-//! The modules are plain files next to this one, so the generator example and the two
-//! integration tests compile exactly the same reader and the same oracle adapter:
+//! The modules are plain files next to this one, so the tests compile exactly the same
+//! reader and the same adapter:
 //!
 //! - support owns the fixture schema and the canonical instant arithmetic,
-//! - api puts the oracle and the candidate behind one trait.
+//! - api puts this crate's implementation behind one trait and replays the fixture.
 //!
-//! The generator example and the two integration tests each compile this module and
-//! each use a different part of it, so the unused half of the shared surface is
-//! expected in every target.
+//! Each test target compiles this module and uses a different part of it, so the unused
+//! half of the shared surface is expected in every target.
 #![allow(dead_code)]
 
 pub mod api;

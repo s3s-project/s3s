@@ -553,16 +553,8 @@ pub(crate) fn headers_from_slice(slice: &[(&str, &str)]) -> HeaderMap {
     headers
 }
 
-pub(crate) fn fmt_current_amz_date(dt: time::OffsetDateTime) -> String {
-    format!(
-        "{:04}{:02}{:02}T{:02}{:02}{:02}Z",
-        dt.year(),
-        u8::from(dt.month()),
-        dt.day(),
-        dt.hour(),
-        dt.minute(),
-        dt.second()
-    )
+pub(crate) fn fmt_current_amz_date(dt: jiff::Timestamp) -> String {
+    dt.strftime("%Y%m%dT%H%M%SZ").to_string()
 }
 
 pub(crate) fn sig_v2_test_config(enable_sig_v2: bool) -> Arc<dyn S3ConfigProvider> {

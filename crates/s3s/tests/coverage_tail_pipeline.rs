@@ -412,16 +412,7 @@ async fn credential_region_differing_from_the_host_region_is_accepted() {
     builder.set_auth(SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY));
     let service = builder.build();
 
-    let now = time::OffsetDateTime::now_utc();
-    let amz_date = format!(
-        "{:04}{:02}{:02}T{:02}{:02}{:02}Z",
-        now.year(),
-        u8::from(now.month()),
-        now.day(),
-        now.hour(),
-        now.minute(),
-        now.second()
-    );
+    let amz_date = jiff::Timestamp::now().strftime("%Y%m%dT%H%M%SZ").to_string();
 
     let region = "us-west-2";
     let date = &amz_date[..8];

@@ -225,11 +225,9 @@ async fn legacy_error_precedence_preserved_on_route_miss() {
 /// Builds a correctly signed `SigV4` header-auth request against the given
 /// Host, using the same credentials as [`ctx`].
 fn signed_vhost_request(host: &str) -> Request {
-    let now = time::OffsetDateTime::now_utc();
-    let date_fmt = time::macros::format_description!("[year][month][day]T[hour][minute][second]Z");
-    let scope_fmt = time::macros::format_description!("[year][month][day]");
-    let date = now.format(&date_fmt).expect("format");
-    let scope_date = now.format(&scope_fmt).expect("format");
+    let now = jiff::Timestamp::now();
+    let date = now.strftime("%Y%m%dT%H%M%SZ").to_string();
+    let scope_date = now.strftime("%Y%m%d").to_string();
     let region = "us-east-1";
 
     let amz_date = AmzDate::parse(date.as_str()).expect("valid date");
@@ -318,11 +316,9 @@ async fn valid_path_on_route_miss_resolves_operation_normally() {
 /// `x-amz-content-sha256` header carries the empty-string hash and no
 /// `Content-Length` is sent.
 fn signed_empty_body_request(method: Method, path: &str) -> Request {
-    let now = time::OffsetDateTime::now_utc();
-    let date_fmt = time::macros::format_description!("[year][month][day]T[hour][minute][second]Z");
-    let scope_fmt = time::macros::format_description!("[year][month][day]");
-    let date = now.format(&date_fmt).expect("format");
-    let scope_date = now.format(&scope_fmt).expect("format");
+    let now = jiff::Timestamp::now();
+    let date = now.strftime("%Y%m%dT%H%M%SZ").to_string();
+    let scope_date = now.strftime("%Y%m%d").to_string();
     let region = "us-east-1";
     let host = "localhost";
 

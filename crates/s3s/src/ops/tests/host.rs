@@ -666,14 +666,5 @@ async fn presigned_url_with_port_and_vhost_routes_bucket() {
 }
 
 fn format_current_amz_date() -> String {
-    let dt = time::OffsetDateTime::now_utc();
-    format!(
-        "{:04}{:02}{:02}T{:02}{:02}{:02}Z",
-        dt.year(),
-        u8::from(dt.month()),
-        dt.day(),
-        dt.hour(),
-        dt.minute(),
-        dt.second()
-    )
+    jiff::Timestamp::now().strftime("%Y%m%dT%H%M%SZ").to_string()
 }

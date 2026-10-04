@@ -17,8 +17,10 @@ pub use self::generated::*;
 mod streaming_blob;
 pub use self::streaming_blob::*;
 
-mod timestamp;
-pub use self::timestamp::*;
+pub use s3s_time::FormatTimestampError;
+pub use s3s_time::ParseTimestampError;
+pub use s3s_time::Timestamp;
+pub use s3s_time::TimestampFormat;
 
 mod copy_source;
 pub use self::copy_source::*;

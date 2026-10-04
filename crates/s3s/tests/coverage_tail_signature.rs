@@ -66,16 +66,7 @@ async fn send(service: &S3Service, req: HttpRequest) -> (StatusCode, String) {
 }
 
 fn amz_date_now() -> AmzDate {
-    let now = time::OffsetDateTime::now_utc();
-    let raw = format!(
-        "{:04}{:02}{:02}T{:02}{:02}{:02}Z",
-        now.year(),
-        u8::from(now.month()),
-        now.day(),
-        now.hour(),
-        now.minute(),
-        now.second()
-    );
+    let raw = jiff::Timestamp::now().strftime("%Y%m%dT%H%M%SZ").to_string();
     AmzDate::parse(&raw).expect("current time is a valid amz date")
 }
 
@@ -195,7 +186,7 @@ async fn sig_v2_header_auth_without_a_date_is_rejected() {
 #[tokio::test]
 async fn sig_v2_presigned_url_with_a_bad_signature_is_rejected() {
     let service = service(sig_v2_config(), true);
-    let expires = time::OffsetDateTime::now_utc().unix_timestamp() + 600;
+    let expires = jiff::Timestamp::now().as_second() + 600;
     let uri = format!("/bucket/key?AWSAccessKeyId={ACCESS_KEY}&Expires={expires}&Signature=1No4mq5ETf02z8aet9voy6gui6E%3D");
     let req = Request::builder()
         .method(Method::GET)

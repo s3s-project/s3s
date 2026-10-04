@@ -1122,8 +1122,7 @@ impl<'a> SignatureContext<'a> {
         } else {
             let ts = crate::dto::Timestamp::parse(crate::dto::TimestampFormat::HttpDate, date)
                 .map_err(|_| invalid_request!("invalid date"))?;
-            let odt: time::OffsetDateTime = ts.into();
-            jiff::Timestamp::from_second(odt.unix_timestamp()).map_err(|_| invalid_request!("invalid date"))?
+            jiff::Timestamp::from_second(ts.unix_seconds()).map_err(|_| invalid_request!("invalid date"))?
         };
         validate_clock_skew(request_time, jiff::Timestamp::now(), &config)?;
 
