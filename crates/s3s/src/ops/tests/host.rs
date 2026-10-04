@@ -116,8 +116,9 @@ fn extract_host_rejects_duplicate_host_header() {
     );
 
     let err = super::extract_host(&req).expect_err("duplicate Host must be rejected");
-    assert_eq!(err.code(), &crate::S3ErrorCode::InvalidRequest);
-    assert_eq!(err.message(), Some("duplicate header: Host"));
+    assert_eq!(err.code(), &crate::S3ErrorCode::DuplicateHeaderName);
+    assert_eq!(err.status_code(), Some(hyper::StatusCode::BAD_REQUEST));
+    assert_eq!(err.message(), Some("Your request contains duplicate headers."));
 }
 
 #[test]

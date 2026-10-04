@@ -204,9 +204,14 @@ fn resolve_default_message(
 }
 
 // https://github.com/Nugine/s3s/issues/224
+//
+// `data/s3_error_codes.json` is the snapshot of the official AWS error-code table.
+// `data/s3_extra_error_codes.json` carries codes the S3 front end returns without
+// documenting them in that table; keeping them in a separate file leaves the official
+// snapshot untouched.
 fn patch_extra_errors(errors: &mut Errors) {
-    {
-        let extra = error_codes::load_json("data/s3_error_codes.json").unwrap();
+    for path in ["data/s3_error_codes.json", "data/s3_extra_error_codes.json"] {
+        let extra = error_codes::load_json(path).unwrap();
 
         for group in extra.values() {
             for ec in group {

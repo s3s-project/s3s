@@ -1,0 +1,9 @@
+{
+    "S3": [
+        {
+            "code": "DuplicateHeaderName",
+            "description": "Your request contains duplicate headers.",
+            "http_status_code": 400
+        }
+    ]
+}
