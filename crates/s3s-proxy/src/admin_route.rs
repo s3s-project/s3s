@@ -20,16 +20,7 @@ use hyper::http::Extensions;
 use hyper::http::uri::PathAndQuery;
 use hyper::{HeaderMap, Method, StatusCode, Uri};
 
-/// Headers that must not be forwarded to the backend.
-///
-/// Only `transfer-encoding` is dropped: `hyper` manages chunked framing
-/// itself. The `host` header is part of the `SigV4` signature that `mc`
-/// computed against the proxy's address, and the backend verifies the
-/// signature against it. The `content-length` header is preserved too:
-/// `MinIO` admin endpoints require it even for empty bodies (e.g.
-/// `set-user-status`), and the aggregated body below has the exact same
-/// length.
-const HOP_BY_HOP_HEADERS: &[&str] = &["transfer-encoding"];
+use crate::hop_by_hop;
 
 /// Defensive cap for admin request bodies forwarded to the backend.
 ///
@@ -69,12 +60,6 @@ impl MinioAdminRoute {
         let base = endpoint_url.as_str().trim_end_matches('/');
         reqwest::Url::parse(&format!("{base}{path_and_query}")).ok()
     }
-
-    /// Whether `name` is a hop-by-hop header that `reqwest` manages itself.
-    #[must_use]
-    fn is_hop_by_hop(name: &str) -> bool {
-        HOP_BY_HOP_HEADERS.iter().any(|header| header.eq_ignore_ascii_case(name))
-    }
 }
 
 #[async_trait::async_trait]
@@ -98,7 +83,10 @@ impl S3Route for MinioAdminRoute {
 
         let mut request = self.client.request(req.method.clone(), target.clone());
         for (name, value) in &req.headers {
-            if Self::is_hop_by_hop(name.as_str()) {
+            // Connection-specific headers are dropped (RFC 9110 section 7.6.1);
+            // `host` is part of the signature, and `content-length` is preserved
+            // because MinIO admin endpoints require it even for empty bodies.
+            if hop_by_hop::is_connection_specific(&req.headers, name.as_str()) {
                 continue;
             }
             request = request.header(name, value);
@@ -206,17 +194,5 @@ mod tests {
     fn backend_url_without_path_and_query_is_none() {
         let endpoint = reqwest::Url::parse("http://localhost:9000").expect("valid base url");
         assert!(MinioAdminRoute::backend_url(&endpoint, None).is_none());
-    }
-
-    #[test]
-    fn hop_by_hop_headers_are_detected() {
-        for name in ["transfer-encoding", "Transfer-Encoding"] {
-            assert!(MinioAdminRoute::is_hop_by_hop(name), "{name} should be hop-by-hop");
-        }
-        // `host` (part of the `SigV4` signature) and `content-length` (required
-        // by MinIO admin endpoints even for empty bodies) are preserved.
-        for name in ["authorization", "host", "content-length", "accept", "x-test"] {
-            assert!(!MinioAdminRoute::is_hop_by_hop(name), "{name} should be forwarded");
-        }
     }
 }
