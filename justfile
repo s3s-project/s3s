@@ -63,7 +63,7 @@ install-all:
     just install-e2e --offline
 
 coverage *ARGS:
-    cargo llvm-cov -p s3s -p s3s-chunked -p s3s-sigv2 -p s3s-sigv4 -p s3s-test --all-features --html {{ARGS}}
+    cargo llvm-cov -p s3s -p s3s-chunked -p s3s-sigv2 -p s3s-sigv4 -p s3s-test -p s3s-time --all-features --html {{ARGS}}
 
 # ------------------------------------------------
 
@@ -82,6 +82,7 @@ sync-version:
     cargo set-version -p s3s-http3      0.17.0-alpha.1
     cargo set-version -p s3s-multipart  0.17.0
     cargo set-version -p s3s-chunked    0.18.0-alpha.2
+    cargo set-version -p s3s-time       0.18.0-alpha.1
 
 # ------------------------------------------------
 

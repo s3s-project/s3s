@@ -746,16 +746,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "aws-smithy-types-convert"
-version = "0.61.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f09916ff010d43086d52ec7d38899a5bc2ad21a2cb5428f85f1ee84a44008ba0"
-dependencies = [
- "aws-smithy-types",
- "time",
-]
-
-[[package]]
 name = "aws-smithy-xml"
 version = "0.62.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3784,7 +3774,6 @@ dependencies = [
  "subtle",
  "sync_wrapper",
  "thiserror",
- "time",
  "tokio",
  "tokio-rustls",
  "tokio-util",
@@ -3805,7 +3794,6 @@ dependencies = [
  "aws-sdk-s3",
  "aws-smithy-runtime-api",
  "aws-smithy-types",
- "aws-smithy-types-convert",
  "futures",
  "http-body",
  "hyper",

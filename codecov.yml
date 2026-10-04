@@ -65,6 +65,10 @@ component_management:
       name: s3s-test
       paths:
         - crates/s3s-test/**
+    - component_id: s3s-time
+      name: s3s-time
+      paths:
+        - crates/s3s-time/**
     - component_id: s3s-wasm
       name: s3s-wasm
       paths:

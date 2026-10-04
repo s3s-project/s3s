@@ -68,7 +68,6 @@ regex = "1.13.1"
 
 # Date & time
 jiff = { version = "0.2.35", default-features = false, features = ["std"] }
-time = "0.3.53"
 
 # Utilities
 cfg-if = "1.0.4"
@@ -155,5 +154,4 @@ aws-sdk-s3 = { version = "1.143.0", default-features = false, features = ["defau
 aws-sdk-sts = { version = "1.108.0", default-features = false, features = ["default-https-client", "rt-tokio"] }
 aws-smithy-runtime-api = "1.13.0"
 aws-smithy-types = "1.6.1"
-aws-smithy-types-convert = "0.61.1"
 minio = "0.4.0"
