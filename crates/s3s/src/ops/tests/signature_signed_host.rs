@@ -294,8 +294,10 @@ async fn unsigned_host_is_accepted_when_the_check_is_disabled_on_presigned_url()
         let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
         let ccx = test_context(&s3, &config, &auth);
 
-        let uri = presigned_put_uri(&[("x-amz-content-sha256", EMPTY_SHA256)]);
-        let mut req = presigned_request(version, uri, &[("x-amz-content-sha256", EMPTY_SHA256)]);
+        // The header doubles as the payload line, so it must carry the marker the URL was signed
+        // with; the test is about the missing host, not about the digest rule.
+        let uri = presigned_put_uri(&[("x-amz-content-sha256", UNSIGNED_PAYLOAD)]);
+        let mut req = presigned_request(version, uri, &[("x-amz-content-sha256", UNSIGNED_PAYLOAD)]);
         let response = super::call(&mut req, &ccx)
             .await
             .expect("a presigned URL signed without host must be routed");
