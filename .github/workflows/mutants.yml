@@ -1,0 +1,102 @@
+# Mutation testing: a budgeted daily sweep. The rotation, the budget and the cursor
+# belong to `xtask mutants`; the workflow carries the state artifact and nothing else.
+# Sweeps cap the address space, because a mutant can make a test allocate without
+# limit. Neither pull requests nor local recipes drive it; `just mutants-run` mirrors
+# the sweep for local use.
+name: Mutants
+
+on:
+  schedule:
+    - cron: '0 1 * * *' # daily at 01:00 UTC, one hour after the fuzz run
+  workflow_dispatch:
+    inputs:
+      budget_minutes:
+        description: 'Wall-clock budget for the sweep'
+        default: '15'
+      files:
+        description: 'Space separated files to sweep instead of the rotation'
+        default: ''
+
+permissions:
+  contents: read
+
+# Informational runs queue instead of cancelling each other.
+concurrency:
+  group: mutants-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  # cargo-mutants advises two workers per runner; the public runner has four vCPUs.
+  CARGO_MUTANTS_JOBS: '2'
+
+jobs:
+
+  # Daily budgeted sweep over the files that are due.
+  mutants-run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: taiki-e/install-action@just
+      - uses: taiki-e/install-action@cargo-mutants
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      # Artifacts of another run have to be addressed by run id: the default
+      # download looks at this run only, where no cursor exists yet.
+      - name: Find the previous run carrying the cursor
+        id: previous-run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          run_id="$(
+            gh api "repos/${{ github.repository }}/actions/workflows/mutants.yml/runs" \
+              --jq '[.workflow_runs[] | select(.status == "completed" and .head_branch == "${{ github.event.repository.default_branch || 'main' }}") | .id][0]'
+          )"
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+
+      # A missing cursor restarts the rotation from the files never swept.
+      - name: Restore the rotation cursor
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: mutants-cursor
+          path: .ci-state
+          run-id: ${{ steps.previous-run.outputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Sweep the files that are due
+        env:
+          BUDGET_MINUTES: ${{ github.event.inputs.budget_minutes || 15 }}
+          FILES: ${{ github.event.inputs.files }}
+        run: |
+          # xtask caps its own address space before spawning cargo-mutants.
+          cargo run -q -p xtask -- mutants run \
+            --budget-minutes "$BUDGET_MINUTES" --files "$FILES"
+
+      - name: Summary
+        if: always()
+        run: cargo run -q -p xtask -- mutants report --out mutants.out >> "$GITHUB_STEP_SUMMARY" || true
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: mutants-outcomes
+          path: mutants.out
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: mutants-cursor
+          path: .ci-state/mutants-cursor.json
+          retention-days: 90
+          if-no-files-found: ignore

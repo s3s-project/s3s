@@ -21,3 +21,5 @@ regex.workspace = true
 reqwest = { workspace = true, features = ["blocking", "system-proxy"] }
 serde.workspace = true
 serde_json = { workspace = true, features = ["preserve_order"] }
+[target.'cfg(unix)'.dependencies]
+rlimit.workspace = true

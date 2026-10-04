@@ -1,0 +1,55 @@
+# Mutation testing configuration for the s3s workspace (cargo-mutants).
+#
+# Scope: the signing and parsing crates are swept first (decision 2026-10-04):
+# s3s-multipart, s3s-chunked, s3s-sigv2, s3s-sigv4, s3s-rfc2047. The other members
+# (s3s, s3s-aws, s3s-fs, s3s-model, s3s-policy, s3s-test, s3s-e2e, s3s-proxy,
+# s3s-http3, codegen, xtask) join when examine_globs is extended.
+#
+# Every exclude_globs entry is derived from the codegen output list in
+# codegen/src/v1/mod.rs::codegen plus the postprocess merge targets. When codegen
+# learns a new output path, add it here in the same commit.
+#
+# Do not add exclude_globs here to hide survivors: a survivor is either a test gap
+# (fix it) or an equivalent mutant (record it in the ACCEPTED table of `xtask mutants`).
+#
+# The sweep scope (which crates are examined) is NOT set here. `examine_globs` makes
+# cargo-mutants ignore `--file` (measured 2026-10-04: with it set, `--file X --list`
+# listed all 907 scoped mutants instead of the one in X), and the rotation needs
+# `--file` per unit. The scope lives in `xtask mutants` (`SCOPE`), which filters the
+# candidate list it gets from `cargo mutants --list`.
+
+
+# Generated code is not reviewed by humans and is not the contract we promise; a
+# surviving mutant there is not actionable. Measured 2026-09-15: 15,083 -> 1,916 in
+# s3s (84% of the workspace mutants lived in generated files: 23,601 -> 3,797) and
+# 5,804 -> 168 in s3s-aws.
+#
+# Keep this an explicit list of codegen output paths rather than a loose
+# "**/generated*.rs" glob: the loose form silently misses s3_trait.rs, which is
+# about 1,482 mutants in s3s alone.
+exclude_globs = [
+    "crates/s3s/src/dto/generated.rs",
+    "crates/s3s/src/dto/generated/*.rs",
+    "crates/s3s/src/header/generated.rs",
+    "crates/s3s/src/error/generated.rs",
+    "crates/s3s/src/xml/generated.rs",
+    "crates/s3s/src/xml/generated/*.rs",
+    "crates/s3s/src/access/generated.rs",
+    "crates/s3s/src/s3_trait.rs",
+    "crates/s3s/src/ops/generated/*.rs",
+    "crates/s3s-aws/src/conv/generated.rs",
+    "crates/s3s-aws/src/proxy/generated.rs",
+]
+
+# Derived impls carry no logic of ours (three such mutants in s3s when measured);
+# this rule is hygiene, not a cost lever.
+exclude_re = [
+    "impl Debug",
+]
+
+# A mutation that breaks a loop condition makes the suite hang; 5s converges those
+# into the timeout bucket, which the method counts as detected.
+minimum_test_timeout = 5
+
+# Keep per-mutant timeouts proportional to the baseline instead of the 20s floor.
+timeout_multiplier = 3
