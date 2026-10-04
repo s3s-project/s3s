@@ -2,25 +2,36 @@
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
 use crate::case;
-use crate::suite::{DOMAIN_NAME, FS_ROOT, Object, REGION, create_bucket, delete_bucket, delete_object};
+#[cfg(unix)]
+use crate::suite::{DOMAIN_NAME, REGION};
+use crate::suite::{FS_ROOT, Object, create_bucket, delete_bucket, delete_object};
 
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
+#[cfg(unix)]
 use aws_sdk_s3::Client;
+#[cfg(unix)]
 use aws_sdk_s3::config::Credentials;
+#[cfg(unix)]
 use aws_sdk_s3::config::Region;
 use aws_sdk_s3::error::ProvideErrorMetadata;
 use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::types::ChecksumMode;
 
+#[cfg(unix)]
 use aws_config::SdkConfig;
+#[cfg(unix)]
 use aws_credential_types::provider::SharedCredentialsProvider;
 
+#[cfg(unix)]
 use s3s::auth::SimpleAuth;
+#[cfg(unix)]
 use s3s::host::SingleDomain;
+#[cfg(unix)]
 use s3s::service::S3ServiceBuilder;
+#[cfg(unix)]
 use s3s_fs::FileSystem;
 
 use s3s::crypto::Checksum as _;
