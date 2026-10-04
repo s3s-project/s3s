@@ -24,6 +24,7 @@ use std::path::Component;
 use std::path::Path;
 #[cfg(test)]
 use std::path::PathBuf;
+use std::time::Duration;
 use std::time::SystemTime;
 
 use tokio::fs;
@@ -67,6 +68,84 @@ fn skip_vanished<T>(result: io::Result<T>) -> io::Result<Option<T>> {
         Ok(value) => Ok(Some(value)),
         Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
         Err(err) => Err(err),
+    }
+}
+
+/// How many times a failed call is re-probed before its error is kept.
+const VANISHED_PROBE_ATTEMPTS: u32 = 4;
+
+/// Wait between two existence probes of a path.
+const VANISHED_PROBE_DELAY: Duration = Duration::from_millis(5);
+
+/// Whether `path` is gone, waiting while its delete is still pending.
+///
+/// Windows answers `PermissionDenied` instead of `NotFound` while a file or a
+/// directory is being deleted, and keeps answering it until the delete completes,
+/// so the probe is repeated a few times before the caller keeps its error.
+async fn path_is_gone(path: &Path) -> bool {
+    for _ in 0..VANISHED_PROBE_ATTEMPTS {
+        match fs::symlink_metadata(path).await {
+            // The path is gone: the call raced with the delete.
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return true,
+            // The path is still there: the caller may not read it, keep the error.
+            Ok(_) => return false,
+            // A delete-pending path answers `PermissionDenied`; wait and probe again.
+            Err(_) => tokio::time::sleep(VANISHED_PROBE_DELAY).await,
+        }
+    }
+    false
+}
+
+/// Maps a failed directory enumeration step to the end of that directory.
+///
+/// Windows answers `PermissionDenied` from an enumeration whose directory is
+/// being deleted, and the open handle that is being enumerated keeps the
+/// directory delete-pending, so a probe cannot tell "gone" from "still there".
+/// Ending that directory keeps the listing working without dropping the error of
+/// any other call.
+fn skip_vanished_iter<T>(result: io::Result<Option<T>>) -> io::Result<Option<T>> {
+    match result {
+        Ok(value) => Ok(value),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(err) if err.kind() == io::ErrorKind::PermissionDenied => Ok(None),
+        Err(err) => Err(err),
+    }
+}
+
+/// Maps a failed stat of one directory entry to `None` when that entry vanished.
+async fn skip_vanished_entry<T>(entry: &fs::DirEntry, result: io::Result<T>) -> io::Result<Option<T>> {
+    match result {
+        Ok(value) => Ok(Some(value)),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(err) if err.kind() != io::ErrorKind::PermissionDenied => Err(err),
+        // The path is built here so that the happy path does not pay for it.
+        Err(err) => {
+            if path_is_gone(&entry.path()).await {
+                Ok(None)
+            } else {
+                Err(err)
+            }
+        }
+    }
+}
+
+/// Maps a failed directory read to `None` when that directory vanished.
+///
+/// The directory counterpart of [`skip_vanished_entry`]: a directory that is
+/// being removed answers `PermissionDenied` on Windows for as long as the
+/// delete is pending.
+async fn skip_vanished_dir<T>(dir: &Path, result: io::Result<T>) -> io::Result<Option<T>> {
+    match result {
+        Ok(value) => Ok(Some(value)),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(err) if err.kind() != io::ErrorKind::PermissionDenied => Err(err),
+        Err(err) => {
+            if path_is_gone(dir).await {
+                Ok(None)
+            } else {
+                Err(err)
+            }
+        }
     }
 }
 
@@ -629,6 +708,8 @@ impl S3 for FileSystem {
     async fn list_buckets(&self, _: S3Request<ListBucketsInput>) -> S3Result<S3Response<ListBucketsOutput>> {
         let mut buckets: Vec<Bucket> = Vec::new();
         let mut iter = try_!(fs::read_dir(&self.root).await);
+        // The service root is not a directory discovered during a walk, so its enumeration
+        // keeps surfacing a failure instead of ending the listing silently.
         while let Some(entry) = try_!(iter.next_entry().await) {
             let file_type = try_!(entry.file_type().await);
             if file_type.is_dir().not() {
@@ -1290,7 +1371,7 @@ impl S3 for FileSystem {
 
         let mut parts: Vec<Part> = Vec::new();
 
-        while let Some(entry) = try_!(iter.next_entry().await) {
+        while let Some(entry) = try_!(skip_vanished_iter(iter.next_entry().await)) {
             let file_type = try_!(entry.file_type().await);
             if file_type.is_file().not() {
                 continue;
@@ -1743,7 +1824,7 @@ impl FileSystem {
             return Ok(());
         }
 
-        let Some(mut iter) = try_!(skip_vanished(fs::read_dir(dir).await)) else {
+        let Some(mut iter) = try_!(skip_vanished_dir(dir, fs::read_dir(dir).await).await) else {
             // The caller checks that the bucket exists before the walk, but the bucket root can
             // vanish before the walk reaches it. Only directories discovered during the walk are
             // skipped.
@@ -1755,10 +1836,10 @@ impl FileSystem {
 
         // (sort key, name, is a directory, entry)
         let mut entries: Vec<(String, String, bool, fs::DirEntry)> = Vec::new();
-        while let Some(entry) = try_!(iter.next_entry().await) {
+        while let Some(entry) = try_!(skip_vanished_iter(iter.next_entry().await)) {
             #[cfg(test)]
             listing_stats::count_entry();
-            let Some(file_type) = try_!(skip_vanished(entry.file_type().await)) else {
+            let Some(file_type) = try_!(skip_vanished_entry(&entry, entry.file_type().await).await) else {
                 continue;
             };
             // A name that is not UTF-8 cannot become a key, and neither can anything below it.
@@ -1825,7 +1906,7 @@ impl FileSystem {
                 if query.start_after.is_some_and(|marker| key.as_str() <= marker) {
                     continue;
                 }
-                let Some(metadata) = try_!(skip_vanished(entry.metadata().await)) else {
+                let Some(metadata) = try_!(skip_vanished_entry(&entry, entry.metadata().await).await) else {
                     continue;
                 };
                 let last_modified = Timestamp::from(try_!(metadata.modified()));
@@ -1845,15 +1926,15 @@ impl FileSystem {
 
     /// Whether any file exists below `dir`, which is what makes a subtree contribute a common prefix.
     async fn subtree_contains_file(&self, dir: &Path) -> S3Result<bool> {
-        let Some(mut iter) = try_!(skip_vanished(fs::read_dir(dir).await)) else {
+        let Some(mut iter) = try_!(skip_vanished_dir(dir, fs::read_dir(dir).await).await) else {
             return Ok(false);
         };
 
         let mut subdirs = Vec::new();
-        while let Some(entry) = try_!(iter.next_entry().await) {
+        while let Some(entry) = try_!(skip_vanished_iter(iter.next_entry().await)) {
             #[cfg(test)]
             listing_stats::count_entry();
-            let Some(file_type) = try_!(skip_vanished(entry.file_type().await)) else {
+            let Some(file_type) = try_!(skip_vanished_entry(&entry, entry.file_type().await).await) else {
                 continue;
             };
             if entry.file_name().to_str().is_none() {
@@ -1905,7 +1986,7 @@ impl FileSystem {
         let prefix_is_empty = prefix.is_empty();
 
         while let Some(dir) = dir_queue.pop_front() {
-            let Some(mut iter) = try_!(skip_vanished(fs::read_dir(&dir).await)) else {
+            let Some(mut iter) = try_!(skip_vanished_dir(&dir, fs::read_dir(&dir).await).await) else {
                 // The caller checks that the bucket exists before the walk, but the bucket root can
                 // vanish before the walk reaches it. Only directories discovered during the walk
                 // are skipped.
@@ -1914,10 +1995,10 @@ impl FileSystem {
                 }
                 continue;
             };
-            while let Some(entry) = try_!(iter.next_entry().await) {
+            while let Some(entry) = try_!(skip_vanished_iter(iter.next_entry().await)) {
                 #[cfg(test)]
                 listing_stats::count_entry();
-                let Some(file_type) = try_!(skip_vanished(entry.file_type().await)) else {
+                let Some(file_type) = try_!(skip_vanished_entry(&entry, entry.file_type().await).await) else {
                     continue;
                 };
                 if file_type.is_dir() {
@@ -1933,7 +2014,7 @@ impl FileSystem {
                         continue;
                     }
 
-                    let Some(metadata) = try_!(skip_vanished(entry.metadata().await)) else {
+                    let Some(metadata) = try_!(skip_vanished_entry(&entry, entry.metadata().await).await) else {
                         continue;
                     };
                     let last_modified = Timestamp::from(try_!(metadata.modified()));
@@ -1969,7 +2050,7 @@ impl FileSystem {
         let prefix_is_empty = prefix.is_empty();
 
         while let Some(dir) = dir_queue.pop_front() {
-            let Some(mut iter) = try_!(skip_vanished(fs::read_dir(&dir).await)) else {
+            let Some(mut iter) = try_!(skip_vanished_dir(&dir, fs::read_dir(&dir).await).await) else {
                 // The caller checks that the bucket exists before the walk, but the bucket root can
                 // vanish before the walk reaches it. Only directories discovered during the walk
                 // are skipped.
@@ -1979,10 +2060,10 @@ impl FileSystem {
                 continue;
             };
 
-            while let Some(entry) = try_!(iter.next_entry().await) {
+            while let Some(entry) = try_!(skip_vanished_iter(iter.next_entry().await)) {
                 #[cfg(test)]
                 listing_stats::count_entry();
-                let Some(file_type) = try_!(skip_vanished(entry.file_type().await)) else {
+                let Some(file_type) = try_!(skip_vanished_entry(&entry, entry.file_type().await).await) else {
                     continue;
                 };
                 let entry_path = entry.path();
@@ -2021,7 +2102,7 @@ impl FileSystem {
                         }
                     } else {
                         // File is at the current level, include it in objects
-                        let Some(metadata) = try_!(skip_vanished(entry.metadata().await)) else {
+                        let Some(metadata) = try_!(skip_vanished_entry(&entry, entry.metadata().await).await) else {
                             continue;
                         };
                         let last_modified = Timestamp::from(try_!(metadata.modified()));
@@ -2058,6 +2139,89 @@ mod tests {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[tokio::test]
+    async fn a_stat_failure_is_skipped_only_when_the_entry_is_gone() {
+        let root = env::temp_dir().join(format!("s3s-fs-vanished-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let _root = TestRoot(root.clone());
+
+        std::fs::write(root.join("present"), b"x").unwrap();
+        std::fs::write(root.join("gone"), b"x").unwrap();
+
+        let mut iter = fs::read_dir(&root).await.unwrap();
+        let mut checked_gone = false;
+        let mut checked_present = false;
+        while let Some(entry) = iter.next_entry().await.unwrap() {
+            match entry.file_name().to_string_lossy().as_ref() {
+                "gone" => {
+                    // A `NotFound` stat is skipped, as before.
+                    let skipped = skip_vanished_entry::<()>(&entry, Err(io::Error::from(io::ErrorKind::NotFound)))
+                        .await
+                        .unwrap();
+                    assert!(skipped.is_none());
+                    // Windows reports a file that is being deleted as `PermissionDenied`; this one is
+                    // gone too, so the entry is skipped.
+                    std::fs::remove_file(root.join("gone")).unwrap();
+                    let skipped = skip_vanished_entry::<()>(&entry, Err(io::Error::from(io::ErrorKind::PermissionDenied)))
+                        .await
+                        .unwrap();
+                    assert!(skipped.is_none());
+                    checked_gone = true;
+                }
+                "present" => {
+                    // The entry is still there: the error is kept instead of dropping the object.
+                    let err = skip_vanished_entry::<()>(&entry, Err(io::Error::from(io::ErrorKind::PermissionDenied)))
+                        .await
+                        .unwrap_err();
+                    assert_eq!(err.kind(), io::ErrorKind::PermissionDenied);
+                    // Any other error passes through untouched.
+                    let err = skip_vanished_entry::<()>(&entry, Err(io::Error::from(io::ErrorKind::InvalidData)))
+                        .await
+                        .unwrap_err();
+                    assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+                    checked_present = true;
+                }
+                _ => {}
+            }
+        }
+        assert!(checked_gone, "the vanished entry must have been visited");
+        assert!(checked_present, "the remaining entry must have been visited");
+    }
+
+    #[tokio::test]
+    async fn a_directory_read_failure_is_skipped_only_when_the_directory_is_gone() {
+        let root = env::temp_dir().join(format!("s3s-fs-vanished-dir-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let _root = TestRoot(root.clone());
+
+        let present = root.join("present");
+        std::fs::create_dir_all(&present).unwrap();
+        let gone = root.join("gone");
+        std::fs::create_dir_all(&gone).unwrap();
+        std::fs::remove_dir(&gone).unwrap();
+
+        // A `NotFound` read is skipped, as before.
+        let skipped = skip_vanished_dir::<()>(&gone, Err(io::Error::from(io::ErrorKind::NotFound)))
+            .await
+            .unwrap();
+        assert!(skipped.is_none());
+        // Windows reports a directory that is being removed as `PermissionDenied`; this one is gone.
+        let skipped = skip_vanished_dir::<()>(&gone, Err(io::Error::from(io::ErrorKind::PermissionDenied)))
+            .await
+            .unwrap();
+        assert!(skipped.is_none());
+        // The directory is still there: the error is kept instead of ending the walk silently.
+        let err = skip_vanished_dir::<()>(&present, Err(io::Error::from(io::ErrorKind::PermissionDenied)))
+            .await
+            .unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::PermissionDenied);
+        // Any other error passes through untouched.
+        let err = skip_vanished_dir::<()>(&present, Err(io::Error::from(io::ErrorKind::InvalidData)))
+            .await
+            .unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -2104,6 +2268,21 @@ mod tests {
         let keys: Vec<&str> = page.objects.iter().filter_map(|object| object.key.as_deref()).collect();
         assert!(keys.windows(2).all(|pair| pair[0] < pair[1]), "a page must stay in key order: {keys:?}");
         assert!(keys.len() <= 1000, "a page must not exceed max_keys: {}", keys.len());
+    }
+
+    #[test]
+    fn an_enumeration_failure_ends_the_directory_only_for_a_vanished_directory() {
+        // `NotFound` and the Windows delete-pending `PermissionDenied` both end the directory.
+        for kind in [io::ErrorKind::NotFound, io::ErrorKind::PermissionDenied] {
+            let ended = skip_vanished_iter::<u8>(Err(io::Error::from(kind))).unwrap();
+            assert!(ended.is_none(), "{kind:?} must end the directory");
+        }
+        // A successful step is passed through.
+        assert_eq!(skip_vanished_iter(Ok(Some(7u8))).unwrap(), Some(7));
+        assert_eq!(skip_vanished_iter::<u8>(Ok(None)).unwrap(), None);
+        // Any other error is kept.
+        let err = skip_vanished_iter::<u8>(Err(io::Error::from(io::ErrorKind::InvalidData))).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
     }
 
     #[tokio::test]
