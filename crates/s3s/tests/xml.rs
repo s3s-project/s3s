@@ -937,3 +937,100 @@ fn update_object_encryption_union_root() {
     );
     test_serde_content(&val);
 }
+
+/// `MinIO` writes the grantee type as a child element next to the `xsi:type`
+/// attribute, and clients that model the `MinIO` wire form require the
+/// element. Under the `minio` feature it is derived from the attribute value,
+/// so the two representations cannot disagree.
+#[cfg(feature = "minio")]
+#[test]
+fn minio_grantee_type_child_element() {
+    use s3s::dto::{Grant, Grantee, Permission, Type};
+
+    let val = Grant {
+        grantee: Some(Grantee {
+            display_name: None,
+            email_address: None,
+            id: Some("canonical-id".to_owned()),
+            type_: Type::from_static(Type::CANONICAL_USER),
+            uri: None,
+        }),
+        permission: Some(Permission::from_static(Permission::FULL_CONTROL)),
+    };
+
+    let xml = serialize_content(&val).unwrap();
+    assert_eq!(
+        xml,
+        "<Grantee xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:type=\"CanonicalUser\">\
+         <Type>CanonicalUser</Type><ID>canonical-id</ID></Grantee><Permission>FULL_CONTROL</Permission>"
+    );
+
+    let ans = deserialize_content::<Grant>(xml.as_bytes()).unwrap();
+    assert_eq!(val, ans);
+}
+
+/// The `minio` build accepts the `<Type>` child element wherever the grantee
+/// type is carried: the attribute wins when it is present, the element supplies
+/// the value when the attribute is absent, and a grantee with neither is still
+/// rejected.
+#[cfg(feature = "minio")]
+#[test]
+fn minio_grantee_type_element_sources() {
+    use s3s::dto::{Grant, TargetGrant, Type};
+
+    // Attribute and child element agree.
+    let both = r#"<Grantee xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="CanonicalUser"><Type>CanonicalUser</Type><ID>abc</ID></Grantee><Permission>READ</Permission>"#;
+    let val = deserialize_content::<Grant>(both.as_bytes()).unwrap();
+    assert_eq!(val.grantee.unwrap().type_, Type::from_static(Type::CANONICAL_USER));
+
+    // Child element only, no attribute.
+    let element_only = r"<Grantee><Type>Group</Type><URI>http://example.com/g</URI></Grantee><Permission>READ</Permission>";
+    let val = deserialize_content::<Grant>(element_only.as_bytes()).unwrap();
+    assert_eq!(val.grantee.unwrap().type_, Type::from_static(Type::GROUP));
+
+    // The logging target grant shares the grantee type and the same serializer,
+    // so the element is accepted there as well.
+    let target = r"<Grantee><Type>AmazonCustomerByEmail</Type></Grantee><Permission>READ</Permission>";
+    let val = deserialize_content::<TargetGrant>(target.as_bytes()).unwrap();
+    assert_eq!(val.grantee.unwrap().type_, Type::from_static(Type::AMAZON_CUSTOMER_BY_EMAIL));
+
+    // Neither source: still a missing required field.
+    let neither = r"<Grantee><ID>abc</ID></Grantee><Permission>READ</Permission>";
+    assert!(matches!(
+        deserialize_content::<Grant>(neither.as_bytes()),
+        Err(xml::DeError::MissingField)
+    ));
+}
+
+/// Without the `minio` feature the AWS wire form is kept exactly: only the
+/// `xsi:type` attribute is written, and a request body that carries the child
+/// element is rejected.
+#[cfg(not(feature = "minio"))]
+#[test]
+fn grantee_type_child_element_requires_minio() {
+    use s3s::dto::{Grant, Grantee, Type};
+
+    let val = Grant {
+        grantee: Some(Grantee {
+            display_name: None,
+            email_address: None,
+            id: Some("canonical-id".to_owned()),
+            type_: Type::from_static(Type::CANONICAL_USER),
+            uri: None,
+        }),
+        permission: None,
+    };
+
+    let xml = serialize_content(&val).unwrap();
+    assert_eq!(
+        xml,
+        "<Grantee xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:type=\"CanonicalUser\">\
+         <ID>canonical-id</ID></Grantee>"
+    );
+
+    let with_element = r#"<Grantee xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="CanonicalUser"><Type>CanonicalUser</Type><ID>abc</ID></Grantee><Permission>READ</Permission>"#;
+    assert!(matches!(
+        deserialize_content::<Grant>(with_element.as_bytes()),
+        Err(xml::DeError::UnexpectedTagName)
+    ));
+}

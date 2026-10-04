@@ -76,14 +76,16 @@ const EXPECTED_FAILURES: &[(&str, &[(&str, usize)])] = &[
     ),
     (
         "minio-java",
-        // MinIO extensions s3s does not implement: `getObjectAcl()` needs the
-        // `<Type>` element MinIO puts inside `<Grantee>` (the AWS shape only
-        // carries `xsi:type`), and `putObjectFanOut()` sends the
+        // MinIO extension s3s does not implement: `putObjectFanOut()` sends the
         // `x-minio-fanout-list` form field, which the POST policy validation
-        // rejects because it is not a policy condition. Both cases only run at
+        // rejects because it is not a policy condition. The case only runs at
         // all because the image stopped sending an unsigned `x-amz-acl` on its
         // presigned PUT.
-        &[("getObjectAcl()", 1), ("putObjectFanOut()", 1)],
+        //
+        // `getObjectAcl()` used to be listed here. Under the `minio` feature the
+        // grantee repeats its type as the `<Type>` child element MinIO writes,
+        // so the case passes.
+        &[("putObjectFanOut()", 1)],
     ),
     (
         "minio-js",
@@ -272,10 +274,10 @@ fn check_counters(counts: &HashMap<String, Counters>, errors: &mut Vec<String>) 
     // The one known failure is `test_admin_users`.
     check_pass_at_least(counts, "mc", 28, errors);
     check_fail_zero(counts, "minio-go", errors);
-    // The two known failures need MinIO extensions; the twelve
+    // The one known failure needs a MinIO extension; the twelve
     // bucket-configuration cases report NA against the pinned backend and are
     // counted separately, so they are not part of this floor.
-    check_pass_at_least(counts, "minio-java", 57, errors);
+    check_pass_at_least(counts, "minio-java", 58, errors);
     // The one known failure is the assume-role case, which needs STS.
     check_pass_at_least(counts, "minio-js", 247, errors);
     check_pass_at_least(counts, "minio-py", 22, errors);
@@ -400,7 +402,7 @@ mod tests {
         let mut errors = Vec::new();
         check_gate(&logs, &mut errors);
 
-        assert_eq!(errors.len(), 7, "two unexpected failures plus five stale entries: {errors:?}");
+        assert_eq!(errors.len(), 6, "two unexpected failures plus four stale entries: {errors:?}");
         assert!(
             errors
                 .iter()
