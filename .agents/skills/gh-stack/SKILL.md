@@ -89,4 +89,3 @@ gh pr view <n> --json state,mergeStateStatus,mergedAt
 - `gh stack --help` and `gh stack <command> --help` describe the installed version, which is the version that counts.
 - The upstream command lives in github/gh-stack: <https://github.com/github/gh-stack>.
 - GitHub's own documentation for stacked pull requests: <https://docs.github.com/en/pull-requests/how-tos/stacked-pull-requests>.
-- This repository's tracker for the practice is #864.
