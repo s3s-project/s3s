@@ -57,7 +57,13 @@ const RUN_FOR: Duration = Duration::from_hours(12);
 const MAX_CONSECUTIVE_FAILURES: u32 = 3;
 
 /// Merge states that only mean "still waiting"; flapping between them is noise.
-const QUIET_MERGE: [&str; 2] = ["BLOCKED", "UNSTABLE"];
+const QUIET_MERGE: [&str; 3] = ["BLOCKED", "UNSTABLE", "UNKNOWN"];
+
+/// The merge state GitHub reports while it recomputes mergeability.
+const RECOMPUTING_MERGE: &str = "UNKNOWN";
+
+/// The merge state that names a conflict with the base branch.
+const CONFLICT_MERGE: &str = "DIRTY";
 
 /// Conclusions or states that mark a check as failed.
 const FAILED: [&str; 6] = [
@@ -411,11 +417,17 @@ fn material_change(previous: Option<&str>, current: &str) -> bool {
                     return true;
                 }
             }
-            // Waiting states flap between each other while the queue is busy.
+            // Waiting states flap between each other while the queue is busy. `UNKNOWN` means
+            // GitHub is still recomputing mergeability, and the recomputation usually lands on the
+            // state the pull request already had, so a transition into or out of it carries no
+            // decision by itself. A transition that names a conflict always does.
             "merge" => {
                 let new_merge = new.get("merge").map(String::as_str);
                 let old_merge = old.get("merge").map(String::as_str);
-                if is_quiet_merge(new_merge) && is_quiet_merge(old_merge) {
+                let recomputing = (new_merge == Some(RECOMPUTING_MERGE) || old_merge == Some(RECOMPUTING_MERGE))
+                    && new_merge != Some(CONFLICT_MERGE)
+                    && old_merge != Some(CONFLICT_MERGE);
+                if (is_quiet_merge(new_merge) && is_quiet_merge(old_merge)) || recomputing {
                     continue;
                 }
                 return true;
@@ -581,7 +593,33 @@ mod tests {
     #[test]
     fn waiting_states_do_not_wake_anybody() {
         assert!(!material_change(Some(LINE), &line(&[("merge", "UNSTABLE")])));
+        assert!(!material_change(Some(LINE), &line(&[("merge", "UNKNOWN")])));
         assert!(material_change(Some(LINE), &line(&[("merge", "CLEAN")])));
+        assert!(material_change(Some(LINE), &line(&[("merge", "DIRTY")])));
+    }
+
+    #[test]
+    fn a_merge_state_that_is_still_being_computed_is_quiet() {
+        // GitHub recomputes mergeability asynchronously and reports `UNKNOWN` until the result
+        // lands; the result is usually the state the pull request already had, so both directions
+        // of the flap carry no decision.
+        let clean = line(&[("merge", "CLEAN")]);
+        let unknown = line(&[("merge", "UNKNOWN")]);
+        let dirty = line(&[("merge", "DIRTY")]);
+
+        assert!(
+            !material_change(Some(clean.as_str()), &unknown),
+            "CLEAN to UNKNOWN is a recomputation, not a decision"
+        );
+        assert!(
+            !material_change(Some(unknown.as_str()), &clean),
+            "UNKNOWN back to CLEAN is the same recomputation"
+        );
+        assert!(material_change(Some(unknown.as_str()), &dirty), "a merge conflict is a decision");
+        assert!(
+            material_change(Some(dirty.as_str()), &unknown),
+            "leaving a conflict for a recomputation is still worth a look"
+        );
     }
 
     #[test]

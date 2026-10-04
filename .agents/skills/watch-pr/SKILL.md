@@ -19,7 +19,7 @@ It exits when something decision-relevant changes, when the pull request merges 
 
 A zero exit means one of those three; a non-zero exit means the snapshot failed three times in a row, usually because `gh` is unavailable. The failure lines are printed to stdout rather than appended to the log, so read them before restarting.
 
-It deliberately ignores the churn that would wake somebody for nothing: check counts moving while the set is still running, a flap between `BLOCKED` and `UNSTABLE`, and comments written by a bot. A new failure, a settled check set, a review, a label, a review request, a merge-queue entry and the merge or close transition all count.
+It deliberately ignores the churn that would wake somebody for nothing: check counts moving while the set is still running, a flap between `BLOCKED`, `UNSTABLE` and `UNKNOWN` (GitHub reports `UNKNOWN` while it recomputes mergeability, and the answer is usually the state the pull request already had), and comments written by a bot. A new failure, a settled check set, a review, a label, a review request, a merge-queue entry and the merge or close transition all count.
 
 Keep one watcher per pull request, and hang the next one after every exit; the twelve-hour budget means a pull request that stays open needs a new watcher every twelve hours, so a quiet one takes two hangs a day.
 
