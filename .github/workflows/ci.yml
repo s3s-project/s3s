@@ -146,7 +146,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
-      - run: docker pull minio/mint:edge
+      - name: Pull pinned mint image
+        run: |
+          . scripts/mint.env
+          docker pull "$MINT_IMAGE_REF"
       - name: Pull pinned MinIO image
         run: |
           . scripts/minio.env
