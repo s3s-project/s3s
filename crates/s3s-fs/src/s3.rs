@@ -1625,7 +1625,7 @@ impl ListingQuery<'_> {
 }
 
 /// One page of a listing, plus what follows it.
-#[derive(Default)]
+#[derive(Debug, Default)]
 struct ListingPage {
     objects: Vec<Object>,
     common_prefixes: Vec<CommonPrefix>,
@@ -2073,29 +2073,43 @@ mod tests {
         let _root = TestRoot(root.clone());
         let fs = FileSystem::new(&root).unwrap();
 
-        // Enough objects that the walk is still running when the deletions start landing.
+        // Enough directories that the walk is still running when the deletions start landing. Half
+        // of them lose the whole directory and half lose only the object, so a directory that
+        // vanishes mid-walk and an entry that vanishes mid-walk are both exercised.
         let bucket_root = root.join("bucket");
-        let dir = bucket_root.join("prefix");
-        std::fs::create_dir_all(&dir).unwrap();
-        let paths: Vec<PathBuf> = (0..1000)
+        let dirs: Vec<PathBuf> = (0..500)
             .map(|i| {
-                let path = dir.join(format!("{i:05}"));
-                std::fs::write(&path, b"x").unwrap();
-                path
+                let dir = bucket_root.join(format!("dir{i:04}"));
+                std::fs::create_dir_all(&dir).unwrap();
+                std::fs::write(dir.join("object"), b"x").unwrap();
+                dir
             })
             .collect();
 
         let deleter = tokio::task::spawn_blocking(move || {
-            for path in paths {
-                let _ = std::fs::remove_file(path);
+            for (index, dir) in dirs.into_iter().enumerate() {
+                if index % 2 == 0 {
+                    let _ = std::fs::remove_dir_all(&dir);
+                } else {
+                    let _ = std::fs::remove_file(dir.join("object"));
+                }
             }
         });
 
-        let mut objects = Vec::new();
-        let listed = fs.list_objects_recursive(&bucket_root, "", &mut objects).await;
+        // The production entry point, not the full scan kept for the differential test.
+        let query = ListingQuery {
+            prefix: "",
+            delimiter: None,
+            start_after: None,
+            max_keys: 1000,
+        };
+        let listed = fs.list_page(&bucket_root, &query).await;
         deleter.await.unwrap();
 
-        assert!(listed.is_ok(), "a delete running alongside the walk failed the listing");
+        let page = listed.expect("a delete running alongside the walk failed the listing");
+        let keys: Vec<&str> = page.objects.iter().filter_map(|object| object.key.as_deref()).collect();
+        assert!(keys.windows(2).all(|pair| pair[0] < pair[1]), "a page must stay in key order: {keys:?}");
+        assert!(keys.len() <= 1000, "a page must not exceed max_keys: {}", keys.len());
     }
 
     #[tokio::test]
@@ -2106,17 +2120,27 @@ mod tests {
         let fs = FileSystem::new(&root).unwrap();
         let bucket_root = root.join("vanished-bucket");
 
-        let mut objects = Vec::new();
+        // Both shapes go through the production walk: plain, and grouped by a delimiter.
+        let query = ListingQuery {
+            prefix: "",
+            delimiter: None,
+            start_after: None,
+            max_keys: 1000,
+        };
         let err = fs
-            .list_objects_recursive(&bucket_root, "", &mut objects)
+            .list_page(&bucket_root, &query)
             .await
             .expect_err("a vanished bucket root must not be listed as empty");
         assert_eq!(err.code(), &S3ErrorCode::NoSuchBucket);
 
-        let mut objects = Vec::new();
-        let mut common_prefixes = std::collections::BTreeSet::new();
+        let query = ListingQuery {
+            prefix: "",
+            delimiter: Some("/"),
+            start_after: None,
+            max_keys: 1000,
+        };
         let err = fs
-            .list_objects_with_delimiter(&bucket_root, "", "/", &mut objects, &mut common_prefixes)
+            .list_page(&bucket_root, &query)
             .await
             .expect_err("a vanished bucket root must not be listed as empty");
         assert_eq!(err.code(), &S3ErrorCode::NoSuchBucket);
