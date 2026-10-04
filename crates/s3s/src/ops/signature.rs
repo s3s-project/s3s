@@ -64,6 +64,16 @@ pub(super) fn extract_amz_content_sha256(hs: &HeaderMap) -> S3Result<Option<AmzC
     }
 }
 
+/// The canonical payload line of a presigned request.
+///
+/// S3 puts the value of the `x-amz-content-sha256` **request header** in the payload line, and falls
+/// back to [`s3s_sigv4::UNSIGNED_PAYLOAD`] when the header is absent. The query parameter of the same
+/// name stays part of the canonical query string and does not change the line. The line therefore
+/// binds a header value even when the header name is absent from `X-Amz-SignedHeaders`.
+pub(super) fn presigned_payload_line(hs: &HeaderMap) -> &str {
+    http::get_unique_header_str(hs, crate::header::X_AMZ_CONTENT_SHA256.as_str()).unwrap_or(s3s_sigv4::UNSIGNED_PAYLOAD)
+}
+
 pub(super) fn extract_authorization_v4(hs: &HeaderMap) -> S3Result<Option<AuthorizationV4<'_>>> {
     let Some(val) = http::get_unique_header_str(hs, crate::header::AUTHORIZATION.as_str()) else {
         return Ok(None);
@@ -95,10 +105,11 @@ pub(super) fn extract_authorization_v4(hs: &HeaderMap) -> S3Result<Option<Author
 /// exempt.
 ///
 /// `x-amz-content-sha256` is exempt because its value is the payload-hash input of the request:
-/// the value read from the header becomes the payload line of the canonical request, so the
-/// signature covers it even when the header name is absent from the signed-header list. A client
-/// that needs the header covered by `CanonicalHeaders` itself can list it in `SignedHeaders`, or
-/// in `X-Amz-SignedHeaders` for a presigned URL.
+/// the value read from the header becomes the payload line of the canonical request on both
+/// authentication paths (header auth and presigned), so the signature covers it even when the
+/// header name is absent from the signed-header list. A client that needs the header covered by
+/// `CanonicalHeaders` itself can list it in `SignedHeaders`, or in `X-Amz-SignedHeaders` for a
+/// presigned URL.
 fn reject_unsigned_amz_headers(config: &S3Config, hs: &HeaderMap, signed_names: &[&str]) -> S3Result<()> {
     // S3 treats x-amz-content-sha256 as the request's payload-hash input rather than ordinary request metadata.
     // Every other exception belongs in the configurable `S3Config::unsigned_amz_header_allowlist`.
@@ -646,6 +657,7 @@ impl<'a> SignatureContext<'a> {
         })
     }
 
+    #[allow(clippy::too_many_lines)]
     pub async fn v4_check_presigned_url(&mut self) -> S3Result<CredentialsExt> {
         let config = self.config.snapshot();
 
@@ -741,27 +753,31 @@ impl<'a> SignatureContext<'a> {
             region,
             service,
         };
-        let canonical_request = s3s_sigv4::create_presigned_canonical_request(
+        // S3 puts the x-amz-content-sha256 request header value in the payload line of a presigned
+        // request, so changing, adding or removing that value breaks the signature.
+        let payload_line = presigned_payload_line(self.hs);
+        let canonical_request = s3s_sigv4::create_presigned_canonical_request_with_payload(
             method.as_str(),
             self.canonical_uri_path(),
             self.query_pairs(),
             &headers,
+            payload_line,
         );
         verifier.verify_with_raw_path_fallback(&canonical_request, self.path_encoding, || {
-            s3s_sigv4::create_presigned_canonical_request_with_raw_uri_path(
+            s3s_sigv4::create_presigned_canonical_request_with_raw_uri_path_and_payload(
                 method.as_str(),
                 self.raw_uri_path,
                 self.query_pairs(),
                 &headers,
+                payload_line,
             )
         })?;
 
-        // Verify body hash for presigned URL requests.
-        // For presigned URLs the canonical request uses UNSIGNED-PAYLOAD (the
-        // body is unknown at signing time), but the actual request MUST carry
-        // the real SHA256 hash in x-amz-content-sha256, and the server must
-        // verify it.  This mirrors MinIO's behavior: the body is wrapped in a
-        // hash-validating reader that compares the hash as it is consumed.
+        // Verify the body digest a presigned request declares.
+        // The payload line above already binds the declared value, so a changed or removed header
+        // fails verification. This step additionally compares the declared digest with the body as
+        // it is consumed: the body is wrapped in a hash-validating reader, so a body that does not
+        // match the declared digest fails with BadDigest instead of being stored.
         if let Some(AmzContentSha256::SingleChunk(expected_checksum)) = amz_content_sha256 {
             let length = if let Some(content_length) = self.content_length {
                 usize::try_from(content_length).map_err(|_| invalid_request!("content-length exceeds platform limits"))?

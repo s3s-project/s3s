@@ -92,6 +92,9 @@ fn normalize_header_value(ans: &mut String, value: &str) {
 /// sha256 hash of an empty string
 pub const EMPTY_STRING_SHA256_HASH: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
+/// The payload line a presigned request carries when the client does not commit to a body digest
+pub const UNSIGNED_PAYLOAD: &str = "UNSIGNED-PAYLOAD";
+
 /// Payload
 #[derive(Debug, Clone, Copy)]
 pub enum Payload<'a> {
@@ -269,7 +272,7 @@ fn create_canonical_request_with_uri_mode<'a>(
     {
         // <HashedPayload>
         match payload {
-            Payload::Unsigned => ans.push_str("UNSIGNED-PAYLOAD"),
+            Payload::Unsigned => ans.push_str(UNSIGNED_PAYLOAD),
             Payload::SingleChunk(checksum) => ans.push_str(checksum),
             Payload::MultipleChunks => ans.push_str("STREAMING-AWS4-HMAC-SHA256-PAYLOAD"),
             Payload::MultipleChunksWithTrailer => ans.push_str("STREAMING-AWS4-HMAC-SHA256-PAYLOAD-TRAILER"),
@@ -554,6 +557,7 @@ fn create_presigned_canonical_request_with_uri_mode<'a>(
     decoded_query_strings: &[(impl AsRef<str>, impl AsRef<str>)],
     signed_headers: impl AsRef<[(&'a str, &'a str)]>,
     raw_uri_path: bool,
+    payload: &str,
 ) -> String {
     let mut ans = String::with_capacity(256);
     {
@@ -619,12 +623,16 @@ fn create_presigned_canonical_request_with_uri_mode<'a>(
     }
     {
         // <Payload>
-        ans.push_str("UNSIGNED-PAYLOAD");
+        // A presigned request has no body at signing time, so the line is what the client
+        // committed to: `UNSIGNED-PAYLOAD` or the value of the `x-amz-content-sha256` request
+        // header. S3 reads that header only; the same name as a query parameter stays part of the
+        // canonical query string and does not change this line.
+        ans.push_str(payload);
     }
     ans
 }
 
-/// create presigned canonical request
+/// create presigned canonical request with [`UNSIGNED_PAYLOAD`] as the payload line
 #[must_use]
 pub fn create_presigned_canonical_request<'a>(
     method: &str,
@@ -632,10 +640,17 @@ pub fn create_presigned_canonical_request<'a>(
     decoded_query_strings: &[(impl AsRef<str>, impl AsRef<str>)],
     signed_headers: impl AsRef<[(&'a str, &'a str)]>,
 ) -> String {
-    create_presigned_canonical_request_with_uri_mode(method, uri_path, decoded_query_strings, signed_headers, false)
+    create_presigned_canonical_request_with_uri_mode(
+        method,
+        uri_path,
+        decoded_query_strings,
+        signed_headers,
+        false,
+        UNSIGNED_PAYLOAD,
+    )
 }
 
-/// create presigned canonical request using the raw (unencoded) URI path
+/// create presigned canonical request with [`UNSIGNED_PAYLOAD`] as the payload line, using the raw (unencoded) URI path
 #[must_use]
 pub fn create_presigned_canonical_request_with_raw_uri_path<'a>(
     method: &str,
@@ -643,7 +658,43 @@ pub fn create_presigned_canonical_request_with_raw_uri_path<'a>(
     decoded_query_strings: &[(impl AsRef<str>, impl AsRef<str>)],
     signed_headers: impl AsRef<[(&'a str, &'a str)]>,
 ) -> String {
-    create_presigned_canonical_request_with_uri_mode(method, raw_uri_path, decoded_query_strings, signed_headers, true)
+    create_presigned_canonical_request_with_uri_mode(
+        method,
+        raw_uri_path,
+        decoded_query_strings,
+        signed_headers,
+        true,
+        UNSIGNED_PAYLOAD,
+    )
+}
+
+/// create presigned canonical request with an explicit payload line
+///
+/// A presigned request carries no body while it is signed, so the payload line is the marker the
+/// client committed to: [`UNSIGNED_PAYLOAD`], the value of the `x-amz-content-sha256` request
+/// header, or any other value the client signed. The caller decides the rule; S3 itself uses the
+/// request header and ignores the query parameter of the same name.
+#[must_use]
+pub fn create_presigned_canonical_request_with_payload<'a>(
+    method: &str,
+    uri_path: &str,
+    decoded_query_strings: &[(impl AsRef<str>, impl AsRef<str>)],
+    signed_headers: impl AsRef<[(&'a str, &'a str)]>,
+    payload: &str,
+) -> String {
+    create_presigned_canonical_request_with_uri_mode(method, uri_path, decoded_query_strings, signed_headers, false, payload)
+}
+
+/// create presigned canonical request with an explicit payload line, using the raw (unencoded) URI path
+#[must_use]
+pub fn create_presigned_canonical_request_with_raw_uri_path_and_payload<'a>(
+    method: &str,
+    raw_uri_path: &str,
+    decoded_query_strings: &[(impl AsRef<str>, impl AsRef<str>)],
+    signed_headers: impl AsRef<[(&'a str, &'a str)]>,
+    payload: &str,
+) -> String {
+    create_presigned_canonical_request_with_uri_mode(method, raw_uri_path, decoded_query_strings, signed_headers, true, payload)
 }
 
 #[cfg(test)]
@@ -1408,6 +1459,38 @@ mod tests {
         );
         assert_eq!(signature, "aeeed9bbccd4d02ee5c0109b86d86835f995330da4c265957d157751f604d404");
         assert_eq!(signature, info.signature);
+    }
+
+    /// A presigned request carries no body while it is signed, so the payload line is whatever the
+    /// client committed to: the builders without an explicit payload use [`UNSIGNED_PAYLOAD`], and the
+    /// ones that take one use it verbatim (S3 puts the `x-amz-content-sha256` request header there).
+    #[test]
+    fn presigned_canonical_request_payload_line_is_explicit() {
+        let headers = [("host", "examplebucket.s3.amazonaws.com")];
+        let query_strings = &[
+            ("X-Amz-Algorithm", "AWS4-HMAC-SHA256"),
+            ("X-Amz-Credential", "AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request"),
+            ("X-Amz-Date", "20130524T000000Z"),
+            ("X-Amz-Expires", "86400"),
+            ("X-Amz-SignedHeaders", "host"),
+        ];
+        let digest = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
+
+        let unsigned = create_presigned_canonical_request("GET", "/test.txt", query_strings, headers);
+        assert!(
+            unsigned.ends_with(&format!("\nhost\n{UNSIGNED_PAYLOAD}")),
+            "the default payload line must stay UNSIGNED-PAYLOAD: {unsigned}"
+        );
+
+        let declared = create_presigned_canonical_request_with_payload("GET", "/test.txt", query_strings, headers, digest);
+        assert!(
+            declared.ends_with(&format!("\nhost\n{digest}")),
+            "the explicit payload line must be used verbatim: {declared}"
+        );
+
+        let raw =
+            create_presigned_canonical_request_with_raw_uri_path_and_payload("GET", "/test.txt", query_strings, headers, digest);
+        assert_eq!(raw, declared, "the raw-path variant must differ only in the URI path");
     }
 
     #[test]
