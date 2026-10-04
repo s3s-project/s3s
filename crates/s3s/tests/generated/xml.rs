@@ -143,7 +143,9 @@ fn xml_errors_abac_status() {
     let content = xml_serialize_content(&value);
     let input = format!("<AbacStatus><S3sUnknown>x</S3sUnknown>{content}</AbacStatus>");
     let ans = xml_deserialize::<dto::AbacStatus>(input.as_bytes());
-    assert!(ans.is_ok(), "unknown element: {ans:?}, input: {input}");
+    if let Err(err) = ans {
+        panic!("unknown element: {err:?}, input: {input}");
+    }
     {
         let input = "<AbacStatus><Status>Disabled</Status><Status>Disabled</Status></AbacStatus>";
         let err = xml_deserialize::<dto::AbacStatus>(input.as_bytes()).unwrap_err();
@@ -158,7 +160,9 @@ fn xml_errors_abac_status() {
     {
         let input = "<AbacStatus></AbacStatus>";
         let ans = xml_deserialize::<dto::AbacStatus>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<S3sWrongRoot></S3sWrongRoot>";
@@ -208,7 +212,9 @@ fn xml_errors_abort_incomplete_multipart_upload() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::AbortIncompleteMultipartUpload>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<DaysAfterInitiation>s3s-not-a-value</DaysAfterInitiation>";
@@ -253,7 +259,9 @@ fn xml_errors_accelerate_configuration() {
     let content = xml_serialize_content(&value);
     let input = format!("<AccelerateConfiguration><S3sUnknown>x</S3sUnknown>{content}</AccelerateConfiguration>");
     let ans = xml_deserialize::<dto::AccelerateConfiguration>(input.as_bytes());
-    assert!(ans.is_ok(), "unknown element: {ans:?}, input: {input}");
+    if let Err(err) = ans {
+        panic!("unknown element: {err:?}, input: {input}");
+    }
     {
         let input = "<AccelerateConfiguration><Status>Enabled</Status><Status>Enabled</Status></AccelerateConfiguration>";
         let err = xml_deserialize::<dto::AccelerateConfiguration>(input.as_bytes()).unwrap_err();
@@ -268,7 +276,9 @@ fn xml_errors_accelerate_configuration() {
     {
         let input = "<AccelerateConfiguration></AccelerateConfiguration>";
         let ans = xml_deserialize::<dto::AccelerateConfiguration>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<S3sWrongRoot></S3sWrongRoot>";
@@ -340,7 +350,9 @@ fn xml_errors_access_control_policy() {
     let content = xml_serialize_content(&value);
     let input = format!("<AccessControlPolicy><S3sUnknown>x</S3sUnknown>{content}</AccessControlPolicy>");
     let ans = xml_deserialize::<dto::AccessControlPolicy>(input.as_bytes());
-    assert!(ans.is_ok(), "unknown element: {ans:?}, input: {input}");
+    if let Err(err) = ans {
+        panic!("unknown element: {err:?}, input: {input}");
+    }
     {
         let input = "<AccessControlPolicy><AccessControlList></AccessControlList><AccessControlList></AccessControlList></AccessControlPolicy>";
         let err = xml_deserialize::<dto::AccessControlPolicy>(input.as_bytes()).unwrap_err();
@@ -360,7 +372,9 @@ fn xml_errors_access_control_policy() {
     {
         let input = "<AccessControlPolicy></AccessControlPolicy>";
         let ans = xml_deserialize::<dto::AccessControlPolicy>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<S3sWrongRoot></S3sWrongRoot>";
@@ -464,7 +478,9 @@ fn xml_errors_analytics_and_operator() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::AnalyticsAndOperator>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<Prefix><S3sNested/></Prefix>";
@@ -556,7 +572,9 @@ fn xml_errors_analytics_configuration() {
     let content = xml_serialize_content(&value);
     let input = format!("<AnalyticsConfiguration><S3sUnknown>x</S3sUnknown>{content}</AnalyticsConfiguration>");
     let ans = xml_deserialize::<dto::AnalyticsConfiguration>(input.as_bytes());
-    assert!(ans.is_ok(), "unknown element: {ans:?}, input: {input}");
+    if let Err(err) = ans {
+        panic!("unknown element: {err:?}, input: {input}");
+    }
     {
         let input = "<AnalyticsConfiguration><Filter><And></And></Filter><Filter><And></And></Filter></AnalyticsConfiguration>";
         let err = xml_deserialize::<dto::AnalyticsConfiguration>(input.as_bytes()).unwrap_err();
@@ -859,7 +877,7 @@ fn xml_errors_analytics_s3_export_file_format() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::AnalyticsS3ExportFileFormat>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -883,7 +901,7 @@ fn xml_errors_annotation_configuration_state() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::AnnotationConfigurationState>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -1231,7 +1249,9 @@ fn xml_errors_annotation_table_configuration_updates() {
     let content = xml_serialize_content(&value);
     let input = format!("<AnnotationTableConfiguration><S3sUnknown>x</S3sUnknown>{content}</AnnotationTableConfiguration>");
     let ans = xml_deserialize::<dto::AnnotationTableConfigurationUpdates>(input.as_bytes());
-    assert!(ans.is_ok(), "unknown element: {ans:?}, input: {input}");
+    if let Err(err) = ans {
+        panic!("unknown element: {err:?}, input: {input}");
+    }
     {
         let input = "<AnnotationTableConfiguration><ConfigurationState>DISABLED</ConfigurationState><ConfigurationState>DISABLED</ConfigurationState></AnnotationTableConfiguration>";
         let err = xml_deserialize::<dto::AnnotationTableConfigurationUpdates>(input.as_bytes()).unwrap_err();
@@ -1357,7 +1377,9 @@ fn xml_errors_assume_role_output() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::AssumeRoleOutput>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<SourceIdentity><S3sNested/></SourceIdentity>";
@@ -1487,7 +1509,9 @@ fn xml_errors_blocked_encryption_types() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::BlockedEncryptionTypes>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
 }
 
@@ -1548,7 +1572,9 @@ fn xml_errors_bucket() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::Bucket>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<BucketArn><S3sNested/></BucketArn>";
@@ -1616,7 +1642,7 @@ fn xml_errors_bucket_abac_status() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::BucketAbacStatus>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -1640,7 +1666,7 @@ fn xml_errors_bucket_accelerate_status() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::BucketAccelerateStatus>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -1680,7 +1706,9 @@ fn xml_errors_bucket_info() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::BucketInfo>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
 }
 
@@ -1812,7 +1840,9 @@ fn xml_errors_bucket_lifecycle_configuration() {
     let content = xml_serialize_content(&value);
     let input = format!("<LifecycleConfiguration><S3sUnknown>x</S3sUnknown>{content}</LifecycleConfiguration>");
     let ans = xml_deserialize::<dto::BucketLifecycleConfiguration>(input.as_bytes());
-    assert!(ans.is_ok(), "unknown element: {ans:?}, input: {input}");
+    if let Err(err) = ans {
+        panic!("unknown element: {err:?}, input: {input}");
+    }
     let content = xml_serialize_content(&value);
     let canonical = format!("<LifecycleConfiguration>{content}</LifecycleConfiguration>");
     let foreign = format!("<LifecycleConfiguration xmlns=\"urn:s3s-not-the-s3-namespace\">{content}</LifecycleConfiguration>");
@@ -2013,7 +2043,9 @@ fn xml_errors_bucket_lifecycle_configuration() {
     let content = xml_serialize_content(&value);
     let input = format!("<LifecycleConfiguration><S3sUnknown>x</S3sUnknown>{content}</LifecycleConfiguration>");
     let ans = xml_deserialize::<dto::BucketLifecycleConfiguration>(input.as_bytes());
-    assert!(ans.is_ok(), "unknown element: {ans:?}, input: {input}");
+    if let Err(err) = ans {
+        panic!("unknown element: {err:?}, input: {input}");
+    }
     {
         let input = "<LifecycleConfiguration><ExpiryUpdatedAt>2024-01-02T03:04:05.000Z</ExpiryUpdatedAt><ExpiryUpdatedAt>2024-01-02T03:04:05.000Z</ExpiryUpdatedAt></LifecycleConfiguration>";
         let err = xml_deserialize::<dto::BucketLifecycleConfiguration>(input.as_bytes()).unwrap_err();
@@ -2136,7 +2168,7 @@ fn xml_errors_bucket_location_constraint() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::BucketLocationConstraint>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -2198,7 +2230,9 @@ fn xml_errors_bucket_logging_status() {
     let content = xml_serialize_content(&value);
     let input = format!("<BucketLoggingStatus><S3sUnknown>x</S3sUnknown>{content}</BucketLoggingStatus>");
     let ans = xml_deserialize::<dto::BucketLoggingStatus>(input.as_bytes());
-    assert!(ans.is_ok(), "unknown element: {ans:?}, input: {input}");
+    if let Err(err) = ans {
+        panic!("unknown element: {err:?}, input: {input}");
+    }
     {
         let input = "<BucketLoggingStatus><LoggingEnabled><TargetBucket>s3s-xml-sample</TargetBucket><TargetPrefix>s3s-xml-sample</TargetPrefix></LoggingEnabled><LoggingEnabled><TargetBucket>s3s-xml-sample</TargetBucket><TargetPrefix>s3s-xml-sample</TargetPrefix></LoggingEnabled></BucketLoggingStatus>";
         let err = xml_deserialize::<dto::BucketLoggingStatus>(input.as_bytes()).unwrap_err();
@@ -2213,7 +2247,9 @@ fn xml_errors_bucket_logging_status() {
     {
         let input = "<BucketLoggingStatus></BucketLoggingStatus>";
         let ans = xml_deserialize::<dto::BucketLoggingStatus>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<S3sWrongRoot></S3sWrongRoot>";
@@ -2258,7 +2294,7 @@ fn xml_errors_bucket_logs_permission() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::BucketLogsPermission>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -2282,7 +2318,7 @@ fn xml_errors_bucket_type() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::BucketType>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -2306,7 +2342,7 @@ fn xml_errors_bucket_versioning_status() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::BucketVersioningStatus>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -2344,7 +2380,9 @@ fn xml_errors_cors_configuration() {
     let content = xml_serialize_content(&value);
     let input = format!("<CORSConfiguration><S3sUnknown>x</S3sUnknown>{content}</CORSConfiguration>");
     let ans = xml_deserialize::<dto::CORSConfiguration>(input.as_bytes());
-    assert!(ans.is_ok(), "unknown element: {ans:?}, input: {input}");
+    if let Err(err) = ans {
+        panic!("unknown element: {err:?}, input: {input}");
+    }
     let content = xml_serialize_content(&value);
     let canonical = format!("<CORSConfiguration>{content}</CORSConfiguration>");
     let foreign = format!("<CORSConfiguration xmlns=\"urn:s3s-not-the-s3-namespace\">{content}</CORSConfiguration>");
@@ -2562,7 +2600,9 @@ fn xml_errors_csv_input() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::CSVInput>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<Comments><S3sNested/></Comments>";
@@ -2684,7 +2724,9 @@ fn xml_errors_csv_output() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::CSVOutput>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<FieldDelimiter><S3sNested/></FieldDelimiter>";
@@ -2836,7 +2878,9 @@ fn xml_errors_checksum() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::Checksum>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<ChecksumCRC32><S3sNested/></ChecksumCRC32>";
@@ -2931,7 +2975,7 @@ fn xml_errors_checksum_algorithm() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::ChecksumAlgorithm>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -2955,7 +2999,7 @@ fn xml_errors_checksum_type() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::ChecksumType>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -2984,7 +3028,9 @@ fn xml_errors_common_prefix() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::CommonPrefix>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<Prefix><S3sNested/></Prefix>";
@@ -3208,7 +3254,9 @@ fn xml_errors_completed_multipart_upload() {
     let content = xml_serialize_content(&value);
     let input = format!("<CompleteMultipartUpload><S3sUnknown>x</S3sUnknown>{content}</CompleteMultipartUpload>");
     let ans = xml_deserialize::<dto::CompletedMultipartUpload>(input.as_bytes());
-    assert!(ans.is_ok(), "unknown element: {ans:?}, input: {input}");
+    if let Err(err) = ans {
+        panic!("unknown element: {err:?}, input: {input}");
+    }
     let content = xml_serialize_content(&value);
     let canonical = format!("<CompleteMultipartUpload>{content}</CompleteMultipartUpload>");
     let foreign = format!("<CompleteMultipartUpload xmlns=\"urn:s3s-not-the-s3-namespace\">{content}</CompleteMultipartUpload>");
@@ -3218,7 +3266,9 @@ fn xml_errors_completed_multipart_upload() {
     {
         let input = "<CompleteMultipartUpload></CompleteMultipartUpload>";
         let ans = xml_deserialize::<dto::CompletedMultipartUpload>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<S3sWrongRoot></S3sWrongRoot>";
@@ -3357,7 +3407,9 @@ fn xml_errors_completed_part() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::CompletedPart>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<ChecksumCRC32><S3sNested/></ChecksumCRC32>";
@@ -3465,7 +3517,7 @@ fn xml_errors_compression_type() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::CompressionType>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -3507,7 +3559,9 @@ fn xml_errors_condition() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::Condition>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<HttpErrorCodeReturnedEquals><S3sNested/></HttpErrorCodeReturnedEquals>";
@@ -3682,7 +3736,9 @@ fn xml_errors_copy_object_result() {
     {
         let input = "<CopyObjectResult></CopyObjectResult>";
         let ans = xml_deserialize::<dto::CopyObjectResult>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<CopyObjectResult><ChecksumCRC32><S3sNested/></ChecksumCRC32></CopyObjectResult>";
@@ -3922,7 +3978,9 @@ fn xml_errors_copy_part_result() {
     {
         let input = "<CopyPartResult></CopyPartResult>";
         let ans = xml_deserialize::<dto::CopyPartResult>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<CopyPartResult><ChecksumCRC32><S3sNested/></ChecksumCRC32></CopyPartResult>";
@@ -4067,7 +4125,9 @@ fn xml_errors_create_bucket_configuration() {
     let content = xml_serialize_content(&value);
     let input = format!("<CreateBucketConfiguration><S3sUnknown>x</S3sUnknown>{content}</CreateBucketConfiguration>");
     let ans = xml_deserialize::<dto::CreateBucketConfiguration>(input.as_bytes());
-    assert!(ans.is_ok(), "unknown element: {ans:?}, input: {input}");
+    if let Err(err) = ans {
+        panic!("unknown element: {err:?}, input: {input}");
+    }
     {
         let input = "<CreateBucketConfiguration><Bucket></Bucket><Bucket></Bucket></CreateBucketConfiguration>";
         let err = xml_deserialize::<dto::CreateBucketConfiguration>(input.as_bytes()).unwrap_err();
@@ -4098,7 +4158,9 @@ fn xml_errors_create_bucket_configuration() {
     {
         let input = "<CreateBucketConfiguration></CreateBucketConfiguration>";
         let ans = xml_deserialize::<dto::CreateBucketConfiguration>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<S3sWrongRoot></S3sWrongRoot>";
@@ -4373,7 +4435,7 @@ fn xml_errors_data_redundancy() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::DataRedundancy>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -4416,7 +4478,9 @@ fn xml_errors_default_retention() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::DefaultRetention>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<Days>s3s-not-a-value</Days>";
@@ -4476,7 +4540,9 @@ fn xml_errors_del_marker_expiration() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::DelMarkerExpiration>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<Days>s3s-not-a-value</Days>";
@@ -4539,7 +4605,9 @@ fn xml_errors_delete() {
     let content = xml_serialize_content(&value);
     let input = format!("<Delete><S3sUnknown>x</S3sUnknown>{content}</Delete>");
     let ans = xml_deserialize::<dto::Delete>(input.as_bytes());
-    assert!(ans.is_ok(), "unknown element: {ans:?}, input: {input}");
+    if let Err(err) = ans {
+        panic!("unknown element: {err:?}, input: {input}");
+    }
     {
         let input = "<Delete><Quiet>true</Quiet><Quiet>true</Quiet></Delete>";
         let err = xml_deserialize::<dto::Delete>(input.as_bytes()).unwrap_err();
@@ -4658,7 +4726,9 @@ fn xml_errors_delete_marker_entry() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::DeleteMarkerEntry>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<Key><S3sNested/></Key>";
@@ -4736,7 +4806,9 @@ fn xml_errors_delete_marker_replication() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::DeleteMarkerReplication>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
 }
 
@@ -4771,7 +4843,7 @@ fn xml_errors_delete_marker_replication_status() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::DeleteMarkerReplicationStatus>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -4892,7 +4964,7 @@ fn xml_errors_delete_replication_status() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::DeleteReplicationStatus>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -4945,7 +5017,9 @@ fn xml_errors_deleted_object() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::DeletedObject>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<DeleteMarkerVersionId><S3sNested/></DeleteMarkerVersionId>";
@@ -5167,7 +5241,9 @@ fn xml_errors_destination_result() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::DestinationResult>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<TableBucketArn><S3sNested/></TableBucketArn>";
@@ -5222,7 +5298,7 @@ fn xml_errors_encoding_type() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::EncodingType>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -5328,7 +5404,9 @@ fn xml_errors_encryption_configuration() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::EncryptionConfiguration>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<ReplicaKmsKeyID><S3sNested/></ReplicaKmsKeyID>";
@@ -5373,7 +5451,7 @@ fn xml_errors_encryption_type() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::EncryptionType>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -5423,7 +5501,9 @@ fn xml_errors_error() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::Error>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<Code><S3sNested/></Code>";
@@ -5495,7 +5575,9 @@ fn xml_errors_error_details() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::ErrorDetails>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<ErrorCode><S3sNested/></ErrorCode>";
@@ -5616,7 +5698,9 @@ fn xml_errors_excluded_prefix() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::ExcludedPrefix>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<Prefix><S3sNested/></Prefix>";
@@ -5702,7 +5786,7 @@ fn xml_errors_existing_object_replication_status() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::ExistingObjectReplicationStatus>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -5726,7 +5810,7 @@ fn xml_errors_expiration_state() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::ExpirationState>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -5750,7 +5834,7 @@ fn xml_errors_expiration_status() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::ExpirationStatus>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -5774,7 +5858,7 @@ fn xml_errors_expression_type() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::ExpressionType>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -5798,7 +5882,7 @@ fn xml_errors_file_header_info() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::FileHeaderInfo>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -5834,7 +5918,9 @@ fn xml_errors_filter_rule() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::FilterRule>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<Value><S3sNested/></Value>";
@@ -5881,7 +5967,7 @@ fn xml_errors_filter_rule_name() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::FilterRuleName>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -5989,7 +6075,9 @@ fn xml_errors_get_bucket_acl_output() {
     {
         let input = "<AccessControlPolicy></AccessControlPolicy>";
         let ans = xml_deserialize::<dto::GetBucketAclOutput>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<S3sWrongRoot></S3sWrongRoot>";
@@ -6072,7 +6160,9 @@ fn xml_errors_get_bucket_cors_output() {
     {
         let input = "<CORSConfiguration></CORSConfiguration>";
         let ans = xml_deserialize::<dto::GetBucketCorsOutput>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<S3sWrongRoot></S3sWrongRoot>";
@@ -6286,7 +6376,9 @@ fn xml_errors_get_bucket_location_output() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::GetBucketLocationOutput>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
 }
 
@@ -6380,7 +6472,9 @@ fn xml_errors_get_bucket_logging_output() {
     {
         let input = "<BucketLoggingStatus></BucketLoggingStatus>";
         let ans = xml_deserialize::<dto::GetBucketLoggingOutput>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<S3sWrongRoot></S3sWrongRoot>";
@@ -6845,7 +6939,9 @@ fn xml_errors_get_bucket_notification_configuration_output() {
     {
         let input = "<NotificationConfiguration></NotificationConfiguration>";
         let ans = xml_deserialize::<dto::GetBucketNotificationConfigurationOutput>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<S3sWrongRoot></S3sWrongRoot>";
@@ -6931,7 +7027,9 @@ fn xml_errors_get_bucket_request_payment_output() {
     {
         let input = "<RequestPaymentConfiguration></RequestPaymentConfiguration>";
         let ans = xml_deserialize::<dto::GetBucketRequestPaymentOutput>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<S3sWrongRoot></S3sWrongRoot>";
@@ -7085,7 +7183,9 @@ fn xml_errors_get_bucket_versioning_output() {
     {
         let input = "<VersioningConfiguration></VersioningConfiguration>";
         let ans = xml_deserialize::<dto::GetBucketVersioningOutput>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<S3sWrongRoot></S3sWrongRoot>";
@@ -7221,7 +7321,9 @@ fn xml_errors_get_bucket_website_output() {
     {
         let input = "<WebsiteConfiguration></WebsiteConfiguration>";
         let ans = xml_deserialize::<dto::GetBucketWebsiteOutput>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<S3sWrongRoot></S3sWrongRoot>";
@@ -7488,7 +7590,9 @@ fn xml_errors_get_object_attributes_parts() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::GetObjectAttributesParts>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<IsTruncated>s3s-not-a-value</IsTruncated>";
@@ -7679,7 +7783,9 @@ fn xml_errors_grant() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::Grant>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
 }
 
@@ -7827,7 +7933,9 @@ fn xml_errors_initiator() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::Initiator>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<DisplayName><S3sNested/></DisplayName>";
@@ -7913,7 +8021,9 @@ fn xml_errors_input_serialization() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::InputSerialization>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
 }
 
@@ -7965,7 +8075,7 @@ fn xml_errors_intelligent_tiering_access_tier() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::IntelligentTieringAccessTier>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -7999,7 +8109,9 @@ fn xml_errors_intelligent_tiering_and_operator() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::IntelligentTieringAndOperator>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<Prefix><S3sNested/></Prefix>";
@@ -8090,7 +8202,9 @@ fn xml_errors_intelligent_tiering_configuration() {
     let content = xml_serialize_content(&value);
     let input = format!("<IntelligentTieringConfiguration><S3sUnknown>x</S3sUnknown>{content}</IntelligentTieringConfiguration>");
     let ans = xml_deserialize::<dto::IntelligentTieringConfiguration>(input.as_bytes());
-    assert!(ans.is_ok(), "unknown element: {ans:?}, input: {input}");
+    if let Err(err) = ans {
+        panic!("unknown element: {err:?}, input: {input}");
+    }
     {
         let input = "<IntelligentTieringConfiguration><Filter></Filter><Filter></Filter></IntelligentTieringConfiguration>";
         let err = xml_deserialize::<dto::IntelligentTieringConfiguration>(input.as_bytes()).unwrap_err();
@@ -8219,7 +8333,9 @@ fn xml_errors_intelligent_tiering_filter() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::IntelligentTieringFilter>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<Prefix><S3sNested/></Prefix>";
@@ -8274,7 +8390,7 @@ fn xml_errors_intelligent_tiering_status() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::IntelligentTieringStatus>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -8353,7 +8469,9 @@ fn xml_errors_inventory_configuration() {
     let content = xml_serialize_content(&value);
     let input = format!("<InventoryConfiguration><S3sUnknown>x</S3sUnknown>{content}</InventoryConfiguration>");
     let ans = xml_deserialize::<dto::InventoryConfiguration>(input.as_bytes());
-    assert!(ans.is_ok(), "unknown element: {ans:?}, input: {input}");
+    if let Err(err) = ans {
+        panic!("unknown element: {err:?}, input: {input}");
+    }
     {
         let input = "<InventoryConfiguration><Destination><S3BucketDestination><Bucket>s3s-xml-sample</Bucket><Format>CSV</Format></S3BucketDestination></Destination><Destination><S3BucketDestination><Bucket>s3s-xml-sample</Bucket><Format>CSV</Format></S3BucketDestination></Destination></InventoryConfiguration>";
         let err = xml_deserialize::<dto::InventoryConfiguration>(input.as_bytes()).unwrap_err();
@@ -8509,7 +8627,7 @@ fn xml_errors_inventory_configuration_state() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::InventoryConfigurationState>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -8611,7 +8729,9 @@ fn xml_errors_inventory_encryption() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::InventoryEncryption>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
 }
 
@@ -8703,7 +8823,7 @@ fn xml_errors_inventory_format() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::InventoryFormat>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -8727,7 +8847,7 @@ fn xml_errors_inventory_frequency() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::InventoryFrequency>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -8751,7 +8871,7 @@ fn xml_errors_inventory_included_object_versions() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::InventoryIncludedObjectVersions>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -8775,7 +8895,7 @@ fn xml_errors_inventory_optional_field() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::InventoryOptionalField>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -9120,7 +9240,9 @@ fn xml_errors_inventory_table_configuration_updates() {
     let content = xml_serialize_content(&value);
     let input = format!("<InventoryTableConfiguration><S3sUnknown>x</S3sUnknown>{content}</InventoryTableConfiguration>");
     let ans = xml_deserialize::<dto::InventoryTableConfigurationUpdates>(input.as_bytes());
-    assert!(ans.is_ok(), "unknown element: {ans:?}, input: {input}");
+    if let Err(err) = ans {
+        panic!("unknown element: {err:?}, input: {input}");
+    }
     {
         let input = "<InventoryTableConfiguration><ConfigurationState>DISABLED</ConfigurationState><ConfigurationState>DISABLED</ConfigurationState></InventoryTableConfiguration>";
         let err = xml_deserialize::<dto::InventoryTableConfigurationUpdates>(input.as_bytes()).unwrap_err();
@@ -9198,7 +9320,9 @@ fn xml_errors_json_input() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::JSONInput>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
 }
 
@@ -9241,7 +9365,9 @@ fn xml_errors_json_output() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::JSONOutput>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<RecordDelimiter><S3sNested/></RecordDelimiter>";
@@ -9284,7 +9410,7 @@ fn xml_errors_json_type() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::JSONType>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -9484,7 +9610,9 @@ fn xml_errors_journal_table_configuration_updates() {
     let content = xml_serialize_content(&value);
     let input = format!("<JournalTableConfiguration><S3sUnknown>x</S3sUnknown>{content}</JournalTableConfiguration>");
     let ans = xml_deserialize::<dto::JournalTableConfigurationUpdates>(input.as_bytes());
-    assert!(ans.is_ok(), "unknown element: {ans:?}, input: {input}");
+    if let Err(err) = ans {
+        panic!("unknown element: {err:?}, input: {input}");
+    }
     {
         let input = "<JournalTableConfiguration><RecordExpiration><Expiration>DISABLED</Expiration></RecordExpiration><RecordExpiration><Expiration>DISABLED</Expiration></RecordExpiration></JournalTableConfiguration>";
         let err = xml_deserialize::<dto::JournalTableConfigurationUpdates>(input.as_bytes()).unwrap_err();
@@ -9662,7 +9790,9 @@ fn xml_errors_lifecycle_expiration() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::LifecycleExpiration>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<Date>s3s-not-a-value</Date>";
@@ -9753,7 +9883,9 @@ fn xml_errors_lifecycle_expiration() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::LifecycleExpiration>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<Date>s3s-not-a-value</Date>";
@@ -10201,7 +10333,9 @@ fn xml_errors_lifecycle_rule_and_operator() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::LifecycleRuleAndOperator>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<Prefix><S3sNested/></Prefix>";
@@ -10318,7 +10452,9 @@ fn xml_errors_lifecycle_rule_filter() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::LifecycleRuleFilter>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<Prefix><S3sNested/></Prefix>";
@@ -10442,7 +10578,9 @@ fn xml_errors_lifecycle_rule_filter() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::LifecycleRuleFilter>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<Prefix><S3sNested/></Prefix>";
@@ -10607,7 +10745,9 @@ fn xml_errors_list_bucket_analytics_configurations_output() {
     {
         let input = "<ListBucketAnalyticsConfigurationResult></ListBucketAnalyticsConfigurationResult>";
         let ans = xml_deserialize::<dto::ListBucketAnalyticsConfigurationsOutput>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<ListBucketAnalyticsConfigurationResult><ContinuationToken><S3sNested/></ContinuationToken></ListBucketAnalyticsConfigurationResult>";
@@ -10780,7 +10920,9 @@ fn xml_errors_list_bucket_intelligent_tiering_configurations_output() {
     {
         let input = "<ListBucketIntelligentTieringConfigurationsOutput></ListBucketIntelligentTieringConfigurationsOutput>";
         let ans = xml_deserialize::<dto::ListBucketIntelligentTieringConfigurationsOutput>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<ListBucketIntelligentTieringConfigurationsOutput><ContinuationToken><S3sNested/></ContinuationToken></ListBucketIntelligentTieringConfigurationsOutput>";
@@ -10960,7 +11102,9 @@ fn xml_errors_list_bucket_inventory_configurations_output() {
     {
         let input = "<ListInventoryConfigurationsResult></ListInventoryConfigurationsResult>";
         let ans = xml_deserialize::<dto::ListBucketInventoryConfigurationsOutput>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<ListInventoryConfigurationsResult><ContinuationToken><S3sNested/></ContinuationToken></ListInventoryConfigurationsResult>";
@@ -11094,7 +11238,9 @@ fn xml_errors_list_bucket_metrics_configurations_output() {
     {
         let input = "<ListMetricsConfigurationsResult></ListMetricsConfigurationsResult>";
         let ans = xml_deserialize::<dto::ListBucketMetricsConfigurationsOutput>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<ListMetricsConfigurationsResult><ContinuationToken><S3sNested/></ContinuationToken></ListMetricsConfigurationsResult>";
@@ -11239,7 +11385,9 @@ fn xml_errors_list_buckets_output() {
     {
         let input = "<ListAllMyBucketsResult></ListAllMyBucketsResult>";
         let ans = xml_deserialize::<dto::ListBucketsOutput>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<ListAllMyBucketsResult><ContinuationToken><S3sNested/></ContinuationToken></ListAllMyBucketsResult>";
@@ -11354,7 +11502,9 @@ fn xml_errors_list_directory_buckets_output() {
     {
         let input = "<ListAllMyDirectoryBucketsResult></ListAllMyDirectoryBucketsResult>";
         let ans = xml_deserialize::<dto::ListDirectoryBucketsOutput>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<ListAllMyDirectoryBucketsResult><ContinuationToken><S3sNested/></ContinuationToken></ListAllMyDirectoryBucketsResult>";
@@ -12480,7 +12630,9 @@ fn xml_errors_location_info() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::LocationInfo>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<Name><S3sNested/></Name>";
@@ -12527,7 +12679,7 @@ fn xml_errors_location_type() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::LocationType>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -12651,7 +12803,7 @@ fn xml_errors_mfa_delete() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::MFADelete>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -12675,7 +12827,7 @@ fn xml_errors_mfa_delete_status() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::MFADeleteStatus>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -12749,7 +12901,9 @@ fn xml_errors_metadata_configuration() {
     let content = xml_serialize_content(&value);
     let input = format!("<MetadataConfiguration><S3sUnknown>x</S3sUnknown>{content}</MetadataConfiguration>");
     let ans = xml_deserialize::<dto::MetadataConfiguration>(input.as_bytes());
-    assert!(ans.is_ok(), "unknown element: {ans:?}, input: {input}");
+    if let Err(err) = ans {
+        panic!("unknown element: {err:?}, input: {input}");
+    }
     {
         let input = "<MetadataConfiguration><AnnotationTableConfiguration><ConfigurationState>DISABLED</ConfigurationState></AnnotationTableConfiguration><AnnotationTableConfiguration><ConfigurationState>DISABLED</ConfigurationState></AnnotationTableConfiguration></MetadataConfiguration>";
         let err = xml_deserialize::<dto::MetadataConfiguration>(input.as_bytes()).unwrap_err();
@@ -12971,7 +13125,9 @@ fn xml_errors_metadata_entry() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::MetadataEntry>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<Name><S3sNested/></Name>";
@@ -13024,7 +13180,9 @@ fn xml_errors_metadata_table_configuration() {
     let content = xml_serialize_content(&value);
     let input = format!("<MetadataTableConfiguration><S3sUnknown>x</S3sUnknown>{content}</MetadataTableConfiguration>");
     let ans = xml_deserialize::<dto::MetadataTableConfiguration>(input.as_bytes());
-    assert!(ans.is_ok(), "unknown element: {ans:?}, input: {input}");
+    if let Err(err) = ans {
+        panic!("unknown element: {err:?}, input: {input}");
+    }
     {
         let input = "<MetadataTableConfiguration><S3TablesDestination><TableBucketArn>s3s-xml-sample</TableBucketArn><TableName>s3s-xml-sample</TableName></S3TablesDestination><S3TablesDestination><TableBucketArn>s3s-xml-sample</TableBucketArn><TableName>s3s-xml-sample</TableName></S3TablesDestination></MetadataTableConfiguration>";
         let err = xml_deserialize::<dto::MetadataTableConfiguration>(input.as_bytes()).unwrap_err();
@@ -13277,7 +13435,9 @@ fn xml_errors_metrics_and_operator() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::MetricsAndOperator>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<AccessPointArn><S3sNested/></AccessPointArn>";
@@ -13335,7 +13495,9 @@ fn xml_errors_metrics_configuration() {
     let content = xml_serialize_content(&value);
     let input = format!("<MetricsConfiguration><S3sUnknown>x</S3sUnknown>{content}</MetricsConfiguration>");
     let ans = xml_deserialize::<dto::MetricsConfiguration>(input.as_bytes());
-    assert!(ans.is_ok(), "unknown element: {ans:?}, input: {input}");
+    if let Err(err) = ans {
+        panic!("unknown element: {err:?}, input: {input}");
+    }
     {
         let input = "<MetricsConfiguration><Filter><AccessPointArn>s3s-xml-sample</AccessPointArn></Filter><Filter><AccessPointArn>s3s-xml-sample</AccessPointArn></Filter></MetricsConfiguration>";
         let err = xml_deserialize::<dto::MetricsConfiguration>(input.as_bytes()).unwrap_err();
@@ -13478,7 +13640,7 @@ fn xml_errors_metrics_status() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::MetricsStatus>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -13565,7 +13727,9 @@ fn xml_errors_multipart_upload() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::MultipartUpload>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<Key><S3sNested/></Key>";
@@ -13668,7 +13832,9 @@ fn xml_errors_noncurrent_version_expiration() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::NoncurrentVersionExpiration>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<NewerNoncurrentVersions>s3s-not-a-value</NewerNoncurrentVersions>";
@@ -13740,7 +13906,9 @@ fn xml_errors_noncurrent_version_transition() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::NoncurrentVersionTransition>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<NewerNoncurrentVersions>s3s-not-a-value</NewerNoncurrentVersions>";
@@ -13876,7 +14044,9 @@ fn xml_errors_notification_configuration() {
     let content = xml_serialize_content(&value);
     let input = format!("<NotificationConfiguration><S3sUnknown>x</S3sUnknown>{content}</NotificationConfiguration>");
     let ans = xml_deserialize::<dto::NotificationConfiguration>(input.as_bytes());
-    assert!(ans.is_ok(), "unknown element: {ans:?}, input: {input}");
+    if let Err(err) = ans {
+        panic!("unknown element: {err:?}, input: {input}");
+    }
     {
         let input = "<NotificationConfiguration><EventBridgeConfiguration></EventBridgeConfiguration><EventBridgeConfiguration></EventBridgeConfiguration></NotificationConfiguration>";
         let err = xml_deserialize::<dto::NotificationConfiguration>(input.as_bytes()).unwrap_err();
@@ -13892,7 +14062,9 @@ fn xml_errors_notification_configuration() {
     {
         let input = "<NotificationConfiguration></NotificationConfiguration>";
         let ans = xml_deserialize::<dto::NotificationConfiguration>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<S3sWrongRoot></S3sWrongRoot>";
@@ -13964,7 +14136,9 @@ fn xml_errors_notification_configuration_filter() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::NotificationConfigurationFilter>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
 }
 
@@ -14066,7 +14240,9 @@ fn xml_errors_object() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::Object>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<Key><S3sNested/></Key>";
@@ -14244,7 +14420,9 @@ fn xml_errors_object() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::Object>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<Key><S3sNested/></Key>";
@@ -14348,7 +14526,7 @@ fn xml_errors_object_canned_acl() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::ObjectCannedACL>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -14516,7 +14694,9 @@ fn xml_errors_object_lock_configuration() {
     let content = xml_serialize_content(&value);
     let input = format!("<ObjectLockConfiguration><S3sUnknown>x</S3sUnknown>{content}</ObjectLockConfiguration>");
     let ans = xml_deserialize::<dto::ObjectLockConfiguration>(input.as_bytes());
-    assert!(ans.is_ok(), "unknown element: {ans:?}, input: {input}");
+    if let Err(err) = ans {
+        panic!("unknown element: {err:?}, input: {input}");
+    }
     {
         let input = "<ObjectLockConfiguration><ObjectLockEnabled>Enabled</ObjectLockEnabled><ObjectLockEnabled>Enabled</ObjectLockEnabled></ObjectLockConfiguration>";
         let err = xml_deserialize::<dto::ObjectLockConfiguration>(input.as_bytes()).unwrap_err();
@@ -14536,7 +14716,9 @@ fn xml_errors_object_lock_configuration() {
     {
         let input = "<ObjectLockConfiguration></ObjectLockConfiguration>";
         let ans = xml_deserialize::<dto::ObjectLockConfiguration>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<S3sWrongRoot></S3sWrongRoot>";
@@ -14588,7 +14770,7 @@ fn xml_errors_object_lock_enabled() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::ObjectLockEnabled>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -14612,7 +14794,9 @@ fn xml_errors_object_lock_legal_hold() {
     let content = xml_serialize_content(&value);
     let input = format!("<LegalHold><S3sUnknown>x</S3sUnknown>{content}</LegalHold>");
     let ans = xml_deserialize::<dto::ObjectLockLegalHold>(input.as_bytes());
-    assert!(ans.is_ok(), "unknown element: {ans:?}, input: {input}");
+    if let Err(err) = ans {
+        panic!("unknown element: {err:?}, input: {input}");
+    }
     {
         let input = "<LegalHold><Status>OFF</Status><Status>OFF</Status></LegalHold>";
         let err = xml_deserialize::<dto::ObjectLockLegalHold>(input.as_bytes()).unwrap_err();
@@ -14627,7 +14811,9 @@ fn xml_errors_object_lock_legal_hold() {
     {
         let input = "<LegalHold></LegalHold>";
         let ans = xml_deserialize::<dto::ObjectLockLegalHold>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<S3sWrongRoot></S3sWrongRoot>";
@@ -14672,7 +14858,7 @@ fn xml_errors_object_lock_legal_hold_status() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::ObjectLockLegalHoldStatus>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -14699,7 +14885,9 @@ fn xml_errors_object_lock_retention() {
     let content = xml_serialize_content(&value);
     let input = format!("<Retention><S3sUnknown>x</S3sUnknown>{content}</Retention>");
     let ans = xml_deserialize::<dto::ObjectLockRetention>(input.as_bytes());
-    assert!(ans.is_ok(), "unknown element: {ans:?}, input: {input}");
+    if let Err(err) = ans {
+        panic!("unknown element: {err:?}, input: {input}");
+    }
     {
         let input = "<Retention><Mode>COMPLIANCE</Mode><Mode>COMPLIANCE</Mode></Retention>";
         let err = xml_deserialize::<dto::ObjectLockRetention>(input.as_bytes()).unwrap_err();
@@ -14719,7 +14907,9 @@ fn xml_errors_object_lock_retention() {
     {
         let input = "<Retention></Retention>";
         let ans = xml_deserialize::<dto::ObjectLockRetention>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<Retention><RetainUntilDate>s3s-not-a-value</RetainUntilDate></Retention>";
@@ -14779,7 +14969,7 @@ fn xml_errors_object_lock_retention_mode() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::ObjectLockRetentionMode>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -14812,7 +15002,9 @@ fn xml_errors_object_lock_rule() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::ObjectLockRule>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
 }
 
@@ -14847,7 +15039,7 @@ fn xml_errors_object_ownership() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::ObjectOwnership>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -14965,7 +15157,9 @@ fn xml_errors_object_part() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::ObjectPart>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<ChecksumCRC32><S3sNested/></ChecksumCRC32>";
@@ -15073,7 +15267,7 @@ fn xml_errors_object_storage_class() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::ObjectStorageClass>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -15173,7 +15367,9 @@ fn xml_errors_object_version() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::ObjectVersion>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<Key><S3sNested/></Key>";
@@ -15276,7 +15472,7 @@ fn xml_errors_object_version_storage_class() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::ObjectVersionStorageClass>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -15335,7 +15531,9 @@ fn xml_errors_output_location() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::OutputLocation>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
 }
 
@@ -15390,7 +15588,9 @@ fn xml_errors_output_serialization() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::OutputSerialization>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
 }
 
@@ -15441,7 +15641,9 @@ fn xml_errors_owner() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::Owner>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<DisplayName><S3sNested/></DisplayName>";
@@ -15491,7 +15693,7 @@ fn xml_errors_owner_override() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::OwnerOverride>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -15519,7 +15721,9 @@ fn xml_errors_ownership_controls() {
     let content = xml_serialize_content(&value);
     let input = format!("<OwnershipControls><S3sUnknown>x</S3sUnknown>{content}</OwnershipControls>");
     let ans = xml_deserialize::<dto::OwnershipControls>(input.as_bytes());
-    assert!(ans.is_ok(), "unknown element: {ans:?}, input: {input}");
+    if let Err(err) = ans {
+        panic!("unknown element: {err:?}, input: {input}");
+    }
     let content = xml_serialize_content(&value);
     let canonical = format!("<OwnershipControls>{content}</OwnershipControls>");
     let foreign = format!("<OwnershipControls xmlns=\"urn:s3s-not-the-s3-namespace\">{content}</OwnershipControls>");
@@ -15746,7 +15950,9 @@ fn xml_errors_part() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::Part>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<ChecksumCRC32><S3sNested/></ChecksumCRC32>";
@@ -15864,7 +16070,7 @@ fn xml_errors_partition_date_source() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::PartitionDateSource>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -15897,7 +16103,9 @@ fn xml_errors_partitioned_prefix() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::PartitionedPrefix>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
 }
 
@@ -15934,7 +16142,7 @@ fn xml_errors_payer() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::Payer>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -15958,7 +16166,7 @@ fn xml_errors_permission() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::Permission>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -15994,7 +16202,9 @@ fn xml_errors_policy_status() {
     {
         let input = "<PolicyStatus></PolicyStatus>";
         let ans = xml_deserialize::<dto::PolicyStatus>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<PolicyStatus><IsPublic>s3s-not-a-value</IsPublic></PolicyStatus>";
@@ -16079,7 +16289,9 @@ fn xml_errors_progress() {
     {
         let input = "<Progress></Progress>";
         let ans = xml_deserialize::<dto::Progress>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<Progress><BytesProcessed>s3s-not-a-value</BytesProcessed></Progress>";
@@ -16144,7 +16356,7 @@ fn xml_errors_protocol() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::Protocol>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -16180,7 +16392,9 @@ fn xml_errors_public_access_block_configuration() {
     let content = xml_serialize_content(&value);
     let input = format!("<PublicAccessBlockConfiguration><S3sUnknown>x</S3sUnknown>{content}</PublicAccessBlockConfiguration>");
     let ans = xml_deserialize::<dto::PublicAccessBlockConfiguration>(input.as_bytes());
-    assert!(ans.is_ok(), "unknown element: {ans:?}, input: {input}");
+    if let Err(err) = ans {
+        panic!("unknown element: {err:?}, input: {input}");
+    }
     {
         let input = "<PublicAccessBlockConfiguration><BlockPublicAcls>true</BlockPublicAcls><BlockPublicAcls>true</BlockPublicAcls></PublicAccessBlockConfiguration>";
         let err = xml_deserialize::<dto::PublicAccessBlockConfiguration>(input.as_bytes()).unwrap_err();
@@ -16212,7 +16426,9 @@ fn xml_errors_public_access_block_configuration() {
     {
         let input = "<PublicAccessBlockConfiguration></PublicAccessBlockConfiguration>";
         let ans = xml_deserialize::<dto::PublicAccessBlockConfiguration>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input =
@@ -16439,7 +16655,7 @@ fn xml_errors_quote_fields() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::QuoteFields>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -16564,7 +16780,9 @@ fn xml_errors_redirect() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::Redirect>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<HostName><S3sNested/></HostName>";
@@ -16733,7 +16951,7 @@ fn xml_errors_replica_modifications_status() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::ReplicaModificationsStatus>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[cfg(not(feature = "minio"))]
@@ -16866,7 +17084,9 @@ fn xml_errors_replication_configuration() {
     let content = xml_serialize_content(&value);
     let input = format!("<ReplicationConfiguration><S3sUnknown>x</S3sUnknown>{content}</ReplicationConfiguration>");
     let ans = xml_deserialize::<dto::ReplicationConfiguration>(input.as_bytes());
-    assert!(ans.is_ok(), "unknown element: {ans:?}, input: {input}");
+    if let Err(err) = ans {
+        panic!("unknown element: {err:?}, input: {input}");
+    }
     {
         let input = "<ReplicationConfiguration><Role>s3s-xml-sample</Role><Role>s3s-xml-sample</Role></ReplicationConfiguration>";
         let err = xml_deserialize::<dto::ReplicationConfiguration>(input.as_bytes()).unwrap_err();
@@ -17112,7 +17332,9 @@ fn xml_errors_replication_configuration() {
     let content = xml_serialize_content(&value);
     let input = format!("<ReplicationConfiguration><S3sUnknown>x</S3sUnknown>{content}</ReplicationConfiguration>");
     let ans = xml_deserialize::<dto::ReplicationConfiguration>(input.as_bytes());
-    assert!(ans.is_ok(), "unknown element: {ans:?}, input: {input}");
+    if let Err(err) = ans {
+        panic!("unknown element: {err:?}, input: {input}");
+    }
     {
         let input = "<ReplicationConfiguration><Role>s3s-xml-sample</Role><Role>s3s-xml-sample</Role></ReplicationConfiguration>";
         let err = xml_deserialize::<dto::ReplicationConfiguration>(input.as_bytes()).unwrap_err();
@@ -17704,7 +17926,9 @@ fn xml_errors_replication_rule_and_operator() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::ReplicationRuleAndOperator>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<Prefix><S3sNested/></Prefix>";
@@ -17784,7 +18008,9 @@ fn xml_errors_replication_rule_filter() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::ReplicationRuleFilter>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<Prefix><S3sNested/></Prefix>";
@@ -17871,7 +18097,9 @@ fn xml_errors_replication_rule_filter() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::ReplicationRuleFilter>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<Prefix><S3sNested/></Prefix>";
@@ -17928,7 +18156,7 @@ fn xml_errors_replication_rule_status() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::ReplicationRuleStatus>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -17952,7 +18180,7 @@ fn xml_errors_replication_status() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::ReplicationStatus>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -18030,7 +18258,7 @@ fn xml_errors_replication_time_status() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::ReplicationTimeStatus>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -18057,7 +18285,9 @@ fn xml_errors_replication_time_value() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::ReplicationTimeValue>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<Minutes>s3s-not-a-value</Minutes>";
@@ -18100,7 +18330,9 @@ fn xml_errors_request_payment_configuration() {
     let content = xml_serialize_content(&value);
     let input = format!("<RequestPaymentConfiguration><S3sUnknown>x</S3sUnknown>{content}</RequestPaymentConfiguration>");
     let ans = xml_deserialize::<dto::RequestPaymentConfiguration>(input.as_bytes());
-    assert!(ans.is_ok(), "unknown element: {ans:?}, input: {input}");
+    if let Err(err) = ans {
+        panic!("unknown element: {err:?}, input: {input}");
+    }
     {
         let input =
             "<RequestPaymentConfiguration><Payer>BucketOwner</Payer><Payer>BucketOwner</Payer></RequestPaymentConfiguration>";
@@ -18167,7 +18399,9 @@ fn xml_errors_request_progress() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::RequestProgress>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<Enabled>s3s-not-a-value</Enabled>";
@@ -18358,7 +18592,9 @@ fn xml_errors_restore_request() {
     let content = xml_serialize_content(&value);
     let input = format!("<RestoreRequest><S3sUnknown>x</S3sUnknown>{content}</RestoreRequest>");
     let ans = xml_deserialize::<dto::RestoreRequest>(input.as_bytes());
-    assert!(ans.is_ok(), "unknown element: {ans:?}, input: {input}");
+    if let Err(err) = ans {
+        panic!("unknown element: {err:?}, input: {input}");
+    }
     {
         let input = "<RestoreRequest><Days>42</Days><Days>42</Days></RestoreRequest>";
         let err = xml_deserialize::<dto::RestoreRequest>(input.as_bytes()).unwrap_err();
@@ -18404,7 +18640,9 @@ fn xml_errors_restore_request() {
     {
         let input = "<RestoreRequest></RestoreRequest>";
         let ans = xml_deserialize::<dto::RestoreRequest>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<RestoreRequest><Description><S3sNested/></Description></RestoreRequest>";
@@ -18497,7 +18735,7 @@ fn xml_errors_restore_request_type() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::RestoreRequestType>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -18533,7 +18771,9 @@ fn xml_errors_restore_status() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::RestoreStatus>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<IsRestoreInProgress>s3s-not-a-value</IsRestoreInProgress>";
@@ -18655,7 +18895,9 @@ fn xml_errors_s3_key_filter() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::S3KeyFilter>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
 }
 
@@ -18848,7 +19090,7 @@ fn xml_errors_s3_tables_bucket_type() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::S3TablesBucketType>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -19166,7 +19408,9 @@ fn xml_errors_scan_range() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::ScanRange>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<End>s3s-not-a-value</End>";
@@ -19286,7 +19530,9 @@ fn xml_errors_select_object_content_request() {
     let content = xml_serialize_content(&value);
     let input = format!("<SelectObjectContentRequest><S3sUnknown>x</S3sUnknown>{content}</SelectObjectContentRequest>");
     let ans = xml_deserialize::<dto::SelectObjectContentRequest>(input.as_bytes());
-    assert!(ans.is_ok(), "unknown element: {ans:?}, input: {input}");
+    if let Err(err) = ans {
+        panic!("unknown element: {err:?}, input: {input}");
+    }
     {
         let input = "<SelectObjectContentRequest><Expression>s3s-xml-sample</Expression><Expression>s3s-xml-sample</Expression></SelectObjectContentRequest>";
         let err = xml_deserialize::<dto::SelectObjectContentRequest>(input.as_bytes()).unwrap_err();
@@ -19571,7 +19817,7 @@ fn xml_errors_server_side_encryption() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::ServerSideEncryption>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -19676,7 +19922,9 @@ fn xml_errors_server_side_encryption_configuration() {
     let input =
         format!("<ServerSideEncryptionConfiguration><S3sUnknown>x</S3sUnknown>{content}</ServerSideEncryptionConfiguration>");
     let ans = xml_deserialize::<dto::ServerSideEncryptionConfiguration>(input.as_bytes());
-    assert!(ans.is_ok(), "unknown element: {ans:?}, input: {input}");
+    if let Err(err) = ans {
+        panic!("unknown element: {err:?}, input: {input}");
+    }
     let content = xml_serialize_content(&value);
     let canonical = format!("<ServerSideEncryptionConfiguration>{content}</ServerSideEncryptionConfiguration>");
     let foreign = format!(
@@ -19768,7 +20016,9 @@ fn xml_errors_server_side_encryption_rule() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::ServerSideEncryptionRule>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<BucketKeyEnabled>s3s-not-a-value</BucketKeyEnabled>";
@@ -19950,7 +20200,9 @@ fn xml_errors_source_selection_criteria() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::SourceSelectionCriteria>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
 }
 
@@ -20034,7 +20286,7 @@ fn xml_errors_sse_kms_encrypted_objects_status() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::SseKmsEncryptedObjectsStatus>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -20090,7 +20342,9 @@ fn xml_errors_stats() {
     {
         let input = "<Stats></Stats>";
         let ans = xml_deserialize::<dto::Stats>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<Stats><BytesProcessed>s3s-not-a-value</BytesProcessed></Stats>";
@@ -20155,7 +20409,7 @@ fn xml_errors_storage_class() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::StorageClass>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -20194,7 +20448,9 @@ fn xml_errors_storage_class_analysis() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::StorageClassAnalysis>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
 }
 
@@ -20297,7 +20553,7 @@ fn xml_errors_storage_class_analysis_schema_version() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::StorageClassAnalysisSchemaVersion>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -20321,7 +20577,7 @@ fn xml_errors_table_sse_algorithm() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::TableSseAlgorithm>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -20357,7 +20613,9 @@ fn xml_errors_tag() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::Tag>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<Key><S3sNested/></Key>";
@@ -20410,7 +20668,9 @@ fn xml_errors_tagging() {
     let content = xml_serialize_content(&value);
     let input = format!("<Tagging><S3sUnknown>x</S3sUnknown>{content}</Tagging>");
     let ans = xml_deserialize::<dto::Tagging>(input.as_bytes());
-    assert!(ans.is_ok(), "unknown element: {ans:?}, input: {input}");
+    if let Err(err) = ans {
+        panic!("unknown element: {err:?}, input: {input}");
+    }
     {
         let input = "<Tagging><TagSet></TagSet><TagSet></TagSet></Tagging>";
         let err = xml_deserialize::<dto::Tagging>(input.as_bytes()).unwrap_err();
@@ -20515,7 +20775,9 @@ fn xml_errors_target_grant() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::TargetGrant>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
 }
 
@@ -20571,7 +20833,9 @@ fn xml_errors_target_object_key_format() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::TargetObjectKeyFormat>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
 }
 
@@ -20613,7 +20877,7 @@ fn xml_errors_tier() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::Tier>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -20806,7 +21070,9 @@ fn xml_errors_transition() {
     {
         let input = "";
         let ans = xml_deserialize_content::<dto::Transition>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<Date>s3s-not-a-value</Date>";
@@ -20861,7 +21127,7 @@ fn xml_errors_transition_storage_class() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::TransitionStorageClass>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[test]
@@ -20885,7 +21151,7 @@ fn xml_errors_type() {
     assert!(matches!(err, xml::DeError::UnexpectedEof), "empty content: {err:?}");
     let input = "s3s-unknown-variant";
     let value = xml_deserialize_content::<dto::Type>(input.as_bytes()).unwrap();
-    assert!(value.as_str() == input, "an undeclared value must be preserved: {value:?}");
+    assert!(value.as_str() == input, "an undeclared value must be preserved: input: {input}");
 }
 
 #[cfg(not(feature = "minio"))]
@@ -20914,7 +21180,9 @@ fn xml_errors_versioning_configuration() {
     let content = xml_serialize_content(&value);
     let input = format!("<VersioningConfiguration><S3sUnknown>x</S3sUnknown>{content}</VersioningConfiguration>");
     let ans = xml_deserialize::<dto::VersioningConfiguration>(input.as_bytes());
-    assert!(ans.is_ok(), "unknown element: {ans:?}, input: {input}");
+    if let Err(err) = ans {
+        panic!("unknown element: {err:?}, input: {input}");
+    }
     {
         let input =
             "<VersioningConfiguration><MfaDelete>Disabled</MfaDelete><MfaDelete>Disabled</MfaDelete></VersioningConfiguration>";
@@ -20935,7 +21203,9 @@ fn xml_errors_versioning_configuration() {
     {
         let input = "<VersioningConfiguration></VersioningConfiguration>";
         let ans = xml_deserialize::<dto::VersioningConfiguration>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<S3sWrongRoot></S3sWrongRoot>";
@@ -21003,7 +21273,9 @@ fn xml_errors_versioning_configuration() {
     let content = xml_serialize_content(&value);
     let input = format!("<VersioningConfiguration><S3sUnknown>x</S3sUnknown>{content}</VersioningConfiguration>");
     let ans = xml_deserialize::<dto::VersioningConfiguration>(input.as_bytes());
-    assert!(ans.is_ok(), "unknown element: {ans:?}, input: {input}");
+    if let Err(err) = ans {
+        panic!("unknown element: {err:?}, input: {input}");
+    }
     {
         let input = "<VersioningConfiguration><ExcludeFolders>true</ExcludeFolders><ExcludeFolders>true</ExcludeFolders></VersioningConfiguration>";
         let err = xml_deserialize::<dto::VersioningConfiguration>(input.as_bytes()).unwrap_err();
@@ -21029,7 +21301,9 @@ fn xml_errors_versioning_configuration() {
     {
         let input = "<VersioningConfiguration></VersioningConfiguration>";
         let ans = xml_deserialize::<dto::VersioningConfiguration>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<VersioningConfiguration><ExcludeFolders>s3s-not-a-value</ExcludeFolders></VersioningConfiguration>";
@@ -21147,7 +21421,9 @@ fn xml_errors_website_configuration() {
     let content = xml_serialize_content(&value);
     let input = format!("<WebsiteConfiguration><S3sUnknown>x</S3sUnknown>{content}</WebsiteConfiguration>");
     let ans = xml_deserialize::<dto::WebsiteConfiguration>(input.as_bytes());
-    assert!(ans.is_ok(), "unknown element: {ans:?}, input: {input}");
+    if let Err(err) = ans {
+        panic!("unknown element: {err:?}, input: {input}");
+    }
     {
         let input = "<WebsiteConfiguration><ErrorDocument><Key>s3s-xml-sample</Key></ErrorDocument><ErrorDocument><Key>s3s-xml-sample</Key></ErrorDocument></WebsiteConfiguration>";
         let err = xml_deserialize::<dto::WebsiteConfiguration>(input.as_bytes()).unwrap_err();
@@ -21177,7 +21453,9 @@ fn xml_errors_website_configuration() {
     {
         let input = "<WebsiteConfiguration></WebsiteConfiguration>";
         let ans = xml_deserialize::<dto::WebsiteConfiguration>(input.as_bytes());
-        assert!(ans.is_ok(), "empty element: {ans:?}, input: {input}");
+        if let Err(err) = ans {
+            panic!("empty element: {err:?}, input: {input}");
+        }
     }
     {
         let input = "<S3sWrongRoot></S3sWrongRoot>";
