@@ -797,3 +797,81 @@ async fn post_policy_file_size_is_total_bytes_not_chunk_count() {
         Ok(_) => panic!("POST object with 50-byte file should fail content-length-range [100, 50000] validation"),
     }
 }
+
+/// A signed `POST Object` form that repeats the `Authorization` header is answered with the code
+/// and the message Amazon S3 uses for a header it does not implement, instead of being served
+/// through the policy path.
+#[tokio::test]
+async fn post_object_with_duplicate_authorization_is_rejected() {
+    use crate::auth::SecretKey;
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicUsize;
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3WithPostTracking {
+        post_calls: AtomicUsize::new(0),
+    });
+    let config = post_policy_test_helpers::create_test_config(1024 * 1024);
+    let auth = post_policy_test_helpers::create_test_auth();
+    let ccx = post_policy_test_helpers::create_test_context(&s3, &config, &auth);
+
+    let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+    let policy_json = &format!(
+        r#"{{"expiration":"2030-01-01T00:00:00.000Z","conditions":[["content-length-range",0,100],["eq","$Content-Type","text/plain"],{}]}}"#,
+        post_policy_test_helpers::BASE_CONDITIONS,
+    );
+    let file_content = "a".repeat(50);
+    let mut req = post_policy_test_helpers::build_post_object_request(policy_json, &file_content, &secret_key, true);
+
+    req.headers.append(
+        crate::header::AUTHORIZATION,
+        hyper::header::HeaderValue::from_static("AWS4-HMAC-SHA256 first"),
+    );
+    req.headers.append(
+        crate::header::AUTHORIZATION,
+        hyper::header::HeaderValue::from_static("AWS4-HMAC-SHA256 second"),
+    );
+
+    let result = super::prepare(&mut req, &ccx).await;
+    let Err(err) = result else {
+        panic!("a repeated Authorization header must be rejected");
+    };
+    assert_eq!(*err.code(), S3ErrorCode::NotImplemented);
+    assert_eq!(err.message(), Some("A header you provided implies functionality that is not implemented"));
+}
+
+/// One `Authorization` header on a signed `POST Object` form does not change the outcome: the
+/// request still passes policy validation and routes to the `PostObject` operation.
+#[tokio::test]
+async fn post_object_with_single_authorization_is_served() {
+    use crate::auth::SecretKey;
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicUsize;
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3WithPostTracking {
+        post_calls: AtomicUsize::new(0),
+    });
+    let config = post_policy_test_helpers::create_test_config(1024 * 1024);
+    let auth = post_policy_test_helpers::create_test_auth();
+    let ccx = post_policy_test_helpers::create_test_context(&s3, &config, &auth);
+
+    let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+    let policy_json = &format!(
+        r#"{{"expiration":"2030-01-01T00:00:00.000Z","conditions":[["content-length-range",0,100],["eq","$Content-Type","text/plain"],{}]}}"#,
+        post_policy_test_helpers::BASE_CONDITIONS,
+    );
+    let file_content = "a".repeat(50);
+    let mut req = post_policy_test_helpers::build_post_object_request(policy_json, &file_content, &secret_key, true);
+
+    req.headers.append(
+        crate::header::AUTHORIZATION,
+        hyper::header::HeaderValue::from_static("AWS4-HMAC-SHA256 not-a-real-credential"),
+    );
+
+    let prepare = super::prepare(&mut req, &ccx)
+        .await
+        .expect("one Authorization header must not change the POST form path");
+    let super::Prepare::S3(op) = prepare else {
+        panic!("a signed POST object form must route to the S3 PostObject operation");
+    };
+    assert_eq!(op.name(), "PostObject");
+}
