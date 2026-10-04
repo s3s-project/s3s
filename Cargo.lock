@@ -4061,6 +4061,7 @@ name = "s3s-time"
 version = "0.18.0-alpha.1"
 dependencies = [
  "jiff",
+ "s3s",
  "serde",
  "serde_json",
  "thiserror",
