@@ -320,4 +320,21 @@ mod tests {
         let back: s3s::dto::Timestamp = try_from_aws(sdk).expect("from aws");
         assert_eq!(back, ts);
     }
+
+    #[test]
+    fn etag_condition_into_aws_joins_list() {
+        // A comma-separated entity tag list stays a list in the AWS SDK string model.
+        let cond = ETagCondition::List(vec![ETag::Strong("a".to_owned()), ETag::Weak("b".to_owned())]);
+        let sent = try_into_aws(cond).expect("convert list");
+        assert_eq!(sent, "\"a\", W/\"b\"");
+    }
+
+    #[test]
+    fn etag_condition_from_aws_parses_list() {
+        let list = "\"a\", \"b\"";
+        let cond: ETagCondition = try_from_aws(list.to_owned()).expect("parse inbound list");
+        assert_eq!(cond.etags().len(), 2);
+        let sent = try_into_aws(cond).expect("forward list");
+        assert_eq!(sent, list);
+    }
 }

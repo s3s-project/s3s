@@ -5,28 +5,38 @@ use std::str::FromStr;
 
 use http::HeaderValue;
 use http::header::InvalidHeaderValue;
+use smallvec::SmallVec;
 
 use super::etag::{ETag, ParseETagError};
 
 /// Condition value for `If-Match`, `If-None-Match` and related headers.
 ///
-/// According to RFC 9110, these headers can contain either:
-/// - An `ETag` value (strong or weak): `"value"` or `W/"value"`
+/// According to RFC 9110 §13.1.1 and §13.1.2, these headers can contain either:
+/// - A single `ETag` value (strong or weak): `"value"` or `W/"value"`
+/// - A comma-separated list of `ETag` values (`1#entity-tag`), matched when any member matches
 /// - A wildcard: `*` (matches any existing entity)
 ///
 /// The wildcard is commonly used for conditional requests like:
 /// - `If-None-Match: *` - Only create if the resource doesn't exist (PUT)
 /// - `If-Match: *` - Only modify if the resource exists
 ///
+/// Entity tags are compared with the function required by the header:
+/// [`ETagCondition::matches_strong`] for `If-Match` and
+/// [`ETagCondition::matches_weak`] for `If-None-Match`. Both return the match
+/// result, not the precondition result: a match means "proceed" for `If-Match`
+/// and "do not proceed" for `If-None-Match`.
+///
 /// See RFC 9110 §13.1 and MDN:
 /// + <https://www.rfc-editor.org/rfc/rfc9110#section-13.1>
 /// + <https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/If-None-Match>
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ETagCondition {
-    /// An `ETag` value (strong or weak)
+    /// A single `ETag` value (strong or weak)
     ETag(ETag),
     /// The wildcard `*` that matches any existing entity
     Any,
+    /// A comma-separated list of entity tags, matched when any member matches
+    List(Vec<ETag>),
 }
 
 /// Errors returned when parsing an `ETagCondition` header.
@@ -43,24 +53,120 @@ pub enum ParseETagConditionError {
     ETagError(#[from] ParseETagError),
 }
 
+/// Returns true when `byte` is optional whitespace (SP / HTAB).
+fn is_ows(byte: u8) -> bool {
+    byte == b' ' || byte == b'\t'
+}
+
+/// Trims optional whitespace from both ends of a list element.
+fn trim_ows(src: &[u8]) -> &[u8] {
+    let mut start = 0;
+    let mut end = src.len();
+    while start < end && is_ows(src[start]) {
+        start += 1;
+    }
+    while end > start && is_ows(src[end - 1]) {
+        end -= 1;
+    }
+    &src[start..end]
+}
+
+/// Splits a comma-separated entity tag list on the commas that are not inside a
+/// quoted opaque tag.
+///
+/// A comma is a valid character of an entity tag (`"a,b"` is a single tag), so
+/// the split has to be quote-aware. Returns `false` when the double quotes are
+/// unbalanced.
+///
+/// The elements are pushed into `elements`. The receiver is a `SmallVec` so the
+/// usual one to four tags stay inline and parsing a conditional header does not
+/// allocate for the split itself.
+fn split_list<'a>(src: &'a [u8], elements: &mut SmallVec<[&'a [u8]; 4]>) -> bool {
+    let mut start = 0;
+    let mut in_quotes = false;
+    for (index, &byte) in src.iter().enumerate() {
+        match byte {
+            b'"' => in_quotes = !in_quotes,
+            b',' if !in_quotes => {
+                elements.push(&src[start..index]);
+                start = index + 1;
+            }
+            _ => {}
+        }
+    }
+    if in_quotes {
+        return false;
+    }
+    elements.push(&src[start..]);
+    true
+}
+
+/// Parses one list element.
+///
+/// The caller has already rejected the empty element and a wildcard member, so
+/// this is only the entity tag syntax.
+fn parse_element(element: &[u8]) -> Result<ETag, ParseETagConditionError> {
+    Ok(ETag::parse_http_header(trim_ows(element))?)
+}
+
 impl ETagCondition {
     /// Parses an `ETagCondition` from header bytes.
     ///
+    /// The field value is the wildcard `*`, a single entity tag, or a
+    /// comma-separated list of entity tags. Optional whitespace is allowed
+    /// around each entity tag of a list.
+    ///
+    /// RFC 9110 allows the wildcard only as the whole field value, but Amazon S3
+    /// accepts it as a member of a list and answers the request instead of
+    /// rejecting it (`If-Match: "a", *` is satisfied), so a `*` member is the
+    /// wildcard condition here too.
+    ///
     /// # Errors
-    /// + Returns `ParseETagConditionError::InvalidFormat` if the bytes do not match the expected syntax.
+    /// + Returns `ParseETagConditionError::InvalidFormat` if the bytes do not match the expected syntax:
+    ///   an empty value, an empty list element, a trailing comma, or unbalanced double quotes.
     /// + Returns `ParseETagConditionError::InvalidChar` if the value contains invalid characters
     pub fn parse_http_header(src: &[u8]) -> Result<Self, ParseETagConditionError> {
-        // Check for wildcard
+        // RFC 9110 defines the field value as `"*" / 1#entity-tag`, so the
+        // wildcard always stands alone.
         if src == b"*" {
             return Ok(ETagCondition::Any);
         }
 
-        // Otherwise, parse as ETag
-        let etag = ETag::parse_http_header(src)?;
-        Ok(ETagCondition::ETag(etag))
+        let mut elements = SmallVec::new();
+        if !split_list(src, &mut elements) {
+            return Err(ParseETagConditionError::InvalidFormat);
+        }
+
+        // An empty element and a trailing comma are malformed in every
+        // position, also next to a wildcard member.
+        if elements.iter().any(|element| trim_ows(element).is_empty()) {
+            return Err(ParseETagConditionError::InvalidFormat);
+        }
+
+        // RFC 9110 allows the wildcard only as the whole field value, but Amazon
+        // S3 satisfies `If-Match: "a", *`, so a `*` member is the wildcard
+        // condition for both conditional headers.
+        if elements.iter().any(|element| trim_ows(element) == b"*") {
+            return Ok(ETagCondition::Any);
+        }
+
+        // A single entity tag is the common case: it goes straight into the
+        // `ETag` variant, so no list container is allocated for it.
+        match elements.as_slice() {
+            [only] => Ok(ETagCondition::ETag(parse_element(only)?)),
+            elements => {
+                let mut etags = Vec::with_capacity(elements.len());
+                for element in elements {
+                    etags.push(parse_element(element)?);
+                }
+                Ok(ETagCondition::List(etags))
+            }
+        }
     }
 
     /// Encodes this `ETagCondition` as an HTTP header value.
+    ///
+    /// A list is encoded as comma-separated entity tags.
     ///
     /// # Errors
     /// Returns `InvalidHeaderValue` if the `ETag` value contains invalid characters for HTTP headers.
@@ -68,24 +174,40 @@ impl ETagCondition {
         match self {
             ETagCondition::ETag(etag) => etag.to_http_header(),
             ETagCondition::Any => HeaderValue::try_from("*"),
+            ETagCondition::List(etags) => {
+                let mut buf = Vec::new();
+                for (index, etag) in etags.iter().enumerate() {
+                    if index > 0 {
+                        buf.extend_from_slice(b", ");
+                    }
+                    buf.extend_from_slice(etag.to_http_header()?.as_bytes());
+                }
+                HeaderValue::from_bytes(&buf)
+            }
         }
     }
 
-    /// Returns the `ETag` if this is an `ETagCondition::ETag`, otherwise `None`.
+    /// Returns the single `ETag` if this is an [`ETagCondition::ETag`], otherwise `None`.
+    ///
+    /// A list has no single entity tag and also returns `None`; use
+    /// [`ETagCondition::etags`] to inspect all members instead.
     #[must_use]
     pub fn as_etag(&self) -> Option<&ETag> {
         match self {
             ETagCondition::ETag(etag) => Some(etag),
-            ETagCondition::Any => None,
+            ETagCondition::Any | ETagCondition::List(_) => None,
         }
     }
 
-    /// Consumes self and returns the `ETag` if this is an `ETagCondition::ETag`, otherwise `None`.
+    /// Consumes self and returns the `ETag` if this is an [`ETagCondition::ETag`], otherwise `None`.
+    ///
+    /// A list has no single entity tag and also returns `None`; use
+    /// [`ETagCondition::etags`] to inspect all members instead.
     #[must_use]
     pub fn into_etag(self) -> Option<ETag> {
         match self {
             ETagCondition::ETag(etag) => Some(etag),
-            ETagCondition::Any => None,
+            ETagCondition::Any | ETagCondition::List(_) => None,
         }
     }
 
@@ -93,6 +215,52 @@ impl ETagCondition {
     #[must_use]
     pub fn is_any(&self) -> bool {
         matches!(self, ETagCondition::Any)
+    }
+
+    /// Returns the entity tags carried by this condition.
+    ///
+    /// [`ETagCondition::ETag`] yields a single element, [`ETagCondition::List`]
+    /// yields all members, and [`ETagCondition::Any`] yields an empty slice.
+    #[must_use]
+    pub fn etags(&self) -> &[ETag] {
+        match self {
+            ETagCondition::ETag(etag) => std::slice::from_ref(etag),
+            ETagCondition::List(etags) => etags,
+            ETagCondition::Any => &[],
+        }
+    }
+
+    /// Returns true when `current` strongly matches this condition.
+    ///
+    /// For an `If-Match` header a `true` return means the precondition is met
+    /// and the request may proceed, as required by RFC 9110 §13.1.1.
+    /// [`ETagCondition::Any`] matches any existing representation, so the caller
+    /// still has to check that the representation exists; otherwise a member has
+    /// to be a strong match ([`ETag::strong_cmp`]).
+    #[must_use]
+    pub fn matches_strong(&self, current: &ETag) -> bool {
+        match self {
+            ETagCondition::Any => true,
+            ETagCondition::ETag(etag) => etag.strong_cmp(current),
+            ETagCondition::List(etags) => etags.iter().any(|etag| etag.strong_cmp(current)),
+        }
+    }
+
+    /// Returns true when `current` weakly matches this condition.
+    ///
+    /// For an `If-None-Match` header a `true` return means the precondition is
+    /// **not** met: the caller has to answer `304 Not Modified` for `GET` and
+    /// `HEAD`, and `412 Precondition Failed` for the other methods, as required
+    /// by RFC 9110 §13.1.2. [`ETagCondition::Any`] matches any existing
+    /// representation, so the caller still has to check that the representation
+    /// exists; otherwise a member has to be a weak match ([`ETag::weak_cmp`]).
+    #[must_use]
+    pub fn matches_weak(&self, current: &ETag) -> bool {
+        match self {
+            ETagCondition::Any => true,
+            ETagCondition::ETag(etag) => etag.weak_cmp(current),
+            ETagCondition::List(etags) => etags.iter().any(|etag| etag.weak_cmp(current)),
+        }
     }
 }
 
@@ -196,11 +364,15 @@ mod tests {
             ParseETagConditionError::InvalidFormat | ParseETagConditionError::ETagError(_)
         ));
 
-        let err = ETagCondition::parse_http_header(b"* ").unwrap_err();
-        assert!(matches!(
-            err,
-            ParseETagConditionError::InvalidFormat | ParseETagConditionError::ETagError(_)
-        ));
+        // The wildcard tolerates the optional whitespace that surrounds a field
+        // value, the same way a list element does.
+        for input in [b"* ".as_slice(), b" *", b"\t*"] {
+            assert_eq!(
+                ETagCondition::parse_http_header(input).expect("parse wildcard with ows"),
+                ETagCondition::Any,
+                "input {input:?}"
+            );
+        }
 
         let err = ETagCondition::parse_http_header(b"\"unclosed").unwrap_err();
         assert!(matches!(
@@ -230,5 +402,173 @@ mod tests {
         let cond = ETagCondition::parse_http_header(b"1").expect("parse single digit");
         assert!(!cond.is_any()); // Should NOT be wildcard
         assert_eq!(cond.as_etag().unwrap().as_strong(), Some("1"));
+    }
+
+    #[test]
+    fn comma_separated_list_is_not_one_opaque_tag() {
+        // RFC 9110 §13.1.1/§13.1.2 and RFC 7232 §3.1/§3.2 define the field value
+        // as a list of entity tags. A list must never collapse into a single
+        // opaque tag whose value embeds a quote and a comma; against the
+        // pre-change parser the length assertion below is the red control.
+        let cond = ETagCondition::parse_http_header(b"\"a\", \"b\"").expect("parse list");
+        assert_eq!(cond.etags().len(), 2);
+        assert_eq!(cond.etags()[0].value(), "a");
+        assert_eq!(cond.etags()[1].value(), "b");
+        assert_eq!(cond.as_etag(), None);
+    }
+
+    #[test]
+    fn list_header_rejects_an_invalid_tag() {
+        // The list encoder propagates the entity tag error instead of skipping
+        // the member or emitting a header with a control character in it.
+        let cond = ETagCondition::List(vec![ETag::Strong("ok".to_owned()), ETag::Strong("bad\nvalue".to_owned())]);
+        assert!(cond.to_http_header().is_err());
+    }
+
+    #[test]
+    fn single_tag_condition_matches_strong_and_weak() {
+        // A single entity tag, strong or weak, is compared by the header it was
+        // parsed from: strong comparison for If-Match, weak for If-None-Match.
+        let current = ETag::Strong("good".to_owned());
+        let strong = ETagCondition::parse_http_header(b"\"good\"").expect("parse strong tag");
+        assert!(strong.matches_strong(&current));
+        assert!(strong.matches_weak(&current));
+        let weak = ETagCondition::parse_http_header(b"W/\"good\"").expect("parse weak tag");
+        assert!(!weak.matches_strong(&current));
+        assert!(weak.matches_weak(&current));
+    }
+
+    #[test]
+    fn parse_list_of_strong_etags() {
+        let cond = ETagCondition::parse_http_header(b"\"a\", \"b\"").expect("parse list");
+        assert_eq!(
+            cond,
+            ETagCondition::List(vec![ETag::Strong("a".to_owned()), ETag::Strong("b".to_owned())])
+        );
+        assert!(!cond.is_any());
+        assert_eq!(cond.as_etag(), None);
+        assert_eq!(cond.etags().len(), 2);
+        assert_eq!(cond.into_etag(), None);
+    }
+
+    #[test]
+    fn parse_list_allows_ows_between_tags() {
+        let cond = ETagCondition::parse_http_header(b"W/\"a\" ,\t\"b\"").expect("parse list");
+        assert_eq!(cond, ETagCondition::List(vec![ETag::Weak("a".to_owned()), ETag::Strong("b".to_owned())]));
+    }
+
+    #[test]
+    fn parse_list_of_three_tags() {
+        let cond = ETagCondition::parse_http_header(b"\"a\", \"b\", \"c\"").expect("parse list");
+        assert_eq!(cond.etags().len(), 3);
+    }
+
+    #[test]
+    fn parse_single_tag_with_ows_stays_single_variant() {
+        // The single-element path parses straight into the `ETag` variant; it
+        // must not turn the value into a one-member list.
+        let cond = ETagCondition::parse_http_header(b"  \"a\"  ").expect("parse single tag with ows");
+        assert_eq!(cond, ETagCondition::ETag(ETag::Strong("a".to_owned())));
+    }
+
+    #[test]
+    fn parse_list_longer_than_the_inline_buffer() {
+        // More members than the `SmallVec` inline capacity, so the split spills
+        // to the heap; parsing and the roundtrip must not depend on the capacity.
+        let input = b"\"a\", \"b\", \"c\", \"d\", \"e\", \"f\"";
+        let cond = ETagCondition::parse_http_header(input).expect("parse long list");
+        assert_eq!(cond.etags().len(), 6);
+        assert_eq!(
+            cond,
+            ETagCondition::List(vec![
+                ETag::Strong("a".to_owned()),
+                ETag::Strong("b".to_owned()),
+                ETag::Strong("c".to_owned()),
+                ETag::Strong("d".to_owned()),
+                ETag::Strong("e".to_owned()),
+                ETag::Strong("f".to_owned()),
+            ])
+        );
+        let hv = cond.to_http_header().expect("to header");
+        assert_eq!(hv.as_bytes(), input);
+        assert_eq!(ETagCondition::parse_http_header(hv.as_bytes()).expect("parse back"), cond);
+    }
+
+    #[test]
+    fn parse_single_tag_may_contain_comma() {
+        // A comma is a valid character of an opaque tag, so splitting must be
+        // quote-aware and keep "a,b" as one tag.
+        let cond = ETagCondition::parse_http_header(b"\"a,b\"").expect("parse single tag");
+        assert_eq!(cond, ETagCondition::ETag(ETag::Strong("a,b".to_owned())));
+    }
+
+    #[test]
+    fn parse_wildcard_mixed_into_a_list_is_the_wildcard() {
+        // RFC 9110 allows `*` only as the whole field value, but Amazon S3
+        // accepts `If-Match: "a", *` and satisfies the condition, so a wildcard
+        // member is parsed as the wildcard condition.
+        for input in ["*, \"a\"", "\"a\", *", "*, *"] {
+            let cond = ETagCondition::parse_http_header(input.as_bytes()).expect("parse wildcard member");
+            assert_eq!(cond, ETagCondition::Any, "input {input:?}");
+            assert!(cond.is_any());
+        }
+        // A malformed element is still rejected next to a wildcard.
+        assert!(ETagCondition::parse_http_header(b"\"a\", *, ").is_err());
+    }
+
+    #[test]
+    fn parse_list_rejects_invalid_forms() {
+        let invalid = [
+            "\"a\",",
+            "\"a\",, \"b\"",
+            "\"a\", ",
+            "\"a\", unquoted value",
+            "\"unclosed",
+            "\"a\", \"b",
+        ];
+        for input in invalid {
+            assert!(
+                ETagCondition::parse_http_header(input.as_bytes()).is_err(),
+                "expected a parse error for {input:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn list_header_roundtrip() {
+        let cond = ETagCondition::List(vec![ETag::Strong("a".to_owned()), ETag::Weak("b".to_owned())]);
+        let hv = cond.to_http_header().expect("to header");
+        assert_eq!(hv.as_bytes(), b"\"a\", W/\"b\"");
+        let parsed = ETagCondition::parse_http_header(hv.as_bytes()).expect("parse back");
+        assert_eq!(cond, parsed);
+    }
+
+    #[test]
+    fn list_matching_uses_strong_or_weak_comparison() {
+        let current = ETag::Strong("good".to_owned());
+        let mixed = ETagCondition::List(vec![ETag::Strong("wrong".to_owned()), ETag::Strong("good".to_owned())]);
+        assert!(mixed.matches_strong(&current));
+        assert!(mixed.matches_weak(&current));
+
+        let weak_only = ETagCondition::List(vec![ETag::Weak("good".to_owned())]);
+        assert!(!weak_only.matches_strong(&current));
+        assert!(weak_only.matches_weak(&current));
+
+        let none = ETagCondition::List(vec![ETag::Strong("other".to_owned())]);
+        assert!(!none.matches_strong(&current));
+        assert!(!none.matches_weak(&current));
+
+        assert!(ETagCondition::Any.matches_strong(&current));
+        assert!(ETagCondition::Any.matches_weak(&current));
+        assert_eq!(ETagCondition::Any.etags(), []);
+    }
+
+    #[test]
+    fn single_etag_condition_accessors() {
+        let cond = ETagCondition::ETag(ETag::Strong("a".to_owned()));
+        assert_eq!(cond.etags().len(), 1);
+        assert_eq!(cond.as_etag(), Some(&ETag::Strong("a".to_owned())));
+        assert!(cond.matches_strong(&ETag::Strong("a".to_owned())));
+        assert!(!cond.matches_strong(&ETag::Strong("b".to_owned())));
     }
 }
