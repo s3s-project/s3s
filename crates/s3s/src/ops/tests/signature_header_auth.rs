@@ -1099,3 +1099,301 @@ async fn v4_header_auth_rejects_stale_request_time() {
         .expect_err("stale signed header request should be rejected");
     assert_eq!(err.code(), &S3ErrorCode::RequestTimeTooSkewed);
 }
+
+/// Repeated `Authorization` field lines are ambiguous credentials, not an absent
+/// credential: the request must be rejected instead of falling through to the anonymous path.
+#[tokio::test]
+async fn repeated_authorization_is_rejected_by_v2_check() {
+    let config = sig_v2_test_config(true);
+    let method = Method::GET;
+    let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+    let headers = headers_from_slice(&[
+        ("authorization", "AWS AKIAIOSFODNN7EXAMPLE:qgk2+6Sv9/oM7G3qLEjTH1a1l1g="),
+        ("authorization", "AWS AKIAIOSFODNN7EXAMPLE:AAAAAAAAAAAAAAAAAAAAAAAAAAA="),
+    ]);
+    let mut body = Body::empty();
+    let mut cx = sig_v2_test_context(&config, None, &method, &uri, &mut body, None, &headers, None);
+
+    let err = cx
+        .v2_check()
+        .await
+        .expect("repeated authorization must not be treated as an absent credential")
+        .expect_err("repeated authorization must be rejected");
+    assert_eq!(err.code(), &S3ErrorCode::NotImplemented);
+    assert_eq!(err.message(), Some(DUPLICATE_AUTHORIZATION_MESSAGE));
+}
+
+/// The same rule must hold on the v4 dispatch point, which is reached when the v2 check
+/// does not claim the request.
+#[tokio::test]
+async fn repeated_authorization_is_rejected_by_v4_check() {
+    use crate::config::{S3ConfigProvider, StaticConfigProvider};
+    use std::sync::Arc;
+
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+    let method = Method::GET;
+    let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+    let authorization = "AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request, \
+                         SignedHeaders=host, Signature=0000";
+    let headers = headers_from_slice(&[("authorization", authorization), ("authorization", authorization)]);
+    let mut body = Body::empty();
+    let mut cx = sig_v2_test_context(&config, None, &method, &uri, &mut body, None, &headers, None);
+
+    let err = cx
+        .v4_check()
+        .await
+        .expect("repeated authorization must not be treated as an absent credential")
+        .expect_err("repeated authorization must be rejected");
+    assert_eq!(err.code(), &S3ErrorCode::NotImplemented);
+    assert_eq!(err.message(), Some(DUPLICATE_AUTHORIZATION_MESSAGE));
+}
+
+/// A single `Authorization` value that is not valid UTF-8 cannot be interpreted as a
+/// credential; it is rejected as an invalid header rather than treated as absent.
+#[tokio::test]
+async fn non_utf8_authorization_is_rejected_by_v4_check() {
+    use crate::config::{S3ConfigProvider, StaticConfigProvider};
+    use std::sync::Arc;
+
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+    let method = Method::GET;
+    let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+
+    let mut headers = hyper::HeaderMap::new();
+    headers.append(
+        hyper::header::AUTHORIZATION,
+        hyper::header::HeaderValue::from_bytes(b"AWS4-HMAC-SHA256 Credential=\xff\xfe")
+            .expect("obs-text bytes are allowed in a header value"),
+    );
+
+    let mut body = Body::empty();
+    let mut cx = sig_v2_test_context(&config, None, &method, &uri, &mut body, None, &headers, None);
+
+    let err = cx
+        .v4_check()
+        .await
+        .expect("a non-UTF-8 authorization must not be treated as an absent credential")
+        .expect_err("a non-UTF-8 authorization must be rejected");
+    assert_eq!(err.code(), &S3ErrorCode::AuthorizationHeaderMalformed);
+}
+
+/// The message Amazon S3 returns for a repeated `Authorization` header (the response also names
+/// the header in a `<Header>` element, which the error model does not carry).
+const DUPLICATE_AUTHORIZATION_MESSAGE: &str = "A header you provided implies functionality that is not implemented";
+
+/// The message Amazon S3 returns when presigned query parameters and an `Authorization` header
+/// are sent together.
+const ONE_AUTH_MECHANISM_MESSAGE: &str = "Only one auth mechanism allowed; only the X-Amz-Algorithm query \
+                                         parameter, Signature query string parameter or the Authorization header \
+                                         should be specified";
+
+/// The service allows one authentication mechanism per request: presigned query parameters next
+/// to a repeated `Authorization` header are rejected before either mechanism is verified.
+#[tokio::test]
+async fn presigned_with_repeated_authorization_is_rejected_as_two_mechanisms() {
+    use crate::config::{S3ConfigProvider, StaticConfigProvider};
+    use crate::http::OrderedQs;
+    use std::sync::Arc;
+
+    let qs = OrderedQs::parse("X-Amz-Signature=aeeed9bbccd4d02ee5c0109b86d86835f995330da4c265957d157751f604d404")
+        .expect("query should parse");
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+    let method = Method::GET;
+    let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+    let authorization = "AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request, \
+                         SignedHeaders=host, Signature=0000";
+    let headers = headers_from_slice(&[("authorization", authorization), ("authorization", authorization)]);
+    let mut body = Body::empty();
+    let mut cx = sig_v2_test_context(&config, None, &method, &uri, &mut body, Some(&qs), &headers, None);
+
+    let err = cx
+        .v4_check()
+        .await
+        .expect("the presigned parameters must be dispatched")
+        .expect_err("presigned parameters next to a repeated authorization must be rejected");
+    assert_eq!(err.code(), &S3ErrorCode::InvalidArgument);
+    assert_eq!(err.message(), Some(ONE_AUTH_MECHANISM_MESSAGE));
+}
+
+/// The same rule holds for a single `Authorization` value: one mechanism per request, whatever
+/// the header value is.
+#[tokio::test]
+async fn presigned_with_single_authorization_is_rejected_as_two_mechanisms() {
+    use crate::config::{S3ConfigProvider, StaticConfigProvider};
+    use crate::http::OrderedQs;
+    use std::sync::Arc;
+
+    let qs = OrderedQs::parse("X-Amz-Signature=aeeed9bbccd4d02ee5c0109b86d86835f995330da4c265957d157751f604d404")
+        .expect("query should parse");
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+    let method = Method::GET;
+    let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+    let headers = headers_from_slice(&[("authorization", "garbage-one")]);
+    let mut body = Body::empty();
+    let mut cx = sig_v2_test_context(&config, None, &method, &uri, &mut body, Some(&qs), &headers, None);
+
+    let err = cx
+        .v4_check()
+        .await
+        .expect("the presigned parameters must be dispatched")
+        .expect_err("presigned parameters next to an authorization must be rejected");
+    assert_eq!(err.code(), &S3ErrorCode::InvalidArgument);
+    assert_eq!(err.message(), Some(ONE_AUTH_MECHANISM_MESSAGE));
+}
+
+/// Regression: the dispatcher runs the v2 check first, so a v4 presigned request with a repeated
+/// `Authorization` header must be answered by the one-mechanism rule rather than by the v2
+/// ambiguity guard.
+#[tokio::test]
+async fn dispatcher_answers_presigned_with_repeated_authorization_as_two_mechanisms() {
+    use crate::config::{S3ConfigProvider, StaticConfigProvider};
+    use crate::http::OrderedQs;
+    use std::sync::Arc;
+
+    let qs = OrderedQs::parse("X-Amz-Signature=aeeed9bbccd4d02ee5c0109b86d86835f995330da4c265957d157751f604d404")
+        .expect("query should parse");
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+    let method = Method::GET;
+    let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+    let authorization = "AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request, \
+                         SignedHeaders=host, Signature=0000";
+    let headers = headers_from_slice(&[("authorization", authorization), ("authorization", authorization)]);
+    let mut body = Body::empty();
+    let mut cx = sig_v2_test_context(&config, None, &method, &uri, &mut body, Some(&qs), &headers, None);
+
+    let err = cx
+        .check()
+        .await
+        .expect_err("presigned parameters next to a repeated authorization must be rejected");
+    assert_eq!(err.code(), &S3ErrorCode::InvalidArgument);
+    assert_eq!(err.message(), Some(ONE_AUTH_MECHANISM_MESSAGE));
+}
+
+/// The v2 dispatch point applies the same one-mechanism rule to its `Signature` query parameter.
+#[tokio::test]
+async fn presigned_v2_with_authorization_is_rejected_as_two_mechanisms() {
+    use crate::http::OrderedQs;
+
+    let qs =
+        OrderedQs::parse("Signature=abc&AWSAccessKeyId=AKIAIOSFODNN7EXAMPLE&Expires=2000000000").expect("query should parse");
+    let config = sig_v2_test_config(true);
+    let method = Method::GET;
+    let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+    let headers = headers_from_slice(&[("authorization", "AWS AKIAIOSFODNN7EXAMPLE:qgk2+6Sv9/oM7G3qLEjTH1a1l1g=")]);
+    let mut body = Body::empty();
+    let mut cx = sig_v2_test_context(&config, None, &method, &uri, &mut body, Some(&qs), &headers, None);
+
+    let err = cx
+        .v2_check()
+        .await
+        .expect("the presigned parameters must be dispatched")
+        .expect_err("presigned parameters next to an authorization must be rejected");
+    assert_eq!(err.code(), &S3ErrorCode::InvalidArgument);
+    assert_eq!(err.message(), Some(ONE_AUTH_MECHANISM_MESSAGE));
+}
+
+/// Control: without an `Authorization` header the request stays unauthenticated, so the
+/// anonymous path keeps working.
+#[tokio::test]
+async fn absent_authorization_is_not_rejected() {
+    use crate::config::{S3ConfigProvider, StaticConfigProvider};
+    use std::sync::Arc;
+
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+    let method = Method::GET;
+    let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+    let headers = headers_from_slice(&[("host", "s3.amazonaws.com")]);
+    let mut body = Body::empty();
+    let mut cx = sig_v2_test_context(&config, None, &method, &uri, &mut body, None, &headers, None);
+
+    assert!(cx.v2_check().await.is_none(), "an absent authorization header must stay unauthenticated");
+    assert!(cx.v4_check().await.is_none(), "an absent authorization header must stay unauthenticated");
+}
+
+/// End-to-end: an ambiguous credential must never reach the handler through the anonymous
+/// path, while a request without credentials is still served when access control allows it.
+#[tokio::test]
+async fn repeated_authorization_is_not_served_as_anonymous() {
+    use crate::access::{S3Access, S3AccessContext};
+    use crate::auth::{SecretKey, SimpleAuth};
+    use crate::config::{S3ConfigProvider, StaticConfigProvider};
+    use crate::http::Request;
+    use crate::ops::CallContext;
+    use std::sync::Arc;
+    use std::sync::atomic::Ordering;
+
+    struct AnonymousAccess;
+
+    #[async_trait::async_trait]
+    impl S3Access for AnonymousAccess {
+        async fn check(&self, _cx: &mut S3AccessContext<'_>) -> crate::error::S3Result<()> {
+            Ok(())
+        }
+    }
+
+    let test_s3 = Arc::new(TestS3::default());
+    let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
+    let auth = SimpleAuth::from_single("AKIAIOSFODNN7EXAMPLE", SecretKey::from("wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY"));
+    let access = AnonymousAccess;
+
+    let ccx = CallContext {
+        s3: &s3,
+        config: &config,
+        host: None,
+        auth: Some(&auth),
+        access: Some(&access),
+        route: None,
+        validation: None,
+    };
+
+    let authorization = "AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request, \
+                         SignedHeaders=host, Signature=0000";
+    let mut req = Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri("http://localhost/test-bucket/test-key.txt")
+            .header(crate::header::HOST, "localhost")
+            .header(crate::header::AUTHORIZATION, authorization)
+            .header(crate::header::AUTHORIZATION, authorization)
+            .body(Body::empty())
+            .expect("valid test request"),
+    );
+
+    let response = super::call(&mut req, &ccx)
+        .await
+        .expect("the operation must serialize the rejection into a response");
+    assert_eq!(
+        response.status,
+        hyper::StatusCode::NOT_IMPLEMENTED,
+        "a repeated authorization header must not be served as an anonymous request"
+    );
+    assert_eq!(
+        test_s3.get_object.load(Ordering::SeqCst),
+        0,
+        "the handler must not be invoked for an ambiguous credential"
+    );
+
+    // Control: the same request without credentials is still served as anonymous.
+    let mut req = Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri("http://localhost/test-bucket/test-key.txt")
+            .header(crate::header::HOST, "localhost")
+            .body(Body::empty())
+            .expect("valid test request"),
+    );
+    let response = super::call(&mut req, &ccx)
+        .await
+        .expect("the anonymous request must be served");
+    assert!(
+        response.status.is_success(),
+        "a request without credentials must keep the anonymous path, got status: {:?}",
+        response.status
+    );
+    assert_eq!(
+        test_s3.get_object.load(Ordering::SeqCst),
+        1,
+        "the anonymous request must reach the handler"
+    );
+}

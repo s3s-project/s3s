@@ -43,7 +43,7 @@ async fn v4_presigned_url_rejects_invalid_expires_as_authorization_query_error()
     let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::default());
     let method = Method::GET;
     let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
-    let headers = headers_from_slice(&[("authorization", "AWS4-HMAC-SHA256 Credential=invalid")]);
+    let headers = headers_from_slice(&[("host", "s3.amazonaws.com")]);
     let mut body = Body::empty();
     let mut cx = SignatureContext {
         path_encoding: crate::auth::SigV4PathEncoding::S3,
@@ -69,7 +69,7 @@ async fn v4_presigned_url_rejects_invalid_expires_as_authorization_query_error()
     let err = cx
         .v4_check()
         .await
-        .expect("X-Amz-Signature must take precedence over header auth")
+        .expect("the presigned parameters must be dispatched")
         .expect_err("expiration beyond seven days must be rejected before authentication");
     assert_eq!(err.code(), &S3ErrorCode::AuthorizationQueryParametersError);
     assert_eq!(err.message(), Some("The authorization query parameters that you provided are not valid."));

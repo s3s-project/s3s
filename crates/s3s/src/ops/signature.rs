@@ -74,6 +74,46 @@ pub(super) fn presigned_payload_line(hs: &HeaderMap) -> &str {
     http::get_unique_header_str(hs, crate::header::X_AMZ_CONTENT_SHA256.as_str()).unwrap_or(s3s_sigv4::UNSIGNED_PAYLOAD)
 }
 
+/// Rejects an ambiguous `Authorization` header before the authentication type is selected.
+///
+/// A header that appears more than once, or a single value that is not valid UTF-8, carries
+/// ambiguous credentials rather than no credentials. Treating it as absent would fall through to
+/// the anonymous path and turn a failed authentication into an unauthenticated request.
+///
+/// A repeated header gets the answer Amazon S3 gives for it: `501 NotImplemented` with
+/// `A header you provided implies functionality that is not implemented`; the response also names
+/// the header in a `<Header>` element, which this error model does not carry. A value that cannot
+/// be decoded is rejected as an invalid authorization header.
+fn reject_ambiguous_authorization(hs: &HeaderMap) -> S3Result<()> {
+    let mut iter = hs.get_all(crate::header::AUTHORIZATION.as_str()).iter();
+    let Some(value) = iter.next() else {
+        return Ok(());
+    };
+    if iter.next().is_some() {
+        return Err(s3_error!(
+            NotImplemented,
+            "A header you provided implies functionality that is not implemented"
+        ));
+    }
+    if http::header_value_to_str(value).is_none() {
+        return Err(s3_error!(AuthorizationHeaderMalformed, "invalid header: authorization: not valid UTF-8"));
+    }
+    Ok(())
+}
+
+/// The rejection shared by both signature versions when a request carries presigned query
+/// parameters and an `Authorization` header.
+///
+/// The service allows one authentication mechanism per request and rejects the combination before
+/// it verifies either of them, so the check does not depend on the presigned signature or on the
+/// header value being well formed.
+fn one_auth_mechanism_error() -> S3Error {
+    s3_error!(
+        InvalidArgument,
+        "Only one auth mechanism allowed; only the X-Amz-Algorithm query parameter, Signature query string parameter or the Authorization header should be specified"
+    )
+}
+
 pub(super) fn extract_authorization_v4(hs: &HeaderMap) -> S3Result<Option<AuthorizationV4<'_>>> {
     let Some(val) = http::get_unique_header_str(hs, crate::header::AUTHORIZATION.as_str()) else {
         return Ok(None);
@@ -438,6 +478,24 @@ impl<'a> SignatureContext<'a> {
         Ok(())
     }
 
+    /// Rejects a request that names two authentication mechanisms: presigned query parameters
+    /// next to an `Authorization` header.
+    ///
+    /// The service allows one authentication mechanism per request and rejects the combination
+    /// before it verifies either of them, so the check does not depend on the presigned signature
+    /// or on the header value being well formed. It also runs in the dispatcher, because the
+    /// `SigV2` check runs first and its ambiguity guard would otherwise decide a `SigV4`
+    /// presigned request.
+    fn reject_two_mechanisms(&self) -> S3Result<()> {
+        let Some(qs) = self.qs else {
+            return Ok(());
+        };
+        if (qs.has("X-Amz-Signature") || qs.has("Signature")) && self.hs.contains_key(crate::header::AUTHORIZATION.as_str()) {
+            return Err(one_auth_mechanism_error());
+        }
+        Ok(())
+    }
+
     /// Rejects presigned URL requests when `allow_presigned_url` is off.
     ///
     /// A presigned request is recognized by its query signature — `X-Amz-Signature`
@@ -478,6 +536,10 @@ impl<'a> SignatureContext<'a> {
         {
             return self.check_post_signature().await;
         }
+
+        // The v2 check runs first; decide the one-mechanism rule before it so a v4 presigned
+        // request with an `Authorization` header is not answered by the v2 ambiguity guard.
+        self.reject_two_mechanisms()?;
 
         if let Some(result) = self.v2_check().await {
             debug!("checked signature v2");
@@ -547,11 +609,21 @@ impl<'a> SignatureContext<'a> {
         if let Some(qs) = self.qs
             && qs.has("X-Amz-Signature")
         {
+            if let Err(err) = self.reject_two_mechanisms() {
+                return Some(Err(err));
+            }
+
             debug!("checking presigned url");
             if let Err(error) = self.ensure_presigned_url_enabled() {
                 return Some(Err(error));
             }
             return Some(self.v4_check_presigned_url().await);
+        }
+
+        // An ambiguous `Authorization` header is rejected before header authentication is
+        // attempted, so it cannot fall through to the anonymous path.
+        if let Err(err) = reject_ambiguous_authorization(self.hs) {
+            return Some(Err(err));
         }
 
         // header auth
@@ -992,11 +1064,21 @@ impl<'a> SignatureContext<'a> {
         if let Some(qs) = self.qs
             && qs.has("Signature")
         {
+            if let Err(err) = self.reject_two_mechanisms() {
+                return Some(Err(err));
+            }
+
             debug!("checking presigned url");
             if let Err(error) = self.ensure_presigned_url_enabled() {
                 return Some(Err(error));
             }
             return Some(self.v2_check_presigned_url().await);
+        }
+
+        // An ambiguous `Authorization` header is rejected before header authentication is
+        // attempted, so it cannot fall through to the anonymous path.
+        if let Err(err) = reject_ambiguous_authorization(self.hs) {
+            return Some(Err(err));
         }
 
         // header auth
