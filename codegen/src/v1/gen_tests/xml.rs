@@ -822,7 +822,9 @@ fn emit_errors(types: &RustTypes, surface: &Surface, name: &str, gate: Gate, val
         g!("    let content = xml_serialize_content(&value);");
         g!("    let input = {input};");
         g!("    let ans = {deserialize}::<dto::{name}>(input.as_bytes());");
-        g!("    assert!(ans.is_ok(), \"unknown element: {{ans:?}}, input: {{input}}\");");
+        g!("    if let Err(err) = ans {{");
+        g!("        panic!(\"unknown element: {{err:?}}, input: {{input}}\");");
+        g!("    }}");
     }
     for probe in &duplicates {
         emit_probe(probe, name, deserialize);
@@ -907,7 +909,7 @@ fn emit_str_enum_errors(name: &str, gate: Gate, enum_ty: &rust::StrEnum) -> usiz
     g!("    assert!(matches!(err, xml::DeError::UnexpectedEof), \"empty content: {{err:?}}\");");
     g!("    let input = {unknown:?};");
     g!("    let value = xml_deserialize_content::<dto::{name}>(input.as_bytes()).unwrap();");
-    g!("    assert!(value.as_str() == input, \"an undeclared value must be preserved: {{value:?}}\");");
+    g!("    assert!(value.as_str() == input, \"an undeclared value must be preserved: input: {{input}}\");");
     g!("}}");
     g!();
     1
@@ -961,7 +963,9 @@ fn emit_probe(probe: &Probe, name: &str, deserialize: &str) {
         );
     } else {
         g!("        let ans = {deserialize}::<dto::{name}>(input.as_bytes());");
-        g!("        assert!(ans.is_ok(), \"{}: {{ans:?}}, input: {{input}}\");", probe.label);
+        g!("        if let Err(err) = ans {{");
+        g!("            panic!(\"{}: {{err:?}}, input: {{input}}\");", probe.label);
+        g!("        }}");
     }
     g!("    }}");
 }
