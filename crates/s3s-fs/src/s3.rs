@@ -13,13 +13,17 @@ use s3s::dto::*;
 use s3s::s3_error;
 use s3s::{S3Request, S3Response};
 
+#[cfg(test)]
 use std::collections::VecDeque;
 use std::fs::FileTimes;
 use std::io;
 use std::ops::Neg;
 use std::ops::Not;
+#[cfg(test)]
 use std::path::Component;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+#[cfg(test)]
+use std::path::PathBuf;
 use std::time::SystemTime;
 
 use tokio::fs;
@@ -57,6 +61,10 @@ fn skip_vanished<T>(result: io::Result<T>) -> io::Result<Option<T>> {
     }
 }
 
+/// Build the key of a path below the bucket root, or `None` when it cannot become a key.
+///
+/// The full scan the ordered walk replaced still uses it in tests.
+#[cfg(test)]
 fn normalize_path(path: &Path, delimiter: &str) -> Option<String> {
     let mut normalized = String::new();
     let mut first = true;
@@ -686,24 +694,6 @@ impl S3 for FileSystem {
         let prefix = input.prefix.as_deref().unwrap_or("").trim_start_matches('/');
         let max_keys = input.max_keys.unwrap_or(1000);
 
-        // Collect all matching objects and common prefixes
-        let mut objects: Vec<Object> = default();
-        let mut common_prefixes = std::collections::BTreeSet::new();
-
-        if let Some(delimiter) = delimiter {
-            self.list_objects_with_delimiter(&path, prefix, delimiter, &mut objects, &mut common_prefixes)
-                .await?;
-        } else {
-            self.list_objects_recursive(&path, prefix, &mut objects).await?;
-        }
-
-        // Sort before filtering and limiting
-        objects.sort_by(|lhs, rhs| {
-            let lhs_key = lhs.key.as_deref().unwrap_or("");
-            let rhs_key = rhs.key.as_deref().unwrap_or("");
-            lhs_key.cmp(rhs_key)
-        });
-
         let start_after = match (input.continuation_token.as_deref(), input.start_after.as_deref()) {
             (Some(ct), Some(sa)) => Some(if ct >= sa { ct } else { sa }),
             (Some(ct), None) => Some(ct),
@@ -711,89 +701,28 @@ impl S3 for FileSystem {
             (None, None) => None,
         };
 
-        // Filter out objects and common prefixes at or before the resume point
-        if let Some(marker) = start_after {
-            objects.retain(|obj| obj.key.as_deref().unwrap_or("") > marker);
-            common_prefixes.retain(|cp| cp.as_str() > marker);
-        }
-
-        // Convert common_prefixes to sorted list
-        let common_prefixes_list: Vec<CommonPrefix> = common_prefixes
-            .into_iter()
-            .map(|prefix| CommonPrefix { prefix: Some(prefix) })
-            .collect();
-
-        // Limit results to max_keys by interleaving objects and common_prefixes
-        let mut result_objects = Vec::new();
-        let mut result_prefixes = Vec::new();
-        let mut total_count = 0;
-        let max_keys_usize = usize::try_from(max_keys).unwrap_or(1000);
-        let mut last_key: Option<String> = None;
-
-        let mut obj_idx = 0;
-        let mut prefix_idx = 0;
-
-        while total_count < max_keys_usize {
-            let obj_key = objects.get(obj_idx).and_then(|o| o.key.as_deref());
-            let prefix_key = common_prefixes_list.get(prefix_idx).and_then(|p| p.prefix.as_deref());
-
-            match (obj_key, prefix_key) {
-                (Some(ok), Some(pk)) => {
-                    if ok < pk {
-                        last_key = Some(ok.to_owned());
-                        result_objects.push(objects[obj_idx].clone());
-                        obj_idx += 1;
-                    } else {
-                        last_key = Some(pk.to_owned());
-                        result_prefixes.push(common_prefixes_list[prefix_idx].clone());
-                        prefix_idx += 1;
-                    }
-                    total_count += 1;
-                }
-                (Some(ok), None) => {
-                    last_key = Some(ok.to_owned());
-                    result_objects.push(objects[obj_idx].clone());
-                    obj_idx += 1;
-                    total_count += 1;
-                }
-                (None, Some(pk)) => {
-                    last_key = Some(pk.to_owned());
-                    result_prefixes.push(common_prefixes_list[prefix_idx].clone());
-                    prefix_idx += 1;
-                    total_count += 1;
-                }
-                (None, None) => break,
-            }
-        }
-
-        let is_truncated = max_keys_usize > 0 && (obj_idx < objects.len() || prefix_idx < common_prefixes_list.len());
-        let key_count = try_!(i32::try_from(total_count));
-        let next_continuation_token = if is_truncated {
-            last_key.or_else(|| {
-                let obj_key = objects.get(obj_idx).and_then(|o| o.key.clone());
-                let prefix_key = common_prefixes_list.get(prefix_idx).and_then(|p| p.prefix.clone());
-                match (obj_key, prefix_key) {
-                    (Some(ok), Some(pk)) => Some(if ok < pk { ok } else { pk }),
-                    (Some(ok), None) => Some(ok),
-                    (None, Some(pk)) => Some(pk),
-                    (None, None) => None,
-                }
-            })
-        } else {
-            None
+        let query = ListingQuery {
+            prefix,
+            delimiter,
+            start_after,
+            max_keys: usize::try_from(max_keys).unwrap_or(1000),
         };
 
-        let contents = result_objects.is_empty().not().then_some(result_objects);
-        let common_prefixes = result_prefixes.is_empty().not().then_some(result_prefixes);
+        // The walk collects one page in key order, so a page no longer has to be cut out of the whole
+        // bucket. The page arithmetic itself is shared with the full scan the walk replaced.
+        let page = self.list_page(&path, &query).await?;
+
+        let contents = page.objects.is_empty().not().then_some(page.objects);
+        let common_prefixes = page.common_prefixes.is_empty().not().then_some(page.common_prefixes);
 
         let output = ListObjectsV2Output {
-            key_count: Some(key_count),
+            key_count: Some(page.key_count),
             max_keys: Some(max_keys),
-            is_truncated: Some(is_truncated),
+            is_truncated: Some(page.is_truncated),
             contents,
             common_prefixes,
             continuation_token: input.continuation_token,
-            next_continuation_token,
+            next_continuation_token: page.next_continuation_token,
             delimiter: input.delimiter,
             encoding_type: input.encoding_type,
             name: Some(input.bucket),
@@ -1650,7 +1579,332 @@ impl S3 for FileSystem {
     }
 }
 
+/// One item of a listing: an object, or the common prefix a delimiter groups keys under.
+#[derive(Debug, Clone, PartialEq)]
+enum ListingItem {
+    /// Boxed because an object is an order of magnitude larger than a common prefix, and a listing
+    /// holds mostly objects.
+    Object(Box<Object>),
+    CommonPrefix(String),
+}
+
+impl ListingItem {
+    fn key(&self) -> &str {
+        match self {
+            Self::Object(object) => object.key.as_deref().unwrap_or(""),
+            Self::CommonPrefix(prefix) => prefix.as_str(),
+        }
+    }
+
+    /// A common prefix sorts before an object with the same key, which is how the merge behaved when
+    /// a page was cut out of the collected list.
+    #[cfg(test)]
+    fn rank(&self) -> u8 {
+        match self {
+            Self::CommonPrefix(_) => 0,
+            Self::Object(_) => 1,
+        }
+    }
+}
+
+/// What a listing asks for: the matching prefix, an optional delimiter, the resume point and the
+/// number of items one page holds.
+struct ListingQuery<'a> {
+    prefix: &'a str,
+    delimiter: Option<&'a str>,
+    start_after: Option<&'a str>,
+    max_keys: usize,
+}
+
+impl ListingQuery<'_> {
+    /// The walk stops after one item more than a page holds: that extra item is what tells a page it
+    /// was truncated.
+    fn limit(&self) -> usize {
+        self.max_keys.saturating_add(1)
+    }
+}
+
+/// One page of a listing, plus what follows it.
+#[derive(Debug, Default)]
+struct ListingPage {
+    objects: Vec<Object>,
+    common_prefixes: Vec<CommonPrefix>,
+    is_truncated: bool,
+    next_continuation_token: Option<String>,
+    key_count: i32,
+}
+
+/// Cut an ordered list of items down to one page, dropping the resume point and everything before it.
+///
+/// The walk already applied the resume point and stopped at one item past the page, so this only
+/// has to agree with itself; the same function is used to cut a page out of a full scan.
+fn build_page(items: Vec<ListingItem>, query: &ListingQuery<'_>) -> ListingPage {
+    let filtered: Vec<ListingItem> = items
+        .into_iter()
+        .filter(|item| query.start_after.is_none_or(|marker| item.key() > marker))
+        .collect();
+
+    let is_truncated = query.max_keys > 0 && filtered.len() > query.max_keys;
+    let emitted = filtered.len().min(query.max_keys);
+
+    let mut objects = Vec::new();
+    let mut common_prefixes = Vec::new();
+    for item in filtered.iter().take(emitted) {
+        match item {
+            ListingItem::Object(object) => objects.push(object.as_ref().clone()),
+            ListingItem::CommonPrefix(prefix) => common_prefixes.push(CommonPrefix {
+                prefix: Some(prefix.clone()),
+            }),
+        }
+    }
+
+    let last_key = emitted.checked_sub(1).map(|index| filtered[index].key().to_owned());
+    let next_continuation_token = if is_truncated {
+        last_key.or_else(|| filtered.get(emitted).map(|item| item.key().to_owned()))
+    } else {
+        None
+    };
+
+    ListingPage {
+        key_count: i32::try_from(emitted).unwrap_or(i32::MAX),
+        is_truncated,
+        next_continuation_token,
+        objects,
+        common_prefixes,
+    }
+}
+
+/// Counts the directory entries a listing walks.
+///
+/// A test shows the ordered walk stops early by comparing this count against the count of a full
+/// scan; a wall-clock measurement would be neither stable nor meaningful.
+#[cfg(test)]
+pub(crate) mod listing_stats {
+    use std::cell::Cell;
+
+    thread_local! {
+        static ENTRIES_VISITED: Cell<u64> = const { Cell::new(0) };
+    }
+
+    pub(crate) fn reset() {
+        ENTRIES_VISITED.with(|visited| visited.set(0));
+    }
+
+    pub(crate) fn visited() -> u64 {
+        ENTRIES_VISITED.with(Cell::get)
+    }
+
+    pub(crate) fn count_entry() {
+        ENTRIES_VISITED.with(|visited| visited.set(visited.get() + 1));
+    }
+}
+
+/// Remember a common prefix, once. Every key that maps to one common prefix is contiguous in key
+/// order, so a repeat is always the item that was pushed last.
+fn push_common_prefix(items: &mut Vec<ListingItem>, common_prefix: String) {
+    if items.last().is_some_and(|item| item.key() == common_prefix) {
+        return;
+    }
+    items.push(ListingItem::CommonPrefix(common_prefix));
+}
+
+fn join_key(parent: &str, name: &str) -> String {
+    if parent.is_empty() {
+        name.to_owned()
+    } else {
+        format!("{parent}/{name}")
+    }
+}
+
 impl FileSystem {
+    /// List one page of a bucket in key order.
+    async fn list_page(&self, bucket_root: &Path, query: &ListingQuery<'_>) -> S3Result<ListingPage> {
+        if query.max_keys == 0 {
+            return Ok(build_page(Vec::new(), query));
+        }
+        let items = self.list_objects_ordered(bucket_root, query).await?;
+        Ok(build_page(items, query))
+    }
+
+    /// Walk the bucket in key order and stop once one item more than a page has been collected.
+    ///
+    /// Within one directory a file takes part with its name and a directory with its name plus `/`,
+    /// because `.` (0x2E) sorts before `/` (0x2F): that is what keeps `a.txt` ahead of the keys under
+    /// `a/`. The walk then follows the merged order, so it never has to collect the whole bucket.
+    async fn list_objects_ordered(&self, bucket_root: &Path, query: &ListingQuery<'_>) -> S3Result<Vec<ListingItem>> {
+        let mut items = Vec::new();
+        Box::pin(self.walk_listing_dir(bucket_root, bucket_root, "", query, &mut items)).await?;
+        Ok(items)
+    }
+
+    async fn walk_listing_dir(
+        &self,
+        bucket_root: &Path,
+        dir: &Path,
+        rel: &str,
+        query: &ListingQuery<'_>,
+        items: &mut Vec<ListingItem>,
+    ) -> S3Result<()> {
+        if items.len() >= query.limit() {
+            return Ok(());
+        }
+
+        let Some(mut iter) = try_!(skip_vanished(fs::read_dir(dir).await)) else {
+            // The caller checks that the bucket exists before the walk, but the bucket root can
+            // vanish before the walk reaches it. Only directories discovered during the walk are
+            // skipped.
+            if dir == bucket_root {
+                return Err(s3_error!(NoSuchBucket));
+            }
+            return Ok(());
+        };
+
+        // (sort key, name, is a directory, entry)
+        let mut entries: Vec<(String, String, bool, fs::DirEntry)> = Vec::new();
+        while let Some(entry) = try_!(iter.next_entry().await) {
+            #[cfg(test)]
+            listing_stats::count_entry();
+            let Some(file_type) = try_!(skip_vanished(entry.file_type().await)) else {
+                continue;
+            };
+            // A name that is not UTF-8 cannot become a key, and neither can anything below it.
+            let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
+                continue;
+            };
+            let is_dir = file_type.is_dir();
+            let sort_key = if is_dir { format!("{name}/") } else { name.clone() };
+            entries.push((sort_key, name, is_dir, entry));
+        }
+        entries.sort_by(|lhs, rhs| lhs.0.cmp(&rhs.0));
+
+        for (_, name, is_dir, entry) in entries {
+            if items.len() >= query.limit() {
+                return Ok(());
+            }
+            let key = join_key(rel, &name);
+
+            if is_dir {
+                let dir_prefix = format!("{key}/");
+
+                // Every key below this directory starts with `dir_prefix`, so the subtree can only
+                // contribute when one of the two is a prefix of the other.
+                if !query.prefix.is_empty() && !query.prefix.starts_with(&dir_prefix) && !dir_prefix.starts_with(query.prefix) {
+                    continue;
+                }
+
+                // With a delimiter, a directory whose own path already contains it puts its whole
+                // subtree under a single common prefix, and nothing below it is listed separately.
+                if let Some(delimiter) = query.delimiter
+                    && let Some(remaining) = key.strip_prefix(query.prefix)
+                {
+                    let with_separator = format!("{remaining}/");
+                    if let Some(position) = with_separator.find(delimiter) {
+                        let common_prefix = format!("{}{}", query.prefix, &with_separator[..=position]);
+                        if query.start_after.is_none_or(|marker| common_prefix.as_str() > marker)
+                            && self.subtree_contains_file(&entry.path()).await?
+                        {
+                            push_common_prefix(items, common_prefix);
+                        }
+                        continue;
+                    }
+                }
+
+                Box::pin(self.walk_listing_dir(bucket_root, &entry.path(), &key, query, items)).await?;
+            } else {
+                if !query.prefix.is_empty() && !key.starts_with(query.prefix) {
+                    continue;
+                }
+
+                if let Some(delimiter) = query.delimiter {
+                    let remaining = &key[query.prefix.len()..];
+                    if let Some(position) = remaining.find(delimiter) {
+                        let common_prefix = format!("{}{}", query.prefix, &remaining[..=position]);
+                        // A common prefix at or before the resume point is skipped with the whole
+                        // group it stands for, and skipping it must not use up a slot of the page.
+                        if query.start_after.is_none_or(|marker| common_prefix.as_str() > marker) {
+                            push_common_prefix(items, common_prefix);
+                        }
+                        continue;
+                    }
+                }
+
+                if query.start_after.is_some_and(|marker| key.as_str() <= marker) {
+                    continue;
+                }
+                let Some(metadata) = try_!(skip_vanished(entry.metadata().await)) else {
+                    continue;
+                };
+                let last_modified = Timestamp::from(try_!(metadata.modified()));
+                let size = try_!(i64::try_from(metadata.len()));
+
+                items.push(ListingItem::Object(Box::new(Object {
+                    key: Some(key),
+                    last_modified: Some(last_modified),
+                    size: Some(size),
+                    ..Default::default()
+                })));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Whether any file exists below `dir`, which is what makes a subtree contribute a common prefix.
+    async fn subtree_contains_file(&self, dir: &Path) -> S3Result<bool> {
+        let Some(mut iter) = try_!(skip_vanished(fs::read_dir(dir).await)) else {
+            return Ok(false);
+        };
+
+        let mut subdirs = Vec::new();
+        while let Some(entry) = try_!(iter.next_entry().await) {
+            #[cfg(test)]
+            listing_stats::count_entry();
+            let Some(file_type) = try_!(skip_vanished(entry.file_type().await)) else {
+                continue;
+            };
+            if entry.file_name().to_str().is_none() {
+                continue;
+            }
+            if file_type.is_dir() {
+                subdirs.push(entry.path());
+            } else {
+                return Ok(true);
+            }
+        }
+
+        for subdir in subdirs {
+            if Box::pin(self.subtree_contains_file(&subdir)).await? {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    /// The listing as it was computed before the ordered walk: collect the whole bucket, sort it, then
+    /// cut a page out of it. Kept as the reference the ordered walk is compared against.
+    #[cfg(test)]
+    async fn list_objects_full_scan(&self, bucket_root: &Path, query: &ListingQuery<'_>) -> S3Result<Vec<ListingItem>> {
+        let mut objects: Vec<Object> = default();
+        let mut common_prefixes = std::collections::BTreeSet::new();
+
+        if let Some(delimiter) = query.delimiter {
+            self.list_objects_with_delimiter(bucket_root, query.prefix, delimiter, &mut objects, &mut common_prefixes)
+                .await?;
+        } else {
+            self.list_objects_recursive(bucket_root, query.prefix, &mut objects).await?;
+        }
+
+        let mut items: Vec<ListingItem> = objects
+            .into_iter()
+            .map(|object| ListingItem::Object(Box::new(object)))
+            .collect();
+        items.extend(common_prefixes.into_iter().map(ListingItem::CommonPrefix));
+        items.sort_by(|lhs, rhs| lhs.key().cmp(rhs.key()).then_with(|| lhs.rank().cmp(&rhs.rank())));
+        Ok(items)
+    }
+
+    /// The full scan the ordered walk replaced.
+    #[cfg(test)]
     async fn list_objects_recursive(&self, bucket_root: &Path, prefix: &str, objects: &mut Vec<Object>) -> S3Result<()> {
         let mut dir_queue: VecDeque<PathBuf> = default();
         dir_queue.push_back(bucket_root.to_owned());
@@ -1667,6 +1921,8 @@ impl FileSystem {
                 continue;
             };
             while let Some(entry) = try_!(iter.next_entry().await) {
+                #[cfg(test)]
+                listing_stats::count_entry();
                 let Some(file_type) = try_!(skip_vanished(entry.file_type().await)) else {
                     continue;
                 };
@@ -1703,6 +1959,7 @@ impl FileSystem {
         Ok(())
     }
 
+    #[cfg(test)]
     async fn list_objects_with_delimiter(
         &self,
         bucket_root: &Path,
@@ -1729,6 +1986,8 @@ impl FileSystem {
             };
 
             while let Some(entry) = try_!(iter.next_entry().await) {
+                #[cfg(test)]
+                listing_stats::count_entry();
                 let Some(file_type) = try_!(skip_vanished(entry.file_type().await)) else {
                     continue;
                 };
@@ -1814,29 +2073,43 @@ mod tests {
         let _root = TestRoot(root.clone());
         let fs = FileSystem::new(&root).unwrap();
 
-        // Enough objects that the walk is still running when the deletions start landing.
+        // Enough directories that the walk is still running when the deletions start landing. Half
+        // of them lose the whole directory and half lose only the object, so a directory that
+        // vanishes mid-walk and an entry that vanishes mid-walk are both exercised.
         let bucket_root = root.join("bucket");
-        let dir = bucket_root.join("prefix");
-        std::fs::create_dir_all(&dir).unwrap();
-        let paths: Vec<PathBuf> = (0..1000)
+        let dirs: Vec<PathBuf> = (0..500)
             .map(|i| {
-                let path = dir.join(format!("{i:05}"));
-                std::fs::write(&path, b"x").unwrap();
-                path
+                let dir = bucket_root.join(format!("dir{i:04}"));
+                std::fs::create_dir_all(&dir).unwrap();
+                std::fs::write(dir.join("object"), b"x").unwrap();
+                dir
             })
             .collect();
 
         let deleter = tokio::task::spawn_blocking(move || {
-            for path in paths {
-                let _ = std::fs::remove_file(path);
+            for (index, dir) in dirs.into_iter().enumerate() {
+                if index % 2 == 0 {
+                    let _ = std::fs::remove_dir_all(&dir);
+                } else {
+                    let _ = std::fs::remove_file(dir.join("object"));
+                }
             }
         });
 
-        let mut objects = Vec::new();
-        let listed = fs.list_objects_recursive(&bucket_root, "", &mut objects).await;
+        // The production entry point, not the full scan kept for the differential test.
+        let query = ListingQuery {
+            prefix: "",
+            delimiter: None,
+            start_after: None,
+            max_keys: 1000,
+        };
+        let listed = fs.list_page(&bucket_root, &query).await;
         deleter.await.unwrap();
 
-        assert!(listed.is_ok(), "a delete running alongside the walk failed the listing");
+        let page = listed.expect("a delete running alongside the walk failed the listing");
+        let keys: Vec<&str> = page.objects.iter().filter_map(|object| object.key.as_deref()).collect();
+        assert!(keys.windows(2).all(|pair| pair[0] < pair[1]), "a page must stay in key order: {keys:?}");
+        assert!(keys.len() <= 1000, "a page must not exceed max_keys: {}", keys.len());
     }
 
     #[tokio::test]
@@ -1847,19 +2120,356 @@ mod tests {
         let fs = FileSystem::new(&root).unwrap();
         let bucket_root = root.join("vanished-bucket");
 
-        let mut objects = Vec::new();
+        // Both shapes go through the production walk: plain, and grouped by a delimiter.
+        let query = ListingQuery {
+            prefix: "",
+            delimiter: None,
+            start_after: None,
+            max_keys: 1000,
+        };
         let err = fs
-            .list_objects_recursive(&bucket_root, "", &mut objects)
+            .list_page(&bucket_root, &query)
             .await
             .expect_err("a vanished bucket root must not be listed as empty");
         assert_eq!(err.code(), &S3ErrorCode::NoSuchBucket);
 
-        let mut objects = Vec::new();
-        let mut common_prefixes = std::collections::BTreeSet::new();
+        let query = ListingQuery {
+            prefix: "",
+            delimiter: Some("/"),
+            start_after: None,
+            max_keys: 1000,
+        };
         let err = fs
-            .list_objects_with_delimiter(&bucket_root, "", "/", &mut objects, &mut common_prefixes)
+            .list_page(&bucket_root, &query)
             .await
             .expect_err("a vanished bucket root must not be listed as empty");
         assert_eq!(err.code(), &S3ErrorCode::NoSuchBucket);
+    }
+
+    /// Write `keys` into a bucket below `root` and return the bucket root.
+    fn write_bucket(root: &Path, name: &str, keys: &[&str]) -> PathBuf {
+        let bucket_root = root.join(name);
+        std::fs::create_dir_all(&bucket_root).unwrap();
+        for key in keys {
+            let path = bucket_root.join(key);
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent).unwrap();
+            }
+            std::fs::write(&path, key.as_bytes()).unwrap();
+        }
+        bucket_root
+    }
+
+    /// Why a corpus key cannot be stored on every platform the tests run on, if it cannot.
+    ///
+    /// Windows rejects `<>:"/\\|?*`, control characters, a name that ends with a dot or a space, and a
+    /// few reserved device names. Checking here fails on the machine that adds the name, instead of on
+    /// the Windows leg of CI, which only runs after a push.
+    fn corpus_key_problem(key: &str) -> Option<String> {
+        const RESERVED: [&str; 22] = [
+            "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2",
+            "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+        ];
+
+        for segment in key.split('/') {
+            if segment.is_empty() {
+                return Some(format!("key {key:?} has an empty path segment"));
+            }
+            if let Some(character) = segment
+                .chars()
+                .find(|c| matches!(c, '<' | '>' | ':' | '"' | '\\' | '|' | '?' | '*'))
+            {
+                return Some(format!("key {key:?} has a segment Windows rejects ({character:?}): {segment:?}"));
+            }
+            if let Some(character) = segment.chars().find(|c| c.is_control()) {
+                return Some(format!("key {key:?} has a control character {character:?} in {segment:?}"));
+            }
+            if segment.ends_with('.') || segment.ends_with(' ') {
+                return Some(format!("key {key:?} has a segment that ends with a dot or a space: {segment:?}"));
+            }
+            let stem = segment.split('.').next().unwrap_or(segment).to_ascii_uppercase();
+            if RESERVED.contains(&stem.as_str()) {
+                return Some(format!("key {key:?} has a segment named after a reserved Windows device: {segment:?}"));
+            }
+        }
+        None
+    }
+
+    /// Panic when the corpus holds a key that cannot be stored on every platform the tests run on.
+    fn assert_corpus_is_portable(keys: &[&str]) {
+        for key in keys {
+            if let Some(problem) = corpus_key_problem(key) {
+                panic!("{problem}");
+            }
+        }
+    }
+
+    /// The guard protects nothing unless it rejects what Windows rejects.
+    #[test]
+    fn the_portability_guard_rejects_names_windows_cannot_store() {
+        let rejected = [
+            "quote\".txt",
+            "delim::x.txt",
+            "back\\slash.txt",
+            "star*.txt",
+            "question?.txt",
+            "pipe|.txt",
+            "less<.txt",
+            "trailing.",
+            "trailing ",
+            "CON",
+            "nul.txt",
+            "aux",
+            "com1.dat",
+            "lpt9",
+            "control\u{7}.txt",
+        ];
+        for key in rejected {
+            assert!(
+                corpus_key_problem(key).is_some(),
+                "the portability guard accepted {key:?}, which Windows rejects"
+            );
+        }
+
+        // And it accepts every shape the corpus itself uses.
+        assert_corpus_is_portable(&[
+            "a.txt",
+            "dir/sub/y.txt",
+            "sp ace.txt",
+            "unicode-é.txt",
+            "hash#x.txt",
+            "a!x.txt",
+            "a.b",
+        ]);
+    }
+    /// Check one page of the ordered walk against a page cut out of a full scan of the same bucket.
+    async fn assert_page_matches_a_full_scan(fs: &FileSystem, bucket_root: &Path, query: &ListingQuery<'_>) {
+        let page = fs.list_page(bucket_root, query).await.unwrap();
+        let oracle = build_page(fs.list_objects_full_scan(bucket_root, query).await.unwrap(), query);
+        let case = format!(
+            "prefix={:?} delimiter={:?} start_after={:?} max_keys={}",
+            query.prefix, query.delimiter, query.start_after, query.max_keys
+        );
+
+        let objects = |page: &ListingPage| -> Vec<String> {
+            page.objects
+                .iter()
+                .map(|object| object.key.clone().unwrap_or_default())
+                .collect()
+        };
+        let prefixes = |page: &ListingPage| -> Vec<String> {
+            page.common_prefixes
+                .iter()
+                .map(|prefix| prefix.prefix.clone().unwrap_or_default())
+                .collect()
+        };
+
+        assert_eq!(objects(&page), objects(&oracle), "objects disagree for {case}");
+        assert_eq!(prefixes(&page), prefixes(&oracle), "common prefixes disagree for {case}");
+        assert_eq!(page.is_truncated, oracle.is_truncated, "is_truncated disagrees for {case}");
+        assert_eq!(
+            page.next_continuation_token, oracle.next_continuation_token,
+            "next continuation token disagrees for {case}"
+        );
+        assert_eq!(page.key_count, oracle.key_count, "key count disagrees for {case}");
+        for (ours, theirs) in page.objects.iter().zip(oracle.objects.iter()) {
+            assert_eq!(ours.size, theirs.size, "size disagrees for {case}");
+            assert_eq!(ours.last_modified, theirs.last_modified, "last modified disagrees for {case}");
+        }
+
+        // The walk itself must stay ordered and stop within one item of the page.
+        let items = fs.list_objects_ordered(bucket_root, query).await.unwrap();
+        assert!(items.len() <= query.limit(), "the walk collected more than a page for {case}");
+        for pair in items.windows(2) {
+            assert!(
+                pair[0].key() < pair[1].key(),
+                "the walk is out of key order for {case}: {:?} then {:?}",
+                pair[0].key(),
+                pair[1].key()
+            );
+        }
+    }
+
+    /// The ordered walk must agree with a full scan for every query shape.
+    #[tokio::test(flavor = "current_thread")]
+    async fn the_ordered_walk_agrees_with_a_full_scan() {
+        let root = env::temp_dir().join(format!("s3s-fs-list-diff-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let _root = TestRoot(root.clone());
+        let fs = FileSystem::new(&root).unwrap();
+
+        // The corpus has to be storable everywhere the tests run: `#` is a legal name character
+        // on every platform, while `::` and `"` are not (the keys that use them are added below
+        // only where the file system accepts them).
+        let mut keys: Vec<&str> = vec![
+            "a.txt",
+            "a/b.txt",
+            "a/c/d.txt",
+            "a0.txt",
+            "ab.txt",
+            "a!x.txt",
+            "a.b",
+            "b",
+            "B.txt",
+            "z.txt",
+            "dir/x.txt",
+            "dir/sub/y.txt",
+            "dir2/z.txt",
+            "sp ace.txt",
+            "unicode-é.txt",
+            "hash#x.txt",
+            "hash#y.txt",
+            "hash#sub/z.txt",
+            "other.txt",
+            "prefix.txt",
+            "pre/fix.txt",
+            "pre/fix/deep.txt",
+            "same0",
+            "same/child.txt",
+            "samely.txt",
+        ];
+        // A guard rather than a comment: a name Windows rejects would otherwise fail the Windows CI
+        // leg, which only runs after a push.
+        assert_corpus_is_portable(&keys);
+        // Windows rejects a `"` or a `:` in a name, so the keys that put the delimiter inside one are
+        // only created where the file system allows them. Both sides of the comparison read the same
+        // tree, so the rest of the matrix stays meaningful either way.
+        #[cfg(unix)]
+        keys.extend(["quote\".txt", "delim::x.txt", "delim::y.txt", "delim::sub/z.txt"]);
+        let bucket_root = write_bucket(&root, "bucket", &keys);
+        // An empty directory must contribute nothing.
+        std::fs::create_dir_all(bucket_root.join("empty-dir/inner")).unwrap();
+
+        let prefixes = [
+            "",
+            "a",
+            "a/",
+            "a/b",
+            "dir",
+            "dir/",
+            "pre/fix",
+            "delim",
+            "delim::",
+            "hash",
+            "hash#",
+            "nonexistent",
+            "z",
+            "same",
+        ];
+        let delimiters: [Option<&str>; 7] = [None, Some("/"), Some("#"), Some("##"), Some("::"), Some("x"), Some(".")];
+        let markers: [Option<&str>; 7] = [
+            None,
+            Some("a"),
+            Some("a/b.txt"),
+            Some("delim::x.txt"),
+            Some("hash#x.txt"),
+            Some("same/child.txt"),
+            Some("zzz"),
+        ];
+        let max_keys: [usize; 5] = [0, 1, 2, 3, 1000];
+
+        for prefix in prefixes {
+            for delimiter in delimiters {
+                for start_after in markers {
+                    for max_keys in max_keys {
+                        let query = ListingQuery {
+                            prefix,
+                            delimiter,
+                            start_after,
+                            max_keys,
+                        };
+                        assert_page_matches_a_full_scan(&fs, &bucket_root, &query).await;
+                    }
+                }
+            }
+        }
+    }
+
+    /// One page must cost one page, not the whole bucket.
+    #[tokio::test(flavor = "current_thread")]
+    async fn the_ordered_walk_stops_after_one_page() {
+        let root = env::temp_dir().join(format!("s3s-fs-list-stop-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let _root = TestRoot(root.clone());
+        let fs = FileSystem::new(&root).unwrap();
+
+        // 200 directories with 50 objects each: 10_000 objects in total.
+        let bucket_root = root.join("bucket");
+        for dir in 0..200 {
+            let dir_path = bucket_root.join(format!("dir{dir:04}"));
+            std::fs::create_dir_all(&dir_path).unwrap();
+            for file in 0..50 {
+                std::fs::write(dir_path.join(format!("obj{file:04}")), b"x").unwrap();
+            }
+        }
+
+        let query = ListingQuery {
+            prefix: "",
+            delimiter: None,
+            start_after: None,
+            max_keys: 1,
+        };
+
+        listing_stats::reset();
+        let page = fs.list_page(&bucket_root, &query).await.unwrap();
+        let visited_ordered = listing_stats::visited();
+
+        assert_eq!(page.objects.len(), 1, "a page holds max_keys objects");
+        assert!(page.is_truncated, "another object exists, so the page is truncated");
+        // The walk reads the root to order it and then one directory to fill the page: the cost is the
+        // fanout along the path it follows, not the number of objects in the bucket.
+        assert!(
+            visited_ordered <= 300,
+            "the ordered walk visited {visited_ordered} entries, which is not a bounded prefix of the bucket"
+        );
+
+        listing_stats::reset();
+        let all = fs.list_objects_full_scan(&bucket_root, &query).await.unwrap();
+        let visited_full = listing_stats::visited();
+
+        assert_eq!(all.len(), 10_000, "the full scan sees every object");
+        assert!(visited_full >= 10_000, "the full scan visits the whole bucket: {visited_full}");
+    }
+
+    /// A subtree the prefix cannot match must not be entered at all.
+    #[tokio::test(flavor = "current_thread")]
+    async fn the_ordered_walk_skips_subtrees_the_prefix_cannot_match() {
+        let root = env::temp_dir().join(format!("s3s-fs-list-prune-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let _root = TestRoot(root.clone());
+        let fs = FileSystem::new(&root).unwrap();
+
+        let bucket_root = root.join("bucket");
+        let dir = bucket_root.join("aaa");
+        std::fs::create_dir_all(&dir).unwrap();
+        for file in 0..1000 {
+            std::fs::write(dir.join(format!("obj{file:04}")), b"x").unwrap();
+        }
+
+        let query = ListingQuery {
+            prefix: "bbb/",
+            delimiter: None,
+            start_after: None,
+            max_keys: 1000,
+        };
+
+        listing_stats::reset();
+        let page = fs.list_page(&bucket_root, &query).await.unwrap();
+        let visited_ordered = listing_stats::visited();
+
+        assert_eq!(page.key_count, 0, "no key can match the requested prefix");
+        assert!(
+            visited_ordered <= 4,
+            "the walk entered a subtree that cannot match the prefix: {visited_ordered} entries"
+        );
+
+        listing_stats::reset();
+        let all = fs.list_objects_full_scan(&bucket_root, &query).await.unwrap();
+        assert_eq!(all.len(), 0, "no item can match the requested prefix");
+        assert!(
+            listing_stats::visited() >= 1000,
+            "the full scan reads the subtree anyway: {} entries",
+            listing_stats::visited()
+        );
     }
 }
