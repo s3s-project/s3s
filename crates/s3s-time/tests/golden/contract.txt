@@ -1,0 +1,827 @@
+# s3s-time frozen contract fixture
+#
+# oracle: crates/s3s/src/dto/timestamp.rs
+# oracle blob: da636b8ca8c95a1b2506424f840e627d5960b015
+# suite: data/date_time_format_test_suite.json
+# suite blob: fea94cb6378da39a96ca82f4a8a0fd69ea44076b
+# jiff: 0.2.37
+# refresh with: cargo run -p s3s-time --example gen_golden
+#
+# columns (tab separated): <direction>/<format> | <input> | <expected> | <intent>
+# direction: parse (the input is text to parse) or format (the input is an instant)
+# format: date-time | http-date | epoch-seconds
+# input: parse -> the literal text; format -> <seconds>:<nanoseconds>, with floor
+#        seconds and a non-negative nanosecond adjustment
+# expected: parse -> instant:<seconds>:<nanoseconds> or error:<name>
+#           format -> text:<output> or error:<name>
+# error names: InvalidFormat | OutOfRange | FractionTooLong | Overflow | Io
+# intent: <case id> [note]; the case id is the first whitespace-delimited token
+# text fields escape the backslash, the tab, the line feed and the carriage return
+# as \\ \t \n \r; an empty field is the empty string
+# format cases use instants that both the pre-migration implementation and the
+# jiff-backed implementation can represent; parse inputs are not restricted
+# cases: 803 (parse 407, format 396)
+#
+format/epoch-seconds	-377703389549:10000	text:-377703389549.00001	smithy/format_epoch_seconds/000 sub-millisecond
+format/epoch-seconds	-377700707496:100000	text:-377700707496.0001	smithy/format_epoch_seconds/001 sub-millisecond
+format/epoch-seconds	-377698198243:234000	text:-377698198243.000234	smithy/format_epoch_seconds/002 sub-millisecond
+format/epoch-seconds	-377695602590:0	text:-377695602590	smithy/format_epoch_seconds/003
+format/epoch-seconds	-377692747737:1000	text:-377692747737.000001	smithy/format_epoch_seconds/004 sub-millisecond
+format/epoch-seconds	-377690152024:10000	text:-377690152024.00001	smithy/format_epoch_seconds/005 sub-millisecond
+format/epoch-seconds	-377687297171:100000	text:-377687297171.0001	smithy/format_epoch_seconds/006 sub-millisecond
+format/epoch-seconds	-377684528718:234000	text:-377684528718.000234	smithy/format_epoch_seconds/007 sub-millisecond
+format/epoch-seconds	-377681933065:0	text:-377681933065	smithy/format_epoch_seconds/008
+format/epoch-seconds	-377679078212:1000	text:-377679078212.000001	smithy/format_epoch_seconds/009 sub-millisecond
+format/epoch-seconds	-377676482559:10000	text:-377676482559.00001	smithy/format_epoch_seconds/010 sub-millisecond
+format/epoch-seconds	-377673627706:100000	text:-377673627706.0001	smithy/format_epoch_seconds/011 sub-millisecond
+format/epoch-seconds	-65322849653:234000	text:-65322849653.000234	smithy/format_epoch_seconds/012 sub-millisecond
+format/epoch-seconds	-65319825600:0	text:-65319825600	smithy/format_epoch_seconds/013
+format/epoch-seconds	-65317575487:1000	text:-65317575487.000001	smithy/format_epoch_seconds/014 sub-millisecond
+format/epoch-seconds	-65314893434:10000	text:-65314893434.00001	smithy/format_epoch_seconds/015 sub-millisecond
+format/epoch-seconds	-65312124981:100000	text:-65312124981.0001	smithy/format_epoch_seconds/016 sub-millisecond
+format/epoch-seconds	-65309442928:234000	text:-65309442928.000234	smithy/format_epoch_seconds/017 sub-millisecond
+format/epoch-seconds	-65306674475:0	text:-65306674475	smithy/format_epoch_seconds/018
+format/epoch-seconds	-65303906022:1000	text:-65303906022.000001	smithy/format_epoch_seconds/019 sub-millisecond
+format/epoch-seconds	-65301223969:10000	text:-65301223969.00001	smithy/format_epoch_seconds/020 sub-millisecond
+format/epoch-seconds	-65298455516:100000	text:-65298455516.0001	smithy/format_epoch_seconds/021 sub-millisecond
+format/epoch-seconds	-65295773403:234000	text:-65295773403.000234	smithy/format_epoch_seconds/022 sub-millisecond
+format/epoch-seconds	-65293004950:0	text:-65293004950	smithy/format_epoch_seconds/023
+format/epoch-seconds	-62197634897:1000	text:-62197634897.000001	smithy/format_epoch_seconds/024 sub-millisecond
+format/epoch-seconds	-62194693644:10000	text:-62194693644.00001	smithy/format_epoch_seconds/025 sub-millisecond
+format/epoch-seconds	-62192443591:100000	text:-62192443591.0001	smithy/format_epoch_seconds/026 sub-millisecond
+format/epoch-seconds	-62189761538:234000	text:-62189761538.000234	smithy/format_epoch_seconds/027 sub-millisecond
+format/epoch-seconds	-62186993085:0	text:-62186993085	smithy/format_epoch_seconds/028
+format/epoch-seconds	-62184311032:1000	text:-62184311032.000001	smithy/format_epoch_seconds/029 sub-millisecond
+format/epoch-seconds	-62181542579:10000	text:-62181542579.00001	smithy/format_epoch_seconds/030 sub-millisecond
+format/epoch-seconds	-62178774066:100000	text:-62178774066.0001	smithy/format_epoch_seconds/031 sub-millisecond
+format/epoch-seconds	-62176092013:234000	text:-62176092013.000234	smithy/format_epoch_seconds/032 sub-millisecond
+format/epoch-seconds	-62173323560:0	text:-62173323560	smithy/format_epoch_seconds/033
+format/epoch-seconds	-62170641507:1000	text:-62170641507.000001	smithy/format_epoch_seconds/034 sub-millisecond
+format/epoch-seconds	-62167873054:10000	text:-62167873054.00001	smithy/format_epoch_seconds/035 sub-millisecond
+format/epoch-seconds	-62133482201:100000	text:-62133482201.0001	smithy/format_epoch_seconds/036 sub-millisecond
+format/epoch-seconds	-62132873748:234000	text:-62132873748.000234	smithy/format_epoch_seconds/037 sub-millisecond
+format/epoch-seconds	-62128204495:0	text:-62128204495	smithy/format_epoch_seconds/038
+format/epoch-seconds	-62125522382:1000	text:-62125522382.000001	smithy/format_epoch_seconds/039 sub-millisecond
+format/epoch-seconds	-62122753929:10000	text:-62122753929.00001	smithy/format_epoch_seconds/040 sub-millisecond
+format/epoch-seconds	-62120071876:100000	text:-62120071876.0001	smithy/format_epoch_seconds/041 sub-millisecond
+format/epoch-seconds	-62117303423:234000	text:-62117303423.000234	smithy/format_epoch_seconds/042 sub-millisecond
+format/epoch-seconds	-62117213370:0	text:-62117213370	smithy/format_epoch_seconds/043
+format/epoch-seconds	-62114444917:1000	text:-62114444917.000001	smithy/format_epoch_seconds/044 sub-millisecond
+format/epoch-seconds	-62111762864:10000	text:-62111762864.00001	smithy/format_epoch_seconds/045 sub-millisecond
+format/epoch-seconds	-62108994411:100000	text:-62108994411.0001	smithy/format_epoch_seconds/046 sub-millisecond
+format/epoch-seconds	-62106312358:234000	text:-62106312358.000234	smithy/format_epoch_seconds/047 sub-millisecond
+format/epoch-seconds	-59010942245:0	text:-59010942245	smithy/format_epoch_seconds/048
+format/epoch-seconds	-59007741792:1000	text:-59007741792.000001	smithy/format_epoch_seconds/049 sub-millisecond
+format/epoch-seconds	-59005750939:10000	text:-59005750939.00001	smithy/format_epoch_seconds/050 sub-millisecond
+format/epoch-seconds	-59002982486:100000	text:-59002982486.0001	smithy/format_epoch_seconds/051 sub-millisecond
+format/epoch-seconds	-59000300433:234000	text:-59000300433.000234	smithy/format_epoch_seconds/052 sub-millisecond
+format/epoch-seconds	-58997531980:0	text:-58997531980	smithy/format_epoch_seconds/053
+format/epoch-seconds	-58994849927:1000	text:-58994849927.000001	smithy/format_epoch_seconds/054 sub-millisecond
+format/epoch-seconds	-58992081474:10000	text:-58992081474.00001	smithy/format_epoch_seconds/055 sub-millisecond
+format/epoch-seconds	-58989312961:100000	text:-58989312961.0001	smithy/format_epoch_seconds/056 sub-millisecond
+format/epoch-seconds	-58986630908:234000	text:-58986630908.000234	smithy/format_epoch_seconds/057 sub-millisecond
+format/epoch-seconds	-58983862455:0	text:-58983862455	smithy/format_epoch_seconds/058
+format/epoch-seconds	-58981180402:1000	text:-58981180402.000001	smithy/format_epoch_seconds/059 sub-millisecond
+format/epoch-seconds	-12175833601:999000000	text:-12175833601.999	smithy/format_epoch_seconds/060
+format/epoch-seconds	-30024749:10000	text:-30024749.00001	smithy/format_epoch_seconds/061 sub-millisecond
+format/epoch-seconds	-26737896:100000	text:-26737896.0001	smithy/format_epoch_seconds/062 sub-millisecond
+format/epoch-seconds	-24747043:234000	text:-24747043.000234	smithy/format_epoch_seconds/063 sub-millisecond
+format/epoch-seconds	-21978590:0	text:-21978590	smithy/format_epoch_seconds/064
+format/epoch-seconds	-19296537:1000	text:-19296537.000001	smithy/format_epoch_seconds/065 sub-millisecond
+format/epoch-seconds	-16528024:10000	text:-16528024.00001	smithy/format_epoch_seconds/066 sub-millisecond
+format/epoch-seconds	-13845971:100000	text:-13845971.0001	smithy/format_epoch_seconds/067 sub-millisecond
+format/epoch-seconds	-11077518:234000	text:-11077518.000234	smithy/format_epoch_seconds/068 sub-millisecond
+format/epoch-seconds	-8309065:0	text:-8309065	smithy/format_epoch_seconds/069
+format/epoch-seconds	-5627012:1000	text:-5627012.000001	smithy/format_epoch_seconds/070 sub-millisecond
+format/epoch-seconds	-2858559:10000	text:-2858559.00001	smithy/format_epoch_seconds/071 sub-millisecond
+format/epoch-seconds	-176506:100000	text:-176506.0001	smithy/format_epoch_seconds/072 sub-millisecond
+format/epoch-seconds	2591947:234000	text:2591947.000234	smithy/format_epoch_seconds/073 sub-millisecond
+format/epoch-seconds	3369600:0	text:3369600	smithy/format_epoch_seconds/074
+format/epoch-seconds	5101313:1000	text:5101313.000001	smithy/format_epoch_seconds/075 sub-millisecond
+format/epoch-seconds	7956166:10000	text:7956166.00001	smithy/format_epoch_seconds/076 sub-millisecond
+format/epoch-seconds	10551819:100000	text:10551819.0001	smithy/format_epoch_seconds/077 sub-millisecond
+format/epoch-seconds	13406672:234000	text:13406672.000234	smithy/format_epoch_seconds/078 sub-millisecond
+format/epoch-seconds	16002325:0	text:16002325	smithy/format_epoch_seconds/079
+format/epoch-seconds	18770778:1000	text:18770778.000001	smithy/format_epoch_seconds/080 sub-millisecond
+format/epoch-seconds	21625631:10000	text:21625631.00001	smithy/format_epoch_seconds/081 sub-millisecond
+format/epoch-seconds	24221284:100000	text:24221284.0001	smithy/format_epoch_seconds/082 sub-millisecond
+format/epoch-seconds	27076197:234000	text:27076197.000234	smithy/format_epoch_seconds/083 sub-millisecond
+format/epoch-seconds	29671850:0	text:29671850	smithy/format_epoch_seconds/084
+format/epoch-seconds	1078099199:999000000	text:1078099199.999	smithy/format_epoch_seconds/085
+format/epoch-seconds	2115285103:1000	text:2115285103.000001	smithy/format_epoch_seconds/086 sub-millisecond
+format/epoch-seconds	2118831156:10000	text:2118831156.00001	smithy/format_epoch_seconds/087 sub-millisecond
+format/epoch-seconds	2120562809:100000	text:2120562809.0001	smithy/format_epoch_seconds/088 sub-millisecond
+format/epoch-seconds	2123417662:234000	text:2123417662.000234	smithy/format_epoch_seconds/089 sub-millisecond
+format/epoch-seconds	2126013315:0	text:2126013315	smithy/format_epoch_seconds/090
+format/epoch-seconds	2128868168:1000	text:2128868168.000001	smithy/format_epoch_seconds/091 sub-millisecond
+format/epoch-seconds	2131463821:10000	text:2131463821.00001	smithy/format_epoch_seconds/092 sub-millisecond
+format/epoch-seconds	2134232334:100000	text:2134232334.0001	smithy/format_epoch_seconds/093 sub-millisecond
+format/epoch-seconds	2137087187:234000	text:2137087187.000234	smithy/format_epoch_seconds/094 sub-millisecond
+format/epoch-seconds	2139682840:0	text:2139682840	smithy/format_epoch_seconds/095
+format/epoch-seconds	2142537693:1000	text:2142537693.000001	smithy/format_epoch_seconds/096 sub-millisecond
+format/epoch-seconds	2145133346:10000	text:2145133346.00001	smithy/format_epoch_seconds/097 sub-millisecond
+format/epoch-seconds	2147901799:100000	text:2147901799.0001	smithy/format_epoch_seconds/098 sub-millisecond
+format/epoch-seconds	2148942252:234000	text:2148942252.000234	smithy/format_epoch_seconds/099 sub-millisecond
+format/epoch-seconds	2153093105:0	text:2153093105	smithy/format_epoch_seconds/100
+format/epoch-seconds	2155948018:1000	text:2155948018.000001	smithy/format_epoch_seconds/101 sub-millisecond
+format/epoch-seconds	2158543671:10000	text:2158543671.00001	smithy/format_epoch_seconds/102 sub-millisecond
+format/epoch-seconds	2161398524:100000	text:2161398524.0001	smithy/format_epoch_seconds/103 sub-millisecond
+format/epoch-seconds	2163994177:234000	text:2163994177.000234	smithy/format_epoch_seconds/104 sub-millisecond
+format/epoch-seconds	2166762630:0	text:2166762630	smithy/format_epoch_seconds/105
+format/epoch-seconds	2167025483:1000	text:2167025483.000001	smithy/format_epoch_seconds/106 sub-millisecond
+format/epoch-seconds	2169534736:10000	text:2169534736.00001	smithy/format_epoch_seconds/107 sub-millisecond
+format/epoch-seconds	2172475989:100000	text:2172475989.0001	smithy/format_epoch_seconds/108 sub-millisecond
+format/epoch-seconds	2174985242:234000	text:2174985242.000234	smithy/format_epoch_seconds/109 sub-millisecond
+format/epoch-seconds	253371065755:0	text:253371065755	smithy/format_epoch_seconds/110
+format/epoch-seconds	253374871008:1000	text:253374871008.000001	smithy/format_epoch_seconds/111 sub-millisecond
+format/epoch-seconds	253376343461:10000	text:253376343461.00001	smithy/format_epoch_seconds/112 sub-millisecond
+format/epoch-seconds	253379284714:100000	text:253379284714.0001	smithy/format_epoch_seconds/113 sub-millisecond
+format/epoch-seconds	253381793967:234000	text:253381793967.000234	smithy/format_epoch_seconds/114 sub-millisecond
+format/epoch-seconds	253384735220:0	text:253384735220	smithy/format_epoch_seconds/115
+format/epoch-seconds	253387244473:1000	text:253387244473.000001	smithy/format_epoch_seconds/116 sub-millisecond
+format/epoch-seconds	253390012926:10000	text:253390012926.00001	smithy/format_epoch_seconds/117 sub-millisecond
+format/epoch-seconds	253392954239:100000	text:253392954239.0001	smithy/format_epoch_seconds/118 sub-millisecond
+format/epoch-seconds	253395463492:234000	text:253395463492.000234	smithy/format_epoch_seconds/119 sub-millisecond
+format/epoch-seconds	253398404745:0	text:253398404745	smithy/format_epoch_seconds/120
+format/epoch-seconds	253400913998:1000	text:253400913998.000001	smithy/format_epoch_seconds/121 sub-millisecond
+format/http-date	-377703389549:1000000	error:OutOfRange	smithy/format_http_date/000 error case
+format/http-date	-377700707496:10000000	error:OutOfRange	smithy/format_http_date/001 error case
+format/http-date	-377698198243:100000000	error:OutOfRange	smithy/format_http_date/002 error case
+format/http-date	-377695602590:123456789	error:OutOfRange	smithy/format_http_date/003 error case, sub-millisecond
+format/http-date	-377692747737:0	error:OutOfRange	smithy/format_http_date/004 error case
+format/http-date	-377690152024:1	error:OutOfRange	smithy/format_http_date/005 error case, sub-millisecond
+format/http-date	-377687297171:10	error:OutOfRange	smithy/format_http_date/006 error case, sub-millisecond
+format/http-date	-377684528718:100	error:OutOfRange	smithy/format_http_date/007 error case, sub-millisecond
+format/http-date	-377681933065:1000	error:OutOfRange	smithy/format_http_date/008 error case, sub-millisecond
+format/http-date	-377679078212:10000	error:OutOfRange	smithy/format_http_date/009 error case, sub-millisecond
+format/http-date	-377676482559:100000	error:OutOfRange	smithy/format_http_date/010 error case, sub-millisecond
+format/http-date	-377673627706:1000000	error:OutOfRange	smithy/format_http_date/011 error case
+format/http-date	-65322849653:10000000	error:OutOfRange	smithy/format_http_date/012 error case
+format/http-date	-65319825600:100000000	error:OutOfRange	smithy/format_http_date/013 error case
+format/http-date	-65317575487:123456789	error:OutOfRange	smithy/format_http_date/014 error case, sub-millisecond
+format/http-date	-65314893434:0	error:OutOfRange	smithy/format_http_date/015 error case
+format/http-date	-65312124981:1	error:OutOfRange	smithy/format_http_date/016 error case, sub-millisecond
+format/http-date	-65309442928:10	error:OutOfRange	smithy/format_http_date/017 error case, sub-millisecond
+format/http-date	-65306674475:100	error:OutOfRange	smithy/format_http_date/018 error case, sub-millisecond
+format/http-date	-65303906022:1000	error:OutOfRange	smithy/format_http_date/019 error case, sub-millisecond
+format/http-date	-65301223969:10000	error:OutOfRange	smithy/format_http_date/020 error case, sub-millisecond
+format/http-date	-65298455516:100000	error:OutOfRange	smithy/format_http_date/021 error case, sub-millisecond
+format/http-date	-65295773403:1000000	error:OutOfRange	smithy/format_http_date/022 error case
+format/http-date	-65293004950:10000000	error:OutOfRange	smithy/format_http_date/023 error case
+format/http-date	-62197634897:100000000	error:OutOfRange	smithy/format_http_date/024 error case
+format/http-date	-62194693644:123456789	error:OutOfRange	smithy/format_http_date/025 error case, sub-millisecond
+format/http-date	-62192443591:0	error:OutOfRange	smithy/format_http_date/026 error case
+format/http-date	-62189761538:1	error:OutOfRange	smithy/format_http_date/027 error case, sub-millisecond
+format/http-date	-62186993085:10	error:OutOfRange	smithy/format_http_date/028 error case, sub-millisecond
+format/http-date	-62184311032:100	error:OutOfRange	smithy/format_http_date/029 error case, sub-millisecond
+format/http-date	-62181542579:1000	error:OutOfRange	smithy/format_http_date/030 error case, sub-millisecond
+format/http-date	-62178774066:10000	error:OutOfRange	smithy/format_http_date/031 error case, sub-millisecond
+format/http-date	-62176092013:100000	error:OutOfRange	smithy/format_http_date/032 error case, sub-millisecond
+format/http-date	-62173323560:1000000	error:OutOfRange	smithy/format_http_date/033 error case
+format/http-date	-62170641507:10000000	error:OutOfRange	smithy/format_http_date/034 error case
+format/http-date	-62167873054:100000000	error:OutOfRange	smithy/format_http_date/035 error case
+format/http-date	-62133482201:123456789	text:Thu, 25 Jan 0001 11:23:19 GMT	smithy/format_http_date/036 sub-millisecond
+format/http-date	-62132873748:0	text:Thu, 01 Feb 0001 12:24:12 GMT	smithy/format_http_date/037
+format/http-date	-62128204495:1	text:Tue, 27 Mar 0001 13:25:05 GMT	smithy/format_http_date/038 sub-millisecond
+format/http-date	-62125522382:10	text:Fri, 27 Apr 0001 14:26:58 GMT	smithy/format_http_date/039 sub-millisecond
+format/http-date	-62122753929:100	text:Tue, 29 May 0001 15:27:51 GMT	smithy/format_http_date/040 sub-millisecond
+format/http-date	-62120071876:1000	text:Fri, 29 Jun 0001 16:28:44 GMT	smithy/format_http_date/041 sub-millisecond
+format/http-date	-62117303423:10000	text:Tue, 31 Jul 0001 17:29:37 GMT	smithy/format_http_date/042 sub-millisecond
+format/http-date	-62117213370:100000	text:Wed, 01 Aug 0001 18:30:30 GMT	smithy/format_http_date/043 sub-millisecond
+format/http-date	-62114444917:1000000	text:Sun, 02 Sep 0001 19:31:23 GMT	smithy/format_http_date/044
+format/http-date	-62111762864:10000000	text:Wed, 03 Oct 0001 20:32:16 GMT	smithy/format_http_date/045
+format/http-date	-62108994411:100000000	text:Sun, 04 Nov 0001 21:33:09 GMT	smithy/format_http_date/046
+format/http-date	-62106312358:123456789	text:Wed, 05 Dec 0001 22:34:02 GMT	smithy/format_http_date/047 sub-millisecond
+format/http-date	-59010942245:0	text:Wed, 06 Jan 0100 23:35:55 GMT	smithy/format_http_date/048
+format/http-date	-59007741792:1	text:Sat, 13 Feb 0100 00:36:48 GMT	smithy/format_http_date/049 sub-millisecond
+format/http-date	-59005750939:10	text:Mon, 08 Mar 0100 01:37:41 GMT	smithy/format_http_date/050 sub-millisecond
+format/http-date	-59002982486:100	text:Fri, 09 Apr 0100 02:38:34 GMT	smithy/format_http_date/051 sub-millisecond
+format/http-date	-59000300433:1000	text:Mon, 10 May 0100 03:39:27 GMT	smithy/format_http_date/052 sub-millisecond
+format/http-date	-58997531980:10000	text:Fri, 11 Jun 0100 04:40:20 GMT	smithy/format_http_date/053 sub-millisecond
+format/http-date	-58994849927:100000	text:Mon, 12 Jul 0100 05:41:13 GMT	smithy/format_http_date/054 sub-millisecond
+format/http-date	-58992081474:1000000	text:Fri, 13 Aug 0100 06:42:06 GMT	smithy/format_http_date/055
+format/http-date	-58989312961:10000000	text:Tue, 14 Sep 0100 07:43:59 GMT	smithy/format_http_date/056
+format/http-date	-58986630908:100000000	text:Fri, 15 Oct 0100 08:44:52 GMT	smithy/format_http_date/057
+format/http-date	-58983862455:123456789	text:Tue, 16 Nov 0100 09:45:45 GMT	smithy/format_http_date/058 sub-millisecond
+format/http-date	-58981180402:0	text:Fri, 17 Dec 0100 10:46:38 GMT	smithy/format_http_date/059
+format/http-date	-12175833601:999000000	text:Wed, 29 Feb 1584 23:59:59 GMT	smithy/format_http_date/060
+format/http-date	-30024749:1	text:Sat, 18 Jan 1969 11:47:31 GMT	smithy/format_http_date/061 sub-millisecond
+format/http-date	-26737896:10	text:Tue, 25 Feb 1969 12:48:24 GMT	smithy/format_http_date/062 sub-millisecond
+format/http-date	-24747043:100	text:Thu, 20 Mar 1969 13:49:17 GMT	smithy/format_http_date/063 sub-millisecond
+format/http-date	-21978590:1000	text:Mon, 21 Apr 1969 14:50:10 GMT	smithy/format_http_date/064 sub-millisecond
+format/http-date	-19296537:10000	text:Thu, 22 May 1969 15:51:03 GMT	smithy/format_http_date/065 sub-millisecond
+format/http-date	-16528024:100000	text:Mon, 23 Jun 1969 16:52:56 GMT	smithy/format_http_date/066 sub-millisecond
+format/http-date	-13845971:1000000	text:Thu, 24 Jul 1969 17:53:49 GMT	smithy/format_http_date/067
+format/http-date	-11077518:10000000	text:Mon, 25 Aug 1969 18:54:42 GMT	smithy/format_http_date/068
+format/http-date	-8309065:100000000	text:Fri, 26 Sep 1969 19:55:35 GMT	smithy/format_http_date/069
+format/http-date	-5627012:123456789	text:Mon, 27 Oct 1969 20:56:28 GMT	smithy/format_http_date/070 sub-millisecond
+format/http-date	-2858559:0	text:Fri, 28 Nov 1969 21:57:21 GMT	smithy/format_http_date/071
+format/http-date	-176506:1	text:Mon, 29 Dec 1969 22:58:14 GMT	smithy/format_http_date/072 sub-millisecond
+format/http-date	2591947:10	text:Fri, 30 Jan 1970 23:59:07 GMT	smithy/format_http_date/073 sub-millisecond
+format/http-date	3369600:100	text:Mon, 09 Feb 1970 00:00:00 GMT	smithy/format_http_date/074 sub-millisecond
+format/http-date	5101313:1000	text:Sun, 01 Mar 1970 01:01:53 GMT	smithy/format_http_date/075 sub-millisecond
+format/http-date	7956166:10000	text:Fri, 03 Apr 1970 02:02:46 GMT	smithy/format_http_date/076 sub-millisecond
+format/http-date	10551819:100000	text:Sun, 03 May 1970 03:03:39 GMT	smithy/format_http_date/077 sub-millisecond
+format/http-date	13406672:1000000	text:Fri, 05 Jun 1970 04:04:32 GMT	smithy/format_http_date/078
+format/http-date	16002325:10000000	text:Sun, 05 Jul 1970 05:05:25 GMT	smithy/format_http_date/079
+format/http-date	18770778:100000000	text:Thu, 06 Aug 1970 06:06:18 GMT	smithy/format_http_date/080
+format/http-date	21625631:123456789	text:Tue, 08 Sep 1970 07:07:11 GMT	smithy/format_http_date/081 sub-millisecond
+format/http-date	24221284:0	text:Thu, 08 Oct 1970 08:08:04 GMT	smithy/format_http_date/082
+format/http-date	27076197:1	text:Tue, 10 Nov 1970 09:09:57 GMT	smithy/format_http_date/083 sub-millisecond
+format/http-date	29671850:10	text:Thu, 10 Dec 1970 10:10:50 GMT	smithy/format_http_date/084 sub-millisecond
+format/http-date	1078099199:999000000	text:Sun, 29 Feb 2004 23:59:59 GMT	smithy/format_http_date/085
+format/http-date	2115285103:100	text:Sun, 11 Jan 2037 11:11:43 GMT	smithy/format_http_date/086 sub-millisecond
+format/http-date	2118831156:1000	text:Sat, 21 Feb 2037 12:12:36 GMT	smithy/format_http_date/087 sub-millisecond
+format/http-date	2120562809:10000	text:Fri, 13 Mar 2037 13:13:29 GMT	smithy/format_http_date/088 sub-millisecond
+format/http-date	2123417662:100000	text:Wed, 15 Apr 2037 14:14:22 GMT	smithy/format_http_date/089 sub-millisecond
+format/http-date	2126013315:1000000	text:Fri, 15 May 2037 15:15:15 GMT	smithy/format_http_date/090
+format/http-date	2128868168:10000000	text:Wed, 17 Jun 2037 16:16:08 GMT	smithy/format_http_date/091
+format/http-date	2131463821:100000000	text:Fri, 17 Jul 2037 17:17:01 GMT	smithy/format_http_date/092
+format/http-date	2134232334:123456789	text:Tue, 18 Aug 2037 18:18:54 GMT	smithy/format_http_date/093 sub-millisecond
+format/http-date	2137087187:0	text:Sun, 20 Sep 2037 19:19:47 GMT	smithy/format_http_date/094
+format/http-date	2139682840:1	text:Tue, 20 Oct 2037 20:20:40 GMT	smithy/format_http_date/095 sub-millisecond
+format/http-date	2142537693:10	text:Sun, 22 Nov 2037 21:21:33 GMT	smithy/format_http_date/096 sub-millisecond
+format/http-date	2145133346:100	text:Tue, 22 Dec 2037 22:22:26 GMT	smithy/format_http_date/097 sub-millisecond
+format/http-date	2147901799:1000	text:Sat, 23 Jan 2038 23:23:19 GMT	smithy/format_http_date/098 sub-millisecond
+format/http-date	2148942252:10000	text:Fri, 05 Feb 2038 00:24:12 GMT	smithy/format_http_date/099 sub-millisecond
+format/http-date	2153093105:100000	text:Thu, 25 Mar 2038 01:25:05 GMT	smithy/format_http_date/100 sub-millisecond
+format/http-date	2155948018:1000000	text:Tue, 27 Apr 2038 02:26:58 GMT	smithy/format_http_date/101
+format/http-date	2158543671:10000000	text:Thu, 27 May 2038 03:27:51 GMT	smithy/format_http_date/102
+format/http-date	2161398524:100000000	text:Tue, 29 Jun 2038 04:28:44 GMT	smithy/format_http_date/103
+format/http-date	2163994177:123456789	text:Thu, 29 Jul 2038 05:29:37 GMT	smithy/format_http_date/104 sub-millisecond
+format/http-date	2166762630:0	text:Mon, 30 Aug 2038 06:30:30 GMT	smithy/format_http_date/105
+format/http-date	2167025483:1	text:Thu, 02 Sep 2038 07:31:23 GMT	smithy/format_http_date/106 sub-millisecond
+format/http-date	2169534736:10	text:Fri, 01 Oct 2038 08:32:16 GMT	smithy/format_http_date/107 sub-millisecond
+format/http-date	2172475989:100	text:Thu, 04 Nov 2038 09:33:09 GMT	smithy/format_http_date/108 sub-millisecond
+format/http-date	2174985242:1000	text:Fri, 03 Dec 2038 10:34:02 GMT	smithy/format_http_date/109 sub-millisecond
+format/http-date	253371065755:10000	text:Mon, 04 Jan 9999 11:35:55 GMT	smithy/format_http_date/110 sub-millisecond
+format/http-date	253374871008:100000	text:Wed, 17 Feb 9999 12:36:48 GMT	smithy/format_http_date/111 sub-millisecond
+format/http-date	253376343461:1000000	text:Sat, 06 Mar 9999 13:37:41 GMT	smithy/format_http_date/112
+format/http-date	253379284714:10000000	text:Fri, 09 Apr 9999 14:38:34 GMT	smithy/format_http_date/113
+format/http-date	253381793967:100000000	text:Sat, 08 May 9999 15:39:27 GMT	smithy/format_http_date/114
+format/http-date	253384735220:123456789	text:Fri, 11 Jun 9999 16:40:20 GMT	smithy/format_http_date/115 sub-millisecond
+format/http-date	253387244473:0	text:Sat, 10 Jul 9999 17:41:13 GMT	smithy/format_http_date/116
+format/http-date	253390012926:1	text:Wed, 11 Aug 9999 18:42:06 GMT	smithy/format_http_date/117 sub-millisecond
+format/http-date	253392954239:10	text:Tue, 14 Sep 9999 19:43:59 GMT	smithy/format_http_date/118 sub-millisecond
+format/http-date	253395463492:100	text:Wed, 13 Oct 9999 20:44:52 GMT	smithy/format_http_date/119 sub-millisecond
+format/http-date	253398404745:1000	text:Tue, 16 Nov 9999 21:45:45 GMT	smithy/format_http_date/120 sub-millisecond
+format/http-date	253400913998:10000	text:Wed, 15 Dec 9999 22:46:38 GMT	smithy/format_http_date/121 sub-millisecond
+format/date-time	-377703389549:1000000	error:OutOfRange	smithy/format_date_time/000 error case
+format/date-time	-377700707496:10000000	error:OutOfRange	smithy/format_date_time/001 error case
+format/date-time	-377698198243:100000000	error:OutOfRange	smithy/format_date_time/002 error case
+format/date-time	-377695602590:123456789	error:OutOfRange	smithy/format_date_time/003 error case, sub-millisecond
+format/date-time	-377692747737:0	error:OutOfRange	smithy/format_date_time/004 error case
+format/date-time	-377690152024:1	error:OutOfRange	smithy/format_date_time/005 error case, sub-millisecond
+format/date-time	-377687297171:10	error:OutOfRange	smithy/format_date_time/006 error case, sub-millisecond
+format/date-time	-377684528718:100	error:OutOfRange	smithy/format_date_time/007 error case, sub-millisecond
+format/date-time	-377681933065:1000	error:OutOfRange	smithy/format_date_time/008 error case, sub-millisecond
+format/date-time	-377679078212:10000	error:OutOfRange	smithy/format_date_time/009 error case, sub-millisecond
+format/date-time	-377676482559:100000	error:OutOfRange	smithy/format_date_time/010 error case, sub-millisecond
+format/date-time	-377673627706:1000000	error:OutOfRange	smithy/format_date_time/011 error case
+format/date-time	-65322849653:10000000	error:OutOfRange	smithy/format_date_time/012 error case
+format/date-time	-65319825600:100000000	error:OutOfRange	smithy/format_date_time/013 error case
+format/date-time	-65317575487:123456789	error:OutOfRange	smithy/format_date_time/014 error case, sub-millisecond
+format/date-time	-65314893434:0	error:OutOfRange	smithy/format_date_time/015 error case
+format/date-time	-65312124981:1	error:OutOfRange	smithy/format_date_time/016 error case, sub-millisecond
+format/date-time	-65309442928:10	error:OutOfRange	smithy/format_date_time/017 error case, sub-millisecond
+format/date-time	-65306674475:100	error:OutOfRange	smithy/format_date_time/018 error case, sub-millisecond
+format/date-time	-65303906022:1000	error:OutOfRange	smithy/format_date_time/019 error case, sub-millisecond
+format/date-time	-65301223969:10000	error:OutOfRange	smithy/format_date_time/020 error case, sub-millisecond
+format/date-time	-65298455516:100000	error:OutOfRange	smithy/format_date_time/021 error case, sub-millisecond
+format/date-time	-65295773403:1000000	error:OutOfRange	smithy/format_date_time/022 error case
+format/date-time	-65293004950:10000000	error:OutOfRange	smithy/format_date_time/023 error case
+format/date-time	-62197634897:100000000	error:OutOfRange	smithy/format_date_time/024 error case
+format/date-time	-62194693644:123456789	error:OutOfRange	smithy/format_date_time/025 error case, sub-millisecond
+format/date-time	-62192443591:0	error:OutOfRange	smithy/format_date_time/026 error case
+format/date-time	-62189761538:1	error:OutOfRange	smithy/format_date_time/027 error case, sub-millisecond
+format/date-time	-62186993085:10	error:OutOfRange	smithy/format_date_time/028 error case, sub-millisecond
+format/date-time	-62184311032:100	error:OutOfRange	smithy/format_date_time/029 error case, sub-millisecond
+format/date-time	-62181542579:1000	error:OutOfRange	smithy/format_date_time/030 error case, sub-millisecond
+format/date-time	-62178774066:10000	error:OutOfRange	smithy/format_date_time/031 error case, sub-millisecond
+format/date-time	-62176092013:100000	error:OutOfRange	smithy/format_date_time/032 error case, sub-millisecond
+format/date-time	-62173323560:1000000	error:OutOfRange	smithy/format_date_time/033 error case
+format/date-time	-62170641507:10000000	error:OutOfRange	smithy/format_date_time/034 error case
+format/date-time	-62167873054:100000000	error:OutOfRange	smithy/format_date_time/035 error case
+format/date-time	-62133482201:123456789	text:0001-01-25T11:23:19.123Z	smithy/format_date_time/036 sub-millisecond
+format/date-time	-62132873748:0	text:0001-02-01T12:24:12.000Z	smithy/format_date_time/037
+format/date-time	-62128204495:1	text:0001-03-27T13:25:05.000Z	smithy/format_date_time/038 sub-millisecond
+format/date-time	-62125522382:10	text:0001-04-27T14:26:58.000Z	smithy/format_date_time/039 sub-millisecond
+format/date-time	-62122753929:100	text:0001-05-29T15:27:51.000Z	smithy/format_date_time/040 sub-millisecond
+format/date-time	-62120071876:1000	text:0001-06-29T16:28:44.000Z	smithy/format_date_time/041 sub-millisecond
+format/date-time	-62117303423:10000	text:0001-07-31T17:29:37.000Z	smithy/format_date_time/042 sub-millisecond
+format/date-time	-62117213370:100000	text:0001-08-01T18:30:30.000Z	smithy/format_date_time/043 sub-millisecond
+format/date-time	-62114444917:1000000	text:0001-09-02T19:31:23.001Z	smithy/format_date_time/044
+format/date-time	-62111762864:10000000	text:0001-10-03T20:32:16.010Z	smithy/format_date_time/045
+format/date-time	-62108994411:100000000	text:0001-11-04T21:33:09.100Z	smithy/format_date_time/046
+format/date-time	-62106312358:123456789	text:0001-12-05T22:34:02.123Z	smithy/format_date_time/047 sub-millisecond
+format/date-time	-59010942245:0	text:0100-01-06T23:35:55.000Z	smithy/format_date_time/048
+format/date-time	-59007741792:1	text:0100-02-13T00:36:48.000Z	smithy/format_date_time/049 sub-millisecond
+format/date-time	-59005750939:10	text:0100-03-08T01:37:41.000Z	smithy/format_date_time/050 sub-millisecond
+format/date-time	-59002982486:100	text:0100-04-09T02:38:34.000Z	smithy/format_date_time/051 sub-millisecond
+format/date-time	-59000300433:1000	text:0100-05-10T03:39:27.000Z	smithy/format_date_time/052 sub-millisecond
+format/date-time	-58997531980:10000	text:0100-06-11T04:40:20.000Z	smithy/format_date_time/053 sub-millisecond
+format/date-time	-58994849927:100000	text:0100-07-12T05:41:13.000Z	smithy/format_date_time/054 sub-millisecond
+format/date-time	-58992081474:1000000	text:0100-08-13T06:42:06.001Z	smithy/format_date_time/055
+format/date-time	-58989312961:10000000	text:0100-09-14T07:43:59.010Z	smithy/format_date_time/056
+format/date-time	-58986630908:100000000	text:0100-10-15T08:44:52.100Z	smithy/format_date_time/057
+format/date-time	-58983862455:123456789	text:0100-11-16T09:45:45.123Z	smithy/format_date_time/058 sub-millisecond
+format/date-time	-58981180402:0	text:0100-12-17T10:46:38.000Z	smithy/format_date_time/059
+format/date-time	-12175833601:999000000	text:1584-02-29T23:59:59.999Z	smithy/format_date_time/060
+format/date-time	-30024749:1	text:1969-01-18T11:47:31.000Z	smithy/format_date_time/061 sub-millisecond
+format/date-time	-26737896:10	text:1969-02-25T12:48:24.000Z	smithy/format_date_time/062 sub-millisecond
+format/date-time	-24747043:100	text:1969-03-20T13:49:17.000Z	smithy/format_date_time/063 sub-millisecond
+format/date-time	-21978590:1000	text:1969-04-21T14:50:10.000Z	smithy/format_date_time/064 sub-millisecond
+format/date-time	-19296537:10000	text:1969-05-22T15:51:03.000Z	smithy/format_date_time/065 sub-millisecond
+format/date-time	-16528024:100000	text:1969-06-23T16:52:56.000Z	smithy/format_date_time/066 sub-millisecond
+format/date-time	-13845971:1000000	text:1969-07-24T17:53:49.001Z	smithy/format_date_time/067
+format/date-time	-11077518:10000000	text:1969-08-25T18:54:42.010Z	smithy/format_date_time/068
+format/date-time	-8309065:100000000	text:1969-09-26T19:55:35.100Z	smithy/format_date_time/069
+format/date-time	-5627012:123456789	text:1969-10-27T20:56:28.123Z	smithy/format_date_time/070 sub-millisecond
+format/date-time	-2858559:0	text:1969-11-28T21:57:21.000Z	smithy/format_date_time/071
+format/date-time	-176506:1	text:1969-12-29T22:58:14.000Z	smithy/format_date_time/072 sub-millisecond
+format/date-time	2591947:10	text:1970-01-30T23:59:07.000Z	smithy/format_date_time/073 sub-millisecond
+format/date-time	3369600:100	text:1970-02-09T00:00:00.000Z	smithy/format_date_time/074 sub-millisecond
+format/date-time	5101313:1000	text:1970-03-01T01:01:53.000Z	smithy/format_date_time/075 sub-millisecond
+format/date-time	7956166:10000	text:1970-04-03T02:02:46.000Z	smithy/format_date_time/076 sub-millisecond
+format/date-time	10551819:100000	text:1970-05-03T03:03:39.000Z	smithy/format_date_time/077 sub-millisecond
+format/date-time	13406672:1000000	text:1970-06-05T04:04:32.001Z	smithy/format_date_time/078
+format/date-time	16002325:10000000	text:1970-07-05T05:05:25.010Z	smithy/format_date_time/079
+format/date-time	18770778:100000000	text:1970-08-06T06:06:18.100Z	smithy/format_date_time/080
+format/date-time	21625631:123456789	text:1970-09-08T07:07:11.123Z	smithy/format_date_time/081 sub-millisecond
+format/date-time	24221284:0	text:1970-10-08T08:08:04.000Z	smithy/format_date_time/082
+format/date-time	27076197:1	text:1970-11-10T09:09:57.000Z	smithy/format_date_time/083 sub-millisecond
+format/date-time	29671850:10	text:1970-12-10T10:10:50.000Z	smithy/format_date_time/084 sub-millisecond
+format/date-time	1078099199:999000000	text:2004-02-29T23:59:59.999Z	smithy/format_date_time/085
+format/date-time	2115285103:100	text:2037-01-11T11:11:43.000Z	smithy/format_date_time/086 sub-millisecond
+format/date-time	2118831156:1000	text:2037-02-21T12:12:36.000Z	smithy/format_date_time/087 sub-millisecond
+format/date-time	2120562809:10000	text:2037-03-13T13:13:29.000Z	smithy/format_date_time/088 sub-millisecond
+format/date-time	2123417662:100000	text:2037-04-15T14:14:22.000Z	smithy/format_date_time/089 sub-millisecond
+format/date-time	2126013315:1000000	text:2037-05-15T15:15:15.001Z	smithy/format_date_time/090
+format/date-time	2128868168:10000000	text:2037-06-17T16:16:08.010Z	smithy/format_date_time/091
+format/date-time	2131463821:100000000	text:2037-07-17T17:17:01.100Z	smithy/format_date_time/092
+format/date-time	2134232334:123456789	text:2037-08-18T18:18:54.123Z	smithy/format_date_time/093 sub-millisecond
+format/date-time	2137087187:0	text:2037-09-20T19:19:47.000Z	smithy/format_date_time/094
+format/date-time	2139682840:1	text:2037-10-20T20:20:40.000Z	smithy/format_date_time/095 sub-millisecond
+format/date-time	2142537693:10	text:2037-11-22T21:21:33.000Z	smithy/format_date_time/096 sub-millisecond
+format/date-time	2145133346:100	text:2037-12-22T22:22:26.000Z	smithy/format_date_time/097 sub-millisecond
+format/date-time	2147901799:1000	text:2038-01-23T23:23:19.000Z	smithy/format_date_time/098 sub-millisecond
+format/date-time	2148942252:10000	text:2038-02-05T00:24:12.000Z	smithy/format_date_time/099 sub-millisecond
+format/date-time	2153093105:100000	text:2038-03-25T01:25:05.000Z	smithy/format_date_time/100 sub-millisecond
+format/date-time	2155948018:1000000	text:2038-04-27T02:26:58.001Z	smithy/format_date_time/101
+format/date-time	2158543671:10000000	text:2038-05-27T03:27:51.010Z	smithy/format_date_time/102
+format/date-time	2161398524:100000000	text:2038-06-29T04:28:44.100Z	smithy/format_date_time/103
+format/date-time	2163994177:123456789	text:2038-07-29T05:29:37.123Z	smithy/format_date_time/104 sub-millisecond
+format/date-time	2166762630:0	text:2038-08-30T06:30:30.000Z	smithy/format_date_time/105
+format/date-time	2167025483:1	text:2038-09-02T07:31:23.000Z	smithy/format_date_time/106 sub-millisecond
+format/date-time	2169534736:10	text:2038-10-01T08:32:16.000Z	smithy/format_date_time/107 sub-millisecond
+format/date-time	2172475989:100	text:2038-11-04T09:33:09.000Z	smithy/format_date_time/108 sub-millisecond
+format/date-time	2174985242:1000	text:2038-12-03T10:34:02.000Z	smithy/format_date_time/109 sub-millisecond
+format/date-time	253371065755:10000	text:9999-01-04T11:35:55.000Z	smithy/format_date_time/110 sub-millisecond
+format/date-time	253374871008:100000	text:9999-02-17T12:36:48.000Z	smithy/format_date_time/111 sub-millisecond
+format/date-time	253376343461:1000000	text:9999-03-06T13:37:41.001Z	smithy/format_date_time/112
+format/date-time	253379284714:10000000	text:9999-04-09T14:38:34.010Z	smithy/format_date_time/113
+format/date-time	253381793967:100000000	text:9999-05-08T15:39:27.100Z	smithy/format_date_time/114
+format/date-time	253384735220:123456789	text:9999-06-11T16:40:20.123Z	smithy/format_date_time/115 sub-millisecond
+format/date-time	253387244473:0	text:9999-07-10T17:41:13.000Z	smithy/format_date_time/116
+format/date-time	253390012926:1	text:9999-08-11T18:42:06.000Z	smithy/format_date_time/117 sub-millisecond
+format/date-time	253392954239:10	text:9999-09-14T19:43:59.000Z	smithy/format_date_time/118 sub-millisecond
+format/date-time	253395463492:100	text:9999-10-13T20:44:52.000Z	smithy/format_date_time/119 sub-millisecond
+format/date-time	253398404745:1000	text:9999-11-16T21:45:45.000Z	smithy/format_date_time/120 sub-millisecond
+format/date-time	253400913998:10000	text:9999-12-15T22:46:38.000Z	smithy/format_date_time/121 sub-millisecond
+parse/epoch-seconds	-377703389549.00001	instant:-377703389549:10000	smithy/parse_epoch_seconds/000
+parse/epoch-seconds	-377700707496.0001	instant:-377700707496:100000	smithy/parse_epoch_seconds/001
+parse/epoch-seconds	-377698198243.000234	instant:-377698198243:234000	smithy/parse_epoch_seconds/002
+parse/epoch-seconds	-377695602590	instant:-377695602590:0	smithy/parse_epoch_seconds/003
+parse/epoch-seconds	-377692747737.000001	instant:-377692747737:1000	smithy/parse_epoch_seconds/004
+parse/epoch-seconds	-377690152024.00001	instant:-377690152024:10000	smithy/parse_epoch_seconds/005
+parse/epoch-seconds	-377687297171.0001	instant:-377687297171:100000	smithy/parse_epoch_seconds/006
+parse/epoch-seconds	-377684528718.000234	instant:-377684528718:234000	smithy/parse_epoch_seconds/007
+parse/epoch-seconds	-377681933065	instant:-377681933065:0	smithy/parse_epoch_seconds/008
+parse/epoch-seconds	-377679078212.000001	instant:-377679078212:1000	smithy/parse_epoch_seconds/009
+parse/epoch-seconds	-377676482559.00001	instant:-377676482559:10000	smithy/parse_epoch_seconds/010
+parse/epoch-seconds	-377673627706.0001	instant:-377673627706:100000	smithy/parse_epoch_seconds/011
+parse/epoch-seconds	-65322849653.000234	instant:-65322849653:234000	smithy/parse_epoch_seconds/012
+parse/epoch-seconds	-65319825600	instant:-65319825600:0	smithy/parse_epoch_seconds/013
+parse/epoch-seconds	-65317575487.000001	instant:-65317575487:1000	smithy/parse_epoch_seconds/014
+parse/epoch-seconds	-65314893434.00001	instant:-65314893434:10000	smithy/parse_epoch_seconds/015
+parse/epoch-seconds	-65312124981.0001	instant:-65312124981:100000	smithy/parse_epoch_seconds/016
+parse/epoch-seconds	-65309442928.000234	instant:-65309442928:234000	smithy/parse_epoch_seconds/017
+parse/epoch-seconds	-65306674475	instant:-65306674475:0	smithy/parse_epoch_seconds/018
+parse/epoch-seconds	-65303906022.000001	instant:-65303906022:1000	smithy/parse_epoch_seconds/019
+parse/epoch-seconds	-65301223969.00001	instant:-65301223969:10000	smithy/parse_epoch_seconds/020
+parse/epoch-seconds	-65298455516.0001	instant:-65298455516:100000	smithy/parse_epoch_seconds/021
+parse/epoch-seconds	-65295773403.000234	instant:-65295773403:234000	smithy/parse_epoch_seconds/022
+parse/epoch-seconds	-65293004950	instant:-65293004950:0	smithy/parse_epoch_seconds/023
+parse/epoch-seconds	-62197634897.000001	instant:-62197634897:1000	smithy/parse_epoch_seconds/024
+parse/epoch-seconds	-62194693644.00001	instant:-62194693644:10000	smithy/parse_epoch_seconds/025
+parse/epoch-seconds	-62192443591.0001	instant:-62192443591:100000	smithy/parse_epoch_seconds/026
+parse/epoch-seconds	-62189761538.000234	instant:-62189761538:234000	smithy/parse_epoch_seconds/027
+parse/epoch-seconds	-62186993085	instant:-62186993085:0	smithy/parse_epoch_seconds/028
+parse/epoch-seconds	-62184311032.000001	instant:-62184311032:1000	smithy/parse_epoch_seconds/029
+parse/epoch-seconds	-62181542579.00001	instant:-62181542579:10000	smithy/parse_epoch_seconds/030
+parse/epoch-seconds	-62178774066.0001	instant:-62178774066:100000	smithy/parse_epoch_seconds/031
+parse/epoch-seconds	-62176092013.000234	instant:-62176092013:234000	smithy/parse_epoch_seconds/032
+parse/epoch-seconds	-62173323560	instant:-62173323560:0	smithy/parse_epoch_seconds/033
+parse/epoch-seconds	-62170641507.000001	instant:-62170641507:1000	smithy/parse_epoch_seconds/034
+parse/epoch-seconds	-62167873054.00001	instant:-62167873054:10000	smithy/parse_epoch_seconds/035
+parse/epoch-seconds	-62133482201.0001	instant:-62133482201:100000	smithy/parse_epoch_seconds/036
+parse/epoch-seconds	-62132873748.000234	instant:-62132873748:234000	smithy/parse_epoch_seconds/037
+parse/epoch-seconds	-62128204495	instant:-62128204495:0	smithy/parse_epoch_seconds/038
+parse/epoch-seconds	-62125522382.000001	instant:-62125522382:1000	smithy/parse_epoch_seconds/039
+parse/epoch-seconds	-62122753929.00001	instant:-62122753929:10000	smithy/parse_epoch_seconds/040
+parse/epoch-seconds	-62120071876.0001	instant:-62120071876:100000	smithy/parse_epoch_seconds/041
+parse/epoch-seconds	-62117303423.000234	instant:-62117303423:234000	smithy/parse_epoch_seconds/042
+parse/epoch-seconds	-62117213370	instant:-62117213370:0	smithy/parse_epoch_seconds/043
+parse/epoch-seconds	-62114444917.000001	instant:-62114444917:1000	smithy/parse_epoch_seconds/044
+parse/epoch-seconds	-62111762864.00001	instant:-62111762864:10000	smithy/parse_epoch_seconds/045
+parse/epoch-seconds	-62108994411.0001	instant:-62108994411:100000	smithy/parse_epoch_seconds/046
+parse/epoch-seconds	-62106312358.000234	instant:-62106312358:234000	smithy/parse_epoch_seconds/047
+parse/epoch-seconds	-59010942245	instant:-59010942245:0	smithy/parse_epoch_seconds/048
+parse/epoch-seconds	-59007741792.000001	instant:-59007741792:1000	smithy/parse_epoch_seconds/049
+parse/epoch-seconds	-59005750939.00001	instant:-59005750939:10000	smithy/parse_epoch_seconds/050
+parse/epoch-seconds	-59002982486.0001	instant:-59002982486:100000	smithy/parse_epoch_seconds/051
+parse/epoch-seconds	-59000300433.000234	instant:-59000300433:234000	smithy/parse_epoch_seconds/052
+parse/epoch-seconds	-58997531980	instant:-58997531980:0	smithy/parse_epoch_seconds/053
+parse/epoch-seconds	-58994849927.000001	instant:-58994849927:1000	smithy/parse_epoch_seconds/054
+parse/epoch-seconds	-58992081474.00001	instant:-58992081474:10000	smithy/parse_epoch_seconds/055
+parse/epoch-seconds	-58989312961.0001	instant:-58989312961:100000	smithy/parse_epoch_seconds/056
+parse/epoch-seconds	-58986630908.000234	instant:-58986630908:234000	smithy/parse_epoch_seconds/057
+parse/epoch-seconds	-58983862455	instant:-58983862455:0	smithy/parse_epoch_seconds/058
+parse/epoch-seconds	-58981180402.000001	instant:-58981180402:1000	smithy/parse_epoch_seconds/059
+parse/epoch-seconds	-12175833601.999	instant:-12175833601:999000000	smithy/parse_epoch_seconds/060
+parse/epoch-seconds	-30024749.00001	instant:-30024749:10000	smithy/parse_epoch_seconds/061
+parse/epoch-seconds	-26737896.0001	instant:-26737896:100000	smithy/parse_epoch_seconds/062
+parse/epoch-seconds	-24747043.000234	instant:-24747043:234000	smithy/parse_epoch_seconds/063
+parse/epoch-seconds	-21978590	instant:-21978590:0	smithy/parse_epoch_seconds/064
+parse/epoch-seconds	-19296537.000001	instant:-19296537:1000	smithy/parse_epoch_seconds/065
+parse/epoch-seconds	-16528024.00001	instant:-16528024:10000	smithy/parse_epoch_seconds/066
+parse/epoch-seconds	-13845971.0001	instant:-13845971:100000	smithy/parse_epoch_seconds/067
+parse/epoch-seconds	-11077518.000234	instant:-11077518:234000	smithy/parse_epoch_seconds/068
+parse/epoch-seconds	-8309065	instant:-8309065:0	smithy/parse_epoch_seconds/069
+parse/epoch-seconds	-5627012.000001	instant:-5627012:1000	smithy/parse_epoch_seconds/070
+parse/epoch-seconds	-2858559.00001	instant:-2858559:10000	smithy/parse_epoch_seconds/071
+parse/epoch-seconds	-176506.0001	instant:-176506:100000	smithy/parse_epoch_seconds/072
+parse/epoch-seconds	2591947.000234	instant:2591947:234000	smithy/parse_epoch_seconds/073
+parse/epoch-seconds	3369600	instant:3369600:0	smithy/parse_epoch_seconds/074
+parse/epoch-seconds	5101313.000001	instant:5101313:1000	smithy/parse_epoch_seconds/075
+parse/epoch-seconds	7956166.00001	instant:7956166:10000	smithy/parse_epoch_seconds/076
+parse/epoch-seconds	10551819.0001	instant:10551819:100000	smithy/parse_epoch_seconds/077
+parse/epoch-seconds	13406672.000234	instant:13406672:234000	smithy/parse_epoch_seconds/078
+parse/epoch-seconds	16002325	instant:16002325:0	smithy/parse_epoch_seconds/079
+parse/epoch-seconds	18770778.000001	instant:18770778:1000	smithy/parse_epoch_seconds/080
+parse/epoch-seconds	21625631.00001	instant:21625631:10000	smithy/parse_epoch_seconds/081
+parse/epoch-seconds	24221284.0001	instant:24221284:100000	smithy/parse_epoch_seconds/082
+parse/epoch-seconds	27076197.000234	instant:27076197:234000	smithy/parse_epoch_seconds/083
+parse/epoch-seconds	29671850	instant:29671850:0	smithy/parse_epoch_seconds/084
+parse/epoch-seconds	1078099199.999	instant:1078099199:999000000	smithy/parse_epoch_seconds/085
+parse/epoch-seconds	2115285103.000001	instant:2115285103:1000	smithy/parse_epoch_seconds/086
+parse/epoch-seconds	2118831156.00001	instant:2118831156:10000	smithy/parse_epoch_seconds/087
+parse/epoch-seconds	2120562809.0001	instant:2120562809:100000	smithy/parse_epoch_seconds/088
+parse/epoch-seconds	2123417662.000234	instant:2123417662:234000	smithy/parse_epoch_seconds/089
+parse/epoch-seconds	2126013315	instant:2126013315:0	smithy/parse_epoch_seconds/090
+parse/epoch-seconds	2128868168.000001	instant:2128868168:1000	smithy/parse_epoch_seconds/091
+parse/epoch-seconds	2131463821.00001	instant:2131463821:10000	smithy/parse_epoch_seconds/092
+parse/epoch-seconds	2134232334.0001	instant:2134232334:100000	smithy/parse_epoch_seconds/093
+parse/epoch-seconds	2137087187.000234	instant:2137087187:234000	smithy/parse_epoch_seconds/094
+parse/epoch-seconds	2139682840	instant:2139682840:0	smithy/parse_epoch_seconds/095
+parse/epoch-seconds	2142537693.000001	instant:2142537693:1000	smithy/parse_epoch_seconds/096
+parse/epoch-seconds	2145133346.00001	instant:2145133346:10000	smithy/parse_epoch_seconds/097
+parse/epoch-seconds	2147901799.0001	instant:2147901799:100000	smithy/parse_epoch_seconds/098
+parse/epoch-seconds	2148942252.000234	instant:2148942252:234000	smithy/parse_epoch_seconds/099
+parse/epoch-seconds	2153093105	instant:2153093105:0	smithy/parse_epoch_seconds/100
+parse/epoch-seconds	2155948018.000001	instant:2155948018:1000	smithy/parse_epoch_seconds/101
+parse/epoch-seconds	2158543671.00001	instant:2158543671:10000	smithy/parse_epoch_seconds/102
+parse/epoch-seconds	2161398524.0001	instant:2161398524:100000	smithy/parse_epoch_seconds/103
+parse/epoch-seconds	2163994177.000234	instant:2163994177:234000	smithy/parse_epoch_seconds/104
+parse/epoch-seconds	2166762630	instant:2166762630:0	smithy/parse_epoch_seconds/105
+parse/epoch-seconds	2167025483.000001	instant:2167025483:1000	smithy/parse_epoch_seconds/106
+parse/epoch-seconds	2169534736.00001	instant:2169534736:10000	smithy/parse_epoch_seconds/107
+parse/epoch-seconds	2172475989.0001	instant:2172475989:100000	smithy/parse_epoch_seconds/108
+parse/epoch-seconds	2174985242.000234	instant:2174985242:234000	smithy/parse_epoch_seconds/109
+parse/epoch-seconds	253371065755	instant:253371065755:0	smithy/parse_epoch_seconds/110
+parse/epoch-seconds	253374871008.000001	instant:253374871008:1000	smithy/parse_epoch_seconds/111
+parse/epoch-seconds	253376343461.00001	instant:253376343461:10000	smithy/parse_epoch_seconds/112
+parse/epoch-seconds	253379284714.0001	instant:253379284714:100000	smithy/parse_epoch_seconds/113
+parse/epoch-seconds	253381793967.000234	instant:253381793967:234000	smithy/parse_epoch_seconds/114
+parse/epoch-seconds	253384735220	instant:253384735220:0	smithy/parse_epoch_seconds/115
+parse/epoch-seconds	253387244473.000001	instant:253387244473:1000	smithy/parse_epoch_seconds/116
+parse/epoch-seconds	253390012926.00001	instant:253390012926:10000	smithy/parse_epoch_seconds/117
+parse/epoch-seconds	253392954239.0001	instant:253392954239:100000	smithy/parse_epoch_seconds/118
+parse/epoch-seconds	253395463492.000234	instant:253395463492:234000	smithy/parse_epoch_seconds/119
+parse/epoch-seconds	253398404745	instant:253398404745:0	smithy/parse_epoch_seconds/120
+parse/epoch-seconds	253400913998.000001	instant:253400913998:1000	smithy/parse_epoch_seconds/121
+parse/http-date	Thu, 25 Jan 0001 11:23:19.1 GMT	error:InvalidFormat	smithy/parse_http_date/000
+parse/http-date	Thu, 01 Feb 0001 12:24:12.234 GMT	error:InvalidFormat	smithy/parse_http_date/001
+parse/http-date	Tue, 27 Mar 0001 13:25:05 GMT	instant:-62128204495:0	smithy/parse_http_date/002
+parse/http-date	Fri, 27 Apr 0001 14:26:58.001 GMT	error:InvalidFormat	smithy/parse_http_date/003
+parse/http-date	Tue, 29 May 0001 15:27:51.01 GMT	error:InvalidFormat	smithy/parse_http_date/004
+parse/http-date	Fri, 29 Jun 0001 16:28:44.1 GMT	error:InvalidFormat	smithy/parse_http_date/005
+parse/http-date	Tue, 31 Jul 0001 17:29:37.234 GMT	error:InvalidFormat	smithy/parse_http_date/006
+parse/http-date	Wed, 01 Aug 0001 18:30:30 GMT	instant:-62117213370:0	smithy/parse_http_date/007
+parse/http-date	Sun, 02 Sep 0001 19:31:23.001 GMT	error:InvalidFormat	smithy/parse_http_date/008
+parse/http-date	Wed, 03 Oct 0001 20:32:16.01 GMT	error:InvalidFormat	smithy/parse_http_date/009
+parse/http-date	Sun, 04 Nov 0001 21:33:09.1 GMT	error:InvalidFormat	smithy/parse_http_date/010
+parse/http-date	Wed, 05 Dec 0001 22:34:02.234 GMT	error:InvalidFormat	smithy/parse_http_date/011
+parse/http-date	Wed, 06 Jan 0100 23:35:55 GMT	instant:-59010942245:0	smithy/parse_http_date/012
+parse/http-date	Sat, 13 Feb 0100 00:36:48.001 GMT	error:InvalidFormat	smithy/parse_http_date/013
+parse/http-date	Mon, 08 Mar 0100 01:37:41.01 GMT	error:InvalidFormat	smithy/parse_http_date/014
+parse/http-date	Fri, 09 Apr 0100 02:38:34.1 GMT	error:InvalidFormat	smithy/parse_http_date/015
+parse/http-date	Mon, 10 May 0100 03:39:27.234 GMT	error:InvalidFormat	smithy/parse_http_date/016
+parse/http-date	Fri, 11 Jun 0100 04:40:20 GMT	instant:-58997531980:0	smithy/parse_http_date/017
+parse/http-date	Mon, 12 Jul 0100 05:41:13.001 GMT	error:InvalidFormat	smithy/parse_http_date/018
+parse/http-date	Fri, 13 Aug 0100 06:42:06.01 GMT	error:InvalidFormat	smithy/parse_http_date/019
+parse/http-date	Tue, 14 Sep 0100 07:43:59.1 GMT	error:InvalidFormat	smithy/parse_http_date/020
+parse/http-date	Fri, 15 Oct 0100 08:44:52.234 GMT	error:InvalidFormat	smithy/parse_http_date/021
+parse/http-date	Tue, 16 Nov 0100 09:45:45 GMT	instant:-58983862455:0	smithy/parse_http_date/022
+parse/http-date	Fri, 17 Dec 0100 10:46:38.001 GMT	error:InvalidFormat	smithy/parse_http_date/023
+parse/http-date	Wed, 29 Feb 1584 23:59:59.999 GMT	error:InvalidFormat	smithy/parse_http_date/024
+parse/http-date	Sat, 18 Jan 1969 11:47:31.01 GMT	error:InvalidFormat	smithy/parse_http_date/025
+parse/http-date	Tue, 25 Feb 1969 12:48:24.1 GMT	error:InvalidFormat	smithy/parse_http_date/026
+parse/http-date	Thu, 20 Mar 1969 13:49:17.234 GMT	error:InvalidFormat	smithy/parse_http_date/027
+parse/http-date	Mon, 21 Apr 1969 14:50:10 GMT	instant:-21978590:0	smithy/parse_http_date/028
+parse/http-date	Thu, 22 May 1969 15:51:03.001 GMT	error:InvalidFormat	smithy/parse_http_date/029
+parse/http-date	Mon, 23 Jun 1969 16:52:56.01 GMT	error:InvalidFormat	smithy/parse_http_date/030
+parse/http-date	Thu, 24 Jul 1969 17:53:49.1 GMT	error:InvalidFormat	smithy/parse_http_date/031
+parse/http-date	Mon, 25 Aug 1969 18:54:42.234 GMT	error:InvalidFormat	smithy/parse_http_date/032
+parse/http-date	Fri, 26 Sep 1969 19:55:35 GMT	instant:-8309065:0	smithy/parse_http_date/033
+parse/http-date	Mon, 27 Oct 1969 20:56:28.001 GMT	error:InvalidFormat	smithy/parse_http_date/034
+parse/http-date	Fri, 28 Nov 1969 21:57:21.01 GMT	error:InvalidFormat	smithy/parse_http_date/035
+parse/http-date	Mon, 29 Dec 1969 22:58:14.1 GMT	error:InvalidFormat	smithy/parse_http_date/036
+parse/http-date	Fri, 30 Jan 1970 23:59:07.234 GMT	error:InvalidFormat	smithy/parse_http_date/037
+parse/http-date	Mon, 09 Feb 1970 00:00:00 GMT	instant:3369600:0	smithy/parse_http_date/038
+parse/http-date	Sun, 01 Mar 1970 01:01:53.001 GMT	error:InvalidFormat	smithy/parse_http_date/039
+parse/http-date	Fri, 03 Apr 1970 02:02:46.01 GMT	error:InvalidFormat	smithy/parse_http_date/040
+parse/http-date	Sun, 03 May 1970 03:03:39.1 GMT	error:InvalidFormat	smithy/parse_http_date/041
+parse/http-date	Fri, 05 Jun 1970 04:04:32.234 GMT	error:InvalidFormat	smithy/parse_http_date/042
+parse/http-date	Sun, 05 Jul 1970 05:05:25 GMT	instant:16002325:0	smithy/parse_http_date/043
+parse/http-date	Thu, 06 Aug 1970 06:06:18.001 GMT	error:InvalidFormat	smithy/parse_http_date/044
+parse/http-date	Tue, 08 Sep 1970 07:07:11.01 GMT	error:InvalidFormat	smithy/parse_http_date/045
+parse/http-date	Thu, 08 Oct 1970 08:08:04.1 GMT	error:InvalidFormat	smithy/parse_http_date/046
+parse/http-date	Tue, 10 Nov 1970 09:09:57.234 GMT	error:InvalidFormat	smithy/parse_http_date/047
+parse/http-date	Thu, 10 Dec 1970 10:10:50 GMT	instant:29671850:0	smithy/parse_http_date/048
+parse/http-date	Sun, 29 Feb 2004 23:59:59.999 GMT	error:InvalidFormat	smithy/parse_http_date/049
+parse/http-date	Sun, 11 Jan 2037 11:11:43.001 GMT	error:InvalidFormat	smithy/parse_http_date/050
+parse/http-date	Sat, 21 Feb 2037 12:12:36.01 GMT	error:InvalidFormat	smithy/parse_http_date/051
+parse/http-date	Fri, 13 Mar 2037 13:13:29.1 GMT	error:InvalidFormat	smithy/parse_http_date/052
+parse/http-date	Wed, 15 Apr 2037 14:14:22.234 GMT	error:InvalidFormat	smithy/parse_http_date/053
+parse/http-date	Fri, 15 May 2037 15:15:15 GMT	instant:2126013315:0	smithy/parse_http_date/054
+parse/http-date	Wed, 17 Jun 2037 16:16:08.001 GMT	error:InvalidFormat	smithy/parse_http_date/055
+parse/http-date	Fri, 17 Jul 2037 17:17:01.01 GMT	error:InvalidFormat	smithy/parse_http_date/056
+parse/http-date	Tue, 18 Aug 2037 18:18:54.1 GMT	error:InvalidFormat	smithy/parse_http_date/057
+parse/http-date	Sun, 20 Sep 2037 19:19:47.234 GMT	error:InvalidFormat	smithy/parse_http_date/058
+parse/http-date	Tue, 20 Oct 2037 20:20:40 GMT	instant:2139682840:0	smithy/parse_http_date/059
+parse/http-date	Sun, 22 Nov 2037 21:21:33.001 GMT	error:InvalidFormat	smithy/parse_http_date/060
+parse/http-date	Tue, 22 Dec 2037 22:22:26.01 GMT	error:InvalidFormat	smithy/parse_http_date/061
+parse/http-date	Sat, 23 Jan 2038 23:23:19.1 GMT	error:InvalidFormat	smithy/parse_http_date/062
+parse/http-date	Fri, 05 Feb 2038 00:24:12.234 GMT	error:InvalidFormat	smithy/parse_http_date/063
+parse/http-date	Thu, 25 Mar 2038 01:25:05 GMT	instant:2153093105:0	smithy/parse_http_date/064
+parse/http-date	Tue, 27 Apr 2038 02:26:58.001 GMT	error:InvalidFormat	smithy/parse_http_date/065
+parse/http-date	Thu, 27 May 2038 03:27:51.01 GMT	error:InvalidFormat	smithy/parse_http_date/066
+parse/http-date	Tue, 29 Jun 2038 04:28:44.1 GMT	error:InvalidFormat	smithy/parse_http_date/067
+parse/http-date	Thu, 29 Jul 2038 05:29:37.234 GMT	error:InvalidFormat	smithy/parse_http_date/068
+parse/http-date	Mon, 30 Aug 2038 06:30:30 GMT	instant:2166762630:0	smithy/parse_http_date/069
+parse/http-date	Thu, 02 Sep 2038 07:31:23.001 GMT	error:InvalidFormat	smithy/parse_http_date/070
+parse/http-date	Fri, 01 Oct 2038 08:32:16.01 GMT	error:InvalidFormat	smithy/parse_http_date/071
+parse/http-date	Thu, 04 Nov 2038 09:33:09.1 GMT	error:InvalidFormat	smithy/parse_http_date/072
+parse/http-date	Fri, 03 Dec 2038 10:34:02.234 GMT	error:InvalidFormat	smithy/parse_http_date/073
+parse/http-date	Mon, 04 Jan 9999 11:35:55 GMT	instant:253371065755:0	smithy/parse_http_date/074
+parse/http-date	Wed, 17 Feb 9999 12:36:48.001 GMT	error:InvalidFormat	smithy/parse_http_date/075
+parse/http-date	Sat, 06 Mar 9999 13:37:41.01 GMT	error:InvalidFormat	smithy/parse_http_date/076
+parse/http-date	Fri, 09 Apr 9999 14:38:34.1 GMT	error:InvalidFormat	smithy/parse_http_date/077
+parse/http-date	Sat, 08 May 9999 15:39:27.234 GMT	error:InvalidFormat	smithy/parse_http_date/078
+parse/http-date	Fri, 11 Jun 9999 16:40:20 GMT	instant:253384735220:0	smithy/parse_http_date/079
+parse/http-date	Sat, 10 Jul 9999 17:41:13.001 GMT	error:InvalidFormat	smithy/parse_http_date/080
+parse/http-date	Wed, 11 Aug 9999 18:42:06.01 GMT	error:InvalidFormat	smithy/parse_http_date/081
+parse/http-date	Tue, 14 Sep 9999 19:43:59.1 GMT	error:InvalidFormat	smithy/parse_http_date/082
+parse/http-date	Wed, 13 Oct 9999 20:44:52.234 GMT	error:InvalidFormat	smithy/parse_http_date/083
+parse/http-date	Tue, 16 Nov 9999 21:45:45 GMT	instant:253398404745:0	smithy/parse_http_date/084
+parse/http-date	Wed, 15 Dec 9999 22:46:38.001 GMT	error:InvalidFormat	smithy/parse_http_date/085
+parse/date-time	0001-01-25T11:23:19.0001Z	instant:-62133482201:100000	smithy/parse_date_time/000
+parse/date-time	0001-02-01T12:24:12.000234Z	instant:-62132873748:234000	smithy/parse_date_time/001
+parse/date-time	0001-03-27T13:25:05Z	instant:-62128204495:0	smithy/parse_date_time/002
+parse/date-time	0001-04-27T14:26:58.000001Z	instant:-62125522382:1000	smithy/parse_date_time/003
+parse/date-time	0001-05-29T15:27:51.00001Z	instant:-62122753929:10000	smithy/parse_date_time/004
+parse/date-time	0001-06-29T16:28:44.0001Z	instant:-62120071876:100000	smithy/parse_date_time/005
+parse/date-time	0001-07-31T17:29:37.000234Z	instant:-62117303423:234000	smithy/parse_date_time/006
+parse/date-time	0001-08-01T18:30:30Z	instant:-62117213370:0	smithy/parse_date_time/007
+parse/date-time	0001-09-02T19:31:23.000001Z	instant:-62114444917:1000	smithy/parse_date_time/008
+parse/date-time	0001-10-03T20:32:16.00001Z	instant:-62111762864:10000	smithy/parse_date_time/009
+parse/date-time	0001-11-04T21:33:09.0001Z	instant:-62108994411:100000	smithy/parse_date_time/010
+parse/date-time	0001-12-05T22:34:02.000234Z	instant:-62106312358:234000	smithy/parse_date_time/011
+parse/date-time	0100-01-06T23:35:55Z	instant:-59010942245:0	smithy/parse_date_time/012
+parse/date-time	0100-02-13T00:36:48.000001Z	instant:-59007741792:1000	smithy/parse_date_time/013
+parse/date-time	0100-03-08T01:37:41.00001Z	instant:-59005750939:10000	smithy/parse_date_time/014
+parse/date-time	0100-04-09T02:38:34.0001Z	instant:-59002982486:100000	smithy/parse_date_time/015
+parse/date-time	0100-05-10T03:39:27.000234Z	instant:-59000300433:234000	smithy/parse_date_time/016
+parse/date-time	0100-06-11T04:40:20Z	instant:-58997531980:0	smithy/parse_date_time/017
+parse/date-time	0100-07-12T05:41:13.000001Z	instant:-58994849927:1000	smithy/parse_date_time/018
+parse/date-time	0100-08-13T06:42:06.00001Z	instant:-58992081474:10000	smithy/parse_date_time/019
+parse/date-time	0100-09-14T07:43:59.0001Z	instant:-58989312961:100000	smithy/parse_date_time/020
+parse/date-time	0100-10-15T08:44:52.000234Z	instant:-58986630908:234000	smithy/parse_date_time/021
+parse/date-time	0100-11-16T09:45:45Z	instant:-58983862455:0	smithy/parse_date_time/022
+parse/date-time	0100-12-17T10:46:38.000001Z	instant:-58981180402:1000	smithy/parse_date_time/023
+parse/date-time	1584-02-29T23:59:59.999Z	instant:-12175833601:999000000	smithy/parse_date_time/024
+parse/date-time	1969-01-18T11:47:31.00001Z	instant:-30024749:10000	smithy/parse_date_time/025
+parse/date-time	1969-02-25T12:48:24.0001Z	instant:-26737896:100000	smithy/parse_date_time/026
+parse/date-time	1969-03-20T13:49:17.000234Z	instant:-24747043:234000	smithy/parse_date_time/027
+parse/date-time	1969-04-21T14:50:10Z	instant:-21978590:0	smithy/parse_date_time/028
+parse/date-time	1969-05-22T15:51:03.000001Z	instant:-19296537:1000	smithy/parse_date_time/029
+parse/date-time	1969-06-23T16:52:56.00001Z	instant:-16528024:10000	smithy/parse_date_time/030
+parse/date-time	1969-07-24T17:53:49.0001Z	instant:-13845971:100000	smithy/parse_date_time/031
+parse/date-time	1969-08-25T18:54:42.000234Z	instant:-11077518:234000	smithy/parse_date_time/032
+parse/date-time	1969-09-26T19:55:35Z	instant:-8309065:0	smithy/parse_date_time/033
+parse/date-time	1969-10-27T20:56:28.000001Z	instant:-5627012:1000	smithy/parse_date_time/034
+parse/date-time	1969-11-28T21:57:21.00001Z	instant:-2858559:10000	smithy/parse_date_time/035
+parse/date-time	1969-12-29T22:58:14.0001Z	instant:-176506:100000	smithy/parse_date_time/036
+parse/date-time	1970-01-30T23:59:07.000234Z	instant:2591947:234000	smithy/parse_date_time/037
+parse/date-time	1970-02-09T00:00:00Z	instant:3369600:0	smithy/parse_date_time/038
+parse/date-time	1970-03-01T01:01:53.000001Z	instant:5101313:1000	smithy/parse_date_time/039
+parse/date-time	1970-04-03T02:02:46.00001Z	instant:7956166:10000	smithy/parse_date_time/040
+parse/date-time	1970-05-03T03:03:39.0001Z	instant:10551819:100000	smithy/parse_date_time/041
+parse/date-time	1970-06-05T04:04:32.000234Z	instant:13406672:234000	smithy/parse_date_time/042
+parse/date-time	1970-07-05T05:05:25Z	instant:16002325:0	smithy/parse_date_time/043
+parse/date-time	1970-08-06T06:06:18.000001Z	instant:18770778:1000	smithy/parse_date_time/044
+parse/date-time	1970-09-08T07:07:11.00001Z	instant:21625631:10000	smithy/parse_date_time/045
+parse/date-time	1970-10-08T08:08:04.0001Z	instant:24221284:100000	smithy/parse_date_time/046
+parse/date-time	1970-11-10T09:09:57.000234Z	instant:27076197:234000	smithy/parse_date_time/047
+parse/date-time	1970-12-10T10:10:50Z	instant:29671850:0	smithy/parse_date_time/048
+parse/date-time	2004-02-29T23:59:59.999Z	instant:1078099199:999000000	smithy/parse_date_time/049
+parse/date-time	2037-01-11T11:11:43.000001Z	instant:2115285103:1000	smithy/parse_date_time/050
+parse/date-time	2037-02-21T12:12:36.00001Z	instant:2118831156:10000	smithy/parse_date_time/051
+parse/date-time	2037-03-13T13:13:29.0001Z	instant:2120562809:100000	smithy/parse_date_time/052
+parse/date-time	2037-04-15T14:14:22.000234Z	instant:2123417662:234000	smithy/parse_date_time/053
+parse/date-time	2037-05-15T15:15:15Z	instant:2126013315:0	smithy/parse_date_time/054
+parse/date-time	2037-06-17T16:16:08.000001Z	instant:2128868168:1000	smithy/parse_date_time/055
+parse/date-time	2037-07-17T17:17:01.00001Z	instant:2131463821:10000	smithy/parse_date_time/056
+parse/date-time	2037-08-18T18:18:54.0001Z	instant:2134232334:100000	smithy/parse_date_time/057
+parse/date-time	2037-09-20T19:19:47.000234Z	instant:2137087187:234000	smithy/parse_date_time/058
+parse/date-time	2037-10-20T20:20:40Z	instant:2139682840:0	smithy/parse_date_time/059
+parse/date-time	2037-11-22T21:21:33.000001Z	instant:2142537693:1000	smithy/parse_date_time/060
+parse/date-time	2037-12-22T22:22:26.00001Z	instant:2145133346:10000	smithy/parse_date_time/061
+parse/date-time	2038-01-23T23:23:19.0001Z	instant:2147901799:100000	smithy/parse_date_time/062
+parse/date-time	2038-02-05T00:24:12.000234Z	instant:2148942252:234000	smithy/parse_date_time/063
+parse/date-time	2038-03-25T01:25:05Z	instant:2153093105:0	smithy/parse_date_time/064
+parse/date-time	2038-04-27T02:26:58.000001Z	instant:2155948018:1000	smithy/parse_date_time/065
+parse/date-time	2038-05-27T03:27:51.00001Z	instant:2158543671:10000	smithy/parse_date_time/066
+parse/date-time	2038-06-29T04:28:44.0001Z	instant:2161398524:100000	smithy/parse_date_time/067
+parse/date-time	2038-07-29T05:29:37.000234Z	instant:2163994177:234000	smithy/parse_date_time/068
+parse/date-time	2038-08-30T06:30:30Z	instant:2166762630:0	smithy/parse_date_time/069
+parse/date-time	2038-09-02T07:31:23.000001Z	instant:2167025483:1000	smithy/parse_date_time/070
+parse/date-time	2038-10-01T08:32:16.00001Z	instant:2169534736:10000	smithy/parse_date_time/071
+parse/date-time	2038-11-04T09:33:09.0001Z	instant:2172475989:100000	smithy/parse_date_time/072
+parse/date-time	2038-12-03T10:34:02.000234Z	instant:2174985242:234000	smithy/parse_date_time/073
+parse/date-time	9999-01-04T11:35:55Z	instant:253371065755:0	smithy/parse_date_time/074
+parse/date-time	9999-02-17T12:36:48.000001Z	instant:253374871008:1000	smithy/parse_date_time/075
+parse/date-time	9999-03-06T13:37:41.00001Z	instant:253376343461:10000	smithy/parse_date_time/076
+parse/date-time	9999-04-09T14:38:34.0001Z	instant:253379284714:100000	smithy/parse_date_time/077
+parse/date-time	9999-05-08T15:39:27.000234Z	instant:253381793967:234000	smithy/parse_date_time/078
+parse/date-time	9999-06-11T16:40:20Z	instant:253384735220:0	smithy/parse_date_time/079
+parse/date-time	9999-07-10T17:41:13.000001Z	instant:253387244473:1000	smithy/parse_date_time/080
+parse/date-time	9999-08-11T18:42:06.00001Z	instant:253390012926:10000	smithy/parse_date_time/081
+parse/date-time	9999-09-14T19:43:59.0001Z	instant:253392954239:100000	smithy/parse_date_time/082
+parse/date-time	9999-10-13T20:44:52.000234Z	instant:253395463492:234000	smithy/parse_date_time/083
+parse/date-time	9999-11-16T21:45:45Z	instant:253398404745:0	smithy/parse_date_time/084
+parse/date-time	9999-12-15T22:46:38.000001Z	instant:253400913998:1000	smithy/parse_date_time/085
+parse/date-time	1985-04-12T23:20:50Z	instant:482196050:0	design-4.1/canonical RFC 3339 without a fraction
+parse/date-time	1985-04-12T23:20:50.5Z	instant:482196050:500000000	design-4.1/fraction-one-digit one fractional digit
+parse/date-time	1985-04-12T23:20:50.123456789Z	instant:482196050:123456789	design-4.1/fraction-nine-digits nine fractional digits
+parse/date-time	1985-04-12T23:20:50.1234567890Z	instant:482196050:123456789	design-4.1/fraction-ten-digits ten fractional digits
+parse/date-time	1985-04-12T23:20:50.Z	error:InvalidFormat	design-4.1/fraction-empty a decimal point without digits
+parse/date-time	1985-04-12t23:20:50z	instant:482196050:0	design-4.1/lowercase lower-case separator and zone
+parse/date-time	1985-04-12T23:20:50+00:00	instant:482196050:0	design-4.1/offset-utc-colon a zero offset written out
+parse/date-time	1985-04-12T23:20:50+02:00	instant:482188850:0	design-4.1/offset-positive a positive offset
+parse/date-time	1985-04-12T23:20:50-05:30	instant:482215850:0	design-4.1/offset-negative a negative offset with minutes
+parse/date-time	1985-04-12T23:20:50-00:00	instant:482196050:0	design-4.1/offset-negative-zero an unknown zero offset
+parse/date-time	1985-04-12T23:20:50+0200	error:InvalidFormat	design-4.1/offset-without-colon an offset without a colon
+parse/date-time	1985-04-12T23:20:50+02	error:InvalidFormat	design-4.1/offset-hour-only an offset without minutes
+parse/date-time	1985-04-12T23:20:50+24:00	error:InvalidFormat	design-4.1/offset-out-of-range an offset beyond a day
+parse/date-time	1985-04-12T23:20:50+00:60	error:InvalidFormat	design-4.1/offset-minute-out-of-range an offset minute beyond an hour
+parse/date-time	1985-04-12T23:20:50.5+01:00	instant:482192450:500000000	design-4.1/fraction-and-offset a fraction next to an offset
+parse/date-time	1990-12-31T23:59:60Z	instant:662687999:999999999	design-4.1/leap-second a leap second
+parse/date-time	1990-12-31T23:59:60.5Z	instant:662687999:999999999	design-4.1/leap-second-fraction a leap second with a fraction
+parse/date-time	1990-12-31T23:59:60+00:00	instant:662687999:999999999	design-4.1/leap-second-offset a leap second with a zero offset
+parse/date-time	2020-02-29T12:00:00Z	instant:1582977600:0	design-4.1/leap-day a leap day
+parse/date-time	2021-02-29T12:00:00Z	error:InvalidFormat	design-4.1/non-leap-day a leap day in a common year
+parse/date-time	1985-02-30T00:00:00Z	error:InvalidFormat	design-4.1/day-out-of-range day 30 in February
+parse/date-time	1985-13-01T00:00:00Z	error:InvalidFormat	design-4.1/month-out-of-range month 13
+parse/date-time	1985-04-12T24:00:00Z	error:InvalidFormat	design-4.1/hour-out-of-range hour 24
+parse/date-time	1985-04-12T23:60:00Z	error:InvalidFormat	design-4.1/minute-out-of-range minute 60
+parse/date-time	1985-04-12T23:20:61Z	error:InvalidFormat	design-4.1/second-out-of-range second 61
+parse/date-time	1985-04-12	error:InvalidFormat	design-4.1/date-only a date without a time
+parse/date-time	1985-04-12 23:20:50Z	instant:482196050:0	design-4.1/space-separator a space instead of the T separator
+parse/date-time	1985-04-12\t23:20:50Z	instant:482196050:0	design-4.1/tab-separator a tab instead of the T separator
+parse/date-time	1985-04-12T23:20Z	error:InvalidFormat	design-4.1/no-seconds a time without seconds
+parse/date-time	1985-04-12T23:20:50	error:InvalidFormat	design-4.1/no-zone a time without a zone
+parse/date-time	1985-04-12T23:20:50,52Z	error:InvalidFormat	design-4.1/comma-decimal a comma as the decimal separator
+parse/date-time	1985-04-12T23:20:50.52Z[UTC]	error:InvalidFormat	design-4.1/annotation an RFC 9557 annotation
+parse/date-time	0000-01-01T00:00:00Z	instant:-62167219200:0	design-4.1/year-zero year zero
+parse/date-time	-0001-01-01T00:00:00Z	error:InvalidFormat	design-4.1/year-negative a negative four-digit year
+parse/date-time	-009999-01-01T00:00:00Z	error:InvalidFormat	design-4.1/year-negative-extended a negative six-digit year
+parse/date-time	+10000-01-01T00:00:00Z	error:InvalidFormat	design-4.1/year-five-digits a five-digit year
+parse/date-time	9999-12-31T23:59:59Z	instant:253402300799:0	design-4.1/year-max the last second of year 9999
+parse/date-time	-9999-01-01T00:00:00Z	error:InvalidFormat	design-4.1/year-min the first second of year -9999
+parse/date-time	-9999-01-02T01:59:59Z	error:InvalidFormat	design-4.1/range-min the early end of the representable range
+parse/date-time	-9999-01-02T01:59:58Z	error:InvalidFormat	design-4.1/range-min-minus-one one second before the representable range
+parse/date-time	9999-12-30T22:00:00.999999999Z	instant:253402207200:999999999	design-4.1/range-max the late end of the representable range
+parse/date-time	9999-12-30T22:00:01Z	instant:253402207201:0	design-4.1/range-max-plus-one one second past the representable range
+parse/date-time		error:InvalidFormat	design-4.1/empty the empty string
+parse/date-time	1985-04-12T23:20:50Zx	error:InvalidFormat	design-4.1/trailing-junk trailing text
+parse/date-time	 1985-04-12T23:20:50Z	error:InvalidFormat	design-4.1/leading-space a leading space
+parse/date-time	1985-04-12T23:20:50Z\n	error:InvalidFormat	design-4.1/trailing-newline a trailing line feed
+format/date-time	0:0	text:1970-01-01T00:00:00.000Z	design-4.1/format-epoch the Unix epoch
+format/date-time	0:1000000	text:1970-01-01T00:00:00.001Z	design-4.1/format-millisecond one millisecond
+format/date-time	0:999999999	text:1970-01-01T00:00:00.999Z	design-4.1/format-subsecond-truncated the fraction is truncated, not rounded
+format/date-time	0:1	text:1970-01-01T00:00:00.000Z	design-4.1/format-single-nano one nanosecond renders as zero milliseconds
+format/date-time	-1:500000000	text:1969-12-31T23:59:59.500Z	design-4.1/format-before-epoch half a second before the epoch
+format/date-time	-1:999999999	text:1969-12-31T23:59:59.999Z	design-4.1/format-before-epoch-nano one nanosecond before the epoch
+format/date-time	1582977600:0	text:2020-02-29T12:00:00.000Z	design-4.1/format-leap-day a leap day
+format/date-time	-62167219200:0	text:0000-01-01T00:00:00.000Z	design-4.1/format-year-zero year zero carries four digits
+format/date-time	-62198755200:0	error:OutOfRange	design-4.1/format-year-negative a negative year cannot be written
+format/date-time	-62184474000:500000000	error:OutOfRange	design-4.1/format-year-negative-fraction a negative year with a fraction
+format/date-time	-377705023201:0	error:OutOfRange	design-4.1/format-range-min the early end of the range
+format/date-time	253402207200:999999999	text:9999-12-30T22:00:00.999Z	design-4.1/format-range-max the late end of the range
+parse/http-date	Sun, 06 Nov 1994 08:49:37 GMT	instant:784111777:0	design-4.2/imf-fixdate the reference IMF-fixdate
+parse/http-date	Mon, 06 Nov 1994 08:49:37 GMT	instant:784111777:0	design-4.2/weekday-mismatch the weekday does not match the date
+parse/http-date	sun, 06 Nov 1994 08:49:37 GMT	error:InvalidFormat	design-4.2/weekday-lowercase a lower-case weekday
+parse/http-date	Sunday, 06 Nov 1994 08:49:37 GMT	error:InvalidFormat	design-4.2/weekday-full a full weekday name
+parse/http-date	Sun, 06 nov 1994 08:49:37 GMT	error:InvalidFormat	design-4.2/month-lowercase a lower-case month
+parse/http-date	Sun, 06 Nov 1994 08:49:37 gmt	error:InvalidFormat	design-4.2/zone-lowercase a lower-case zone
+parse/http-date	Sun, 06 Nov 1994 08:49:37 GMT+00:00	error:InvalidFormat	design-4.2/zone-offset a zone with an offset
+parse/http-date	Sun, 06 Nov 1994 08:49:37.000 GMT	error:InvalidFormat	design-4.2/fraction a fractional second
+parse/http-date	Sun, 06 Nov 1994 08:49:37	error:InvalidFormat	design-4.2/missing-zone no zone
+parse/http-date	Sunday, 06-Nov-94 08:49:37 GMT	error:InvalidFormat	design-4.2/rfc850 the obsolete RFC 850 form
+parse/http-date	Sun Nov  6 08:49:37 1994	error:InvalidFormat	design-4.2/asctime the obsolete asctime form
+parse/http-date	Sun, 6 Nov 1994 08:49:37 GMT	error:InvalidFormat	design-4.2/single-digit-day a day without the leading zero
+parse/http-date	Sun,  06 Nov 1994 08:49:37 GMT	error:InvalidFormat	design-4.2/double-space two spaces after the comma
+parse/http-date	Sun 06 Nov 1994 08:49:37 GMT	error:InvalidFormat	design-4.2/no-comma no comma after the weekday
+parse/http-date	Sun, 06 Nov 94 08:49:37 GMT	error:InvalidFormat	design-4.2/two-digit-year a two-digit year
+parse/http-date	Sun, 06 Nov 10000 08:49:37 GMT	error:InvalidFormat	design-4.2/five-digit-year a five-digit year
+parse/http-date	Sat, 01 Jan 0000 00:00:00 GMT	instant:-62167219200:0	design-4.2/year-zero year zero
+parse/http-date	Sat, 29 Feb 2020 08:49:37 GMT	instant:1582966177:0	design-4.2/leap-day a leap day
+parse/http-date	Mon, 29 Feb 2021 08:49:37 GMT	error:InvalidFormat	design-4.2/non-leap-day a leap day in a common year
+parse/http-date	Mon, 31 Feb 2020 08:49:37 GMT	error:InvalidFormat	design-4.2/day-out-of-range a day out of range
+parse/http-date	Sun, 06 Nov 1994 24:49:37 GMT	error:InvalidFormat	design-4.2/hour-out-of-range hour 24
+parse/http-date	Sun, 06 Nov 1994 08:49:37\tGMT	error:InvalidFormat	design-4.2/tab-separator a tab instead of the space
+parse/http-date	Sun, 06 Nov 1994 08:49:37 GMT 	error:InvalidFormat	design-4.2/trailing-space a trailing space
+parse/http-date	Sun, 06 Nov 1994 08:49:37 GMT\n	error:InvalidFormat	design-4.2/trailing-newline a trailing line feed
+parse/http-date	 Sun, 06 Nov 1994 08:49:37 GMT	error:InvalidFormat	design-4.2/leading-space a leading space
+parse/http-date		error:InvalidFormat	design-4.2/empty the empty string
+format/http-date	784111777:0	text:Sun, 06 Nov 1994 08:49:37 GMT	design-4.2/format-reference the reference IMF-fixdate
+format/http-date	784111777:999999999	text:Sun, 06 Nov 1994 08:49:37 GMT	design-4.2/format-subsecond-dropped the subsecond is dropped
+format/http-date	-62167219200:0	text:Sat, 01 Jan 0000 00:00:00 GMT	design-4.2/format-year-zero year zero carries four digits
+format/http-date	-62198755200:0	error:OutOfRange	design-4.2/format-year-negative a negative year cannot be written
+format/http-date	253402207200:999999999	text:Thu, 30 Dec 9999 22:00:00 GMT	design-4.2/format-range-max the late end of the range
+format/http-date	1718434800:123000000	text:Sat, 15 Jun 2024 07:00:00 GMT	design-4.2/format-documentation the example of the crate documentation
+parse/epoch-seconds	0	instant:0:0	design-4.3/zero the epoch
+parse/epoch-seconds	-0	instant:0:0	design-4.3/negative-zero a negative zero
+parse/epoch-seconds	+1	instant:1:0	design-4.3/plus-prefix an explicit plus sign
+parse/epoch-seconds	0001.5	instant:1:500000000	design-4.3/leading-zeros leading zeros
+parse/epoch-seconds	100.5	instant:100:500000000	design-4.3/fraction-one-digit one fractional digit
+parse/epoch-seconds	100.123456789	instant:100:123456789	design-4.3/fraction-nine-digits nine fractional digits
+parse/epoch-seconds	1.0	instant:1:0	design-4.3/fraction-zero a zero fraction
+parse/epoch-seconds	100.500	instant:100:500000000	design-4.3/fraction-trailing-zeros trailing zeros in the fraction
+parse/epoch-seconds	100.000000001	instant:100:1	design-4.3/fraction-leading-zeros leading zeros in the fraction
+parse/epoch-seconds	100.1234567890	error:FractionTooLong	design-4.3/fraction-ten-digits ten fractional digits
+parse/epoch-seconds	100.000000000	instant:100:0	design-4.3/fraction-ten-zeros ten fractional digits that are all zero
+parse/epoch-seconds	-1.5	instant:-1:500000000	design-4.3/negative-fraction the fraction of a negative value is positive
+parse/epoch-seconds	-1.999999999	instant:-1:999999999	design-4.3/negative-fraction-nine nine fractional digits below minus one
+parse/epoch-seconds	-0.999999999	instant:0:999999999	design-4.3/negative-small a value between minus one and zero
+parse/epoch-seconds	-1	instant:-1:0	design-4.3/negative-whole a negative whole second
+parse/epoch-seconds	 1	error:InvalidFormat	design-4.3/leading-space a leading space
+parse/epoch-seconds	1 	error:InvalidFormat	design-4.3/trailing-space a trailing space
+parse/epoch-seconds	\t1	error:InvalidFormat	design-4.3/tab-prefix a leading tab
+parse/epoch-seconds		error:InvalidFormat	design-4.3/empty the empty string
+parse/epoch-seconds	.	error:InvalidFormat	design-4.3/dot-only a decimal point without digits
+parse/epoch-seconds	.5	error:InvalidFormat	design-4.3/leading-dot a fraction without an integral part
+parse/epoch-seconds	5.	error:InvalidFormat	design-4.3/trailing-dot a decimal point without a fraction
+parse/epoch-seconds	1.5.5	error:InvalidFormat	design-4.3/two-dots two decimal points
+parse/epoch-seconds	1..5	error:InvalidFormat	design-4.3/double-dot an empty fraction between two points
+parse/epoch-seconds	1e3	error:InvalidFormat	design-4.3/exponent an exponent
+parse/epoch-seconds	1,5	error:InvalidFormat	design-4.3/comma a comma as the decimal separator
+parse/epoch-seconds	abc	error:InvalidFormat	design-4.3/letters letters
+parse/epoch-seconds	9223372036854775807	error:OutOfRange	design-4.3/i64-max the largest signed 64-bit second
+parse/epoch-seconds	9223372036854775808	error:InvalidFormat	design-4.3/i64-max-plus-one one past the largest signed 64-bit second
+parse/epoch-seconds	-9223372036854775808	error:OutOfRange	design-4.3/i64-min the smallest signed 64-bit second
+parse/epoch-seconds	-9223372036854775808.000000001	error:OutOfRange	design-4.3/i64-min-fraction a fraction on the smallest second
+parse/epoch-seconds	253402300800	error:OutOfRange	design-4.3/year-10000 the first second of year 10000
+parse/epoch-seconds	253402300799	instant:253402300799:0	design-4.3/year-9999-end the last second of year 9999
+parse/epoch-seconds	253402300799.999999999	instant:253402300799:999999999	design-4.3/year-9999-end-fraction the last nanosecond of year 9999
+parse/epoch-seconds	-377705116800	instant:-377705116800:0	design-4.3/year-minus-9999-start the first second of year -9999
+parse/epoch-seconds	-377705116800.000000001	instant:-377705116800:1	design-4.3/year-minus-9999-fraction one nanosecond after the first second
+parse/epoch-seconds	-377705116801	error:OutOfRange	design-4.3/year-minus-9999-before one second before year -9999
+parse/epoch-seconds	-377705023201	instant:-377705023201:0	design-4.3/range-min the early end of the representable range
+parse/epoch-seconds	-377705023202	instant:-377705023202:0	design-4.3/range-min-minus-one one second before the representable range
+parse/epoch-seconds	253402207200.999999999	instant:253402207200:999999999	design-4.3/range-max the late end of the representable range
+parse/epoch-seconds	253402207201	instant:253402207201:0	design-4.3/range-max-plus-one one second past the representable range
+format/epoch-seconds	0:0	text:0	design-4.3/format-epoch the epoch has no fraction
+format/epoch-seconds	0:1	text:0.000000001	design-4.3/format-nanosecond the shortest exact decimal of one nanosecond
+format/epoch-seconds	0:100000000	text:0.1	design-4.3/format-tenth one tenth
+format/epoch-seconds	0:10000	text:0.00001	design-4.3/format-hundred-thousandth ten microseconds
+format/epoch-seconds	100:123456789	text:100.123456789	design-4.3/format-nine-digits nine fractional digits
+format/epoch-seconds	100:120000000	text:100.12	design-4.3/format-trailing-zeros trailing zeros are trimmed
+format/epoch-seconds	-1:999999999	text:-1.999999999	design-4.3/format-before-epoch-nano one nanosecond before the epoch
+format/epoch-seconds	-1:500000000	text:-1.5	design-4.3/format-before-epoch-half half a second before the epoch
+format/epoch-seconds	-2:500000000	text:-2.5	design-4.3/format-before-epoch-two one and a half seconds before the epoch
+format/epoch-seconds	-1:0	text:-1	design-4.3/format-negative-whole a negative whole second
+format/epoch-seconds	-377705023201:0	text:-377705023201	design-4.3/format-range-min the early end of the range
+format/epoch-seconds	253402207200:999999999	text:253402207200.999999999	design-4.3/format-range-max the late end of the range
