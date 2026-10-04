@@ -181,7 +181,11 @@ fn extract_host(req: &Request) -> S3Result<Option<String>> {
     let mut iter = req.headers.get_all(crate::header::HOST).iter();
     if let Some(val) = iter.next() {
         if iter.next().is_some() {
-            return Err(invalid_request!("duplicate header: Host"));
+            // AWS answers a repeated Host with 400 `DuplicateHeaderName` and
+            // "Your request contains duplicate headers."; the code lives in
+            // `data/s3_extra_error_codes.json` because the official error table does
+            // not list it.
+            return Err(s3_error!(DuplicateHeaderName));
         }
         let on_err = |e| s3_error!(e, InvalidRequest, "invalid header: Host: {val:?}");
         let host = val.to_str().map_err(on_err)?;
