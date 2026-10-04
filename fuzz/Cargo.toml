@@ -15,6 +15,7 @@ s3s = { path = "../crates/s3s" }
 s3s-chunked = { path = "../crates/s3s-chunked" }
 s3s-multipart = { path = "../crates/s3s-multipart" }
 s3s-sigv4 = { path = "../crates/s3s-sigv4" }
+s3s-time = { path = "../crates/s3s-time" }
 
 [features]
 minio = ["s3s/minio"]
@@ -50,6 +51,13 @@ doc = false
 [[bin]]
 name = "multipart_parser"
 path = "fuzz_targets/multipart_parser.rs"
+test = false
+bench = false
+doc = false
+
+[[bin]]
+name = "timestamp_parsers"
+path = "fuzz_targets/timestamp_parsers.rs"
 test = false
 bench = false
 doc = false
