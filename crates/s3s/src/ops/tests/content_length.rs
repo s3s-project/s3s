@@ -457,9 +457,13 @@ async fn signed_bodyless_operations_reject_non_empty_payload_hash() {
     assert_eq!(test_s3.get_object.load(Ordering::SeqCst), 0);
 }
 
+/// A POST form without a request `Content-Length` is streamed like any other:
+/// the file part is not treated as zero-length, and its length is not claimed
+/// before the body is read.
 #[tokio::test]
-async fn multipart_post_without_content_length_keeps_actual_file_length() {
+async fn multipart_post_without_content_length_streams_the_file() {
     use crate::auth::SecretKey;
+    use futures::StreamExt;
 
     let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
     let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(S3Config {
@@ -488,10 +492,18 @@ async fn multipart_post_without_content_length_keeps_actual_file_length() {
         Prepare::S3(op) => assert_eq!(op.name(), "PostObject"),
         Prepare::CustomRoute => panic!("multipart POST should not dispatch to a custom route"),
     }
-    let stream = req.s3ext.post_object_stream.as_ref().expect("post object stream");
+    let mut stream = req.s3ext.post_object_stream.take().expect("post object stream");
+
+    // The body is not read yet, so no exact length is claimed.
     assert_eq!(
         stream.remaining_length().exact(),
-        Some(5),
-        "the file must be aggregated at its real length, not treated as zero-length"
+        None,
+        "the file length is not known before the body is read"
     );
+
+    let mut data = Vec::new();
+    while let Some(chunk) = stream.next().await {
+        data.extend_from_slice(&chunk.expect("the file is inside the configured range"));
+    }
+    assert_eq!(data, b"hello", "the file arrives, it is not treated as zero-length");
 }

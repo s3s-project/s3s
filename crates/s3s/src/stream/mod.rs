@@ -18,8 +18,6 @@ pub mod upload_stream;
 
 use crate::error::StdError;
 
-use std::collections::VecDeque;
-use std::convert::Infallible;
 use std::fmt;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -164,51 +162,11 @@ where
     }
 }
 
-pub(crate) struct VecByteStream {
-    queue: VecDeque<Bytes>,
-    remaining_bytes: usize,
-}
-
-impl VecByteStream {
-    pub fn new(v: Vec<Bytes>) -> Self {
-        let total = v.iter().map(Bytes::len).fold(0, usize::saturating_add);
-
-        Self {
-            queue: v.into(),
-            remaining_bytes: total,
-        }
-    }
-}
-
-impl Stream for VecByteStream {
-    type Item = Result<Bytes, Infallible>;
-
-    fn poll_next(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let this = Pin::into_inner(self);
-        match this.queue.pop_front() {
-            Some(b) => {
-                this.remaining_bytes -= b.len();
-                Poll::Ready(Some(Ok(b)))
-            }
-            None => Poll::Ready(None),
-        }
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        let cnt = self.queue.len();
-        (cnt, Some(cnt))
-    }
-}
-
-impl ByteStream for VecByteStream {
-    fn remaining_length(&self) -> RemainingLength {
-        RemainingLength::new_exact(self.remaining_bytes)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use std::collections::VecDeque;
 
     use futures::StreamExt;
 
@@ -271,51 +229,6 @@ mod tests {
         let sh = http_body::SizeHint::new();
         let rl: RemainingLength = sh.into();
         assert_eq!(rl.exact(), None);
-    }
-
-    // --- VecByteStream tests ---
-
-    #[tokio::test]
-    async fn vec_byte_stream_empty() {
-        let mut s = VecByteStream::new(vec![]);
-        assert_eq!(s.remaining_length().exact(), Some(0));
-        let (lo, hi) = s.size_hint();
-        assert_eq!(lo, 0);
-        assert_eq!(hi, Some(0));
-        assert!(s.next().await.is_none());
-    }
-
-    #[tokio::test]
-    async fn vec_byte_stream_single_chunk() {
-        let data = Bytes::from_static(b"hello");
-        let mut s = VecByteStream::new(vec![data.clone()]);
-        assert_eq!(s.remaining_length().exact(), Some(5));
-        let item = s.next().await.unwrap().unwrap();
-        assert_eq!(item, data);
-        assert_eq!(s.remaining_length().exact(), Some(0));
-        assert!(s.next().await.is_none());
-    }
-
-    #[tokio::test]
-    async fn vec_byte_stream_multiple_chunks() {
-        let c1 = Bytes::from_static(b"ab");
-        let c2 = Bytes::from_static(b"cde");
-        let mut s = VecByteStream::new(vec![c1.clone(), c2.clone()]);
-        assert_eq!(s.remaining_length().exact(), Some(5));
-
-        let (lo, hi) = s.size_hint();
-        assert_eq!(lo, 2);
-        assert_eq!(hi, Some(2));
-
-        let item1 = s.next().await.unwrap().unwrap();
-        assert_eq!(item1, c1);
-        assert_eq!(s.remaining_length().exact(), Some(3));
-
-        let item2 = s.next().await.unwrap().unwrap();
-        assert_eq!(item2, c2);
-        assert_eq!(s.remaining_length().exact(), Some(0));
-
-        assert!(s.next().await.is_none());
     }
 
     // --- into_dyn / Wrapper tests ---

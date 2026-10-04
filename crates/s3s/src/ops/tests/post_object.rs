@@ -7,6 +7,41 @@
 use super::common::*;
 use super::*;
 
+/// Drains the prepared POST object stream, returning its bytes or the `S3` error
+/// code its failure carries.
+async fn drain_post_object(req: &mut crate::http::Request) -> Result<Vec<u8>, crate::error::S3ErrorCode> {
+    use futures::StreamExt;
+
+    let mut stream = req
+        .s3ext
+        .post_object_stream
+        .take()
+        .expect("post object stream should be present");
+    let mut data = Vec::new();
+    while let Some(chunk) = stream.next().await {
+        match chunk {
+            Ok(bytes) => data.extend_from_slice(&bytes),
+            Err(err) => {
+                let err = err
+                    .downcast_ref::<crate::http::FileStreamError>()
+                    .expect("POST object streams fail with the file stream error");
+                return Err(err.to_s3_error_code());
+            }
+        }
+    }
+    Ok(data)
+}
+
+/// Returns the exact length the prepared POST object stream reports, if it has one.
+fn post_object_exact_length(req: &crate::http::Request) -> Option<usize> {
+    req.s3ext
+        .post_object_stream
+        .as_ref()
+        .expect("post object stream should be present")
+        .remaining_length()
+        .exact()
+}
+
 #[allow(clippy::too_many_lines)]
 #[tokio::test]
 async fn post_multipart_bucket_routes_to_post_object() {
@@ -319,23 +354,17 @@ async fn post_object_file_exceeds_policy_max_but_under_config_max() {
 
     let mut req = post_policy_test_helpers::build_post_object_request(policy_json, &file_content, &secret_key, false);
 
-    // This should fail because file size (150 bytes) exceeds policy limit (100 bytes)
-    // The key security improvement: file is rejected during aggregation (at 100 bytes limit),
-    // not after reading the full 150 bytes (or potentially larger files)
+    // The policy maximum is enforced on the file stream: the file is rejected
+    // as soon as it crosses 100 bytes, not after the whole body is read.
     let result = super::prepare(&mut req, &ccx).await;
-    assert!(result.is_err(), "expected error for file exceeding policy limit");
+    assert!(result.is_ok(), "prepare does not read the file");
 
-    // MultipartError::FileTooLarge is mapped to EntityTooLarge
-    match result {
-        Err(err) => {
-            let code = err.code();
-            assert!(
-                matches!(code, crate::error::S3ErrorCode::EntityTooLarge),
-                "expected EntityTooLarge error, got {code:?}",
-            );
-        }
-        Ok(_) => panic!("expected error for file exceeding policy limit"),
-    }
+    let code = drain_post_object(&mut req).await.unwrap_err();
+    assert_eq!(
+        code,
+        crate::error::S3ErrorCode::EntityTooLarge,
+        "a file over the policy maximum is EntityTooLarge"
+    );
 }
 
 #[tokio::test]
@@ -398,23 +427,59 @@ async fn post_object_content_length_range_rejects_oversized_file() {
     let mut req = post_policy_test_helpers::build_post_object_request(policy_json, file_content, &secret_key, false);
 
     let result = super::prepare(&mut req, &ccx).await;
-    assert!(result.is_err(), "expected error for file exceeding content-length-range");
+    assert!(result.is_ok(), "the range is checked while the file is read");
 
-    let Err(err) = result else {
-        panic!("expected error for file exceeding content-length-range");
-    };
+    let code = drain_post_object(&mut req).await.unwrap_err();
     assert_eq!(
-        *err.code(),
+        code,
         crate::error::S3ErrorCode::EntityTooLarge,
-        "expected EntityTooLarge error, got {:?}",
-        err.code()
+        "a file over the policy range is EntityTooLarge"
     );
 }
 
+/// A policy minimum above the effective maximum describes a range no body can
+/// satisfy. It is a client error, answered before a stream is built: building
+/// one would invert the wrapper's bounds and panic on the request path.
 #[tokio::test]
-async fn post_object_with_content_length_streams_file() {
+async fn post_object_policy_min_above_config_max_is_a_client_error() {
     use crate::auth::SecretKey;
-    use futures::StreamExt;
+    use std::sync::Arc;
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+
+    // The effective maximum is the tighter of the policy's and the configured one.
+    let config = post_policy_test_helpers::create_test_config(1024);
+
+    let auth = post_policy_test_helpers::create_test_auth();
+    let ccx = post_policy_test_helpers::create_test_context(&s3, &config, &auth);
+
+    let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+
+    // Minimum 2048 above the configured maximum 1024: unsatisfiable.
+    let policy_json = &format!(
+        r#"{{"expiration":"2030-01-01T00:00:00.000Z","conditions":[["content-length-range",2048,4096],{}]}}"#,
+        post_policy_test_helpers::BASE_CONDITIONS,
+    );
+    let file_content = "any contents at all";
+
+    let mut req = post_policy_test_helpers::build_post_object_request(policy_json, file_content, &secret_key, false);
+
+    let Err(err) = super::prepare(&mut req, &ccx).await else {
+        panic!("an unsatisfiable content-length-range is a client error");
+    };
+    assert_eq!(
+        err.code(),
+        &crate::error::S3ErrorCode::EntityTooSmall,
+        "the buffered path answered EntityTooSmall for an unsatisfiable range"
+    );
+}
+
+/// The file part is forwarded as a stream whose length is not derived from the
+/// request: how many trailer bytes the body carries is only known once it has
+/// been read, so the stream reports a range rather than an exact length.
+#[tokio::test]
+async fn post_object_with_content_length_streams_an_unknown_length_file() {
+    use crate::auth::SecretKey;
     use std::sync::Arc;
 
     let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
@@ -434,36 +499,21 @@ async fn post_object_with_content_length_streams_file() {
     let result = super::prepare(&mut req, &ccx).await;
     assert!(result.is_ok(), "expected prepare to succeed");
 
-    let mut stream = req
-        .s3ext
-        .post_object_stream
-        .take()
-        .expect("post object stream should be present");
     assert_eq!(
-        stream.remaining_length().exact(),
-        Some(file_content.len()),
-        "the stream must report the exact file length"
+        post_object_exact_length(&req),
+        None,
+        "the file length is not known before the body is read"
     );
 
-    // Partial consumption decrements the reported remaining length.
-    let first = stream.next().await.unwrap().expect("stream should not error");
-    assert_eq!(
-        stream.remaining_length().exact(),
-        Some(file_content.len() - first.len()),
-        "remaining length must track consumption"
-    );
-
-    let mut collected = first.to_vec();
-    while let Some(chunk) = stream.next().await {
-        collected.extend_from_slice(&chunk.expect("stream should not error"));
-    }
-    assert_eq!(collected, file_content.as_bytes());
+    let data = drain_post_object(&mut req)
+        .await
+        .expect("the file is inside the configured range");
+    assert_eq!(data, file_content.as_bytes());
 }
 
 #[tokio::test]
 async fn post_object_empty_file_streams_zero_length() {
     use crate::auth::SecretKey;
-    use futures::StreamExt;
     use std::sync::Arc;
 
     let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
@@ -482,23 +532,13 @@ async fn post_object_empty_file_streams_zero_length() {
     let result = super::prepare(&mut req, &ccx).await;
     assert!(result.is_ok(), "expected prepare to succeed");
 
-    let mut stream = req
-        .s3ext
-        .post_object_stream
-        .take()
-        .expect("post object stream should be present");
-    assert_eq!(stream.remaining_length().exact(), Some(0));
-
-    while let Some(chunk) = stream.next().await {
-        let bytes = chunk.expect("stream should not error");
-        assert!(bytes.is_empty(), "zero-length file must yield no content");
-    }
+    let data = drain_post_object(&mut req).await.expect("an empty file is inside the range");
+    assert!(data.is_empty(), "zero-length file must yield no content");
 }
 
 #[tokio::test]
 async fn post_object_content_with_near_miss_boundary_streams_exactly() {
     use crate::auth::SecretKey;
-    use futures::StreamExt;
     use std::sync::Arc;
 
     let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
@@ -520,24 +560,15 @@ async fn post_object_content_with_near_miss_boundary_streams_exactly() {
     let result = super::prepare(&mut req, &ccx).await;
     assert!(result.is_ok(), "expected prepare to succeed");
 
-    let mut stream = req
-        .s3ext
-        .post_object_stream
-        .take()
-        .expect("post object stream should be present");
-    assert_eq!(stream.remaining_length().exact(), Some(file_content.len()));
-
-    let mut collected = Vec::new();
-    while let Some(chunk) = stream.next().await {
-        collected.extend_from_slice(&chunk.expect("stream should not error"));
-    }
-    assert_eq!(collected, file_content.as_bytes());
+    let data = drain_post_object(&mut req).await.expect("the content is inside the range");
+    assert_eq!(data, file_content.as_bytes());
 }
 
+/// A chunked POST (no request `Content-Length`) is streamed as well: the
+/// expected range is enforced while the bytes arrive.
 #[tokio::test]
-async fn post_object_chunked_aggregates_file() {
+async fn post_object_chunked_form_streams_the_file() {
     use crate::auth::SecretKey;
-    use futures::StreamExt;
     use std::sync::Arc;
 
     let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
@@ -559,18 +590,8 @@ async fn post_object_chunked_aggregates_file() {
         panic!("expected prepare to succeed, got {err:?}");
     }
 
-    let mut stream = req
-        .s3ext
-        .post_object_stream
-        .take()
-        .expect("post object stream should be present");
-    assert_eq!(stream.remaining_length().exact(), Some(file_content.len()),);
-
-    let mut collected = Vec::new();
-    while let Some(chunk) = stream.next().await {
-        collected.extend_from_slice(&chunk.expect("stream should not error"));
-    }
-    assert_eq!(collected, file_content.as_bytes());
+    let data = drain_post_object(&mut req).await.expect("the file is inside the range");
+    assert_eq!(data, file_content.as_bytes());
 }
 
 #[tokio::test]
@@ -595,20 +616,19 @@ async fn post_object_chunked_rejects_oversized_file() {
 
     let mut req = post_policy_test_helpers::build_post_object_request_chunked(policy_json, &file_content, &secret_key, 1024);
 
+    // Nothing reads the body before dispatch: the limit is enforced on the
+    // stream, as soon as the bytes cross it.
     let result = super::prepare(&mut req, &ccx).await;
-    let Err(err) = result else {
-        panic!("expected prepare to fail for an oversized chunked upload");
-    };
-    assert_eq!(
-        *err.code(),
-        crate::error::S3ErrorCode::EntityTooLarge,
-        "expected EntityTooLarge error, got {:?}",
-        err.code()
-    );
+    assert!(result.is_ok(), "prepare does not read the file");
+
+    let code = drain_post_object(&mut req).await.unwrap_err();
+    assert_eq!(code, crate::error::S3ErrorCode::EntityTooLarge, "an oversized file is EntityTooLarge");
 }
 
+/// A body stream that fails is reported while the file stream is read, not by
+/// `prepare`: nothing reads the body before dispatch.
 #[tokio::test]
-async fn post_object_chunked_rejects_broken_body() {
+async fn post_object_chunked_reports_a_broken_body_stream() {
     use crate::auth::SecretKey;
     use std::sync::Arc;
 
@@ -625,8 +645,8 @@ async fn post_object_chunked_rejects_broken_body() {
     );
 
     // Mirror the helper's request construction, but end the body stream with
-    // an error right after the file part headers: aggregation hits a
-    // non-FileTooLarge underlying error.
+    // an error right after the file part headers: reading the file stream hits
+    // the transport error.
     let boundary = "------------------------test12345678";
     let bucket = "test-bucket";
     let key = "test-key";
@@ -651,8 +671,10 @@ async fn post_object_chunked_rejects_broken_body() {
         ],
         boundary,
     );
+    // The fields helper already terminates the last field with CRLF, so the file
+    // part starts with its own delimiter.
     let file_field_header = format!(
-        "\r\n--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"test.txt\"\r\nContent-Type: text/plain\r\n\r\n"
+        "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"test.txt\"\r\nContent-Type: text/plain\r\n\r\n"
     );
 
     let frames: Vec<Result<http_body::Frame<Bytes>, crate::error::StdError>> = vec![
@@ -676,25 +698,25 @@ async fn post_object_chunked_rejects_broken_body() {
     );
 
     let result = super::prepare(&mut req, &ccx).await;
-    let Err(err) = result else {
-        panic!("expected prepare to fail for a broken body stream");
+    let Ok(_prepare) = result else {
+        let err = result.as_ref().err().expect("checked above");
+        panic!("prepare does not read the body, got {err:?}");
     };
-    assert_eq!(
-        *err.code(),
-        crate::error::S3ErrorCode::InvalidRequest,
-        "expected InvalidRequest error, got {:?}",
-        err.code()
-    );
+
+    // A failing body stream is an incomplete body; the *malformed* bodies
+    // (a truncated closing delimiter, another part after the file) are the
+    // client errors, which `FileStreamError::to_s3_error_code` maps to 400.
+    let code = drain_post_object(&mut req).await.unwrap_err();
+    assert_eq!(code, crate::error::S3ErrorCode::IncompleteBody, "a failing body stream is incomplete");
 }
 
 /// The closing delimiter may be followed directly by the end of the body: how
 /// many trailer bytes the request carries is only known once the body has been
-/// read, so the file part is aggregated and its length is the length of the data
-/// that was actually there.
+/// read, so the file part is streamed and its length is the length of the data
+/// the stream delivers.
 #[tokio::test]
 async fn post_object_with_content_length_accepts_a_missing_final_crlf() {
     use crate::auth::SecretKey;
-    use futures::StreamExt;
     use std::sync::Arc;
 
     let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
@@ -723,23 +745,15 @@ async fn post_object_with_content_length_accepts_a_missing_final_crlf() {
     let result = super::prepare(&mut req, &ccx).await;
     assert!(result.is_ok(), "dispatch is not affected");
 
-    let mut stream = req
-        .s3ext
-        .post_object_stream
-        .take()
-        .expect("post object stream should be present");
-    assert_eq!(stream.remaining_length().exact(), Some("content".len()));
-
-    let mut collected = Vec::new();
-    while let Some(chunk) = stream.next().await {
-        collected.extend_from_slice(&chunk.expect("the aggregated file must not error"));
-    }
-    assert_eq!(collected, b"content");
+    let data = drain_post_object(&mut req)
+        .await
+        .expect("the body is inside the configured range");
+    assert_eq!(data, b"content");
 }
 
-/// The size limit is enforced while the file part is aggregated, so a file over
-/// the configured maximum is still rejected before dispatch, with the code
-/// clients expect for an oversized upload.
+/// The size limit is enforced while the file part is streamed, so a file over
+/// the configured maximum is still rejected with the code clients expect for an
+/// oversized upload — as soon as it crosses the limit, without buffering it.
 #[tokio::test]
 async fn post_object_with_content_length_rejects_an_oversized_file() {
     use crate::auth::SecretKey;
@@ -761,15 +775,14 @@ async fn post_object_with_content_length_rejects_an_oversized_file() {
     let mut req = post_policy_test_helpers::build_post_object_request(policy_json, &file_content, &secret_key, false);
 
     let result = super::prepare(&mut req, &ccx).await;
-    let Err(err) = result else {
-        panic!("expected prepare to fail for a file over the configured maximum");
-    };
+
+    assert!(result.is_ok(), "prepare does not read the file");
+
+    let code = drain_post_object(&mut req).await.unwrap_err();
     assert_eq!(
-        *err.code(),
+        code,
         crate::error::S3ErrorCode::EntityTooLarge,
-        "got {:?}: {:?}",
-        err.code(),
-        err.message()
+        "a file over the configured maximum is EntityTooLarge"
     );
 }
 
@@ -796,9 +809,8 @@ async fn post_policy_file_size_is_total_bytes_not_chunk_count() {
     );
 
     // Create a 30 KB file (30 000 bytes) within policy limits.
-    // Use 1 KiB chunks so the body stream yields ~30 chunks for the file part.
-    // With the buggy code (vec_bytes.len()), file_size would be ~30 (chunk count),
-    // which is < 100 (policy minimum) and would incorrectly fail.
+    // Use 1 KiB chunks so the body stream yields ~30 chunks for the file part:
+    // the range counts bytes, not the number of chunks.
     let file_content = "a".repeat(30_000);
     let chunk_size = 1024;
 
@@ -806,34 +818,29 @@ async fn post_policy_file_size_is_total_bytes_not_chunk_count() {
         post_policy_test_helpers::build_post_object_request_chunked(policy_json, &file_content, &secret_key, chunk_size);
 
     let result = super::prepare(&mut req, &ccx).await;
+    assert!(result.is_ok(), "the range is checked while the file is read");
 
     // This must succeed: the file is 30 000 bytes, within [100, 50000].
-    match result {
-        Ok(_) => {}
-        Err(err) => panic!("POST object with 30 KB file should pass content-length-range [100, 50000] validation, got: {err:?}"),
-    }
+    let data = drain_post_object(&mut req)
+        .await
+        .expect("30 000 bytes are within [100, 50000]");
+    assert_eq!(data.len(), 30_000, "every byte counts once, whatever the chunking");
+    assert_eq!(data, file_content.as_bytes());
 
-    // Now test with a file that's too small (should fail)
+    // A file below the minimum fails when the stream ends.
     let small_file_content = "a".repeat(50); // 50 bytes, less than minimum of 100
     let mut req_small =
         post_policy_test_helpers::build_post_object_request_chunked(policy_json, &small_file_content, &secret_key, chunk_size);
 
     let result_small = super::prepare(&mut req_small, &ccx).await;
-    match result_small {
-        Err(err) => {
-            assert_eq!(
-                *err.code(),
-                crate::error::S3ErrorCode::EntityTooSmall,
-                "Expected EntityTooSmall error for content-length-range violation"
-            );
-            let msg = err.message().unwrap_or("");
-            assert!(
-                msg.contains("smaller than the minimum"),
-                "Error message should mention file is too small, got: {msg}"
-            );
-        }
-        Ok(_) => panic!("POST object with 50-byte file should fail content-length-range [100, 50000] validation"),
-    }
+    assert!(result_small.is_ok(), "the minimum is checked when the stream ends");
+
+    let code = drain_post_object(&mut req_small).await.unwrap_err();
+    assert_eq!(
+        code,
+        crate::error::S3ErrorCode::EntityTooSmall,
+        "a file below the policy minimum is EntityTooSmall"
+    );
 }
 
 /// A signed `POST Object` form that repeats the `Authorization` header is answered with the code

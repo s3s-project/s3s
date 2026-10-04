@@ -180,25 +180,15 @@ pub enum MultipartError {
     TotalSizeTooLarge(usize, usize),
     #[error("MultipartError: TooManyParts: part count {0} exceeds limit of {1}")]
     TooManyParts(usize, usize),
+    /// A file exceeded the size limit an aggregating caller passed.
+    ///
+    /// The POST Object path streams the file part and reports the range
+    /// through [`FileStreamError`] instead, so nothing inside this crate
+    /// constructs this variant; it stays part of the error surface callers
+    /// match on.
+    #[allow(dead_code)]
     #[error("MultipartError: FileTooLarge: file size {0} bytes exceeds limit of {1} bytes")]
     FileTooLarge(u64, u64),
-}
-
-/// Aggregates a file stream into a Vec<Bytes> with a size limit.
-/// Returns error if the total size exceeds the limit.
-pub async fn aggregate_file_stream_limited(mut stream: FileStream, max_size: u64) -> Result<Vec<Bytes>, MultipartError> {
-    let mut vec = Vec::new();
-    let mut total_size: u64 = 0;
-
-    while let Some(result) = stream.next().await {
-        let bytes = result.map_err(|e| MultipartError::Underlying(Box::new(e)))?;
-        total_size = total_size.saturating_add(bytes.len() as u64);
-        if total_size > max_size {
-            return Err(MultipartError::FileTooLarge(total_size, max_size));
-        }
-        vec.push(bytes);
-    }
-    Ok(vec)
 }
 
 /// transform multipart
@@ -329,6 +319,7 @@ fn map_parser_error(err: ParserError) -> MultipartError {
 
 /// File stream error
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum FileStreamError {
     /// Incomplete error
     #[error("FileStreamError: Incomplete")]
@@ -343,23 +334,57 @@ pub enum FileStreamError {
     /// The yielded byte count disagrees with the declared content length
     #[error("FileStreamError: LengthMismatch: {remaining} bytes remaining")]
     LengthMismatch { remaining: u64 },
+    /// More bytes arrived than the maximum the caller allowed
+    #[error("FileStreamError: size {size} exceeds the maximum of {max} bytes")]
+    TooLarge {
+        /// Bytes counted when the maximum was crossed.
+        size: u64,
+        /// Maximum the caller allowed.
+        max: u64,
+    },
+    /// Fewer bytes arrived than the minimum the caller required
+    #[error("FileStreamError: size {size} is below the minimum of {min} bytes")]
+    TooSmall {
+        /// Bytes counted when the stream ended.
+        size: u64,
+        /// Minimum the caller required.
+        min: u64,
+    },
 }
 
 impl FileStreamError {
     /// Maps a file-stream error to the `S3` error code a conforming
     /// implementation should report.
     ///
-    /// A malformed or truncated multipart body is the client's error, so it
-    /// maps to a 400-class code; only a transport failure maps to
-    /// `InternalError`.
+    /// A body that ends early, disagrees with a declared length or fails in
+    /// transport is an incomplete body; a structural surprise — the taken part
+    /// is not the last one — is a malformed POST. Both are the client's error,
+    /// so neither maps to an internal one. A file outside the range the caller
+    /// required is the client's error too.
     #[must_use]
     pub fn to_s3_error_code(&self) -> S3ErrorCode {
         match self {
-            Self::Underlying(_) => S3ErrorCode::InternalError,
-            Self::Incomplete | Self::LengthMismatch { .. } => S3ErrorCode::IncompleteBody,
+            Self::Incomplete | Self::LengthMismatch { .. } | Self::Underlying(_) => S3ErrorCode::IncompleteBody,
             Self::InvalidTrailer => S3ErrorCode::MalformedPOSTRequest,
+            Self::TooLarge { .. } => S3ErrorCode::EntityTooLarge,
+            Self::TooSmall { .. } => S3ErrorCode::EntityTooSmall,
         }
     }
+}
+
+/// The length bookkeeping of a [`FileStream`].
+///
+/// Boxed as a unit: the stream travels through the dispatch futures, and the
+/// budget test counts this state wherever the stream is held, so it is kept on
+/// the heap like the parser state.
+#[derive(Debug)]
+struct FileStreamLimits {
+    /// exact content length derived from the request's `Content-Length`, if known
+    content_len: Option<u64>,
+    /// the `[min, max]` the caller requires, once it is known
+    range: Option<(u64, u64)>,
+    /// bytes yielded so far, counted against `range`
+    read: u64,
 }
 
 /// File stream
@@ -371,10 +396,8 @@ pub struct FileStream {
     /// futures, so keeping it on the heap bounds their size (see the
     /// future-size budget test).
     inner: Box<FinalPartDataStream<ParserStream>>,
-    /// exact content length derived from the request's `Content-Length`, if known
-    content_len: Option<u64>,
-    /// remaining content bytes; counts down as bytes are yielded
-    remaining: u64,
+    /// the declared length and the required range, with the byte count
+    limits: Box<FileStreamLimits>,
     /// set once a terminal error has been reported
     ended: bool,
 }
@@ -382,8 +405,10 @@ pub struct FileStream {
 impl Debug for FileStream {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("FileStream")
-            .field("content_len", &self.content_len)
-            .field("remaining", &self.remaining)
+            .field("content_len", &self.limits.content_len)
+            .field("remaining", &self.remaining_claim())
+            .field("range", &self.limits.range)
+            .field("read", &self.limits.read)
             .finish_non_exhaustive()
     }
 }
@@ -393,8 +418,11 @@ impl FileStream {
     fn from_owned(inner: FinalPartDataStream<ParserStream>, content_len: Option<u64>) -> Self {
         Self {
             inner: Box::new(inner),
-            content_len,
-            remaining: content_len.unwrap_or(0),
+            limits: Box::new(FileStreamLimits {
+                content_len,
+                range: None,
+                read: 0,
+            }),
             ended: false,
         }
     }
@@ -408,11 +436,32 @@ impl FileStream {
     /// of them needs the length of the bytes actually delivered, which is only
     /// known once the body has been read.
     ///
-    /// The POST Object path aggregates the file part before dispatch instead of
-    /// deriving a length, so nothing inside this crate reads this value.
+    /// The POST Object path streams the file part and enforces the range the
+    /// policy requires instead of deriving a length from the request, so nothing
+    /// inside this crate reads this value.
     #[allow(dead_code)]
     pub fn content_len(&self) -> Option<u64> {
-        self.content_len
+        self.limits.content_len
+    }
+
+    /// The declared length that has not been delivered yet.
+    ///
+    /// `None` when the request carried no `Content-Length`, which is the case for
+    /// a chunked form.
+    fn remaining_claim(&self) -> Option<u64> {
+        self.limits.content_len.map(|claim| claim.saturating_sub(self.limits.read))
+    }
+
+    /// Requires the file part to deliver between `min` and `max` bytes.
+    ///
+    /// Both bounds are enforced while the stream is read: crossing the maximum
+    /// fails as soon as it is crossed, and ending below the minimum fails at the
+    /// end of the stream. `min` must not exceed `max`; deciding what an
+    /// unsatisfiable range means for the request belongs to the caller (the POST
+    /// path answers `EntityTooSmall` before it gets here).
+    pub(crate) fn set_expected_range(&mut self, min: u64, max: u64) {
+        debug_assert!(min <= max, "the minimum {min} must not exceed the maximum {max}");
+        self.limits.range = Some((min, max));
     }
 }
 
@@ -426,26 +475,33 @@ impl Stream for FileStream {
         }
         match Pin::new(&mut *this.inner).poll_next(cx) {
             Poll::Ready(Some(Ok(bytes))) => {
-                // Enforce the declared length: never deliver content beyond
-                // the claim. The trailer validation in the inner stream
-                // guarantees the counter reaches zero on clean completion.
-                if this.content_len.is_some() {
-                    let len = bytes.len() as u64;
-                    if len > this.remaining {
-                        this.ended = true;
-                        return Poll::Ready(Some(Err(FileStreamError::LengthMismatch {
-                            remaining: this.remaining,
-                        })));
-                    }
-                    this.remaining -= len;
+                let len = bytes.len() as u64;
+                let read = this.limits.read.saturating_add(len);
+                // Enforce the declared length: never deliver content beyond the
+                // claim. The trailer validation in the inner stream guarantees
+                // the count reaches the claim on clean completion.
+                if this.limits.content_len.is_some_and(|claim| read > claim) {
+                    this.ended = true;
+                    return Poll::Ready(Some(Err(FileStreamError::LengthMismatch {
+                        remaining: this.remaining_claim().unwrap_or(0),
+                    })));
                 }
+                // Enforce the range the caller requires: the chunk that crosses
+                // the maximum is not delivered, and the failure is terminal.
+                if let Some((_, max)) = this.limits.range
+                    && read > max
+                {
+                    this.ended = true;
+                    return Poll::Ready(Some(Err(FileStreamError::TooLarge { size: read, max })));
+                }
+                this.limits.read = read;
                 Poll::Ready(Some(Ok(bytes)))
             }
             // The stream ended cleanly but delivered fewer bytes than claimed.
-            Poll::Ready(None) if this.content_len.is_some() && this.remaining > 0 => {
+            Poll::Ready(None) if this.remaining_claim().is_some_and(|remaining| remaining > 0) => {
                 this.ended = true;
                 Poll::Ready(Some(Err(FileStreamError::LengthMismatch {
-                    remaining: this.remaining,
+                    remaining: this.remaining_claim().unwrap_or(0),
                 })))
             }
             // An error surfaced by the inner stream is terminal for this
@@ -456,7 +512,16 @@ impl Stream for FileStream {
                 Poll::Ready(Some(Err(map_file_stream_error(err))))
             }
             Poll::Pending => Poll::Pending,
-            Poll::Ready(None) => Poll::Ready(None),
+            Poll::Ready(None) => {
+                this.ended = true;
+                match this.limits.range {
+                    Some((min, _)) if this.limits.read < min => Poll::Ready(Some(Err(FileStreamError::TooSmall {
+                        size: this.limits.read,
+                        min,
+                    }))),
+                    _ => Poll::Ready(None),
+                }
+            }
         }
     }
 
@@ -470,9 +535,22 @@ impl Stream for FileStream {
 
 impl ByteStream for FileStream {
     fn remaining_length(&self) -> crate::stream::RemainingLength {
-        match usize::try_from(self.remaining) {
-            Ok(remaining) if self.content_len.is_some() => crate::stream::RemainingLength::new_exact(remaining),
-            _ => crate::stream::RemainingLength::unknown(),
+        // A required range is what the caller may still deliver, so it is
+        // reported in preference to the declared length: the latter is exact
+        // for the canonical closing form only.
+        match self.limits.range {
+            Some((min, max)) => {
+                let lower = min.saturating_sub(self.limits.read);
+                let upper = max.saturating_sub(self.limits.read);
+                match (usize::try_from(lower), usize::try_from(upper)) {
+                    (Ok(lower), Ok(upper)) => crate::stream::RemainingLength::new(lower, Some(upper)),
+                    _ => crate::stream::RemainingLength::unknown(),
+                }
+            }
+            None => match self.remaining_claim().and_then(|remaining| usize::try_from(remaining).ok()) {
+                Some(remaining) => crate::stream::RemainingLength::new_exact(remaining),
+                None => crate::stream::RemainingLength::unknown(),
+            },
         }
     }
 }
@@ -1228,8 +1306,10 @@ mod tests {
             (FileStreamError::LengthMismatch { remaining: 2 }, S3ErrorCode::IncompleteBody),
             (
                 FileStreamError::Underlying(Box::new(io::Error::other("boom"))),
-                S3ErrorCode::InternalError,
+                S3ErrorCode::IncompleteBody,
             ),
+            (FileStreamError::TooLarge { size: 2, max: 1 }, S3ErrorCode::EntityTooLarge),
+            (FileStreamError::TooSmall { size: 1, min: 2 }, S3ErrorCode::EntityTooSmall),
         ];
         for (err, expected) in cases {
             assert_eq!(err.to_s3_error_code(), expected, "{err:?}");
@@ -1246,5 +1326,75 @@ mod tests {
             source.downcast_ref::<io::Error>().map(io::Error::kind),
             Some(io::ErrorKind::ConnectionReset)
         );
+    }
+
+    /// A required range is enforced while the file part is read.
+    #[tokio::test]
+    async fn range_forwards_the_bytes_inside_it() {
+        let body = file_form(&[], "hello world");
+        let mut stream = parse_file_stream(&body, None).await;
+        stream.set_expected_range(5, 11);
+        assert_eq!(aggregate_file_stream(stream).await.unwrap(), "hello world");
+    }
+
+    #[tokio::test]
+    async fn range_rejects_more_than_the_maximum_without_delivering_the_chunk() {
+        let body = file_form(&[], "hello world");
+        let mut stream = parse_file_stream(&body, None).await;
+        stream.set_expected_range(0, 8);
+        let mut delivered = 0;
+        let err = loop {
+            match stream.next().await {
+                Some(Ok(bytes)) => delivered += bytes.len(),
+                Some(Err(err)) => break err,
+                None => panic!("a range failure is expected"),
+            }
+        };
+        assert!(matches!(err, FileStreamError::TooLarge { size, max } if max == 8 && size > 8), "{err:?}");
+        assert!(delivered <= 8, "nothing beyond the maximum is delivered");
+        assert!(stream.next().await.is_none(), "the failure is terminal");
+    }
+
+    #[tokio::test]
+    async fn range_rejects_fewer_than_the_minimum_at_the_end_of_the_stream() {
+        let body = file_form(&[], "hello");
+        let mut stream = parse_file_stream(&body, None).await;
+        stream.set_expected_range(6, 10);
+        let mut delivered = 0;
+        let err = loop {
+            match stream.next().await {
+                Some(Ok(bytes)) => delivered += bytes.len(),
+                Some(Err(err)) => break err,
+                None => panic!("a range failure is expected"),
+            }
+        };
+        assert!(matches!(err, FileStreamError::TooSmall { size: 5, min: 6 }), "{err:?}");
+        assert_eq!(delivered, 5, "the bytes inside the range are still delivered");
+        assert!(stream.next().await.is_none(), "the failure is terminal");
+    }
+
+    /// A required range replaces the declared length as the reported remaining
+    /// length: the declared one is exact for the canonical closing form only.
+    #[tokio::test]
+    async fn range_is_reported_as_the_remaining_length() {
+        let body = file_form(&[], "hello world");
+        let total_len = body.len() as u64;
+        let mut stream = parse_file_stream(&body, Some(total_len)).await;
+        stream.set_expected_range(5, 11);
+        assert_eq!(format!("{:?}", stream.remaining_length()), "(5..=11)");
+        assert_eq!(stream.remaining_length().exact(), None);
+
+        stream.set_expected_range(11, 11);
+        assert_eq!(stream.remaining_length().exact(), Some(11));
+    }
+
+    #[tokio::test]
+    async fn range_is_visible_in_debug() {
+        let body = file_form(&[], "hello");
+        let mut stream = parse_file_stream(&body, None).await;
+        stream.set_expected_range(1, 2);
+        let text = format!("{stream:?}");
+        assert!(text.contains("range"), "{text}");
+        assert!(text.contains("read"), "{text}");
     }
 }

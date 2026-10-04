@@ -119,23 +119,21 @@ impl PostPolicy {
     /// policy condition. If a `bucket` form field is also present but differs
     /// from `url_bucket`, the request is rejected with `InvalidPolicyDocument`.
     ///
+    /// The `content-length-range` condition is not checked here: it needs the
+    /// size of the uploaded file, which is only known while the file stream is
+    /// read. Callers enforce it there (see [`PostPolicy::content_length_range`]).
+    ///
     /// # Arguments
     /// * `multipart` - The multipart form data
-    /// * `file_size` - The size of the uploaded file in bytes
     /// * `url_bucket` - The bucket name from the URL path/host. When present,
     ///   it is the source of truth for the `bucket` condition.
     ///
     /// # Errors
     /// Returns `InvalidPolicyDocument` if any condition is not satisfied
-    pub(crate) fn validate_conditions_only(
-        &self,
-        multipart: &Multipart,
-        file_size: u64,
-        url_bucket: Option<&str>,
-    ) -> S3Result<()> {
+    pub(crate) fn validate_conditions_only(&self, multipart: &Multipart, url_bucket: Option<&str>) -> S3Result<()> {
         // Check all conditions against form fields
         for condition in &self.conditions {
-            Self::validate_condition(condition, multipart, file_size, url_bucket)?;
+            Self::validate_condition(condition, multipart, url_bucket)?;
         }
 
         // Check that every form field is covered by a policy condition.
@@ -179,12 +177,7 @@ impl PostPolicy {
         })
     }
 
-    fn validate_condition(
-        condition: &PostPolicyCondition,
-        multipart: &Multipart,
-        file_size: u64,
-        url_bucket: Option<&str>,
-    ) -> S3Result<()> {
+    fn validate_condition(condition: &PostPolicyCondition, multipart: &Multipart, url_bucket: Option<&str>) -> S3Result<()> {
         match condition {
             PostPolicyCondition::Eq { field, value } => {
                 let actual = Self::get_field_value(field, multipart, url_bucket)?;
@@ -210,17 +203,10 @@ impl PostPolicy {
                     ));
                 }
             }
-            PostPolicyCondition::ContentLengthRange { min, max } => {
-                if file_size > *max {
-                    return Err(s3_error!(EntityTooLarge, "Your proposed upload exceeds the maximum allowed object size."));
-                }
-                if file_size < *min {
-                    return Err(s3_error!(
-                        EntityTooSmall,
-                        "Your proposed upload is smaller than the minimum allowed object size."
-                    ));
-                }
-            }
+            // The size of the upload is not known here: the file part is
+            // streamed, and the caller enforces the range while reading it
+            // (`PostPolicy::content_length_range` feeds the stream bounds).
+            PostPolicyCondition::ContentLengthRange { .. } => {}
         }
         Ok(())
     }
@@ -587,7 +573,7 @@ mod tests {
             value: "mybucket".to_owned(),
         };
 
-        let result = PostPolicy::validate_condition(&condition, &multipart, 0, None);
+        let result = PostPolicy::validate_condition(&condition, &multipart, None);
         assert!(result.is_ok());
     }
 
@@ -599,7 +585,7 @@ mod tests {
             value: "wrongbucket".to_owned(),
         };
 
-        let e = PostPolicy::validate_condition(&condition, &multipart, 0, None).unwrap_err();
+        let e = PostPolicy::validate_condition(&condition, &multipart, None).unwrap_err();
         assert_eq!(e.code(), &S3ErrorCode::InvalidPolicyDocument);
     }
 
@@ -611,7 +597,7 @@ mod tests {
             prefix: "user/".to_owned(),
         };
 
-        let result = PostPolicy::validate_condition(&condition, &multipart, 0, None);
+        let result = PostPolicy::validate_condition(&condition, &multipart, None);
         assert!(result.is_ok());
     }
 
@@ -623,7 +609,7 @@ mod tests {
             prefix: String::new(),
         };
 
-        let result = PostPolicy::validate_condition(&condition, &multipart, 0, None);
+        let result = PostPolicy::validate_condition(&condition, &multipart, None);
         assert!(result.is_ok());
     }
 
@@ -635,53 +621,19 @@ mod tests {
             prefix: "user/".to_owned(),
         };
 
-        let e = PostPolicy::validate_condition(&condition, &multipart, 0, None).unwrap_err();
+        let e = PostPolicy::validate_condition(&condition, &multipart, None).unwrap_err();
         assert_eq!(e.code(), &S3ErrorCode::InvalidPolicyDocument);
     }
 
+    /// `content-length-range` is not checked against a size here: the file part
+    /// bounds `content_length_range` reports.
     #[test]
-    fn test_validate_condition_content_length_range_success() {
+    fn test_validate_condition_skips_content_length_range() {
         let multipart = create_test_multipart(vec![], None);
         let condition = PostPolicyCondition::ContentLengthRange { min: 100, max: 1000 };
 
-        let result = PostPolicy::validate_condition(&condition, &multipart, 500, None);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_validate_condition_content_length_range_at_min() {
-        let multipart = create_test_multipart(vec![], None);
-        let condition = PostPolicyCondition::ContentLengthRange { min: 100, max: 1000 };
-
-        let result = PostPolicy::validate_condition(&condition, &multipart, 100, None);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_validate_condition_content_length_range_at_max() {
-        let multipart = create_test_multipart(vec![], None);
-        let condition = PostPolicyCondition::ContentLengthRange { min: 100, max: 1000 };
-
-        let result = PostPolicy::validate_condition(&condition, &multipart, 1000, None);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_validate_condition_content_length_range_too_small() {
-        let multipart = create_test_multipart(vec![], None);
-        let condition = PostPolicyCondition::ContentLengthRange { min: 100, max: 1000 };
-
-        let e = PostPolicy::validate_condition(&condition, &multipart, 99, None).unwrap_err();
-        assert_eq!(e.code(), &S3ErrorCode::EntityTooSmall);
-    }
-
-    #[test]
-    fn test_validate_condition_content_length_range_too_large() {
-        let multipart = create_test_multipart(vec![], None);
-        let condition = PostPolicyCondition::ContentLengthRange { min: 100, max: 1000 };
-
-        let e = PostPolicy::validate_condition(&condition, &multipart, 1001, None).unwrap_err();
-        assert_eq!(e.code(), &S3ErrorCode::EntityTooLarge);
+        let result = PostPolicy::validate_condition(&condition, &multipart, None);
+        assert!(result.is_ok(), "the range is enforced on the file stream");
     }
 
     #[test]
@@ -692,7 +644,7 @@ mod tests {
             value: "image/jpeg".to_owned(),
         };
 
-        let e = PostPolicy::validate_condition(&condition, &multipart, 0, None).unwrap_err();
+        let e = PostPolicy::validate_condition(&condition, &multipart, None).unwrap_err();
         assert_eq!(e.code(), &S3ErrorCode::InvalidPolicyDocument);
     }
 
@@ -704,7 +656,7 @@ mod tests {
             value: "image/jpeg".to_owned(),
         };
 
-        let e = PostPolicy::validate_condition(&condition, &multipart, 0, None).unwrap_err();
+        let e = PostPolicy::validate_condition(&condition, &multipart, None).unwrap_err();
         assert_eq!(e.code(), &S3ErrorCode::InvalidPolicyDocument);
     }
 
@@ -716,7 +668,7 @@ mod tests {
             value: "image/jpeg".to_owned(),
         };
 
-        let result = PostPolicy::validate_condition(&condition, &multipart, 0, None);
+        let result = PostPolicy::validate_condition(&condition, &multipart, None);
         assert!(result.is_ok());
     }
 
@@ -728,7 +680,7 @@ mod tests {
             value: "mybucket".to_owned(),
         };
 
-        let e = PostPolicy::validate_condition(&condition, &multipart, 0, None).unwrap_err();
+        let e = PostPolicy::validate_condition(&condition, &multipart, None).unwrap_err();
         assert_eq!(e.code(), &S3ErrorCode::InvalidPolicyDocument);
     }
 
@@ -744,7 +696,7 @@ mod tests {
         };
 
         // With matching url_bucket -> should succeed
-        let result = PostPolicy::validate_condition(&condition, &multipart, 0, Some("mybucket"));
+        let result = PostPolicy::validate_condition(&condition, &multipart, Some("mybucket"));
         assert!(result.is_ok());
     }
 
@@ -759,7 +711,7 @@ mod tests {
         };
 
         // With mismatching url_bucket -> should fail
-        let e = PostPolicy::validate_condition(&condition, &multipart, 0, Some("wrongbucket")).unwrap_err();
+        let e = PostPolicy::validate_condition(&condition, &multipart, Some("wrongbucket")).unwrap_err();
         assert_eq!(e.code(), &S3ErrorCode::InvalidPolicyDocument);
     }
 
@@ -775,7 +727,7 @@ mod tests {
         };
 
         // Conflict between form field and url_bucket must be rejected outright
-        let e = PostPolicy::validate_condition(&condition, &multipart, 0, Some("url-bucket")).unwrap_err();
+        let e = PostPolicy::validate_condition(&condition, &multipart, Some("url-bucket")).unwrap_err();
         assert_eq!(e.code(), &S3ErrorCode::InvalidPolicyDocument);
     }
 
@@ -800,7 +752,7 @@ mod tests {
         // substituted key, which is what the stored object will be named.
         multipart.substitute_key_filename();
         assert_eq!(multipart.find_field_value("key"), Some("user/betty/test.txt"));
-        assert!(policy.validate_conditions_only(&multipart, 0, Some("mybucket")).is_ok());
+        assert!(policy.validate_conditions_only(&multipart, Some("mybucket")).is_ok());
 
         let eq_json = r#"{
             "expiration": "2030-01-01T00:00:00.000Z",
@@ -812,7 +764,7 @@ mod tests {
         let eq_policy = PostPolicy::from_json(eq_json).unwrap();
         let mut multipart = create_test_multipart(vec![("key", "user/betty/${filename}")], None);
         multipart.substitute_key_filename();
-        assert!(eq_policy.validate_conditions_only(&multipart, 0, Some("mybucket")).is_ok());
+        assert!(eq_policy.validate_conditions_only(&multipart, Some("mybucket")).is_ok());
     }
 
     /// Regression test for <https://github.com/rustfs/rustfs/issues/1785>
@@ -830,7 +782,7 @@ mod tests {
 
         // No bucket in form fields, but url_bucket matches
         let multipart = create_test_multipart(vec![("key", "mykey")], None);
-        let result = policy.validate_conditions_only(&multipart, 0, Some("mybucket"));
+        let result = policy.validate_conditions_only(&multipart, Some("mybucket"));
         assert!(result.is_ok());
     }
 
@@ -957,7 +909,7 @@ mod tests {
 
         // "success_action_status" is NOT in the policy but IS in form fields
         let multipart = create_test_multipart(vec![("key", "mykey"), ("success_action_status", "200")], None);
-        let err = policy.validate_conditions_only(&multipart, 0, Some("mybucket")).unwrap_err();
+        let err = policy.validate_conditions_only(&multipart, Some("mybucket")).unwrap_err();
         assert_eq!(err.code(), &S3ErrorCode::AccessDenied);
         assert!(
             err.message().unwrap_or("").contains("success_action_status"),
@@ -980,7 +932,7 @@ mod tests {
 
         // SigV4 exempt fields
         let multipart = create_test_multipart(vec![("key", "mykey"), ("policy", "abc"), ("x-amz-signature", "sig123")], None);
-        let result = policy.validate_conditions_only(&multipart, 0, Some("mybucket"));
+        let result = policy.validate_conditions_only(&multipart, Some("mybucket"));
         assert!(result.is_ok(), "SigV4 exempt fields should not be rejected");
 
         // SigV2 exempt fields
@@ -993,7 +945,7 @@ mod tests {
             ],
             None,
         );
-        let result_v2 = policy.validate_conditions_only(&multipart_v2, 0, Some("mybucket"));
+        let result_v2 = policy.validate_conditions_only(&multipart_v2, Some("mybucket"));
         assert!(result_v2.is_ok(), "SigV2 exempt fields should not be rejected");
     }
 
@@ -1022,7 +974,7 @@ mod tests {
             ],
             None,
         );
-        let result = policy.validate_conditions_only(&multipart, 0, Some("mybucket"));
+        let result = policy.validate_conditions_only(&multipart, Some("mybucket"));
         assert!(result.is_ok(), "encryption exception fields should not be rejected");
     }
 
@@ -1040,7 +992,7 @@ mod tests {
         let policy = PostPolicy::from_json(json).unwrap();
 
         let multipart = create_test_multipart(vec![("key", "mykey"), ("success_action_status", "200")], None);
-        let result = policy.validate_conditions_only(&multipart, 0, Some("mybucket"));
+        let result = policy.validate_conditions_only(&multipart, Some("mybucket"));
         assert!(result.is_ok(), "field covered by starts-with should be accepted");
     }
 
@@ -1057,7 +1009,7 @@ mod tests {
         let policy = PostPolicy::from_json(json).unwrap();
 
         let multipart = create_test_multipart(vec![("key", "mykey"), ("x-ignore-custom", "anything")], None);
-        let result = policy.validate_conditions_only(&multipart, 0, Some("mybucket"));
+        let result = policy.validate_conditions_only(&multipart, Some("mybucket"));
         assert!(result.is_ok(), "x-ignore- fields should not be rejected");
     }
 }
