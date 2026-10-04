@@ -96,7 +96,10 @@ impl S3Route for MinioAdminRoute {
             .build()
             .map_err(|e| bad_gateway_with_source(Box::new(e)))?;
 
-        tracing::debug!(target = %target, request_headers = ?request.headers(), "forwarding MinIO admin request");
+        // The request headers are deliberately not logged: admin requests carry
+        // the client's `authorization` header, and a debug dump would put a
+        // signature (and any session token) into the log.
+        tracing::debug!(target = %target, "forwarding MinIO admin request");
 
         let response = self
             .client
