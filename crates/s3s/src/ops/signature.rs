@@ -696,12 +696,6 @@ impl<'a> SignatureContext<'a> {
 
         let amz_content_sha256 = extract_amz_content_sha256(self.hs)?;
 
-        // Presigned URLs do not support streaming (chunked) payload signing,
-        // so reject them here before reaching the SingleChunk handler below.
-        if amz_content_sha256.is_some_and(|v| v.is_streaming()) {
-            return Err(s3_error!(NotImplemented, "streaming payload for presigned URLs is not implemented"));
-        }
-
         {
             // check expiration
             validate_sig_v4_region(region, &config)?;
@@ -772,6 +766,14 @@ impl<'a> SignatureContext<'a> {
                 payload_line,
             )
         })?;
+
+        // A presigned request is never decoded as aws-chunked, so a streaming marker is rejected —
+        // but only once the signature proves the client committed to it. An unsigned marker (a
+        // marker added to a URL that was signed over UNSIGNED-PAYLOAD) fails the signature check
+        // above with the error S3 returns, instead of short-circuiting before it.
+        if amz_content_sha256.is_some_and(|v| v.is_streaming()) {
+            return Err(s3_error!(NotImplemented, "streaming payload for presigned URLs is not implemented"));
+        }
 
         // Verify the body digest a presigned request declares.
         // The payload line above already binds the declared value, so a changed or removed header
