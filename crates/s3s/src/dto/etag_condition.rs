@@ -5,6 +5,7 @@ use std::str::FromStr;
 
 use http::HeaderValue;
 use http::header::InvalidHeaderValue;
+use smallvec::SmallVec;
 
 use super::etag::{ETag, ParseETagError};
 
@@ -72,10 +73,13 @@ fn trim_ows(src: &[u8]) -> &[u8] {
 /// quoted opaque tag.
 ///
 /// A comma is a valid character of an entity tag (`"a,b"` is a single tag), so
-/// the split has to be quote-aware. Returns `None` when the double quotes are
+/// the split has to be quote-aware. Returns `false` when the double quotes are
 /// unbalanced.
-fn split_list(src: &[u8]) -> Option<Vec<&[u8]>> {
-    let mut elements = Vec::new();
+///
+/// The elements are pushed into `elements`. The receiver is a `SmallVec` so the
+/// usual one to four tags stay inline and parsing a conditional header does not
+/// allocate for the split itself.
+fn split_list<'a>(src: &'a [u8], elements: &mut SmallVec<[&'a [u8]; 4]>) -> bool {
     let mut start = 0;
     let mut in_quotes = false;
     for (index, &byte) in src.iter().enumerate() {
@@ -89,10 +93,22 @@ fn split_list(src: &[u8]) -> Option<Vec<&[u8]>> {
         }
     }
     if in_quotes {
-        return None;
+        return false;
     }
     elements.push(&src[start..]);
-    Some(elements)
+    true
+}
+
+/// Parses one list element.
+///
+/// The empty element and the wildcard are rejected: RFC 9110 defines the field
+/// value as `"*" / 1#entity-tag`, so the wildcard always stands alone.
+fn parse_element(element: &[u8]) -> Result<ETag, ParseETagConditionError> {
+    let element = trim_ows(element);
+    if element.is_empty() || element == b"*" {
+        return Err(ParseETagConditionError::InvalidFormat);
+    }
+    Ok(ETag::parse_http_header(element)?)
 }
 
 impl ETagCondition {
@@ -115,20 +131,22 @@ impl ETagCondition {
             return Ok(ETagCondition::Any);
         }
 
-        let elements = split_list(src).ok_or(ParseETagConditionError::InvalidFormat)?;
-
-        let mut etags = Vec::with_capacity(elements.len());
-        for element in elements {
-            let element = trim_ows(element);
-            if element.is_empty() || element == b"*" {
-                return Err(ParseETagConditionError::InvalidFormat);
-            }
-            etags.push(ETag::parse_http_header(element)?);
+        let mut elements = SmallVec::new();
+        if !split_list(src, &mut elements) {
+            return Err(ParseETagConditionError::InvalidFormat);
         }
 
-        match <[ETag; 1]>::try_from(etags) {
-            Ok([etag]) => Ok(ETagCondition::ETag(etag)),
-            Err(etags) => Ok(ETagCondition::List(etags)),
+        // A single entity tag is the common case: it goes straight into the
+        // `ETag` variant, so no list container is allocated for it.
+        match elements.as_slice() {
+            [only] => Ok(ETagCondition::ETag(parse_element(only)?)),
+            elements => {
+                let mut etags = Vec::with_capacity(elements.len());
+                for element in elements {
+                    etags.push(parse_element(element)?);
+                }
+                Ok(ETagCondition::List(etags))
+            }
         }
     }
 
@@ -398,6 +416,37 @@ mod tests {
     fn parse_list_of_three_tags() {
         let cond = ETagCondition::parse_http_header(b"\"a\", \"b\", \"c\"").expect("parse list");
         assert_eq!(cond.etags().len(), 3);
+    }
+
+    #[test]
+    fn parse_single_tag_with_ows_stays_single_variant() {
+        // The single-element path parses straight into the `ETag` variant; it
+        // must not turn the value into a one-member list.
+        let cond = ETagCondition::parse_http_header(b"  \"a\"  ").expect("parse single tag with ows");
+        assert_eq!(cond, ETagCondition::ETag(ETag::Strong("a".to_owned())));
+    }
+
+    #[test]
+    fn parse_list_longer_than_the_inline_buffer() {
+        // More members than the `SmallVec` inline capacity, so the split spills
+        // to the heap; parsing and the roundtrip must not depend on the capacity.
+        let input = b"\"a\", \"b\", \"c\", \"d\", \"e\", \"f\"";
+        let cond = ETagCondition::parse_http_header(input).expect("parse long list");
+        assert_eq!(cond.etags().len(), 6);
+        assert_eq!(
+            cond,
+            ETagCondition::List(vec![
+                ETag::Strong("a".to_owned()),
+                ETag::Strong("b".to_owned()),
+                ETag::Strong("c".to_owned()),
+                ETag::Strong("d".to_owned()),
+                ETag::Strong("e".to_owned()),
+                ETag::Strong("f".to_owned()),
+            ])
+        );
+        let hv = cond.to_http_header().expect("to header");
+        assert_eq!(hv.as_bytes(), input);
+        assert_eq!(ETagCondition::parse_http_header(hv.as_bytes()).expect("parse back"), cond);
     }
 
     #[test]
