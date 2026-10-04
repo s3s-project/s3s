@@ -101,14 +101,10 @@ fn split_list<'a>(src: &'a [u8], elements: &mut SmallVec<[&'a [u8]; 4]>) -> bool
 
 /// Parses one list element.
 ///
-/// The empty element and the wildcard are rejected: RFC 9110 defines the field
-/// value as `"*" / 1#entity-tag`, so the wildcard always stands alone.
+/// The caller has already rejected the empty element and a wildcard member, so
+/// this is only the entity tag syntax.
 fn parse_element(element: &[u8]) -> Result<ETag, ParseETagConditionError> {
-    let element = trim_ows(element);
-    if element.is_empty() || element == b"*" {
-        return Err(ParseETagConditionError::InvalidFormat);
-    }
-    Ok(ETag::parse_http_header(element)?)
+    Ok(ETag::parse_http_header(trim_ows(element))?)
 }
 
 impl ETagCondition {
@@ -407,10 +403,34 @@ mod tests {
     fn comma_separated_list_is_not_one_opaque_tag() {
         // RFC 9110 §13.1.1/§13.1.2 and RFC 7232 §3.1/§3.2 define the field value
         // as a list of entity tags. A list must never collapse into a single
-        // opaque tag whose value embeds a quote and a comma.
+        // opaque tag whose value embeds a quote and a comma; against the
+        // pre-change parser the length assertion below is the red control.
         let cond = ETagCondition::parse_http_header(b"\"a\", \"b\"").expect("parse list");
-        let single = cond.as_etag().map(|etag| etag.value().to_owned());
-        assert_ne!(single.as_deref(), Some("a\", \"b"), "list parsed as one opaque tag");
+        assert_eq!(cond.etags().len(), 2);
+        assert_eq!(cond.etags()[0].value(), "a");
+        assert_eq!(cond.etags()[1].value(), "b");
+        assert_eq!(cond.as_etag(), None);
+    }
+
+    #[test]
+    fn list_header_rejects_an_invalid_tag() {
+        // The list encoder propagates the entity tag error instead of skipping
+        // the member or emitting a header with a control character in it.
+        let cond = ETagCondition::List(vec![ETag::Strong("ok".to_owned()), ETag::Strong("bad\nvalue".to_owned())]);
+        assert!(cond.to_http_header().is_err());
+    }
+
+    #[test]
+    fn single_tag_condition_matches_strong_and_weak() {
+        // A single entity tag, strong or weak, is compared by the header it was
+        // parsed from: strong comparison for If-Match, weak for If-None-Match.
+        let current = ETag::Strong("good".to_owned());
+        let strong = ETagCondition::parse_http_header(b"\"good\"").expect("parse strong tag");
+        assert!(strong.matches_strong(&current));
+        assert!(strong.matches_weak(&current));
+        let weak = ETagCondition::parse_http_header(b"W/\"good\"").expect("parse weak tag");
+        assert!(!weak.matches_strong(&current));
+        assert!(weak.matches_weak(&current));
     }
 
     #[test]
