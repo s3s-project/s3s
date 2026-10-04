@@ -46,48 +46,53 @@ struct Counters {
 /// entry after a mint image upgrade is reported instead of being silently
 /// ignored).
 ///
-/// Baselines recorded on 2026-08-30 against `minio/mint:edge` and
-/// `minio/minio:latest`; each entry maps to a tracked known issue.
+/// Baseline re-recorded on 2026-10-04 against the pinned image in
+/// `scripts/mint.env` and the pinned `MinIO` image. What is left is the s3s
+/// defects s3s owns, the `MinIO` extensions it does not implement, and the two
+/// limits of the proxy or the backend, each mapped to a tracked known issue.
 const EXPECTED_FAILURES: &[(&str, &[(&str, usize)])] = &[
     (
         "aws-sdk-go-v2",
+        // Backend: the pinned MinIO ignores `If-Match` on `DeleteObject`, so a
+        // delete with a wrong ETag succeeds instead of being rejected.
         // FIXME: https://github.com/minio/mint/blob/master/run/core/aws-sdk-go-v2/main.go#L294
         &[("ConditionalDeleteWithIncorrectETag", 1)],
     ),
     (
         "aws-sdk-ruby",
-        // `presignedPost(...)` used to fail here; the suite now stops at
-        // `presignedPut` (it adds an unsigned `x-amz-acl` to a presigned PUT,
-        // which AWS and s3s refuse) and never reaches it.
-        &[("presignedPut(bucket_name,file_name)", 1)],
+        // s3s defect: `PostObject` is forwarded as a `PutObject` whose body is
+        // shorter than the content length it declares, so the request fails with
+        // `InternalError`. The case only runs at all because the image stopped
+        // sending an unsigned `x-amz-acl` on its presigned PUT.
+        &[("presignedPost(bucket_name,file_name,expires_in_sec,max_byte_size)", 1)],
     ),
     (
         "mc",
-        // s3s-proxy authenticates with a single static key and re-signs
-        // forwarded requests with it; the dynamically created user in
+        // Proxy limit: s3s-proxy authenticates with a single static key and
+        // re-signs forwarded requests with it; the dynamically created user in
         // test_admin_users cannot be signed in (`NotSignedUp`), so its S3
         // operations never reach the backend.
         &[("test_admin_users", 1)],
     ),
     (
         "minio-java",
-        // `getObjectAcl()` used to fail here and is likewise never reached now;
-        // the suite stops at `getPresignedObjectUrl()` [PUT], which sends the
-        // same unsigned `x-amz-acl`.
-        &[("getPresignedObjectUrl()", 1)],
+        // MinIO extensions s3s does not implement: `getObjectAcl()` needs the
+        // `<Type>` element MinIO puts inside `<Grantee>` (the AWS shape only
+        // carries `xsi:type`), and `putObjectFanOut()` sends the
+        // `x-minio-fanout-list` form field, which the POST policy validation
+        // rejects because it is not a policy condition. Both cases only run at
+        // all because the image stopped sending an unsigned `x-amz-acl` on its
+        // presigned PUT.
+        &[("getObjectAcl()", 1), ("putObjectFanOut()", 1)],
     ),
     (
         "minio-js",
-        // The force-delete cases pass now that the `x-minio-force-delete` header
-        // is forwarded, and `extensions.listObjectsV2WithMetadata` passes now that
-        // the proxy forwards the `metadata=true` extension; the remaining entries
-        // are client- or backend-owned.
-        &[
-            ("copyObject(bucketName, objectName, srcObject, conditions, cb)", 1),
-            ("listObjects(bucketName, prefix, recursive)", 1),
-            ("Put an object with assume role credentials:  bucket:", 1),
-            ("\"after all\" hook in \"functional tests\"", 1),
-        ],
+        // s3s gap: there is no STS, so the assume-role case cannot pass. The
+        // force-delete cases pass now that the `x-minio-force-delete` header is
+        // forwarded, `extensions.listObjectsV2WithMetadata` passes now that the
+        // proxy forwards the `metadata=true` extension, and the conditional-copy
+        // cases pass now that the image reads the field the SDK returns.
+        &[("Put an object with assume role credentials:  bucket:", 1)],
     ),
 ];
 
@@ -235,6 +240,15 @@ fn normalize_function(name: &str, function: &str) -> String {
 }
 
 /// Evaluate the group-level counter assertions.
+///
+/// Both images are pinned by digest (see `scripts/mint.env` and
+/// `scripts/minio.env`), so a full run produces the same counts every time and
+/// the pass floors below are the counts a full run produces. Their job is to
+/// catch a suite that stops early: that is what hid three real failures - the
+/// `minio-java` and `aws-sdk-ruby` suites stopped at their first failure until
+/// the mint image stopped sending an unsigned `x-amz-acl` on a presigned PUT.
+/// A floor that has to be lowered, or a `check_fail_zero` that has to become a
+/// count, needs the reason written next to it.
 fn check_counters(counts: &HashMap<String, Counters>, errors: &mut Vec<String>) {
     fn check_pass_at_least(counts: &HashMap<String, Counters>, name: &str, minimum: usize, errors: &mut Vec<String>) {
         let pass_count = counts.get(name).map_or(0, |counter| counter.pass);
@@ -252,19 +266,22 @@ fn check_counters(counts: &HashMap<String, Counters>, errors: &mut Vec<String>) 
 
     check_pass_at_least(counts, "aws-sdk-go-v2", 5, errors);
     check_fail_zero(counts, "aws-sdk-php", errors);
-    // One test less than a full run: the suite stops at `presignedPut`.
-    check_pass_at_least(counts, "aws-sdk-ruby", 11, errors);
+    // The one known failure is `presignedPost(...)`.
+    check_pass_at_least(counts, "aws-sdk-ruby", 12, errors);
     check_fail_zero(counts, "awscli", errors);
-    check_pass_at_least(counts, "mc", 16, errors);
+    // The one known failure is `test_admin_users`.
+    check_pass_at_least(counts, "mc", 28, errors);
     check_fail_zero(counts, "minio-go", errors);
-    // Twelve tests less than a full run: the suite stops at
-    // `getPresignedObjectUrl()` [PUT].
-    check_pass_at_least(counts, "minio-java", 42, errors);
-    check_pass_at_least(counts, "minio-js", 190, errors);
-    check_pass_at_least(counts, "minio-py", 16, errors);
+    // The two known failures need MinIO extensions; the twelve
+    // bucket-configuration cases report NA against the pinned backend and are
+    // counted separately, so they are not part of this floor.
+    check_pass_at_least(counts, "minio-java", 57, errors);
+    // The one known failure is the assume-role case, which needs STS.
+    check_pass_at_least(counts, "minio-js", 247, errors);
+    check_pass_at_least(counts, "minio-py", 22, errors);
     check_fail_zero(counts, "s3cmd", errors);
     check_fail_zero(counts, "s3select", errors);
-    check_pass_at_least(counts, "versioning", 4, errors);
+    check_pass_at_least(counts, "versioning", 18, errors);
 }
 
 /// Evaluate the per-function gate; an empty list of errors means it passed.
@@ -373,7 +390,7 @@ mod tests {
             "gate",
             &format!(
                 "{}\n{}\n{}\n",
-                entry("minio-js:listObjects(bucketName, prefix, recursive)", "FAIL"),
+                entry("minio-java:getPresignedObjectUrl()", "FAIL"),
                 entry("minio-js:notExpected", "FAIL"),
                 entry("mc:test_admin_users", "FAIL")
             ),
@@ -383,12 +400,12 @@ mod tests {
         let mut errors = Vec::new();
         check_gate(&logs, &mut errors);
 
-        assert_eq!(errors.len(), 7, "one unexpected failure plus six stale entries: {errors:?}");
+        assert_eq!(errors.len(), 7, "two unexpected failures plus five stale entries: {errors:?}");
         assert!(
-            !errors
+            errors
                 .iter()
-                .any(|error| error.contains("Force Deletion") || error.contains("\"listObjects(bucketName, prefix, recursive)\"")),
-            "the fixed force-delete cases must have no expected-failure entry left: {errors:?}"
+                .any(|error| error.contains("unexpected failure: \"minio-java\" \"getPresignedObjectUrl()\"")),
+            "the case the patched image fixes must have no expected-failure entry left: {errors:?}"
         );
         assert!(
             errors
