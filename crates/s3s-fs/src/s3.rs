@@ -2136,6 +2136,88 @@ mod tests {
         bucket_root
     }
 
+    /// Why a corpus key cannot be stored on every platform the tests run on, if it cannot.
+    ///
+    /// Windows rejects `<>:"/\\|?*`, control characters, a name that ends with a dot or a space, and a
+    /// few reserved device names. Checking here fails on the machine that adds the name, instead of on
+    /// the Windows leg of CI, which only runs after a push.
+    fn corpus_key_problem(key: &str) -> Option<String> {
+        const RESERVED: [&str; 22] = [
+            "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2",
+            "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+        ];
+
+        for segment in key.split('/') {
+            if segment.is_empty() {
+                return Some(format!("key {key:?} has an empty path segment"));
+            }
+            if let Some(character) = segment
+                .chars()
+                .find(|c| matches!(c, '<' | '>' | ':' | '"' | '\\' | '|' | '?' | '*'))
+            {
+                return Some(format!("key {key:?} has a segment Windows rejects ({character:?}): {segment:?}"));
+            }
+            if let Some(character) = segment.chars().find(|c| c.is_control()) {
+                return Some(format!("key {key:?} has a control character {character:?} in {segment:?}"));
+            }
+            if segment.ends_with('.') || segment.ends_with(' ') {
+                return Some(format!("key {key:?} has a segment that ends with a dot or a space: {segment:?}"));
+            }
+            let stem = segment.split('.').next().unwrap_or(segment).to_ascii_uppercase();
+            if RESERVED.contains(&stem.as_str()) {
+                return Some(format!("key {key:?} has a segment named after a reserved Windows device: {segment:?}"));
+            }
+        }
+        None
+    }
+
+    /// Panic when the corpus holds a key that cannot be stored on every platform the tests run on.
+    fn assert_corpus_is_portable(keys: &[&str]) {
+        for key in keys {
+            if let Some(problem) = corpus_key_problem(key) {
+                panic!("{problem}");
+            }
+        }
+    }
+
+    /// The guard protects nothing unless it rejects what Windows rejects.
+    #[test]
+    fn the_portability_guard_rejects_names_windows_cannot_store() {
+        let rejected = [
+            "quote\".txt",
+            "delim::x.txt",
+            "back\\slash.txt",
+            "star*.txt",
+            "question?.txt",
+            "pipe|.txt",
+            "less<.txt",
+            "trailing.",
+            "trailing ",
+            "CON",
+            "nul.txt",
+            "aux",
+            "com1.dat",
+            "lpt9",
+            "control\u{7}.txt",
+        ];
+        for key in rejected {
+            assert!(
+                corpus_key_problem(key).is_some(),
+                "the portability guard accepted {key:?}, which Windows rejects"
+            );
+        }
+
+        // And it accepts every shape the corpus itself uses.
+        assert_corpus_is_portable(&[
+            "a.txt",
+            "dir/sub/y.txt",
+            "sp ace.txt",
+            "unicode-é.txt",
+            "hash#x.txt",
+            "a!x.txt",
+            "a.b",
+        ]);
+    }
     /// Check one page of the ordered walk against a page cut out of a full scan of the same bucket.
     async fn assert_page_matches_a_full_scan(fs: &FileSystem, bucket_root: &Path, query: &ListingQuery<'_>) {
         let page = fs.list_page(bucket_root, query).await.unwrap();
@@ -2192,7 +2274,10 @@ mod tests {
         let _root = TestRoot(root.clone());
         let fs = FileSystem::new(&root).unwrap();
 
-        let keys = [
+        // The corpus has to be storable everywhere the tests run: `#` is a legal name character
+        // on every platform, while `::` and `"` are not (the keys that use them are added below
+        // only where the file system accepts them).
+        let mut keys: Vec<&str> = vec![
             "a.txt",
             "a/b.txt",
             "a/c/d.txt",
@@ -2208,10 +2293,9 @@ mod tests {
             "dir2/z.txt",
             "sp ace.txt",
             "unicode-é.txt",
-            "quote\".txt",
-            "delim::x.txt",
-            "delim::y.txt",
-            "delim::sub/z.txt",
+            "hash#x.txt",
+            "hash#y.txt",
+            "hash#sub/z.txt",
             "other.txt",
             "prefix.txt",
             "pre/fix.txt",
@@ -2220,6 +2304,14 @@ mod tests {
             "same/child.txt",
             "samely.txt",
         ];
+        // A guard rather than a comment: a name Windows rejects would otherwise fail the Windows CI
+        // leg, which only runs after a push.
+        assert_corpus_is_portable(&keys);
+        // Windows rejects a `"` or a `:` in a name, so the keys that put the delimiter inside one are
+        // only created where the file system allows them. Both sides of the comparison read the same
+        // tree, so the rest of the matrix stays meaningful either way.
+        #[cfg(unix)]
+        keys.extend(["quote\".txt", "delim::x.txt", "delim::y.txt", "delim::sub/z.txt"]);
         let bucket_root = write_bucket(&root, "bucket", &keys);
         // An empty directory must contribute nothing.
         std::fs::create_dir_all(bucket_root.join("empty-dir/inner")).unwrap();
@@ -2234,16 +2326,19 @@ mod tests {
             "pre/fix",
             "delim",
             "delim::",
+            "hash",
+            "hash#",
             "nonexistent",
             "z",
             "same",
         ];
-        let delimiters: [Option<&str>; 5] = [None, Some("/"), Some("::"), Some("x"), Some(".")];
-        let markers: [Option<&str>; 6] = [
+        let delimiters: [Option<&str>; 7] = [None, Some("/"), Some("#"), Some("##"), Some("::"), Some("x"), Some(".")];
+        let markers: [Option<&str>; 7] = [
             None,
             Some("a"),
             Some("a/b.txt"),
             Some("delim::x.txt"),
+            Some("hash#x.txt"),
             Some("same/child.txt"),
             Some("zzz"),
         ];
