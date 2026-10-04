@@ -3,12 +3,13 @@
 
 //! Watch a pull request until something decision-relevant changes.
 //!
-//! One tick prints a state line, appends it to a log when it differs from the
-//! last logged line, and restores its baseline from that log, so a restart does
-//! not miss a change. The watcher exits on a material change, on the merge or
-//! close transition, or when its time budget runs out — **the exit is the
-//! signal**, so nothing may keep the process alive past a change: a watcher that
-//! never returns watches nothing, because its caller is never woken.
+//! One tick prints a state line and appends it to a log when it differs from the
+//! last logged line. A watcher that starts without one writes the first line as
+//! its baseline and keeps watching; a restart resumes from the last logged line,
+//! so a change is not missed either way. The watcher exits on a material change,
+//! on the merge or close transition, or when its time budget runs out — **the
+//! exit is the signal**, so nothing may keep the process alive past a change: a
+//! watcher that never returns watches nothing, because its caller is never woken.
 //!
 //! The log is bookkeeping, not the watch: it is the bookmark a restarted watcher
 //! resumes from, and to observe a long run, read the log while the watcher runs
@@ -89,7 +90,7 @@ impl WatchPr {
             fs::create_dir_all(parent).with_context(|| format!("failed to create {}", parent.display()))?;
         }
         let queue = Repository::resolve();
-        let baseline = last_logged_line(&log);
+        let mut baseline = last_logged_line(&log);
         let deadline = Instant::now() + RUN_FOR;
         let mut failures = 0_u32;
         let mut ticks = 0_u64;
@@ -101,8 +102,12 @@ impl WatchPr {
                     let line = snapshot.render();
                     emit(&line);
                     let changed = material_change(baseline.as_deref(), &line);
-                    if changed || ticks.is_multiple_of(HEARTBEAT_TICKS) {
+                    // A watcher without a baseline writes one before it starts watching, and the
+                    // next tick compares against it: seeding must move the baseline, or every
+                    // later tick compares against nothing and no change is ever seen.
+                    if changed || baseline.is_none() || ticks.is_multiple_of(HEARTBEAT_TICKS) {
                         append(&log, &line);
+                        baseline = Some(line);
                     }
                     if snapshot.terminal() {
                         return Ok(true);
@@ -383,9 +388,12 @@ fn non_empty_owned(value: Option<&str>) -> Option<String> {
 }
 
 /// Whether a change between two state lines deserves attention.
+///
+/// A watcher that starts without a logged line has nothing to compare against: its first
+/// snapshot becomes the baseline, and the watcher keeps running.
 fn material_change(previous: Option<&str>, current: &str) -> bool {
     let Some(previous) = previous else {
-        return true;
+        return false;
     };
     let old = parse_line(previous);
     let new = parse_line(current);
@@ -525,8 +533,31 @@ mod tests {
     }
 
     #[test]
-    fn a_first_snapshot_is_always_a_change() {
-        assert!(material_change(None, LINE));
+    fn a_first_snapshot_is_a_baseline_not_a_change() {
+        assert!(!material_change(None, LINE));
+    }
+
+    #[test]
+    fn a_seeded_baseline_reports_the_next_change() {
+        // The first snapshot seeds the log instead of waking anybody; the baseline must then move
+        // to that line. If it stays `None`, every later tick compares against nothing and the
+        // watcher never sees the change it exists to report.
+        let mut baseline: Option<String> = None;
+        let seeded = line(&[
+            ("reviews", "0(-/-)"),
+            ("checks", "?:12,SKIPPED:8,SUCCESS:1"),
+            ("merge", "BLOCKED"),
+        ]);
+        assert!(!material_change(baseline.as_deref(), &seeded), "the first snapshot is the baseline");
+        baseline = Some(seeded);
+
+        let reviewed = line(&[
+            ("reviews", "1(COMMENTED/copilot-pull-request-reviewer)"),
+            ("checks", "SKIPPED:8,SUCCESS:14"),
+            ("merge", "CLEAN"),
+        ]);
+        assert!(material_change(baseline.as_deref(), &reviewed), "a review after the seed is a change");
+        assert!(!material_change(None, &reviewed), "a missing baseline is still not a change");
     }
 
     #[test]
