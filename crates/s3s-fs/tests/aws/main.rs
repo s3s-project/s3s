@@ -4,6 +4,7 @@
 mod bucket;
 mod conditional;
 mod copy;
+mod etag_backfill;
 mod list;
 mod multipart;
 mod object;
@@ -19,6 +20,7 @@ fn register(tcx: &mut TestContext) {
     multipart::register(tcx);
     copy::register(tcx);
     conditional::register(tcx);
+    etag_backfill::register(tcx);
     sts::register(tcx);
 }
 
