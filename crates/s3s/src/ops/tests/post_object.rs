@@ -686,15 +686,18 @@ async fn post_object_chunked_rejects_broken_body() {
     );
 }
 
+/// The size limit is enforced while the file part is aggregated, so a file over
+/// the configured maximum is still rejected before dispatch, with the code
+/// clients expect for an oversized upload.
 #[tokio::test]
-async fn post_object_with_content_length_rejects_bad_trailer() {
+async fn post_object_with_content_length_rejects_an_oversized_file() {
     use crate::auth::SecretKey;
-    use futures::StreamExt;
     use std::sync::Arc;
 
     let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
 
-    let config = post_policy_test_helpers::create_test_config(1024 * 1024);
+    // The config maximum applies: the policy carries no content-length-range.
+    let config = post_policy_test_helpers::create_test_config(10);
     let auth = post_policy_test_helpers::create_test_auth();
     let ccx = post_policy_test_helpers::create_test_context(&s3, &config, &auth);
 
@@ -703,36 +706,20 @@ async fn post_object_with_content_length_rejects_bad_trailer() {
         r#"{{"expiration":"2030-01-01T00:00:00.000Z","conditions":[{}]}}"#,
         post_policy_test_helpers::BASE_CONDITIONS,
     );
-    let mut req = post_policy_test_helpers::build_post_object_request(policy_json, "content", &secret_key, false);
-
-    // Strip the final CRLF from the multipart body to produce a non-canonical
-    // trailer (`--{boundary}--` directly followed by EOF).
-    let mut full = req.body.bytes().expect("body should be buffered").to_vec();
-    assert!(full.ends_with(b"--\r\n"));
-    full.pop();
-    full.pop();
-    req.body = crate::http::Body::from(bytes::Bytes::from(full.clone()));
-    req.headers
-        .insert(hyper::header::CONTENT_LENGTH, hyper::header::HeaderValue::from(full.len()));
+    let file_content = "x".repeat(64);
+    let mut req = post_policy_test_helpers::build_post_object_request(policy_json, &file_content, &secret_key, false);
 
     let result = super::prepare(&mut req, &ccx).await;
-    assert!(result.is_ok(), "dispatch is not affected");
-
-    let mut stream = req
-        .s3ext
-        .post_object_stream
-        .take()
-        .expect("post object stream should be present");
-
-    // The stream must report an error instead of yielding a truncated body.
-    let mut errored = false;
-    while let Some(chunk) = stream.next().await {
-        match chunk {
-            Ok(_) => {}
-            Err(_) => errored = true,
-        }
-    }
-    assert!(errored, "stream must reject the non-canonical trailer");
+    let Err(err) = result else {
+        panic!("expected prepare to fail for a file over the configured maximum");
+    };
+    assert_eq!(
+        *err.code(),
+        crate::error::S3ErrorCode::EntityTooLarge,
+        "got {:?}: {:?}",
+        err.code(),
+        err.message()
+    );
 }
 
 #[tokio::test]
