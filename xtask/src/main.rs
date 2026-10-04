@@ -11,6 +11,7 @@ mod coverage;
 mod crawl;
 mod fuzz;
 mod link_license;
+mod mutants;
 mod report;
 mod spdx;
 mod watch_pr;
@@ -39,6 +40,9 @@ enum Command {
     Fuzz(fuzz::Fuzz),
     /// Link the LICENSE file into every workspace member.
     LinkLicense(link_license::LinkLicense),
+    /// Plan and run mutation testing sweeps.
+    #[command(subcommand)]
+    Mutants(mutants::Mutants),
     /// Report gates for the end-to-end suites.
     #[command(subcommand)]
     Report(report::Report),
@@ -55,6 +59,7 @@ fn main() -> ExitCode {
         Command::Crawl(cmd) => cmd.run(),
         Command::Fuzz(cmd) => cmd.run(),
         Command::LinkLicense(cmd) => cmd.run(),
+        Command::Mutants(cmd) => cmd.run(),
         Command::Report(cmd) => cmd.run(),
         Command::Spdx(cmd) => cmd.run(),
         Command::WatchPr(cmd) => cmd.run(),

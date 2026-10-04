@@ -3580,6 +3580,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rlimit"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f35ee2729c56bb610f6dba436bf78135f728b7373bdffae2ec815b2d3eb98cc3"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "rust-ini"
 version = "0.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5324,6 +5333,7 @@ dependencies = [
  "quick-xml 0.42.0",
  "regex",
  "reqwest 0.13.5",
+ "rlimit",
  "serde",
  "serde_json",
 ]

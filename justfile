@@ -99,3 +99,15 @@ ci-rust:
 ci-python:
     uvx ruff format --check
     uvx ruff check
+
+# --- mutation testing (cargo-mutants) ------------------------------------------
+# Sweeps cap the address space: a mutant can make a test allocate without limit.
+
+# What the next sweep would run, without mutating anything.
+mutants-plan budget="15":
+    cargo run -q -p xtask -- mutants plan --budget-minutes {{budget}}
+
+# One budgeted sweep of the files that are due.
+mutants-run budget="15" files="":
+    cargo run -q -p xtask -- mutants run --budget-minutes {{budget}} --files "{{files}}"
+
