@@ -116,13 +116,16 @@ impl ETagCondition {
     ///
     /// The field value is the wildcard `*`, a single entity tag, or a
     /// comma-separated list of entity tags. Optional whitespace is allowed
-    /// around each entity tag of a list, and the wildcard has to be the whole
-    /// field value.
+    /// around each entity tag of a list.
+    ///
+    /// RFC 9110 allows the wildcard only as the whole field value, but Amazon S3
+    /// accepts it as a member of a list and answers the request instead of
+    /// rejecting it (`If-Match: "a", *` is satisfied), so a `*` member is the
+    /// wildcard condition here too.
     ///
     /// # Errors
     /// + Returns `ParseETagConditionError::InvalidFormat` if the bytes do not match the expected syntax:
-    ///   an empty value, an empty list element, a trailing comma, the wildcard mixed with entity tags,
-    ///   or unbalanced double quotes.
+    ///   an empty value, an empty list element, a trailing comma, or unbalanced double quotes.
     /// + Returns `ParseETagConditionError::InvalidChar` if the value contains invalid characters
     pub fn parse_http_header(src: &[u8]) -> Result<Self, ParseETagConditionError> {
         // RFC 9110 defines the field value as `"*" / 1#entity-tag`, so the
@@ -134,6 +137,19 @@ impl ETagCondition {
         let mut elements = SmallVec::new();
         if !split_list(src, &mut elements) {
             return Err(ParseETagConditionError::InvalidFormat);
+        }
+
+        // An empty element and a trailing comma are malformed in every
+        // position, also next to a wildcard member.
+        if elements.iter().any(|element| trim_ows(element).is_empty()) {
+            return Err(ParseETagConditionError::InvalidFormat);
+        }
+
+        // RFC 9110 allows the wildcard only as the whole field value, but Amazon
+        // S3 satisfies `If-Match: "a", *`, so a `*` member is the wildcard
+        // condition for both conditional headers.
+        if elements.iter().any(|element| trim_ows(element) == b"*") {
+            return Ok(ETagCondition::Any);
         }
 
         // A single entity tag is the common case: it goes straight into the
@@ -347,11 +363,15 @@ mod tests {
             ParseETagConditionError::InvalidFormat | ParseETagConditionError::ETagError(_)
         ));
 
-        let err = ETagCondition::parse_http_header(b"* ").unwrap_err();
-        assert!(matches!(
-            err,
-            ParseETagConditionError::InvalidFormat | ParseETagConditionError::ETagError(_)
-        ));
+        // The wildcard tolerates the optional whitespace that surrounds a field
+        // value, the same way a list element does.
+        for input in [b"* ".as_slice(), b" *", b"\t*"] {
+            assert_eq!(
+                ETagCondition::parse_http_header(input).expect("parse wildcard with ows"),
+                ETagCondition::Any,
+                "input {input:?}"
+            );
+        }
 
         let err = ETagCondition::parse_http_header(b"\"unclosed").unwrap_err();
         assert!(matches!(
@@ -458,10 +478,22 @@ mod tests {
     }
 
     #[test]
+    fn parse_wildcard_mixed_into_a_list_is_the_wildcard() {
+        // RFC 9110 allows `*` only as the whole field value, but Amazon S3
+        // accepts `If-Match: "a", *` and satisfies the condition, so a wildcard
+        // member is parsed as the wildcard condition.
+        for input in ["*, \"a\"", "\"a\", *", "*, *"] {
+            let cond = ETagCondition::parse_http_header(input.as_bytes()).expect("parse wildcard member");
+            assert_eq!(cond, ETagCondition::Any, "input {input:?}");
+            assert!(cond.is_any());
+        }
+        // A malformed element is still rejected next to a wildcard.
+        assert!(ETagCondition::parse_http_header(b"\"a\", *, ").is_err());
+    }
+
+    #[test]
     fn parse_list_rejects_invalid_forms() {
         let invalid = [
-            "*, \"a\"",
-            "\"a\", *",
             "\"a\",",
             "\"a\",, \"b\"",
             "\"a\", ",
