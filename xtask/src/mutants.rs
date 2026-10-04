@@ -415,6 +415,12 @@ fn sweep(root: &Path, args: &RunArgs) -> Result<bool> {
             Some(status) => eprintln!("cargo mutants exited with {status} for {}", unit.slug()),
             None => {
                 eprintln!("budget reached during {}", unit.slug());
+                // Record what this unit got through. Without an entry the file stays
+                // "never swept" and the next run picks it again, so a file larger than
+                // the budget would stall the rotation forever.
+                let unit_totals = read_totals(&out.join(unit.slug())).unwrap_or_default();
+                merge(&mut totals, &unit_totals);
+                swept.push((unit, unit_totals.tested()));
                 break;
             }
         }
@@ -670,8 +676,11 @@ crates/s3s/src/http/de.rs:3:1: replace a with b
     }
 
     #[test]
-    fn nothing_is_accepted_without_a_recorded_reason() {
-        assert!(ACCEPTED.is_empty(), "record an accepted survivor here only with a reason");
+    fn acceptance_matches_recorded_survivors_only() {
+        for (name, status, reason) in ACCEPTED {
+            assert!(!status.is_empty() && !reason.is_empty(), "{name} needs a status and a reason");
+            assert_eq!(acceptance(name), Some(*status));
+        }
         assert_eq!(acceptance("crates/s3s/src/lib.rs:1:1: replace x with y"), None);
     }
 
