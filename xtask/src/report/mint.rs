@@ -50,6 +50,12 @@ struct Counters {
 /// `scripts/mint.env` and the pinned `MinIO` image. What is left is the s3s
 /// defects s3s owns, the `MinIO` extensions it does not implement, and the two
 /// limits of the proxy or the backend, each mapped to a tracked known issue.
+///
+/// The run this list is scored against enables the proxy's authentication
+/// passthrough: a request carrying a credential the proxy does not know is
+/// forwarded verbatim and the backend decides, so the dynamically created user
+/// of `mc test_admin_users` and the temporary credentials of the `minio-js`
+/// assume-role case are no longer expected to fail.
 const EXPECTED_FAILURES: &[(&str, &[(&str, usize)])] = &[
     (
         "aws-sdk-go-v2",
@@ -57,14 +63,6 @@ const EXPECTED_FAILURES: &[(&str, &[(&str, usize)])] = &[
         // delete with a wrong ETag succeeds instead of being rejected.
         // FIXME: https://github.com/minio/mint/blob/master/run/core/aws-sdk-go-v2/main.go#L294
         &[("ConditionalDeleteWithIncorrectETag", 1)],
-    ),
-    (
-        "mc",
-        // Proxy limit: s3s-proxy authenticates with a single static key and
-        // re-signs forwarded requests with it; the dynamically created user in
-        // test_admin_users cannot be signed in (`NotSignedUp`), so its S3
-        // operations never reach the backend.
-        &[("test_admin_users", 1)],
     ),
     (
         "minio-java",
@@ -78,15 +76,6 @@ const EXPECTED_FAILURES: &[(&str, &[(&str, usize)])] = &[
         // grantee repeats its type as the `<Type>` child element MinIO writes,
         // so the case passes.
         &[("putObjectFanOut()", 1)],
-    ),
-    (
-        "minio-js",
-        // s3s gap: there is no STS, so the assume-role case cannot pass. The
-        // force-delete cases pass now that the `x-minio-force-delete` header is
-        // forwarded, `extensions.listObjectsV2WithMetadata` passes now that the
-        // proxy forwards the `metadata=true` extension, and the conditional-copy
-        // cases pass now that the image reads the field the SDK returns.
-        &[("Put an object with assume role credentials:  bucket:", 1)],
     ),
 ];
 
@@ -263,15 +252,17 @@ fn check_counters(counts: &HashMap<String, Counters>, errors: &mut Vec<String>) 
     // No known failure is left in this suite.
     check_pass_at_least(counts, "aws-sdk-ruby", 13, errors);
     check_fail_zero(counts, "awscli", errors);
-    // The one known failure is `test_admin_users`.
-    check_pass_at_least(counts, "mc", 28, errors);
+    // `test_admin_users` passes now that the authentication passthrough lets the
+    // dynamically created user reach the backend.
+    check_pass_at_least(counts, "mc", 29, errors);
     check_fail_zero(counts, "minio-go", errors);
     // The one known failure needs a MinIO extension; the twelve
     // bucket-configuration cases report NA against the pinned backend and are
     // counted separately, so they are not part of this floor.
     check_pass_at_least(counts, "minio-java", 58, errors);
-    // The one known failure is the assume-role case, which needs STS.
-    check_pass_at_least(counts, "minio-js", 247, errors);
+    // The assume-role case passes now that the STS protocol shape is forwarded
+    // and the temporary credentials reach the backend.
+    check_pass_at_least(counts, "minio-js", 248, errors);
     check_pass_at_least(counts, "minio-py", 22, errors);
     check_fail_zero(counts, "s3cmd", errors);
     check_fail_zero(counts, "s3select", errors);
@@ -394,7 +385,7 @@ mod tests {
         let mut errors = Vec::new();
         check_gate(&logs, &mut errors);
 
-        assert_eq!(errors.len(), 5, "two unexpected failures plus three stale entries: {errors:?}");
+        assert_eq!(errors.len(), 5, "three unexpected failures plus two stale entries: {errors:?}");
         assert!(
             errors
                 .iter()
@@ -405,6 +396,12 @@ mod tests {
             errors
                 .iter()
                 .any(|error| error.contains("unexpected failure: \"minio-js\" \"notExpected\""))
+        );
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.contains("unexpected failure: \"mc\" \"test_admin_users\"")),
+            "the passthrough fixes this case, so it has no expected-failure entry left: {errors:?}"
         );
         assert!(errors.iter().any(|error| error.contains("expected failure entry is stale")));
     }
