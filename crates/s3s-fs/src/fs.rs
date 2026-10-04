@@ -454,6 +454,10 @@ impl<'a> FileWriter<'a> {
     }
 
     pub(crate) async fn done(mut self) -> Result<()> {
+        // A caller may leave bytes in the buffer, and the rename below publishes the file, so the
+        // buffer has to reach the file system first. Callers that flush themselves are unaffected.
+        self.writer.flush().await?;
+
         if let Some(final_dir_path) = self.dest_path().parent() {
             fs::create_dir_all(&final_dir_path).await?;
         }
@@ -607,5 +611,26 @@ mod tests {
 
             Ok(())
         })
+    }
+
+    /// `done` publishes the file with a rename, so it has to flush whatever a caller left buffered.
+    #[tokio::test]
+    async fn done_flushes_buffered_writes_before_renaming() {
+        let root = env::temp_dir().join(format!("s3s-fs-done-flush-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let _root = TestRoot(root.clone());
+        let fs = FileSystem::new(&root).unwrap();
+
+        let dest = root.join("bucket/object");
+        let mut writer = fs.prepare_file_write(&dest).await.unwrap();
+        // Smaller than the buffer, so `done` is the only thing that can flush it.
+        writer.writer().write_all(b"buffered bytes").await.unwrap();
+        writer.done().await.unwrap();
+
+        assert_eq!(
+            std::fs::read(&dest).unwrap(),
+            b"buffered bytes",
+            "done() must flush before it renames the temporary file"
+        );
     }
 }
