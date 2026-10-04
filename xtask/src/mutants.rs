@@ -44,7 +44,6 @@ const FIXED_SECONDS: u64 = 60;
 
 /// Address-space cap for a sweep. A mutant can make a test allocate without limit,
 /// so the sweep limits itself and everything it spawns.
-#[cfg(unix)]
 const ADDRESS_SPACE_LIMIT: u64 = 8 * 1024 * 1024 * 1024;
 
 /// Poll interval while a sweep runs.
@@ -270,22 +269,20 @@ fn plan(root: &Path, args: &PlanArgs) -> Result<Vec<Unit>> {
 
 /// Cap the address space of this process and its children, unless something below
 /// the cap is already in place.
-#[cfg(unix)]
+///
+/// `rlimit` exposes `Resource` on Unix only, so elsewhere a runaway mutant is left to
+/// the mutation timeout and to cargo-mutants' own parallelism.
 fn cap_address_space() -> Result<()> {
-    let resource = rlimit::Resource::AS;
-    let (soft, hard) = rlimit::getrlimit(resource)?;
-    let cap = ADDRESS_SPACE_LIMIT.min(hard);
-    if soft == rlimit::INFINITY || soft > cap {
-        rlimit::setrlimit(resource, cap, hard)?;
-        println!("address space capped at {} GiB", cap >> 30);
+    #[cfg(unix)]
+    {
+        let resource = rlimit::Resource::AS;
+        let (soft, hard) = resource.get()?;
+        let cap = ADDRESS_SPACE_LIMIT.min(hard);
+        if soft > cap {
+            resource.set(cap, hard)?;
+            println!("address space capped at {} GiB", cap >> 30);
+        }
     }
-    Ok(())
-}
-
-/// Address-space limits are a Unix idea; elsewhere a runaway mutant is left to the
-/// mutation timeout and to cargo-mutants' own parallelism.
-#[cfg(not(unix))]
-fn cap_address_space() -> Result<()> {
     Ok(())
 }
 
