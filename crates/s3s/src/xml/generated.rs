@@ -7436,6 +7436,15 @@ impl<'xml> DeserializeContent<'xml> for Grant {
                         uri = Some(d.content()?);
                         Ok(())
                     }
+                    #[cfg(feature = "minio")]
+                    b"Type" => {
+                        if type_.is_some() {
+                            d.skip_element_content()?;
+                        } else {
+                            type_ = Some(d.content()?);
+                        }
+                        Ok(())
+                    }
                     _ => Err(DeError::UnexpectedTagName),
                 })?;
                 grantee = Some(Grantee {
@@ -7462,6 +7471,8 @@ impl<'xml> DeserializeContent<'xml> for Grant {
 
 impl SerializeContent for Grantee {
     fn serialize_content<W: Write>(&self, s: &mut Serializer<W>) -> SerResult {
+        #[cfg(feature = "minio")]
+        s.content("Type", &self.type_)?;
         if let Some(ref val) = self.display_name {
             s.content("DisplayName", val)?;
         }
@@ -12539,6 +12550,15 @@ impl<'xml> DeserializeContent<'xml> for TargetGrant {
                             return Err(DeError::DuplicateField);
                         }
                         uri = Some(d.content()?);
+                        Ok(())
+                    }
+                    #[cfg(feature = "minio")]
+                    b"Type" => {
+                        if type_.is_some() {
+                            d.skip_element_content()?;
+                        } else {
+                            type_ = Some(d.content()?);
+                        }
                         Ok(())
                     }
                     _ => Err(DeError::UnexpectedTagName),

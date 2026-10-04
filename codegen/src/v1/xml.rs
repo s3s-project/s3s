@@ -421,6 +421,20 @@ fn codegen_xml_serde_content_struct(
             if ty.fields.is_empty() { '_' } else { 's' }
         );
 
+        if ty.name == "Grantee" {
+            // MinIO repeats the grantee type as a child element next to the `xsi:type`
+            // attribute, and clients built against that form require the element.
+            // The value is derived from the attribute field, so the two representations
+            // cannot disagree.
+            let type_field = ty
+                .fields
+                .iter()
+                .find(|x| x.is_xml_attr)
+                .expect("Grantee carries its type as an xml attribute");
+            g!("#[cfg(feature = \"minio\")]");
+            g!("s.content(\"Type\", &self.{})?;", type_field.name);
+        }
+
         for field in ty.fields.iter().filter(|x| x.position == "xml") {
             let xml_name = field.xml_name.as_ref().unwrap_or(&field.camel_name);
 
@@ -611,6 +625,19 @@ fn codegen_xml_serde_content_struct(
                             g!("    Ok(())");
                             g!("}}");
                         }
+                        // MinIO clients also send the grantee type as a child element next
+                        // to the `xsi:type` attribute. Accept it: the attribute wins when it
+                        // is present, otherwise the element supplies the value, and a grantee
+                        // with neither stays a missing field.
+                        g!("#[cfg(feature = \"minio\")]");
+                        g!("b\"Type\" => {{");
+                        g!("    if {xml_attr_name}.is_some() {{");
+                        g!("        d.skip_element_content()?;");
+                        g!("    }} else {{");
+                        g!("        {xml_attr_name} = Some(d.content()?);");
+                        g!("    }}");
+                        g!("    Ok(())");
+                        g!("}}");
                         if input_root_types.contains(ty.name.as_str()) {
                             g!("_ => {{ d.skip_element_content()?; Ok(()) }},");
                         } else {
