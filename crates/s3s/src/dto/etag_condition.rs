@@ -13,7 +13,7 @@ use super::etag::{ETag, ParseETagError};
 ///
 /// According to RFC 9110 §13.1.1 and §13.1.2, these headers can contain either:
 /// - A single `ETag` value (strong or weak): `"value"` or `W/"value"`
-/// - A comma-separated list of `ETag` values (`1#entity-tag`), satisfied when any member matches
+/// - A comma-separated list of `ETag` values (`1#entity-tag`), matched when any member matches
 /// - A wildcard: `*` (matches any existing entity)
 ///
 /// The wildcard is commonly used for conditional requests like:
@@ -22,7 +22,9 @@ use super::etag::{ETag, ParseETagError};
 ///
 /// Entity tags are compared with the function required by the header:
 /// [`ETagCondition::matches_strong`] for `If-Match` and
-/// [`ETagCondition::matches_weak`] for `If-None-Match`.
+/// [`ETagCondition::matches_weak`] for `If-None-Match`. Both return the match
+/// result, not the precondition result: a match means "proceed" for `If-Match`
+/// and "do not proceed" for `If-None-Match`.
 ///
 /// See RFC 9110 §13.1 and MDN:
 /// + <https://www.rfc-editor.org/rfc/rfc9110#section-13.1>
@@ -33,7 +35,7 @@ pub enum ETagCondition {
     ETag(ETag),
     /// The wildcard `*` that matches any existing entity
     Any,
-    /// A comma-separated list of entity tags, satisfied when any member matches
+    /// A comma-separated list of entity tags, matched when any member matches
     List(Vec<ETag>),
 }
 
@@ -228,12 +230,13 @@ impl ETagCondition {
         }
     }
 
-    /// Returns true when this `If-Match` condition is satisfied by `current`.
+    /// Returns true when `current` strongly matches this condition.
     ///
-    /// The wildcard is satisfied by any existing representation, so the caller
-    /// still has to check that the representation exists. Otherwise the
-    /// condition is satisfied when any entity tag is a strong match
-    /// ([`ETag::strong_cmp`]), as required by RFC 9110 §13.1.1.
+    /// For an `If-Match` header a `true` return means the precondition is met
+    /// and the request may proceed, as required by RFC 9110 §13.1.1.
+    /// [`ETagCondition::Any`] matches any existing representation, so the caller
+    /// still has to check that the representation exists; otherwise a member has
+    /// to be a strong match ([`ETag::strong_cmp`]).
     #[must_use]
     pub fn matches_strong(&self, current: &ETag) -> bool {
         match self {
@@ -243,12 +246,14 @@ impl ETagCondition {
         }
     }
 
-    /// Returns true when this `If-None-Match` condition is satisfied by `current`.
+    /// Returns true when `current` weakly matches this condition.
     ///
-    /// The wildcard is satisfied by any existing representation, so the caller
-    /// still has to check that the representation exists. Otherwise the
-    /// condition is satisfied when any entity tag is a weak match
-    /// ([`ETag::weak_cmp`]), as required by RFC 9110 §13.1.2.
+    /// For an `If-None-Match` header a `true` return means the precondition is
+    /// **not** met: the caller has to answer `304 Not Modified` for `GET` and
+    /// `HEAD`, and `412 Precondition Failed` for the other methods, as required
+    /// by RFC 9110 §13.1.2. [`ETagCondition::Any`] matches any existing
+    /// representation, so the caller still has to check that the representation
+    /// exists; otherwise a member has to be a weak match ([`ETag::weak_cmp`]).
     #[must_use]
     pub fn matches_weak(&self, current: &ETag) -> bool {
         match self {
