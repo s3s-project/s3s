@@ -49,6 +49,9 @@ const HEARTBEAT_TICKS: u64 = 20;
 /// the moment a change is noticed.
 const TICK: Duration = Duration::from_secs(60);
 
+/// How long a watcher runs before it stops.
+const RUN_FOR: Duration = Duration::from_hours(12);
+
 /// Consecutive snapshot failures tolerated before the watcher gives up.
 const MAX_CONSECUTIVE_FAILURES: u32 = 3;
 
@@ -74,9 +77,6 @@ pub(crate) struct WatchPr {
     /// Pull request number.
     #[arg(value_name = "PR")]
     pr: u64,
-    /// Stop after this many hours.
-    #[arg(long, value_name = "HOURS", default_value_t = 24)]
-    hours: u64,
     /// Where to append the state lines; defaults to `target/pr-watch/pr-<n>.log`.
     #[arg(long, value_name = "PATH")]
     log: Option<PathBuf>,
@@ -90,7 +90,7 @@ impl WatchPr {
         }
         let queue = Repository::resolve();
         let baseline = last_logged_line(&log);
-        let deadline = Instant::now() + Duration::from_secs(self.hours.saturating_mul(3600));
+        let deadline = Instant::now() + RUN_FOR;
         let mut failures = 0_u32;
         let mut ticks = 0_u64;
         loop {
