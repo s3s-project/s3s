@@ -1,7 +1,7 @@
 ---
 
 name: "testing"
-description: Add or run tests in this repository. Use when placing a new test, when a test target is not picked up, when the feature sets matter, or when an end-to-end or fuzz suite is involved.
+description: Add or run tests in this repository. Use when placing a new test, when a test target is not picked up, when the feature sets matter, or when an end-to-end suite is involved.
 license: "Apache-2.0"
 ---
 
@@ -26,9 +26,9 @@ Compare whole values, exact strings or exact error variants, so that a wrong imp
 
 Keep fixtures next to their tests (`crates/s3s/tests/fixtures/`, `crates/s3s/src/ops/tests/fixtures/`) unless the generator consumes them, in which case they belong under `data/`.
 
-## The fuzz workspace
+## Neighbouring suites
 
-`fuzz/` is a separate workspace: the root `just test` does not build it, so use its own recipes in `fuzz/justfile` from that directory. `just ci-check` runs the formatting check, clippy with `--cfg fuzzing` on nightly, and the seed check; `just fuzz <target>` needs cargo-fuzz. The committed seeds under `fuzz/seeds/` are part of the corpus contract: a seed whose result no longer matches the outcome it was added for is a corpus bug, and `just check-seeds` fails on it.
+Fuzzing lives in its own workspace and has its own skill (`fuzz-testing`), as does the scheduled mutation sweep (`mutation-testing`). What follows is the part of the suite that runs like a test.
 
 ## End-to-end suites
 
