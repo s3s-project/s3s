@@ -534,6 +534,12 @@ impl<'a> SignatureContext<'a> {
             && mime.type_() == mime::MULTIPART
             && mime.subtype() == mime::FORM_DATA
         {
+            // A repeated `Authorization` header is rejected before the form is parsed. The header is
+            // part of the request envelope, so the answer does not depend on the form fields, on the
+            // POST-signature switch, or on whether the form turns out to be signed at all. This runs
+            // ahead of `check_post_signature`, which parses the body and applies
+            // `ensure_post_signature_enabled` to signed forms only.
+            reject_ambiguous_authorization(self.hs)?;
             return self.check_post_signature().await;
         }
 
