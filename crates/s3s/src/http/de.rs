@@ -122,6 +122,105 @@ pub fn parse_checksum_algorithm_header(req: &Request) -> S3Result<Option<crate::
     Ok(ans.map(crate::dto::ChecksumAlgorithm::from_static))
 }
 
+/// Whether `name` is one of the auxiliary `x-amz-checksum-*` headers, which do
+/// not name a checksum algorithm.
+///
+/// The names are the generated header constants from [`crate::header`].
+fn is_checksum_aux_header(name: &HeaderName) -> bool {
+    [
+        crate::header::X_AMZ_CHECKSUM_ALGORITHM,
+        crate::header::X_AMZ_CHECKSUM_MODE,
+        crate::header::X_AMZ_CHECKSUM_TYPE,
+    ]
+    .contains(name)
+}
+
+/// Whether `name` is `x-amz-checksum-<algorithm>` for a modelled algorithm, one per
+/// variant of [`crate::dto::ChecksumAlgorithm`].
+///
+/// The names are the generated header constants from [`crate::header`]: a new checksum
+/// algorithm adds a constant there and has to be listed here as well, because the model
+/// type is a string newtype, so the list cannot be derived from it and nothing else
+/// would notice the omission.
+fn is_checksum_algorithm_header(name: &HeaderName) -> bool {
+    [
+        crate::header::X_AMZ_CHECKSUM_CRC32,
+        crate::header::X_AMZ_CHECKSUM_CRC32C,
+        crate::header::X_AMZ_CHECKSUM_CRC64NVME,
+        crate::header::X_AMZ_CHECKSUM_MD5,
+        crate::header::X_AMZ_CHECKSUM_SHA1,
+        crate::header::X_AMZ_CHECKSUM_SHA256,
+        crate::header::X_AMZ_CHECKSUM_SHA512,
+        crate::header::X_AMZ_CHECKSUM_XXHASH3,
+        crate::header::X_AMZ_CHECKSUM_XXHASH64,
+        crate::header::X_AMZ_CHECKSUM_XXHASH128,
+    ]
+    .contains(name)
+}
+
+/// Rejects the `x-amz-checksum-*` headers the service refuses.
+///
+/// The order is the one the service uses: a header name that carries several
+/// values is rejected first, then a request that names more than one checksum
+/// algorithm, then one that names an algorithm outside the model's
+/// [`crate::dto::ChecksumAlgorithm`] enumeration. The auxiliary
+/// `x-amz-checksum-algorithm` / `-mode` / `-type` headers are not algorithm
+/// headers.
+pub fn validate_checksum_headers(req: &Request) -> S3Result<()> {
+    let mut algorithm_headers = 0_usize;
+    let mut unknown_algorithm = false;
+
+    for name in req.headers.keys() {
+        if !name.as_str().starts_with("x-amz-checksum-") {
+            continue;
+        }
+
+        if req.headers.get_all(name).iter().count() > 1 {
+            return Err(s3_error!(InvalidArgument, "Only one value may be specified."));
+        }
+
+        if is_checksum_aux_header(name) {
+            continue;
+        }
+
+        algorithm_headers += 1;
+        unknown_algorithm |= !is_checksum_algorithm_header(name);
+    }
+
+    if algorithm_headers > 1 {
+        return Err(s3_error!(
+            InvalidRequest,
+            "Expecting a single x-amz-checksum- header. Multiple checksum Types are not allowed."
+        ));
+    }
+
+    if unknown_algorithm {
+        return Err(s3_error!(
+            InvalidRequest,
+            "The algorithm type you specified in x-amz-checksum- header is invalid."
+        ));
+    }
+
+    Ok(())
+}
+
+/// Rejects an empty `x-amz-expected-bucket-owner` header.
+///
+/// The header is optional, but a present header must carry an account ID: an
+/// empty value is invalid rather than absent. The message is the one the service
+/// returns, including the trailing `... []` it appends.
+pub fn validate_expected_bucket_owner(req: &Request) -> S3Result<()> {
+    let mut values = req.headers.get_all(&crate::header::X_AMZ_EXPECTED_BUCKET_OWNER).iter();
+    if values.next().is_some_and(HeaderValue::is_empty) {
+        return Err(s3_error!(
+            InvalidBucketOwnerAWSAccountID,
+            "The value of the expected bucket owner parameter must be an AWS Account ID... []"
+        ));
+    }
+
+    Ok(())
+}
+
 pub fn parse_opt_header_timestamp(req: &Request, name: &HeaderName, fmt: TimestampFormat) -> S3Result<Option<Timestamp>> {
     let Some(val) = get_optional_header(req, name)? else { return Ok(None) };
 

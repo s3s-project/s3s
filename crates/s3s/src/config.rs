@@ -299,6 +299,14 @@ pub struct S3Config {
     /// without aws-chunked) are never backfilled and keep a missing
     /// `Content-Length`.
     ///
+    /// AWS rejects a `PUT` that carries neither `Content-Length` nor
+    /// `Transfer-Encoding` with `411 MissingContentLength`. This option is
+    /// deliberately more permissive by default: such a body is empty, its
+    /// length is therefore known to be zero, and implementations observe a
+    /// backfilled `Content-Length: 0` instead of the 411. Set this option to
+    /// `false` to keep the missing header missing so that stricter behavior
+    /// can be enforced elsewhere.
+    ///
     /// Default: true
     pub normalize_content_length: bool,
 

@@ -36,6 +36,7 @@ mod custom_route_body_limit;
 mod decoded_content_length;
 mod error_response;
 mod generated_ops;
+mod header_validation;
 mod host;
 mod key_length;
 #[cfg(feature = "minio")]
