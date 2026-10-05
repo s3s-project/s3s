@@ -686,6 +686,56 @@ async fn post_object_chunked_rejects_broken_body() {
     );
 }
 
+/// The closing delimiter may be followed directly by the end of the body: how
+/// many trailer bytes the request carries is only known once the body has been
+/// read, so the file part is aggregated and its length is the length of the data
+/// that was actually there.
+#[tokio::test]
+async fn post_object_with_content_length_accepts_a_missing_final_crlf() {
+    use crate::auth::SecretKey;
+    use futures::StreamExt;
+    use std::sync::Arc;
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+
+    let config = post_policy_test_helpers::create_test_config(1024 * 1024);
+    let auth = post_policy_test_helpers::create_test_auth();
+    let ccx = post_policy_test_helpers::create_test_context(&s3, &config, &auth);
+
+    let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+    let policy_json = &format!(
+        r#"{{"expiration":"2030-01-01T00:00:00.000Z","conditions":[{}]}}"#,
+        post_policy_test_helpers::BASE_CONDITIONS,
+    );
+    let mut req = post_policy_test_helpers::build_post_object_request(policy_json, "content", &secret_key, false);
+
+    // Strip the final CRLF from the multipart body so the closing delimiter is
+    // followed directly by the end of the body.
+    let mut full = req.body.bytes().expect("body should be buffered").to_vec();
+    assert!(full.ends_with(b"--\r\n"));
+    full.pop();
+    full.pop();
+    req.body = crate::http::Body::from(bytes::Bytes::from(full.clone()));
+    req.headers
+        .insert(hyper::header::CONTENT_LENGTH, hyper::header::HeaderValue::from(full.len()));
+
+    let result = super::prepare(&mut req, &ccx).await;
+    assert!(result.is_ok(), "dispatch is not affected");
+
+    let mut stream = req
+        .s3ext
+        .post_object_stream
+        .take()
+        .expect("post object stream should be present");
+    assert_eq!(stream.remaining_length().exact(), Some("content".len()));
+
+    let mut collected = Vec::new();
+    while let Some(chunk) = stream.next().await {
+        collected.extend_from_slice(&chunk.expect("the aggregated file must not error"));
+    }
+    assert_eq!(collected, b"content");
+}
+
 /// The size limit is enforced while the file part is aggregated, so a file over
 /// the configured maximum is still rejected before dispatch, with the code
 /// clients expect for an oversized upload.
