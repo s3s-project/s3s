@@ -136,6 +136,8 @@ fn tower_service_accepts_a_generic_body() {
     let req = Request::builder()
         .method(Method::PUT)
         .uri("/bucket/key")
+        // A payload-bearing request declares its length, as the service requires.
+        .header(hyper::header::CONTENT_LENGTH, "5")
         .body(http_body_util::Full::new(Bytes::from_static(b"hello")))
         .expect("valid request");
     let resp = futures::executor::block_on(<S3Service as tower::Service<http::Request<http_body_util::Full<Bytes>>>>::call(

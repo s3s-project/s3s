@@ -38,7 +38,10 @@ fn build_request(method: &str, uri_path: &str, headers: &[(&str, &str)]) -> Requ
     let mut builder = hyper::Request::builder()
         .method(Method::from_bytes(method.as_bytes()).unwrap())
         .uri(format!("http://localhost{uri_path}"))
-        .header(crate::header::HOST, "localhost");
+        .header(crate::header::HOST, "localhost")
+        // A payload-bearing request has to declare its length, as the service
+        // requires; the empty body is exactly zero bytes.
+        .header(hyper::header::CONTENT_LENGTH, "0");
     for (name, value) in headers {
         builder = builder.header(*name, *value);
     }

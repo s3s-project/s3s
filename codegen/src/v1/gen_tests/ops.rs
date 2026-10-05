@@ -461,6 +461,13 @@ fn collect_cases(ops: &Operations, types: &RustTypes) -> Vec<Case> {
         }
 
         let input = expect_struct(op.input.as_str(), types);
+        // A streaming operation sends its payload straight to the implementation; the
+        // dispatch path refuses such a request when it declares no length, so the sample
+        // has to carry one. The length is the sample body's own length.
+        let streams_body = input
+            .fields
+            .iter()
+            .any(|field| field.position == "payload" && field.type_ == "StreamingBlob");
         let (path, query, literal_path) = split_http_uri(&op.http_uri);
         let mut query_parts: Vec<String> = query
             .map(|query| query.split('&').map(ToOwned::to_owned).collect())
@@ -477,7 +484,10 @@ fn collect_cases(ops: &Operations, types: &RustTypes) -> Vec<Case> {
                 }
                 "header" => {
                     let name = field.http_header.clone().expect("header binding");
-                    if SKIP_HEADERS.contains(&name.as_str()) || headers.iter().any(|(seen, _)| *seen == name) {
+                    // The model spells the skipped names in its own casing, so compare case-insensitively.
+                    if SKIP_HEADERS.iter().any(|skip| name.eq_ignore_ascii_case(skip))
+                        || headers.iter().any(|(seen, _)| *seen == name)
+                    {
                         continue;
                     }
                     headers.push((name, header_text(field, types)));
@@ -491,6 +501,10 @@ fn collect_cases(ops: &Operations, types: &RustTypes) -> Vec<Case> {
         if !query_parts.is_empty() {
             uri.push('?');
             uri.push_str(&query_parts.join("&"));
+        }
+
+        if streams_body {
+            headers.push(("Content-Length".to_owned(), body.len().to_string()));
         }
 
         assert!(uri.is_ascii(), "request URI of {} must be ASCII", op.name);
