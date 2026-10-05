@@ -33,6 +33,7 @@ s3s = { path = "crates/s3s", version = "0.17.0", default-features = false }
 s3s-aws = { path = "crates/s3s-aws", version = "0.17.0" }
 s3s-chunked = { path = "crates/s3s-chunked", version = "0.18.0-alpha.2" }
 s3s-codegen = { path = "codegen", version = "0.0.0" }
+s3s-compiler = { path = "crates/s3s-compiler", version = "0.18.0-alpha.1" }
 s3s-e2e = { path = "crates/s3s-e2e", version = "0.17.0" }
 s3s-fs = { path = "crates/s3s-fs", version = "0.17.0" }
 s3s-http3 = { path = "crates/s3s-http3", version = "0.17.0-alpha.1" }

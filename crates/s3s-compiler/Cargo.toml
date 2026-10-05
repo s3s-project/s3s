@@ -1,0 +1,19 @@
+[package]
+name = "s3s-compiler"
+version = "0.18.0-alpha.1"
+description = "Compiler for S3 API definitions"
+readme = "../../README.md"
+keywords = ["aws", "s3", "compiler", "codegen", "smithy"]
+categories = ["development-tools::build-utils", "web-programming"]
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
