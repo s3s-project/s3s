@@ -59,14 +59,6 @@ const EXPECTED_FAILURES: &[(&str, &[(&str, usize)])] = &[
         &[("ConditionalDeleteWithIncorrectETag", 1)],
     ),
     (
-        "aws-sdk-ruby",
-        // s3s defect: `PostObject` is forwarded as a `PutObject` whose body is
-        // shorter than the content length it declares, so the request fails with
-        // `InternalError`. The case only runs at all because the image stopped
-        // sending an unsigned `x-amz-acl` on its presigned PUT.
-        &[("presignedPost(bucket_name,file_name,expires_in_sec,max_byte_size)", 1)],
-    ),
-    (
         "mc",
         // Proxy limit: s3s-proxy authenticates with a single static key and
         // re-signs forwarded requests with it; the dynamically created user in
@@ -268,8 +260,8 @@ fn check_counters(counts: &HashMap<String, Counters>, errors: &mut Vec<String>) 
 
     check_pass_at_least(counts, "aws-sdk-go-v2", 5, errors);
     check_fail_zero(counts, "aws-sdk-php", errors);
-    // The one known failure is `presignedPost(...)`.
-    check_pass_at_least(counts, "aws-sdk-ruby", 12, errors);
+    // No known failure is left in this suite.
+    check_pass_at_least(counts, "aws-sdk-ruby", 13, errors);
     check_fail_zero(counts, "awscli", errors);
     // The one known failure is `test_admin_users`.
     check_pass_at_least(counts, "mc", 28, errors);
@@ -402,7 +394,7 @@ mod tests {
         let mut errors = Vec::new();
         check_gate(&logs, &mut errors);
 
-        assert_eq!(errors.len(), 6, "two unexpected failures plus four stale entries: {errors:?}");
+        assert_eq!(errors.len(), 5, "two unexpected failures plus three stale entries: {errors:?}");
         assert!(
             errors
                 .iter()

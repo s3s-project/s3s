@@ -32,12 +32,16 @@ fn file_last_with_strict_trailer() {
     assert!(consumed > 0);
 }
 
+/// The canonical closing trailer is the only one whose length is known before
+/// the body is read, so it is the only one the consumed offset turns into an
+/// exact file length by subtracting a constant. Every other legal ending needs
+/// a bound instead (see the cases below).
 #[test]
 fn multipart_consumed_derives_the_exact_file_length() {
     const FILE_DATA: &[u8] = b"hello file data";
     let body: &'static [u8] = b"--boundary\r\nContent-Disposition: form-data; name=\"key\"\r\n\r\nk\r\n--boundary\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.txt\"\r\n\r\nhello file data\r\n--boundary--\r\n";
     let total = body.len() as u64;
-    // The strict closing trailer is `\r\n--boundary--\r\n`.
+    // The canonical closing trailer is `\r\n--boundary--\r\n`.
     let trailer = b"boundary".len() as u64 + 8;
 
     for chunk_size in [1usize, 2, 3, 5, 7, 16, 1024] {
@@ -54,14 +58,66 @@ fn multipart_consumed_derives_the_exact_file_length() {
     }
 }
 
+/// The bytes after the closing dashes are the epilogue, which RFC 2046 requires
+/// implementations to ignore.
 #[test]
-fn epilogue_after_file_is_rejected() {
-    let err = block_on(take_file_data(
+fn epilogue_after_file_is_ignored() {
+    let (data, _) = block_on(take_file_data(
         b"--boundary\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.txt\"\r\n\r\nhello\r\n--boundary--\r\nepilogue",
         1024,
     ))
-    .unwrap_err();
-    assert!(matches!(err, Error::StreamPartNotLast));
+    .unwrap();
+    assert_eq!(data, b"hello");
+}
+
+/// The final CRLF after the closing dashes is optional: RFC 2046 ends the
+/// multipart body at the closing delimiter.
+#[test]
+fn missing_final_crlf_is_accepted() {
+    const FILE_DATA: &[u8] = b"hello file data";
+    let body: &'static [u8] =
+        b"--boundary\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.txt\"\r\n\r\nhello file data\r\n--boundary--";
+    let total = body.len() as u64;
+
+    let (data, consumed) = block_on(take_file_data(body, 1024)).unwrap();
+    assert_eq!(data, FILE_DATA);
+
+    // The constant-trailer derivation comes out two bytes short: the body does
+    // not carry the CRLF that the constant counts as trailer.
+    let derived = total - consumed - (b"boundary".len() as u64 + 8);
+    assert_eq!(derived, FILE_DATA.len() as u64 - 2);
+}
+
+/// Transport padding after the closing dashes is legal on a boundary line, with
+/// or without the final CRLF, and is not file content.
+#[test]
+fn transport_padding_is_accepted() {
+    const FILE_DATA: &[u8] = b"hello file data";
+    for body in [
+        &b"--boundary\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.txt\"\r\n\r\nhello file data\r\n--boundary--  \t "[..],
+        b"--boundary\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.txt\"\r\n\r\nhello file data\r\n--boundary--  \t\r\n",
+    ] {
+        let (data, _) = block_on(take_file_data(body, 1024)).unwrap();
+        assert_eq!(data, FILE_DATA, "{body:?}");
+    }
+}
+
+/// Every legal ending yields the same file data, at every split point.
+#[test]
+fn every_legal_closing_form_yields_the_file_data() {
+    const FILE_DATA: &[u8] = b"hello file data";
+    for body in [
+        &b"--boundary\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.txt\"\r\n\r\nhello file data\r\n--boundary--\r\n"[..],
+        b"--boundary\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.txt\"\r\n\r\nhello file data\r\n--boundary--",
+        b"--boundary\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.txt\"\r\n\r\nhello file data\r\n--boundary--  \t ",
+        b"--boundary\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.txt\"\r\n\r\nhello file data\r\n--boundary--\r\nepilogue",
+    ] {
+        for chunk_size in [1usize, 2, 3, 5, 7, 16, 1024] {
+            let (data, consumed) = block_on(take_file_data(body, chunk_size)).unwrap();
+            assert_eq!(data, FILE_DATA, "chunk_size={chunk_size} body={body:?}");
+            assert!(consumed > 0, "chunk_size={chunk_size} body={body:?}");
+        }
+    }
 }
 
 #[test]
@@ -74,14 +130,17 @@ fn second_file_part_is_rejected() {
     assert!(matches!(err, Error::StreamPartNotLast));
 }
 
+/// A body that stops before the closing dashes are complete is truncated, not
+/// one of the legal endings.
 #[test]
 fn truncated_file_is_reported() {
-    let err = block_on(take_file_data(
-        b"--boundary\r\nContent-Disposition: form-data; name=\"file\"\r\n\r\nhello\r\n--boundary--",
-        1024,
-    ))
-    .unwrap_err();
-    assert!(matches!(err, Error::IncompleteStreamPart));
+    for body in [
+        &b"--boundary\r\nContent-Disposition: form-data; name=\"file\"\r\n\r\nhello\r\n--boundary-"[..],
+        b"--boundary\r\nContent-Disposition: form-data; name=\"file\"\r\n\r\nhello\r\n--boundary",
+    ] {
+        let err = block_on(take_file_data(body, 1024)).unwrap_err();
+        assert!(matches!(err, Error::IncompleteStreamPart), "{body:?}");
+    }
 }
 
 #[test]

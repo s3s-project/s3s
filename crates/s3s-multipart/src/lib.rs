@@ -48,9 +48,9 @@
 //!   rejected, and there is no unchecked constructor.
 //! - A part data stream taken with `take_data_stream` ends at the closing
 //!   delimiter without interpreting what follows. Converting it with
-//!   `into_final` yields a `FinalPartDataStream` that enforces the strict
-//!   closing delimiter and rejects an epilogue, because callers need an
-//!   exact content length.
+//!   `into_final` yields a `FinalPartDataStream` that consumes the closing
+//!   delimiter, ignores the epilogue RFC 2046 puts after it, and rejects
+//!   another part, because callers need the taken part to be the last one.
 //! - The internal buffer limit bounds the part header block, not the delivery:
 //!   a block that ends within the limit is accepted whichever chunk carried it,
 //!   and one that grows past the limit without a terminator is rejected with

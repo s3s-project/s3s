@@ -56,12 +56,9 @@ const SEEDS: &[(&str, u8, Expect)] = &[
     // Malformed input: the parse must classify the failure, not guess.
     ("bad_header_line", 0x00, Expect::Fails(OutcomeKind::InvalidFormat, &[])),
     ("buffer_over", 0x10, Expect::Fails(OutcomeKind::HeaderSizeExceeded, &[])),
-    ("missing_final_crlf", 0x00, Expect::Fails(OutcomeKind::IncompleteStream, &[(1, 4)])),
     // The part is still being read when the stream ends, so it is never handed
     // out: only parts that ran to completion are counted.
     ("truncated_body", 0x04, Expect::Fails(OutcomeKind::IncompleteStream, &[])),
-    // A non-empty epilogue after the closing delimiter is rejected on purpose.
-    ("epilogue", 0x20, Expect::Fails(OutcomeKind::StreamPartNotLast, &[(1, 4)])),
     // The stream's own error is handed back with its limit intact.
     ("injected_error", 0x01, Expect::Injected),
     // Boundaries of the header buffer.
@@ -80,6 +77,11 @@ const SEEDS: &[(&str, u8, Expect)] = &[
     ("valid_multiple_fields", 0x00, Expect::Parts(&[(1, 6), (1, 6), (1, 5)])),
     ("valid_many_headers", 0x00, Expect::Parts(&[(3, 5)])),
     ("valid_preamble_and_padding", 0x00, Expect::Parts(&[(1, 4)])),
+    // Legal closing forms: the part may end without the final CRLF, and an
+    // epilogue after the closing delimiter is ignored rather than rejected.
+    // The part is handed out either way.
+    ("missing_final_crlf", 0x00, Expect::Parts(&[(1, 4)])),
+    ("epilogue", 0x20, Expect::Parts(&[(1, 4)])),
     // The same body through the single-fragment, take and skip strategies.
     ("valid_single", 0x02, Expect::Parts(&[(1, 5)])),
     ("valid_take", 0x04, Expect::Parts(&[(1, 5)])),

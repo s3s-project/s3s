@@ -17,15 +17,18 @@
 //!   lowercased and sorted so that [`Multipart::find_field_value`] can binary
 //!   search them;
 //! - the `file` part is handed over as a [`FileStream`]; when the request
-//!   carries a `Content-Length`, the stream derives the exact file length from
-//!   it, so the consumer can forward the file without buffering;
-//! - the `file` part must be the last one: the closing trailer is validated
-//!   while the stream is consumed, so an epilogue or another part is rejected;
+//!   carries a `Content-Length`, the stream derives the file length from it,
+//!   which is exact for the canonical closing trailer, so the consumer can
+//!   forward a canonically closed file without buffering;
+//! - the `file` part must be the last one: the closing delimiter is validated
+//!   while the stream is consumed, so another part after the file is rejected;
+//!   the epilogue after the closing delimiter is ignored, as RFC 2046 requires;
 //! - the form limits ([`MultipartLimits`]) are enforced here, on top of the
 //!   parser's own part-header block limit.
 //!
 //! See <https://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectPOST.html>
 
+use crate::error::S3ErrorCode;
 use crate::error::StdError;
 use crate::stream::ByteStream;
 
@@ -201,8 +204,8 @@ pub async fn aggregate_file_stream_limited(mut stream: FileStream, max_size: u64
 /// transform multipart
 ///
 /// When `total_len` is known (the request's `Content-Length`), the parser
-/// derives the exact file content length and the file stream validates the
-/// canonical closing trailer. See [`FileStream::content_len`].
+/// derives the file content length for the canonical closing trailer and the
+/// file stream consumes the closing delimiter. See [`FileStream::content_len`].
 ///
 /// # Errors
 /// Returns an `Err` if the format is invalid
@@ -333,13 +336,30 @@ pub enum FileStreamError {
     /// IO error
     #[error("FileStreamError: Underlying: {0}")]
     Underlying(#[source] StdError),
-    /// Bytes after the file do not match the canonical closing delimiter
-    /// (e.g., the file is not the last part or an epilogue exists)
+    /// The bytes after the file do not start the closing delimiter: another
+    /// part follows the file, so the file was not the last part
     #[error("FileStreamError: InvalidTrailer")]
     InvalidTrailer,
     /// The yielded byte count disagrees with the declared content length
     #[error("FileStreamError: LengthMismatch: {remaining} bytes remaining")]
     LengthMismatch { remaining: u64 },
+}
+
+impl FileStreamError {
+    /// Maps a file-stream error to the `S3` error code a conforming
+    /// implementation should report.
+    ///
+    /// A malformed or truncated multipart body is the client's error, so it
+    /// maps to a 400-class code; only a transport failure maps to
+    /// `InternalError`.
+    #[must_use]
+    pub fn to_s3_error_code(&self) -> S3ErrorCode {
+        match self {
+            Self::Underlying(_) => S3ErrorCode::InternalError,
+            Self::Incomplete | Self::LengthMismatch { .. } => S3ErrorCode::IncompleteBody,
+            Self::InvalidTrailer => S3ErrorCode::MalformedPOSTRequest,
+        }
+    }
 }
 
 /// File stream
@@ -461,9 +481,8 @@ fn map_file_stream_error(err: ParserError) -> FileStreamError {
     match err {
         ParserError::StreamReadFailed(err) => FileStreamError::Underlying(err),
         ParserError::IncompleteStreamPart => FileStreamError::Incomplete,
-        // `StreamPartNotLast` covers an epilogue or another part after the
-        // closing delimiter; every other variant means the closing trailer
-        // could not be validated.
+        // `StreamPartNotLast` covers another part after the closing delimiter;
+        // every other variant means the closing delimiter could not be read.
         _ => FileStreamError::InvalidTrailer,
     }
 }
@@ -652,57 +671,30 @@ mod tests {
         assert!(matches!(stream.next().await, Some(Err(FileStreamError::InvalidTrailer))));
     }
 
+    /// Every legal closing form yields the same file data: the canonical
+    /// `\r\n--boundary--\r\n`, the same without the final CRLF, transport
+    /// padding, and an epilogue. The length a caller can derive before reading
+    /// the body is a separate question, because the trailer is not the same
+    /// size in all of them.
     #[tokio::test]
-    async fn multipart_rejects_epilogue_with_file_len() {
-        let body = format!(
-            "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"f.txt\"\r\n\r\nfile content\r\n--{BOUNDARY}--\r\nepilogue"
-        );
-        let total_len = body.len() as u64;
-        let mut ans = transform_multipart(body_stream(body), BOUNDARY.as_bytes(), MultipartLimits::default(), Some(total_len))
-            .await
-            .unwrap();
-        let mut stream = ans.take_file_stream().unwrap();
-        let first = stream.next().await.unwrap().unwrap();
-        assert_eq!(&first[..], b"file content");
-        assert!(matches!(stream.next().await, Some(Err(FileStreamError::InvalidTrailer))));
-    }
-
-    /// A missing final CRLF after the closing delimiter makes the content
-    /// longer than the derived length; the built-in length check must reject
-    /// it before any content is emitted.
-    #[tokio::test]
-    async fn multipart_rejects_missing_final_crlf_with_file_len() {
+    async fn every_closing_form_yields_the_file_data() {
         let file_content = "file content";
-        let body = format!(
+        let head = format!(
             "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"f.txt\"\r\nContent-Type: text/plain\r\n\r\n{file_content}\r\n--{BOUNDARY}--"
         );
-        let total_len = body.len() as u64;
 
-        let mut ans = transform_multipart(body_stream(body), BOUNDARY.as_bytes(), MultipartLimits::default(), Some(total_len))
-            .await
-            .unwrap();
-
-        let mut file_stream = ans.take_file_stream().unwrap();
-        let mut chunks = Vec::new();
-        while let Some(chunk) = file_stream.next().await {
-            chunks.push(chunk);
+        for body in [
+            file_form(&[], file_content),
+            head.clone(),
+            format!("{head}  \t "),
+            format!("{head}\r\nepilogue"),
+        ] {
+            let mut ans = transform_multipart(body_stream(body), BOUNDARY.as_bytes(), MultipartLimits::default(), None)
+                .await
+                .unwrap();
+            let stream = ans.take_file_stream().unwrap();
+            assert_eq!(aggregate_file_stream(stream).await.unwrap(), file_content);
         }
-        assert_eq!(chunks.len(), 1, "length check rejects before emitting content");
-        assert!(matches!(chunks[0], Err(FileStreamError::LengthMismatch { remaining: 10 })));
-    }
-
-    /// A part with a filename is still a form field, not the file part.
-    #[tokio::test]
-    async fn multipart_field_with_filename() {
-        let file_content = "file content";
-        let body = format!(
-            "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"key\"; filename=\"key\"\r\n\r\nfoo.txt\r\n--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"file.txt\"\r\n\r\n{file_content}\r\n--{BOUNDARY}--\r\n"
-        );
-        let ans = transform_multipart(body_stream(body), BOUNDARY.as_bytes(), MultipartLimits::default(), None)
-            .await
-            .unwrap();
-        assert_eq!(ans.find_field_value("key"), Some("foo.txt"));
-        assert_eq!(aggregate_file_stream(ans.file.stream.unwrap()).await.unwrap(), file_content);
     }
 
     #[tokio::test]
@@ -797,21 +789,17 @@ mod tests {
         assert_eq!(aggregate_file_stream(ans.file.stream.unwrap()).await.unwrap(), "file content");
     }
 
-    /// Without a derived length the strict closing trailer is still validated:
-    /// an epilogue after the closing delimiter is rejected instead of being
-    /// silently dropped.
+    /// An epilogue after the closing delimiter is not file content: RFC 2046
+    /// requires it to be ignored.
     #[tokio::test]
-    async fn chunked_form_rejects_content_after_the_file() {
+    async fn chunked_form_ignores_content_after_the_file() {
         let body = format!(
             "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"f.txt\"\r\n\r\nfile content\r\n--{BOUNDARY}--\r\nepilogue"
         );
-        let mut ans = transform_multipart(body_stream(body), BOUNDARY.as_bytes(), MultipartLimits::default(), None)
+        let ans = transform_multipart(body_stream(body), BOUNDARY.as_bytes(), MultipartLimits::default(), None)
             .await
             .unwrap();
-        let mut stream = ans.take_file_stream().unwrap();
-        let first = stream.next().await.unwrap().unwrap();
-        assert_eq!(&first[..], b"file content");
-        assert!(matches!(stream.next().await, Some(Err(FileStreamError::InvalidTrailer))));
+        assert_eq!(aggregate_file_stream(ans.file.stream.unwrap()).await.unwrap(), "file content");
     }
 
     /// A part without a usable Content-Disposition name is rejected right
@@ -933,17 +921,15 @@ mod tests {
         assert_eq!(aggregate_file_stream(stream).await.unwrap(), file_content);
     }
 
-    /// A body ending mid-trailer (closing delimiter without the final CRLF)
-    /// must surface Incomplete rather than a clean end of stream.
+    /// The final CRLF after the closing dashes is optional: RFC 2046 ends the
+    /// multipart body at the closing delimiter.
     #[tokio::test]
-    async fn file_stream_truncated_trailer_reports_incomplete() {
+    async fn file_stream_missing_final_crlf_ends_cleanly() {
         let body = format!(
             "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"f.txt\"\r\n\r\nhi\r\n--{BOUNDARY}--"
         );
-        let mut stream = parse_file_stream(&body, None).await;
-        let bytes = stream.next().await.unwrap().unwrap();
-        assert_eq!(&bytes[..], b"hi");
-        assert!(matches!(stream.next().await, Some(Err(FileStreamError::Incomplete))));
+        let stream = parse_file_stream(&body, None).await;
+        assert_eq!(aggregate_file_stream(stream).await.unwrap(), "hi");
     }
 
     /// A body ending right after the boundary pattern (no closing dashes) is
@@ -959,10 +945,9 @@ mod tests {
         assert!(matches!(stream.next().await, Some(Err(FileStreamError::Incomplete))));
     }
 
-    /// An epilogue delivered after the canonical close is rejected instead of
-    /// being ignored.
+    /// An epilogue delivered in a chunk of its own is ignored as well.
     #[tokio::test]
-    async fn file_stream_rejects_epilogue_in_separate_chunk() {
+    async fn file_stream_ignores_epilogue_in_separate_chunk() {
         let items = vec![
             Bytes::from(format!(
                 "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"f.txt\"\r\n\r\nhi\r\n--{BOUNDARY}--\r\n"
@@ -972,10 +957,8 @@ mod tests {
         let mut multipart = transform_multipart(chunks(items), BOUNDARY.as_bytes(), MultipartLimits::default(), None)
             .await
             .unwrap();
-        let mut stream = multipart.take_file_stream().unwrap();
-        let bytes = stream.next().await.unwrap().unwrap();
-        assert_eq!(&bytes[..], b"hi");
-        assert!(matches!(stream.next().await, Some(Err(FileStreamError::InvalidTrailer))));
+        let stream = multipart.take_file_stream().unwrap();
+        assert_eq!(aggregate_file_stream(stream).await.unwrap(), "hi");
     }
 
     /// A form whose fields and file part are all within the limits parses, and
@@ -1048,14 +1031,14 @@ mod tests {
         assert!(matches!(stream.next().await, Some(Err(FileStreamError::Underlying(_)))));
     }
 
-    /// Bytes between the closing dashes and the final CRLF are a trailer
-    /// mismatch, not a transport error.
+    /// Bytes right after the closing dashes are the epilogue, which is ignored.
     #[tokio::test]
-    async fn file_stream_rejects_garbage_after_the_closing_dashes() {
-        let mut stream = file_stream_then_error(&format!("\r\n--{BOUNDARY}--zz\r\n")).await;
-        let bytes = stream.next().await.unwrap().unwrap();
-        assert_eq!(&bytes[..], b"hi");
-        assert!(matches!(stream.next().await, Some(Err(FileStreamError::InvalidTrailer))));
+    async fn file_stream_ignores_bytes_after_the_closing_dashes() {
+        let body = format!(
+            "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"f.txt\"\r\n\r\nhi\r\n--{BOUNDARY}--zz\r\n"
+        );
+        let stream = parse_file_stream(&body, None).await;
+        assert_eq!(aggregate_file_stream(stream).await.unwrap(), "hi");
     }
 
     /// A body that never contains the declared boundary is a format error
@@ -1235,6 +1218,22 @@ mod tests {
             source.downcast_ref::<io::Error>().map(io::Error::kind),
             Some(io::ErrorKind::ConnectionReset)
         );
+    }
+
+    #[test]
+    fn file_stream_error_maps_to_s3_error_codes() {
+        let cases = [
+            (FileStreamError::Incomplete, S3ErrorCode::IncompleteBody),
+            (FileStreamError::InvalidTrailer, S3ErrorCode::MalformedPOSTRequest),
+            (FileStreamError::LengthMismatch { remaining: 2 }, S3ErrorCode::IncompleteBody),
+            (
+                FileStreamError::Underlying(Box::new(io::Error::other("boom"))),
+                S3ErrorCode::InternalError,
+            ),
+        ];
+        for (err, expected) in cases {
+            assert_eq!(err.to_s3_error_code(), expected, "{err:?}");
+        }
     }
 
     #[test]

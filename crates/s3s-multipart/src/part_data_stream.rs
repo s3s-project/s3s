@@ -5,9 +5,9 @@
 //!
 //! The stream yields the part's data chunks and ends at the part's closing
 //! delimiter `\r\n--boundary`. It does not interpret what follows the
-//! delimiter: the strict closing contract (the `--` suffix, transport
-//! padding, the final `\r\n`, and the absence of an epilogue or further
-//! parts) is enforced by [`FinalPartDataStream`], reached through
+//! delimiter: the closing contract (the `--` suffix of the last boundary
+//! line and the epilogue that may follow it) is handled by
+//! [`FinalPartDataStream`], reached through
 //! [`PartDataStream::into_final`](crate::PartDataStream::into_final) at any point.
 
 use std::fmt;
@@ -27,10 +27,10 @@ use crate::final_part_data_stream::FinalPartDataStream;
 ///
 /// The stream yields the part's data chunks — each one non-empty, so a part
 /// with no data yields nothing at all — and ends at the closing
-/// delimiter `\r\n--boundary`. What follows the delimiter (the strict
-/// closing trailer, an epilogue, or another part) is not interpreted; call
+/// delimiter `\r\n--boundary`. What follows the delimiter (the closing
+/// `--`, the epilogue, or another part) is not interpreted; call
 /// [`PartDataStream::into_final`](crate::PartDataStream::into_final) to obtain a [`FinalPartDataStream`] that
-/// yields any remaining data and enforces the strict closing trailer.
+/// yields any remaining data and consumes the closing delimiter.
 pub struct PartDataStream<S>
 where
     S: Stream<Item = Result<Bytes, Error>> + Send + Unpin,
