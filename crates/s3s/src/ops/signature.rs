@@ -582,7 +582,13 @@ impl<'a> SignatureContext<'a> {
             // parse. The state is boxed inside `FileStream`; boxing the future
             // as well keeps the remaining parse frame out of the dispatch
             // futures that await this check (see the future-size budget test).
-            Box::pin(http::transform_multipart(body, boundary.as_str().as_bytes(), limits, self.content_length))
+            //
+            // The request `Content-Length` is deliberately not passed: how many
+            // bytes the closing trailer takes depends on the closing form the
+            // client used, so a file length derived from it before the body is
+            // read is exact for one form only. The POST Object path aggregates
+            // the file part instead (`prepare_post_object_stream`).
+            Box::pin(http::transform_multipart(body, boundary.as_str().as_bytes(), limits, None))
                 .await
                 .map_err(|e| s3_error!(e, MalformedPOSTRequest))?
         };

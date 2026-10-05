@@ -429,12 +429,14 @@ fn reject_custom_route_body_too_large(content_length: Option<u64>, max_body_size
 
 /// Prepares the POST object file stream for the operation.
 ///
-/// The file part is the last part of a POST object form. When the request
-/// carries a `Content-Length` header, the multipart parser derives the exact
-/// file length from it (see `http::transform_multipart`), so the file can be
-/// forwarded to the operation as a stream without aggregation. Chunked
-/// requests (or forms without a known length) fall back to aggregating the
-/// file into memory to obtain the size.
+/// The file part is aggregated before dispatch, which is what makes its length
+/// exact: how many bytes the closing trailer takes depends on the closing form
+/// the client used — the final CRLF, transport padding and the epilogue are all
+/// optional — so a length derived from the request `Content-Length` before the
+/// body is read is exact for one form only. Aggregation is bounded by
+/// `max_file_size` and the limit is checked while reading, so an oversized file
+/// is rejected without buffering all of it, and downstream handlers (like
+/// s3s-proxy) get the `Content-Length` they need.
 ///
 /// # Errors
 /// Returns an error if the file exceeds `max_file_size` or the file stream
@@ -443,34 +445,18 @@ async fn prepare_post_object_stream(
     file_stream: http::FileStream,
     max_file_size: u64,
 ) -> S3Result<(crate::stream::DynByteStream, u64)> {
-    match file_stream.content_len() {
-        Some(content_len) => {
-            // The derived length is exact: enforce the size limit before
-            // dispatch without buffering the file. The file stream itself
-            // tracks the remaining length and checks the canonical trailer
-            // while being consumed.
-            if content_len > max_file_size {
-                return Err(s3_error!(EntityTooLarge, "Your proposed upload exceeds the maximum allowed object size."));
+    let vec_bytes = http::aggregate_file_stream_limited(file_stream, max_file_size)
+        .await
+        .map_err(|e| match e {
+            http::MultipartError::FileTooLarge(..) => {
+                s3_error!(EntityTooLarge, "Your proposed upload exceeds the maximum allowed object size.")
             }
-            Ok((crate::stream::into_dyn(file_stream), content_len))
-        }
-        None => {
-            // Aggregate file stream with size limit to get known length
-            // This is required because downstream handlers (like s3s-proxy) need content-length
-            let vec_bytes = http::aggregate_file_stream_limited(file_stream, max_file_size)
-                .await
-                .map_err(|e| match e {
-                    http::MultipartError::FileTooLarge(..) => {
-                        s3_error!(EntityTooLarge, "Your proposed upload exceeds the maximum allowed object size.")
-                    }
-                    other => invalid_request!(other, "failed to read file stream"),
-                })?;
-            // Use saturating_add to prevent overflow in release builds (security-relevant for content-length-range validation)
-            let file_size = vec_bytes.iter().map(|b| b.len() as u64).fold(0u64, u64::saturating_add);
-            let vec_stream = crate::stream::VecByteStream::new(vec_bytes);
-            Ok((crate::stream::into_dyn(vec_stream), file_size))
-        }
-    }
+            other => invalid_request!(other, "failed to read file stream"),
+        })?;
+    // Use saturating_add to prevent overflow in release builds (security-relevant for content-length-range validation)
+    let file_size = vec_bytes.iter().map(|b| b.len() as u64).fold(0u64, u64::saturating_add);
+    let vec_stream = crate::stream::VecByteStream::new(vec_bytes);
+    Ok((crate::stream::into_dyn(vec_stream), file_size))
 }
 
 #[allow(clippy::declare_interior_mutable_const)]
@@ -727,8 +713,8 @@ async fn resolve_post_object(
     let policy = parse_post_policy(multipart)?;
     let max_file_size = post_object_max_file_size(policy.as_ref(), config.post_object_max_file_size);
 
-    // Prepare the file stream for the operation: forwarded as a
-    // stream when the exact length is known, aggregated otherwise.
+    // Prepare the file stream for the operation: the file part is aggregated,
+    // so the length is the length of the data the body actually carried.
     let file_stream = multipart.take_file_stream().expect("missing file stream");
     let (post_stream, file_size) = prepare_post_object_stream(file_stream, max_file_size).await?;
 

@@ -379,8 +379,18 @@ impl FileStream {
         }
     }
 
-    /// Returns the exact content length derived from the request's
-    /// `Content-Length` header, if it is known.
+    /// Returns the file length derived from the request's `Content-Length`
+    /// header, if it is known.
+    ///
+    /// The value is exact for the canonical closing trailer only: every other
+    /// legal closing form takes a different number of trailer bytes, which the
+    /// request length alone cannot tell apart. A caller that has to accept all
+    /// of them needs the length of the bytes actually delivered, which is only
+    /// known once the body has been read.
+    ///
+    /// The POST Object path aggregates the file part before dispatch instead of
+    /// deriving a length, so nothing inside this crate reads this value.
+    #[allow(dead_code)]
     pub fn content_len(&self) -> Option<u64> {
         self.content_len
     }
