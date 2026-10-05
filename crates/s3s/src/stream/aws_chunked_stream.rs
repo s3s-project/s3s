@@ -173,8 +173,31 @@ impl AwsChunkedStream {
             let seed = s3s_chunked::Sha256Sum::from_bytes(*seed_signature.as_bytes());
             ChunkedStream::signed(body, sign, seed, decoded_content_length, limits)
         };
-        let trailers = inner.trailer_handle();
+        Self::from_chunked(inner)
+    }
 
+    /// Constructs an unsigned aws-chunked decoder without a signing context.
+    ///
+    /// STREAMING-UNSIGNED-PAYLOAD-TRAILER carries no signature material, so a
+    /// request that uses it can be decoded without credentials. A chunk or
+    /// trailer signature in the body is a format error, exactly as in the
+    /// unsigned branch of [`Self::new`].
+    #[must_use]
+    pub fn unsigned<S>(body: S, decoded_content_length: usize, max_chunk_size: usize) -> Self
+    where
+        S: Stream<Item = Result<Bytes, StdError>> + Send + Sync + 'static,
+    {
+        let limits = Limits {
+            max_signed_chunk_size: max_chunk_size,
+            ..Limits::default()
+        };
+        let body: BoxedBody = Box::pin(body);
+        Self::from_chunked(ChunkedStream::unsigned(body, decoded_content_length, limits))
+    }
+
+    /// Wraps a decoder together with its trailing-headers handle.
+    fn from_chunked(inner: ChunkedStream<BoxedBody>) -> Self {
+        let trailers = inner.trailer_handle();
         Self { inner, trailers }
     }
 

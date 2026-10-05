@@ -41,6 +41,10 @@ pub(crate) struct S3Extensions {
     pub service: Option<String>,
     pub trailing_headers: Option<TrailingHeaders>,
 
+    /// The validated decoded content length, extracted once while the request is prepared
+    /// for signature verification.
+    pub decoded_content_length: Option<usize>,
+
     pub post_policy: Option<PostPolicy>,
 }
 

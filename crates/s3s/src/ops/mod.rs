@@ -40,6 +40,7 @@ use crate::protocol::S3Request;
 use crate::route::S3Route;
 use crate::s3_trait::S3;
 use crate::stream::ByteStream as _;
+use crate::stream::aws_chunked_stream::AwsChunkedStream;
 use crate::validation::{AwsNameValidation, NameValidation};
 
 use std::mem;
@@ -324,10 +325,66 @@ async fn extract_full_body(content_length: Option<u64>, body: &mut Body, max_bod
     Ok(bytes)
 }
 
+/// Installs the aws-chunked decoder for anonymous STREAMING-UNSIGNED-PAYLOAD-TRAILER requests.
+///
+/// [`SignatureContext::v4_check_header_auth`] installs the decoder for signature
+/// authenticated requests, where the chunk signatures have to be verified. An
+/// unsigned declaration carries no signing context, so it needs no credentials:
+/// AWS decodes the body and stores the decoded payload for anonymous requests as
+/// well, and the framing must not reach the `S3` implementation.
+fn install_anonymous_aws_chunked_body(req: &mut Request, config: &S3Config) -> S3Result {
+    if req.s3ext.credentials.is_some() {
+        return Ok(());
+    }
+
+    let Some(value) = http::get_unique_header_str(&req.headers, crate::header::X_AMZ_CONTENT_SHA256.as_str()) else {
+        return Ok(());
+    };
+    // An anonymous request whose payload-hash declaration cannot be parsed is answered with
+    // 400 `InvalidRequest`, which is the shape the service answers with 400. The SigV4 paths
+    // answer `SignatureDoesNotMatch` for the same header because there the declaration is part
+    // of the signed request.
+    let amz_content_sha256 =
+        s3s_sigv4::AmzContentSha256::parse(value).map_err(|_| invalid_request!("invalid header: x-amz-content-sha256"))?;
+    if !matches!(amz_content_sha256, s3s_sigv4::AmzContentSha256::StreamingUnsignedPayloadTrailer) {
+        return Ok(());
+    }
+
+    // Extracted and validated once by `verify_signature`; reading the header again here would
+    // repeat that work for every anonymous streaming request.
+    let decoded_content_length = req
+        .s3ext
+        .decoded_content_length
+        .ok_or_else(|| s3_error!(MissingContentLength, "missing header: x-amz-decoded-content-length"))?;
+
+    // A request that announced trailing headers has to carry the trailer block
+    // it promised. A request that announced none may end at the completion
+    // chunk, which is what AWS accepts for an unsigned streaming upload.
+    let declared_trailer = http::get_unique_header_str(&req.headers, "x-amz-trailer").is_some();
+    let mut stream =
+        AwsChunkedStream::unsigned(mem::take(&mut req.body), decoded_content_length, config.aws_chunked_stream_max_chunk_size);
+    if declared_trailer {
+        stream.require_trailers(true);
+    }
+
+    let trailers = stream.trailing_headers_handle();
+    req.s3ext.trailing_headers = Some(trailers);
+    req.body = Body::from(stream.into_byte_stream());
+    // The decoded body replaces the framing, so the declared length becomes the
+    // plaintext length; the signature path rewrites it the same way.
+    if let Some(val) = req.headers.get_mut(header::CONTENT_LENGTH) {
+        *val = fmt_content_length(decoded_content_length);
+    }
+
+    Ok(())
+}
+
 fn prepare_streaming_body(req: &mut Request, config: &S3Config) -> S3Result {
     // Signature verification has already replaced aws-chunked bodies and
-    // their Content-Length with the decoded payload length, when present.
+    // their Content-Length with the decoded payload length, when present;
+    // anonymous unsigned declarations are decoded here.
     // An unrelated decoded-length header must not override an ordinary body.
+    install_anonymous_aws_chunked_body(req, config)?;
     let content_length = extract_content_length(req)?;
     let known_length = content_length.or_else(|| req.body.remaining_length().exact().map(|x| x as u64));
     if let (Some(size), Some(limit)) = (known_length, config.put_object_max_size)
@@ -700,6 +757,7 @@ async fn verify_signature(
 
     let mime = extract_mime(&req.headers);
     let decoded_content_length = extract_decoded_content_length(&req.headers)?;
+    req.s3ext.decoded_content_length = decoded_content_length;
 
     let mut scx = SignatureContext {
         auth: ccx.auth,
