@@ -254,9 +254,12 @@ where
         Poll::Pending => return Step::Pending,
         Poll::Ready(Err(error)) => return Step::Fail(error),
         Poll::Ready(Ok(MetaOutcome::End)) => {
-            if state.remaining == 0 {
-                return Step::Done;
-            }
+            // The stream ended while the decoder was waiting for the next chunk
+            // metadata line. A chunked body is only complete after the zero-length
+            // completion chunk, so EOF here is an incomplete body even when every
+            // declared payload byte arrived: accepting it stores a truncated object
+            // as a complete one. AWS answers 400 IncompleteBody for this shape. The
+            // trailer phase has its own EOF handling and is not affected.
             return Step::Fail(Error::Incomplete);
         }
         Poll::Ready(Ok(MetaOutcome::Line)) => {}
@@ -484,10 +487,24 @@ fn verify_trailers(state: &mut State) -> Result<(), Error> {
         // A request that announced trailing headers and then ends without a trailer
         // block would silently drop them, so require the block when the caller says
         // the request declared one.
-        return if state.trailers_required {
-            Err(Error::FormatError)
-        } else {
-            Ok(())
+        //
+        // An empty section maps by signing context, not by framing: with the same
+        // bytes the live service answered `MalformedTrailerError` for the anonymous
+        // shape (`0\r\n\r\n`, probe K) and `IncompleteBody` with "The request body
+        // terminated unexpectedly" for the signed shape
+        // (`0;chunk-signature=...\r\n\r\n`, probe J, reproduced). A signed stream
+        // therefore reports a short body, while an unsigned stream reports the
+        // trailing data as malformed.
+        let signed = state.signing.state().is_some();
+        let missing = state.trailer_buf.is_empty();
+        return match (state.trailers_required, missing) {
+            // The signed shape of an empty section is a short body.
+            (true, false) if signed => Err(Error::TrailersEmpty),
+            // Every other required shape is malformed trailing data: the section is
+            // either absent entirely or, in an unsigned stream, empty.
+            (true, _) => Err(Error::TrailersMissing),
+            // A body without trailers is valid when the request announced none.
+            (false, _) => Ok(()),
         };
     }
 
@@ -657,10 +674,25 @@ mod fragment_and_trailer_tests {
         assert!(matches!(&item, Some(Ok(bytes)) if bytes.as_ref() == b"abc"), "got {item:?}");
     }
 
-    /// A trailer block that the caller required but the body never carried is a
-    /// failure, so a declared checksum cannot silently disappear.
+    /// A trailer block that the caller required but the body never carried at all
+    /// is its own error, so a declared checksum cannot silently disappear.
     #[test]
     fn a_missing_trailer_block_is_rejected_when_required() {
+        // The stream ends right after the completion chunk: no section terminator.
+        let mut stream = ChunkedStream::unsigned(
+            stream::iter(vec![Ok::<Bytes, crate::StdError>(Bytes::from_static(b"3\r\nabc\r\n0\r\n"))]),
+            3,
+            Limits::default(),
+        )
+        .with_required_trailers(true);
+        let items = futures::executor::block_on(stream.by_ref().collect::<Vec<_>>());
+        assert!(matches!(items.last(), Some(Err(Error::TrailersMissing))), "got {:?}", items.last());
+    }
+
+    /// An empty trailer section in an unsigned stream is malformed trailing data:
+    /// the live service answers `MalformedTrailerError` for this shape.
+    #[test]
+    fn an_empty_trailer_block_in_an_unsigned_stream_is_malformed() {
         let mut stream = ChunkedStream::unsigned(
             stream::iter(vec![Ok::<Bytes, crate::StdError>(Bytes::from_static(b"3\r\nabc\r\n0\r\n\r\n"))]),
             3,
@@ -668,9 +700,82 @@ mod fragment_and_trailer_tests {
         )
         .with_required_trailers(true);
         let items = futures::executor::block_on(stream.by_ref().collect::<Vec<_>>());
-        assert!(matches!(items.last(), Some(Err(Error::FormatError))), "got {:?}", items.last());
+        assert!(matches!(items.last(), Some(Err(Error::TrailersMissing))), "got {:?}", items.last());
     }
 
+    /// The same empty section in a signed stream is a short body instead: the live
+    /// service answers `IncompleteBody` for this shape.
+    #[test]
+    fn an_empty_trailer_block_in_a_signed_stream_is_a_short_body() {
+        use crate::test_utils::{chunk_signature, drain, seed_signature, sign_context, signed_chunk_line, single};
+
+        let seed = seed_signature();
+        // The payload is empty, so the first chunk is also the completion chunk.
+        let last = chunk_signature(&seed, b"");
+        let mut body = signed_chunk_line(0, &last);
+        body.extend_from_slice(b"\r\n"); // empty trailer section terminator
+
+        let stream = ChunkedStream::signed(futures::stream::iter(single(&body)), sign_context(), seed, 0, Limits::default())
+            .with_required_trailers(true);
+        let (out, error) = drain(stream);
+        assert!(out.is_empty(), "no payload expected: {out:?}");
+        assert!(matches!(error, Some(Error::TrailersEmpty)), "{error:?}");
+    }
+
+    /// A chunked body is only complete after its zero-length completion chunk: a
+    /// stream that ends after a complete data chunk is an incomplete body.
+    #[test]
+    fn a_body_without_the_completion_chunk_is_incomplete() {
+        let mut stream = ChunkedStream::unsigned(
+            stream::iter(vec![Ok::<Bytes, crate::StdError>(Bytes::from_static(b"3\r\nabc\r\n"))]),
+            3,
+            Limits::default(),
+        );
+        let items = futures::executor::block_on(stream.by_ref().collect::<Vec<_>>());
+        assert!(matches!(items.last(), Some(Err(Error::Incomplete))), "got {:?}", items.last());
+    }
+
+    /// The same for a signed stream: valid chunk signatures do not make a body
+    /// without its completion chunk complete.
+    #[test]
+    fn a_signed_body_without_the_completion_chunk_is_incomplete() {
+        use crate::test_utils::{chunk_signature, drain, seed_signature, sign_context, signed_chunk_line, single};
+
+        let seed = seed_signature();
+        let signature = chunk_signature(&seed, b"abc");
+        let mut body = signed_chunk_line(3, &signature);
+        body.extend_from_slice(b"abc\r\n"); // no completion chunk
+
+        let stream = ChunkedStream::signed(futures::stream::iter(single(&body)), sign_context(), seed, 3, Limits::default());
+        let (out, error) = drain(stream);
+        assert_eq!(out, b"abc", "the complete chunk is still yielded");
+        assert!(matches!(error, Some(Error::Incomplete)), "{error:?}");
+    }
+
+    /// A chunk whose data stops mid-way is incomplete.
+    #[test]
+    fn a_body_truncated_inside_a_chunk_is_incomplete() {
+        let mut stream = ChunkedStream::unsigned(
+            stream::iter(vec![Ok::<Bytes, crate::StdError>(Bytes::from_static(b"3\r\nab"))]),
+            3,
+            Limits::default(),
+        );
+        let items = futures::executor::block_on(stream.by_ref().collect::<Vec<_>>());
+        assert!(matches!(items.last(), Some(Err(Error::Incomplete))), "got {:?}", items.last());
+    }
+
+    /// A declared decoded length longer than the payload is incomplete, even when
+    /// the completion chunk arrived.
+    #[test]
+    fn a_declared_length_longer_than_the_payload_is_incomplete() {
+        let mut stream = ChunkedStream::unsigned(
+            stream::iter(vec![Ok::<Bytes, crate::StdError>(Bytes::from_static(b"3\r\nabc\r\n0\r\n\r\n"))]),
+            8, // five bytes more than the three that arrive
+            Limits::default(),
+        );
+        let items = futures::executor::block_on(stream.by_ref().collect::<Vec<_>>());
+        assert!(matches!(items.last(), Some(Err(Error::Incomplete))), "got {:?}", items.last());
+    }
     /// The default stays permissive: a body without trailers is valid when the
     /// request did not announce any.
     #[test]

@@ -58,7 +58,13 @@ impl crate::s3_trait::S3 for BodyRecordingS3 {
 /// assert the error the implementation would report to the client.
 fn describe(error: &crate::error::StdError) -> String {
     match error.downcast_ref::<crate::stream::aws_chunked_stream::AwsChunkedStreamError>() {
-        Some(chunked) => format!("{chunked} (s3 code {:?})", chunked.to_s3_error_code()),
+        Some(chunked) => {
+            let code = chunked.to_s3_error_code();
+            // A shape-specific message (AWS reports the same code with different
+            // text) takes precedence over the code default.
+            let message = chunked.message().or_else(|| code.default_message()).unwrap_or_default();
+            format!("{chunked} (s3 code {code:?}: {message})")
+        }
         None => error.to_string(),
     }
 }
@@ -272,8 +278,8 @@ async fn anonymous_declared_trailer_is_exposed_to_the_implementation() {
     );
 }
 
-/// A request that declared a trailer but ended without one fails the body
-/// (AWS answers 400 `MalformedTrailerError`; s3s surfaces `IncompleteBody`).
+/// A request that declared a trailer but ended without one fails the body with
+/// `MalformedTrailerError` (AWS answers 400 with the same code and message).
 #[tokio::test]
 async fn anonymous_declared_trailer_without_a_trailer_block_fails() {
     let framed = frames(&[b"payload"]);
@@ -296,9 +302,122 @@ async fn anonymous_declared_trailer_without_a_trailer_block_fails() {
         .expect("put_object should run")
         .expect_err("a declared but missing trailer block must fail the body");
     assert!(
-        error.contains("IncompleteBody"),
-        "a failing chunked body must map to IncompleteBody: {error}"
+        error.contains("MalformedTrailerError"),
+        "a missing trailer block needs its own code: {error}"
     );
+    assert!(
+        error
+            .contains("The request contained trailing data that was not well-formed or did not conform to our published schema."),
+        "the AWS message must be used verbatim: {error}"
+    );
+}
+
+/// An empty trailer section in an anonymous request is malformed trailing data:
+/// the live service answers `MalformedTrailerError` for this shape, while the signed
+/// path answers `IncompleteBody` for the same bytes.
+#[tokio::test]
+async fn anonymous_declared_trailer_with_an_empty_block_is_malformed() {
+    // The completion chunk is followed by the empty section terminator only.
+    let framed = Bytes::from_static(b"7\r\npayload\r\n0\r\n\r\n");
+    let service = Arc::new(BodyRecordingS3::default());
+    let s3: Arc<dyn crate::s3_trait::S3> = service.clone();
+    let config = test_config();
+    let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
+    let access = AllowAllAccess;
+    let ccx = anonymous_ccx(&s3, &config, &auth, &access);
+
+    let mut req = anonymous_put(framed, Some(7), &[("x-amz-trailer", "x-amz-checksum-crc32")]);
+    let response = super::call(&mut req, &ccx).await.expect("the request should be dispatched");
+    assert!(response.status.is_success(), "unexpected status: {}", response.status);
+
+    let error = service
+        .received
+        .lock()
+        .expect("test mutex")
+        .clone()
+        .expect("put_object should run")
+        .expect_err("an empty trailer section must fail the body");
+    assert!(
+        error.contains("MalformedTrailerError"),
+        "an anonymous empty trailer section is malformed trailing data: {error}"
+    );
+    assert!(
+        !error.contains("IncompleteBody"),
+        "the anonymous shape must not report a short body: {error}"
+    );
+    assert!(
+        error
+            .contains("The request contained trailing data that was not well-formed or did not conform to our published schema."),
+        "the MalformedTrailerError message must be used verbatim: {error}"
+    );
+}
+
+/// The signed path shares the decoder, so a declared but missing trailer block
+/// reports the same code there.
+#[tokio::test]
+async fn signed_declared_trailer_without_a_trailer_block_reports_the_same_code() {
+    let framed = frames(&[b"payload"]);
+    let service = Arc::new(BodyRecordingS3::default());
+    let s3: Arc<dyn crate::s3_trait::S3> = service.clone();
+    let config = test_config();
+    let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
+    let access = AllowAllAccess;
+    let ccx = anonymous_ccx(&s3, &config, &auth, &access);
+
+    let mut req = signed_request(
+        Method::PUT,
+        Version::HTTP_11,
+        "http://localhost/test-bucket/test-key.txt",
+        UNSIGNED_TRAILER,
+        &[
+            ("content-encoding", "aws-chunked"),
+            ("x-amz-decoded-content-length", "7"),
+            ("x-amz-trailer", "x-amz-checksum-crc32"),
+        ],
+    );
+    req.headers.insert(CONTENT_LENGTH, framed.len().into());
+    req.body = Body::from(framed);
+    let response = super::call(&mut req, &ccx).await.expect("the request should be dispatched");
+    assert!(response.status.is_success(), "unexpected status: {}", response.status);
+
+    let error = service
+        .received
+        .lock()
+        .expect("test mutex")
+        .clone()
+        .expect("put_object should run")
+        .expect_err("a declared but missing trailer block must fail the body");
+    assert!(
+        error.contains("MalformedTrailerError"),
+        "the signed path must report the same code: {error}"
+    );
+}
+
+/// Control: a body that ends before the declared payload keeps `IncompleteBody`,
+/// which is the AWS meaning of that code.
+#[tokio::test]
+async fn anonymous_truncated_body_still_maps_to_incomplete_body() {
+    // Ten decoded bytes are declared, the framing only carries three.
+    let framed = frames(&[b"abc"]);
+    let service = Arc::new(BodyRecordingS3::default());
+    let s3: Arc<dyn crate::s3_trait::S3> = service.clone();
+    let config = test_config();
+    let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
+    let access = AllowAllAccess;
+    let ccx = anonymous_ccx(&s3, &config, &auth, &access);
+
+    let mut req = anonymous_put(framed, Some(10), &[]);
+    let response = super::call(&mut req, &ccx).await.expect("the request should be dispatched");
+    assert!(response.status.is_success(), "unexpected status: {}", response.status);
+
+    let error = service
+        .received
+        .lock()
+        .expect("test mutex")
+        .clone()
+        .expect("put_object should run")
+        .expect_err("a truncated body must fail");
+    assert!(error.contains("IncompleteBody"), "a truncated body stays IncompleteBody: {error}");
 }
 
 /// `x-amz-decoded-content-length` is required for a chunked body, as on the

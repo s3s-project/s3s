@@ -57,7 +57,18 @@ impl From<Error> for S3Error {
             return S3Error::with_source(err.to_s3_error_code(), source);
         }
         if let Some(err) = source.downcast_ref::<s3s::stream::aws_chunked_stream::AwsChunkedStreamError>() {
-            return S3Error::with_source(err.to_s3_error_code(), source);
+            let code = err.to_s3_error_code();
+            // Some shapes report the same code with a shape-specific message: an
+            // empty trailer section is `IncompleteBody` with the AWS wording, while
+            // the code default describes a body shorter than its `Content-Length`.
+            return match err.message() {
+                Some(message) => {
+                    let mut error = S3Error::with_message(code, message);
+                    error.set_source(source);
+                    error
+                }
+                None => S3Error::with_source(code, source),
+            };
         }
 
         S3Error::with_source(S3ErrorCode::InternalError, source)
@@ -122,6 +133,28 @@ mod tests {
         let e = Error::new(Box::new(s3s::stream::aws_chunked_stream::AwsChunkedStreamError::SignatureMismatch));
         let s3err: S3Error = e.into();
         assert_eq!(s3err.code(), &S3ErrorCode::SignatureDoesNotMatch);
+        assert_eq!(
+            s3err.message(),
+            S3ErrorCode::SignatureDoesNotMatch.default_message(),
+            "shapes without a specific message keep the code default"
+        );
+    }
+
+    #[test]
+    fn incomplete_body_uses_the_aws_message() {
+        let e = Error::new(Box::new(s3s::stream::aws_chunked_stream::AwsChunkedStreamError::Incomplete));
+        let s3err: S3Error = e.into();
+        assert_eq!(s3err.code(), &S3ErrorCode::IncompleteBody);
+        assert_eq!(s3err.message(), Some("The request body terminated unexpectedly"));
+    }
+
+    #[test]
+    fn empty_trailer_section_uses_the_aws_message() {
+        let e = Error::new(Box::new(s3s::stream::aws_chunked_stream::AwsChunkedStreamError::TrailersEmpty));
+        let s3err: S3Error = e.into();
+        assert_eq!(s3err.code(), &S3ErrorCode::IncompleteBody);
+        assert_eq!(s3err.message(), Some("The request body terminated unexpectedly"));
+        assert!(s3err.source().is_some(), "the stream error stays in the chain");
     }
 
     #[test]

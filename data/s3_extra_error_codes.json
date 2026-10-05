@@ -4,6 +4,11 @@
             "code": "DuplicateHeaderName",
             "description": "Your request contains duplicate headers.",
             "http_status_code": 400
+        },
+        {
+            "code": "MalformedTrailerError",
+            "description": "The request contained trailing data that was not well-formed or did not conform to our published schema.",
+            "http_status_code": 400
         }
     ]
 }

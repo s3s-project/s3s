@@ -228,11 +228,13 @@ mod unsigned_tests {
         assert!(matches!(err, Some(Error::Incomplete)));
     }
 
+    /// A chunked body is only complete after its zero-length completion chunk, so
+    /// EOF at a chunk boundary is incomplete (AWS answers 400 `IncompleteBody`).
     #[test]
-    fn accepts_eof_at_a_chunk_boundary() {
+    fn eof_at_a_chunk_boundary_is_incomplete() {
         let (out, err) = decode(single(b""), 0);
         assert_eq!(out, b"");
-        assert!(err.is_none());
+        assert!(matches!(err, Some(Error::Incomplete)), "{err:?}");
     }
 
     #[test]
