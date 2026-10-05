@@ -225,38 +225,41 @@ where
         }
     }
 
-    /// Consumes the closing delimiter's padding and CRLF, then hands the strict
-    /// trailer check to [`Multipart::poll_epilogue`]. Keeping the epilogue in
-    /// its own state is what makes the resume safe: re-running this step after a
-    /// `Pending` would consume a CRLF that is already gone and then wait for
-    /// bytes that never come.
-    fn poll_advance_closing(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Error>> {
-        ready!(self.poll_consume_padding_and_crlf(cx)?);
+    /// The closing delimiter is complete; the epilogue follows.
+    ///
+    /// Nothing is consumed here: the epilogue is not part of the closing
+    /// delimiter, so its bytes — the padding, the optional `\r\n` and whatever
+    /// follows — are left for [`Multipart::poll_epilogue`] to discard. Keeping
+    /// that work in its own state is what makes the resume safe: re-running a
+    /// step after a `Pending` would consume bytes that are already gone and
+    /// then wait for bytes that never come.
+    fn poll_advance_closing(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Error>> {
         self.state = State::ReadingEpilogue;
         Poll::Ready(Ok(()))
     }
 
-    /// Strict trailer: after the closing delimiter only end of stream may
-    /// follow, with the closing CRLF already consumed.
+    /// The epilogue carries no content: RFC 2046 requires implementations to
+    /// ignore everything after the closing delimiter, so its bytes are read and
+    /// discarded. Reading to the end of the stream also leaves the underlying
+    /// body fully consumed, which the callers' byte accounting relies on.
     fn poll_epilogue(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Error>> {
-        let buffer = match self.buffer_mut() {
-            Ok(buffer) => buffer,
-            Err(err) => return Poll::Ready(Err(err)),
-        };
-        if !buffer.buf.is_empty() {
-            return Poll::Ready(Err(Error::StreamPartNotLast));
-        }
-        match ready!(buffer.poll_stream(cx)) {
-            None => {
-                self.state = State::Done;
-                Poll::Ready(Ok(()))
+        loop {
+            match self.buffer_mut() {
+                Ok(buffer) => {
+                    buffer.buf.clear();
+                    // A chunk that carries no bytes is not progress, and
+                    // `poll_stream` never hands one out.
+                    match ready!(buffer.poll_stream(cx)) {
+                        Some(Ok(_)) => {}
+                        Some(Err(err)) => return Poll::Ready(Err(err)),
+                        None => break,
+                    }
+                }
+                Err(err) => return Poll::Ready(Err(err)),
             }
-            // A chunk that carries no bytes is not trailing content, and
-            // `poll_stream` never hands one out, so whatever arrives here is
-            // content after the closing delimiter.
-            Some(Ok(_)) => Poll::Ready(Err(Error::StreamPartNotLast)),
-            Some(Err(err)) => Poll::Ready(Err(err)),
         }
+        self.state = State::Done;
+        Poll::Ready(Ok(()))
     }
 
     fn poll_consume_padding_and_crlf(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Error>> {
@@ -649,7 +652,7 @@ mod tests {
     }
 
     /// A stream may hand out chunks that carry no bytes. They are not content,
-    /// so they must not be mistaken for an epilogue after the closing delimiter.
+    /// so they must not be mistaken for the epilogue after the closing delimiter.
     #[test]
     fn empty_chunks_after_the_closing_delimiter_are_not_an_epilogue() {
         block_on(async {
@@ -667,7 +670,7 @@ mod tests {
 
     /// A stream that never stops answering with empty chunks is not progress:
     /// the parser must report a stream failure instead of polling it forever,
-    /// whether the run happens while reading the body or while checking for an
+    /// whether the run happens while reading the body or while discarding the
     /// epilogue.
     #[test]
     fn an_endless_run_of_empty_chunks_is_a_stream_failure() {
@@ -780,14 +783,24 @@ mod tests {
         });
     }
 
+    /// RFC 2046 requires implementations to ignore the epilogue, so a complete
+    /// form followed by trailing bytes still ends cleanly.
     #[test]
-    fn rejects_epilogue_after_close() {
+    fn ignores_epilogue_after_close() {
         block_on(async {
-            let mut mp = parser(b"--boundary\r\nX: y\r\n\r\ndata\r\n--boundary--\r\nepilogue");
-            let mut part = mp.next_part().await.unwrap().unwrap();
-            let _ = drain_part(&mut part).await;
-            let err = mp.next_part().await.unwrap_err();
-            assert!(matches!(err, Error::StreamPartNotLast));
+            for body in [
+                &b"--boundary\r\nX: y\r\n\r\ndata\r\n--boundary--\r\nepilogue"[..],
+                b"--boundary\r\nX: y\r\n\r\ndata\r\n--boundary--epilogue",
+                b"--boundary\r\nX: y\r\n\r\ndata\r\n--boundary--",
+                b"--boundary\r\nX: y\r\n\r\ndata\r\n--boundary--  \t ",
+            ] {
+                let mut mp = parser(body);
+                let mut part = mp.next_part().await.unwrap().unwrap();
+                let (headers, data) = drain_part(&mut part).await;
+                assert_eq!(headers.len(), 1);
+                assert_eq!(data, b"data", "{body:?}");
+                assert!(mp.next_part().await.unwrap().is_none(), "{body:?}");
+            }
         });
     }
 
@@ -844,14 +857,13 @@ mod tests {
     }
 
     #[test]
-    fn take_data_stream_rejects_epilogue() {
+    fn take_data_stream_ignores_epilogue() {
         block_on(async {
             let mut mp = parser(b"--boundary\r\nX: y\r\n\r\nhello\r\n--boundary--\r\nepilogue");
             let mut part = mp.next_part().await.unwrap().unwrap();
             while part.next_header().await.unwrap().is_some() {}
             let stream = part.take_data_stream().unwrap();
-            let err = collect_taken(stream.into_final()).await.unwrap_err();
-            assert!(matches!(err, Error::StreamPartNotLast));
+            assert_eq!(collect_taken(stream.into_final()).await.unwrap(), b"hello");
         });
     }
 
@@ -867,15 +879,16 @@ mod tests {
         });
     }
 
+    /// The final CRLF after the closing dashes is optional: RFC 2046 allows the
+    /// closing delimiter to be followed directly by the end of the body.
     #[test]
-    fn take_data_stream_reports_incomplete_trailer() {
+    fn take_data_stream_accepts_missing_final_crlf() {
         block_on(async {
             let mut mp = parser(b"--boundary\r\nX: y\r\n\r\nhello\r\n--boundary--");
             let mut part = mp.next_part().await.unwrap().unwrap();
             while part.next_header().await.unwrap().is_some() {}
             let stream = part.take_data_stream().unwrap();
-            let err = collect_taken(stream.into_final()).await.unwrap_err();
-            assert!(matches!(err, Error::IncompleteStreamPart));
+            assert_eq!(collect_taken(stream.into_final()).await.unwrap(), b"hello");
         });
     }
 
@@ -958,7 +971,6 @@ mod coverage_tests {
             for body in [
                 &b"--boundary\r\nX: y\r\n\r\ndata\r\n--boundary-x\r\n"[..],
                 b"--boundary\r\nX: y\r\n\r\ndata\r\n--boundaryX\r\n",
-                b"--boundary\r\nX: y\r\n\r\ndata\r\n--boundary--x\r\n",
             ] {
                 let mut mp = parser_from_chunks(vec![Ok(body)]);
                 let mut part = mp.next_part().await.unwrap().unwrap();
@@ -967,19 +979,27 @@ mod coverage_tests {
                 assert!(matches!(mp.next_part().await, Err(Error::InvalidFormat)), "{body:?}");
             }
 
+            // Bytes after the closing dashes are the epilogue, which is
+            // ignored instead of rejected.
+            let mut mp = parser_from_chunks(vec![Ok(b"--boundary\r\nX: y\r\n\r\ndata\r\n--boundary--x\r\n")]);
+            let mut part = mp.next_part().await.unwrap().unwrap();
+            while part.next_data().await.unwrap().is_some() {}
+            let _ = part;
+            assert!(mp.next_part().await.unwrap().is_none());
+
             let mut mp = parser_from_chunks(vec![Ok(b"--boundary\rx")]);
             assert!(matches!(mp.next_part().await, Err(Error::InvalidFormat)));
         });
     }
 
     #[test]
-    fn closing_poll_sees_separate_epilogue_and_errors() {
+    fn closing_poll_discards_a_separate_epilogue_and_reports_errors() {
         block_on(async {
             let mut mp = parser_from_chunks(vec![Ok(b"--boundary\r\nX: y\r\n\r\ndata\r\n--boundary--\r\n"), Ok(b"epilogue")]);
             let mut part = mp.next_part().await.unwrap().unwrap();
             while part.next_data().await.unwrap().is_some() {}
             let _ = part;
-            assert!(matches!(mp.next_part().await, Err(Error::StreamPartNotLast)));
+            assert!(mp.next_part().await.unwrap().is_none());
 
             let mut mp = parser_from_chunks(vec![
                 Ok(b"--boundary\r\nX: y\r\n\r\ndata\r\n--boundary--\r\n"),
@@ -1121,16 +1141,19 @@ mod coverage_tests {
     #[test]
     fn part_data_stream_trailer_paths() {
         block_on(async {
-            for body in [
-                &b"--boundary\r\nX: y\r\n\r\nhello\r\n--boundary-x\r\n"[..],
-                b"--boundary\r\nX: y\r\n\r\nhello\r\n--boundary--x\r\n",
-            ] {
-                let mut mp = parser_from_chunks(vec![Ok(body)]);
-                let mut part = mp.next_part().await.unwrap().unwrap();
-                while part.next_header().await.unwrap().is_some() {}
-                let stream = part.take_data_stream().unwrap();
-                assert!(matches!(collect_taken(stream.into_final()).await, Err(Error::InvalidFormat)), "{body:?}");
-            }
+            let mut mp = parser_from_chunks(vec![Ok(b"--boundary\r\nX: y\r\n\r\nhello\r\n--boundary-x\r\n")]);
+            let mut part = mp.next_part().await.unwrap().unwrap();
+            while part.next_header().await.unwrap().is_some() {}
+            let stream = part.take_data_stream().unwrap();
+            assert!(matches!(collect_taken(stream.into_final()).await, Err(Error::InvalidFormat)));
+
+            // Bytes after the closing dashes are the epilogue, which is
+            // ignored instead of rejected.
+            let mut mp = parser_from_chunks(vec![Ok(b"--boundary\r\nX: y\r\n\r\nhello\r\n--boundary--x\r\n")]);
+            let mut part = mp.next_part().await.unwrap().unwrap();
+            while part.next_header().await.unwrap().is_some() {}
+            let stream = part.take_data_stream().unwrap();
+            assert_eq!(collect_taken(stream.into_final()).await.unwrap(), b"hello");
 
             let mut mp = parser_from_chunks(vec![Ok(b"--boundary\r\nX: y\r\n\r\nhello\r\n--boundary-- \t\r\n")]);
             let mut part = mp.next_part().await.unwrap().unwrap();
@@ -1142,7 +1165,7 @@ mod coverage_tests {
             let mut part = mp.next_part().await.unwrap().unwrap();
             while part.next_header().await.unwrap().is_some() {}
             let stream = part.take_data_stream().unwrap();
-            assert!(matches!(collect_taken(stream.into_final()).await, Err(Error::StreamPartNotLast)));
+            assert_eq!(collect_taken(stream.into_final()).await.unwrap(), b"hello");
 
             let mut mp = parser_from_chunks(vec![
                 Ok(b"--boundary\r\nX: y\r\n\r\nhello\r\n--boundary--\r\n"),
@@ -1541,15 +1564,25 @@ mod coverage_tests {
         }
     }
 
-    /// F32a: truncating the body, or failing the stream, at any byte offset must
-    /// surface an error instead of panicking or silently accepting the prefix —
-    /// this is what covers the error arms of the poll steps.
+    /// F32a: truncating the body before the closing dashes, or failing the
+    /// stream, at any byte offset must surface an error instead of panicking or
+    /// silently accepting the prefix — this is what covers the error arms of the
+    /// poll steps. Truncation after the closing dashes only drops trailer bytes,
+    /// which are not content.
     #[test]
     fn truncated_or_failing_streams_error_at_every_offset() {
+        // A cut that leaves the closing dashes in place is complete: the
+        // trailer after them, the optional final CRLF included, is ignored.
+        let closing_dashes = TWO_PARTS.len() - 2;
         for cut in 0..TWO_PARTS.len() {
             let truncated = stream::iter(vec![Ok::<Bytes, Error>(Bytes::copy_from_slice(&TWO_PARTS[..cut]))]);
             let mut mp = Multipart::new(truncated, &Boundary::new(b"boundary").unwrap(), 4096);
-            assert!(block_on(drain_all(&mut mp)).is_err(), "truncated at {cut}");
+            let parsed = block_on(drain_all(&mut mp));
+            if cut >= closing_dashes {
+                assert!(parsed.is_ok(), "truncated at {cut} leaves a complete closing delimiter");
+            } else {
+                assert!(parsed.is_err(), "truncated at {cut}");
+            }
 
             let failing = stream::iter(vec![
                 Ok::<Bytes, Error>(Bytes::copy_from_slice(&TWO_PARTS[..cut])),

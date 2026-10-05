@@ -394,7 +394,17 @@ async fn prepare_post_object_stream(
             http::MultipartError::FileTooLarge(..) => {
                 s3_error!(EntityTooLarge, "Your proposed upload exceeds the maximum allowed object size.")
             }
-            other => invalid_request!(other, "failed to read file stream"),
+            // A body that ends early or carries another part after the file is
+            // the client's error, so the code the stream error carries is
+            // reported; a length disagreement or a failing transport keeps the
+            // previous 400-class mapping.
+            http::MultipartError::Underlying(source) => match source.downcast_ref::<http::FileStreamError>() {
+                Some(err @ (http::FileStreamError::Incomplete | http::FileStreamError::InvalidTrailer)) => {
+                    S3Error::with_source(err.to_s3_error_code(), source)
+                }
+                _ => S3Error::with_source(S3ErrorCode::InvalidRequest, source),
+            },
+            other => s3_error!(MalformedPOSTRequest, "failed to read the file part: {other}"),
         })?;
     // Use saturating_add to prevent overflow in release builds (security-relevant for content-length-range validation)
     let file_size = vec_bytes.iter().map(|b| b.len() as u64).fold(0u64, u64::saturating_add);

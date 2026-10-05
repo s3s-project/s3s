@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
-//! Strict closing validation for a taken part stream.
+//! Closing validation for a taken part stream.
 //!
 //! [`FinalPartDataStream`] continues to yield the part's data — including
 //! data that was not yet read when [`PartDataStream::into_final`](crate::PartDataStream::into_final) was called
-//! — and then validates the strict closing trailer: the `--` suffix of the
-//! closing delimiter, optional transport padding, `\r\n`, and end of stream.
+//! — and then consumes the closing delimiter: the `--` suffix of the last
+//! boundary line and the epilogue that may follow it.
 //!
-//! An epilogue or another part is rejected (`Error::StreamPartNotLast`)
-//! because callers derive the exact file length from the multipart byte
-//! accounting: trailing content of unknown size would break that accounting.
-//! Note that RFC 2046 allows an epilogue; this crate deliberately rejects
-//! it.
+//! The closing delimiter has to be the last boundary line: a part separator
+//! instead of the `--` suffix means the taken part was not the last one, and
+//! that is rejected (`Error::StreamPartNotLast`). Everything after the
+//! closing `--` is the epilogue, which RFC 2046 requires implementations to
+//! ignore, so it is discarded instead of being validated.
 
 use std::fmt;
 use std::pin::Pin;
@@ -29,12 +29,13 @@ use crate::delimiter::{DataSearch, search_data};
 /// The strict variant of a taken part stream.
 ///
 /// Created with [`PartDataStream::into_final`](crate::PartDataStream::into_final), it yields the remaining data
-/// chunks of the part — each one non-empty — and then validates the strict
-/// closing trailer: `\r\n--boundary--\r\n` followed by end of stream, with
-/// transport padding (SP / HTAB) allowed between the closing `--` and the
-/// final CRLF, as RFC 2046 section 5.1.1 allows for a boundary line. An
-/// epilogue or another part is rejected because callers derive the exact
-/// content length from the multipart byte accounting.
+/// chunks of the part — each one non-empty — and then consumes the closing
+/// delimiter `\r\n--boundary--`, the epilogue that may follow it, and the end
+/// of stream. Another part after the taken one is rejected
+/// (`Error::StreamPartNotLast`): the caller derives the part's length from the
+/// multipart byte accounting, which requires the taken part to be the last
+/// one. The bytes after the closing `--` are the epilogue, which RFC 2046
+/// section 5.1.1 requires implementations to ignore.
 pub struct FinalPartDataStream<S>
 where
     S: Stream<Item = Result<Bytes, Error>> + Send + Unpin,
@@ -58,11 +59,9 @@ enum DataState {
     /// The delimiter was consumed; the `--` suffix of the closing delimiter
     /// is expected next.
     AfterBoundary,
-    /// The `--` suffix was consumed; optional transport padding and the
-    /// final `\r\n` are expected.
-    FinalCRLF,
-    /// The closing trailer is complete; only end of stream may follow.
-    Eof,
+    /// The closing delimiter is complete; the epilogue is discarded until the
+    /// end of the stream.
+    Epilogue,
     Done,
 }
 
@@ -187,46 +186,25 @@ where
                         return Poll::Ready(Err(err));
                     }
                     let _ = self.buffer.buf.split_to(2);
-                    self.state = DataState::FinalCRLF;
+                    self.state = DataState::Epilogue;
                 }
-                DataState::FinalCRLF => {
-                    loop {
-                        ready!(self.fill_buf(1, cx))?;
-
-                        let first = self.buffer.buf[0];
-                        match first {
-                            b' ' | b'\t' => {
-                                let _ = self.buffer.buf.split_to(1);
-                            }
-                            b'\r' => break,
-                            _ => return Poll::Ready(Err(Error::InvalidFormat)),
-                        }
-                    }
-
-                    ready!(self.fill_buf(2, cx))?;
-                    if !self.buffer.buf.starts_with(b"\r\n") {
-                        return Poll::Ready(Err(Error::InvalidFormat));
-                    }
-                    let _ = self.buffer.buf.split_to(2);
-                    self.state = DataState::Eof;
-                }
-                DataState::Eof => {
-                    if !self.buffer.buf.is_empty() {
-                        return Poll::Ready(Err(Error::StreamPartNotLast));
-                    }
-
+                DataState::Epilogue => {
+                    // The epilogue carries no content: RFC 2046 requires it to
+                    // be ignored, so it is discarded. Reading it to the end of
+                    // the stream also leaves the underlying body fully
+                    // consumed, which the byte accounting of the caller relies
+                    // on. `poll_stream` never hands out an empty chunk.
+                    self.buffer.buf.clear();
                     match ready!(self.buffer.poll_stream(cx)) {
+                        Some(Ok(_)) => {}
+                        Some(Err(err)) => return Poll::Ready(Err(err)),
                         None => {
                             self.state = DataState::Done;
                             return Poll::Ready(Ok(()));
                         }
-                        // An empty chunk is not trailing content either, and
-                        // `poll_stream` never hands one out.
-                        Some(Ok(_)) => return Poll::Ready(Err(Error::StreamPartNotLast)),
-                        Some(Err(err)) => return Poll::Ready(Err(err)),
                     }
                 }
-                // `poll_trailer` is only reached in the three trailer states, so
+                // `poll_trailer` is only reached in the trailer states, so
                 // this arm guards the match rather than describing a reachable
                 // outcome.
                 DataState::Data | DataState::Done => return Poll::Ready(Ok(())),
@@ -283,7 +261,7 @@ where
                         return Poll::Ready(Some(Err(err)));
                     }
                 },
-                DataState::AfterBoundary | DataState::FinalCRLF | DataState::Eof => {
+                DataState::AfterBoundary | DataState::Epilogue => {
                     if let Err(err) = ready!(this.poll_trailer(cx)) {
                         this.terminated = true;
                         return Poll::Ready(Some(Err(err)));
@@ -422,39 +400,35 @@ mod tests {
         });
     }
 
+    /// The closing dashes are read across chunks: the reader waits for the
+    /// second byte rather than judging a one-byte prefix, and an error while
+    /// waiting is reported instead of being mistaken for a truncated body.
     #[test]
-    fn trailer_padding_error_and_pending_paths() {
+    fn closing_dashes_error_and_pending_paths() {
         with_cx(|cx| {
-            let mut ds = final_with_error(Error::InvalidFormat, DataState::FinalCRLF);
-            ds.buffer.buf.extend_from_slice(b" ");
+            let mut ds = final_with_error(Error::InvalidFormat, DataState::AfterBoundary);
+            ds.buffer.buf.extend_from_slice(b"-");
             assert!(matches!(ds.poll_next_unpin(cx), TaskPoll::Ready(Some(Err(Error::InvalidFormat)))));
 
-            let mut ds = final_with_prefix(b" ", DataState::FinalCRLF);
+            let mut ds = final_with_prefix(b"-", DataState::AfterBoundary);
             assert!(matches!(ds.poll_next_unpin(cx), TaskPoll::Pending));
 
-            let mut ds = final_with_buffer(Vec::new(), DataState::FinalCRLF);
-            ds.buffer.buf.extend_from_slice(b" ");
+            let mut ds = final_with_buffer(Vec::new(), DataState::AfterBoundary);
+            ds.buffer.buf.extend_from_slice(b"-");
             assert!(matches!(ds.poll_next_unpin(cx), TaskPoll::Ready(Some(Err(Error::IncompleteStreamPart)))));
-
-            let mut ds = final_with_error(Error::InvalidFormat, DataState::FinalCRLF);
-            ds.buffer.buf.extend_from_slice(b"\r");
-            assert!(matches!(ds.poll_next_unpin(cx), TaskPoll::Ready(Some(Err(Error::InvalidFormat)))));
-
-            let mut ds = final_with_prefix(b"\r", DataState::FinalCRLF);
-            assert!(matches!(ds.poll_next_unpin(cx), TaskPoll::Pending));
-
-            let mut ds = final_with_buffer(Vec::new(), DataState::FinalCRLF);
-            ds.buffer.buf.extend_from_slice(b"xx");
-            assert!(matches!(ds.poll_next_unpin(cx), TaskPoll::Ready(Some(Err(Error::InvalidFormat)))));
         });
     }
 
+    /// Bytes after the closing dashes are the epilogue: RFC 2046 requires them
+    /// to be ignored, so the part ends cleanly whatever they are.
     #[test]
-    fn trailer_final_crlf_requires_exact_bytes() {
+    fn bytes_after_the_closing_dashes_are_discarded() {
         with_cx(|cx| {
-            let mut ds = final_with_buffer(Vec::new(), DataState::FinalCRLF);
-            ds.buffer.buf.extend_from_slice(b"\rX");
-            assert!(matches!(ds.poll_next_unpin(cx), TaskPoll::Ready(Some(Err(Error::InvalidFormat)))));
+            let mut ds = final_with_buffer(vec![Ok(Bytes::from_static(b"--\rX"))], DataState::AfterBoundary);
+            assert!(matches!(ds.poll_next_unpin(cx), TaskPoll::Ready(None)));
+
+            let mut ds = final_with_buffer(vec![Ok(Bytes::from_static(b"--epilogue"))], DataState::AfterBoundary);
+            assert!(matches!(ds.poll_next_unpin(cx), TaskPoll::Ready(None)));
         });
     }
 
@@ -493,9 +467,10 @@ mod tests {
     }
 
     /// A stream may hand out chunks that carry no bytes. They are not content, so
-    /// the strict ending must poll past them instead of rejecting the part.
+    /// the epilogue must poll past them instead of treating them as trailing
+    /// bytes of their own.
     #[test]
-    fn empty_chunks_after_the_trailer_are_not_an_epilogue() {
+    fn empty_chunks_in_the_epilogue_are_skipped() {
         with_cx(|cx| {
             let mut ds = final_with_buffer(
                 vec![
@@ -503,7 +478,7 @@ mod tests {
                     Ok(Bytes::from_static(b"")),
                     Ok(Bytes::from_static(b"")),
                 ],
-                DataState::Eof,
+                DataState::Epilogue,
             );
             assert!(matches!(ds.poll_next_unpin(cx), TaskPoll::Ready(None)));
         });

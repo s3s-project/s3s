@@ -27,9 +27,8 @@ pub enum Error {
         /// The configured buffer limit that was exceeded.
         limit: usize,
     },
-    /// A [`FinalPartDataStream`](crate::FinalPartDataStream) found content
-    /// after the closing delimiter that is not the strict closing trailer
-    /// (an epilogue or another part).
+    /// The delimiter after the taken part does not carry the closing `--`:
+    /// another part follows, so the taken part was not the last one.
     #[error("content follows the closing delimiter of the taken part")]
     StreamPartNotLast,
     /// The multipart parser was already terminated by `take_data_stream`.
