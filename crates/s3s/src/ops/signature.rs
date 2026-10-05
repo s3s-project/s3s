@@ -367,6 +367,15 @@ fn validate_clock_skew(request_time: jiff::Timestamp, now: jiff::Timestamp, conf
 }
 
 pub(super) fn validate_sig_v4_region(region: &str, config: &S3Config) -> S3Result<()> {
+    if let Some(max_region_len) = config.sig_v4_max_region_len
+        && region.len() > max_region_len
+    {
+        return Err(s3_error!(
+            AuthorizationHeaderMalformed,
+            "The authorization header is malformed; the region is longer than {max_region_len} bytes."
+        ));
+    }
+
     if let Some(expected_region) = &config.expected_region
         && region != expected_region.as_str()
     {
