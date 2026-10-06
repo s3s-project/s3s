@@ -78,6 +78,12 @@ The other workspace members are supporting crates:
 - `s3s-e2e` — the end-to-end test runner built on it.
 - `s3s-wasm` — an internal crate (`publish = false`) that runs `s3s` under WebAssembly in its test suite.
 
+## Compatibility
+
+100% S3 compatibility is not a realistic goal, because there is no single authoritative S3 specification to measure against: the S3 API is effectively defined by Amazon S3, and Amazon S3's own behavior does not always match the S3 API documentation exactly.
+
+This project therefore aims for **practical compatibility with real S3 clients and workflows on a best-effort basis**. Compatibility is pursued as far as it is practical, not promised, and each known difference from Amazon S3 is tracked and handled as a separate issue rather than assumed away.
+
 ## How it works
 
 ![architecture diagram](docs/arch/arch.svg)
