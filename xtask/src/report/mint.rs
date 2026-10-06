@@ -55,53 +55,45 @@ struct Counters {
 /// ignored).
 ///
 /// Baseline recorded against the pinned mint image in `scripts/mint.env` and
-/// the pinned backend image in `scripts/minio.env`. What is left is the s3s
-/// defects s3s owns, the `MinIO` extensions it does not implement, and the two
-/// limits of the proxy or the backend, each mapped to a tracked known issue.
+/// the pinned backend image in `scripts/minio.env`. The counters and the
+/// entries below are calibrated on that backend, so overriding
+/// `MINIO_IMAGE_REF` to run the gate against another one does not satisfy
+/// them. One entry is left: a `MinIO` extension s3s does not implement. What
+/// the earlier entries covered - the s3s defects and the limits of the proxy
+/// or the backend - is fixed, or the backend the suites run against answers
+/// it, so no entry is left for them.
 ///
 /// The run this list is scored against enables the proxy's authentication
 /// passthrough: a request carrying a credential the proxy does not know is
 /// forwarded verbatim and the backend decides, so the dynamically created user
 /// of `mc test_admin_users` and the temporary credentials of the `minio-js`
 /// assume-role case are no longer expected to fail.
-const EXPECTED_FAILURES: &[(&str, &[(&str, usize)])] = &[
-    (
-        "aws-sdk-go-v2",
-        // Backend: `If-Match: *` against a key that does not exist answers 404
-        // `NoSuchKey`, as Amazon S3 does. The case expects 412, so it fails
-        // until the expectation is fixed in the image.
-        // FIXME: https://github.com/minio/mint/blob/master/run/core/aws-sdk-go-v2/main.go#L479
-        //
-        // This entry is tied to the image pinned in `scripts/mint.env`: once
-        // that image carries the fixed expectation the case passes, the entry
-        // becomes stale (which the gate reports) and has to be removed, with
-        // the `aws-sdk-go-v2` counter below raised to the measured pass count.
-        &[("ConditionalDeleteWithWildcardMissing", 1)],
-    ),
-    (
-        "minio-java",
-        // MinIO extension s3s does not implement: `putObjectFanOut()` sends the
-        // `x-minio-fanout-list` form field, which the POST policy validation
-        // rejects because it is not a policy condition. The case only runs at
-        // all because the image stopped sending an unsigned `x-amz-acl` on its
-        // presigned PUT.
-        //
-        // `getObjectAcl()` used to be listed here. Under the `minio` feature the
-        // grantee repeats its type as the `<Type>` child element MinIO writes,
-        // so the case passes.
-        //
-        // The suite reports 58 passes and 12 `NA` with no failure, and the
-        // `NA` cases have two different causes: six are waived because the
-        // backend answers `NotImplemented` (the encryption and CORS cases),
-        // and six never execute because the environment variables they need
-        // are not set (the notification and replication cases). They are
-        // neither passes nor failures, so they carry no counter.
-        //
-        // `aws-sdk-java-v2` is a different suite: it logs nothing at all over
-        // plain HTTP and is therefore listed in `NON_PARTICIPATING_GROUPS`.
-        &[("putObjectFanOut()", 1)],
-    ),
-];
+const EXPECTED_FAILURES: &[(&str, &[(&str, usize)])] = &[(
+    "minio-java",
+    // MinIO extension s3s does not implement: `putObjectFanOut()` sends the
+    // `x-minio-fanout-list` form field, which the POST policy validation
+    // rejects because it is not a policy condition. The case only runs at
+    // all because the image stopped sending an unsigned `x-amz-acl` on its
+    // presigned PUT.
+    //
+    // `getObjectAcl()` used to be listed here. Under the `minio` feature the
+    // grantee repeats its type as the `<Type>` child element MinIO writes,
+    // so the case passes.
+    //
+    // The suite reports 61 passes, one failure and nine `NA` here. Its own
+    // conditions explain them: three bucket-encryption cases reach their
+    // request and the backend answers `NotImplemented`, which is the only
+    // error code the suite logs `NA` for, and three bucket-notification plus
+    // three bucket-replication cases return before sending a request because
+    // the environment variables they need (`MINIO_JAVA_TEST_SQS_ARN` and the
+    // replication ones) are not set. A backend whose CORS handlers answer
+    // `NotImplemented` reports three more `NA`, for the bucket-CORS cases,
+    // which pass here instead.
+    //
+    // `aws-sdk-java-v2` is a different suite: it logs nothing at all over
+    // plain HTTP and is therefore listed in `NON_PARTICIPATING_GROUPS`.
+    &[("putObjectFanOut()", 1)],
+)];
 
 /// The suites the pinned mint image runs, in the order the image lists them.
 ///
@@ -378,7 +370,7 @@ fn check_counters(counts: &HashMap<String, Counters>, allow_missing: &[String], 
         }
     }
 
-    check_pass_at_least(counts, "aws-sdk-go-v2", 5, allow_missing, errors);
+    check_pass_at_least(counts, "aws-sdk-go-v2", 24, allow_missing, errors);
     check_fail_zero(counts, "aws-sdk-php", allow_missing, errors);
     // No known failure is left in this suite.
     check_pass_at_least(counts, "aws-sdk-ruby", 13, allow_missing, errors);
@@ -387,13 +379,13 @@ fn check_counters(counts: &HashMap<String, Counters>, allow_missing: &[String], 
     // dynamically created user reach the backend.
     check_pass_at_least(counts, "mc", 29, allow_missing, errors);
     check_fail_zero(counts, "minio-go", allow_missing, errors);
-    // The one known failure needs a MinIO extension; the twelve
-    // bucket-configuration cases report NA against the pinned backend and are
+    // The one known failure needs a MinIO extension; the nine bucket
+    // configuration cases the suite cannot run here report `NA` and are
     // counted separately, so they are not part of this floor.
-    check_pass_at_least(counts, "minio-java", 58, allow_missing, errors);
+    check_pass_at_least(counts, "minio-java", 61, allow_missing, errors);
     // The assume-role case passes now that the STS protocol shape is forwarded
     // and the temporary credentials reach the backend.
-    check_pass_at_least(counts, "minio-js", 248, allow_missing, errors);
+    check_pass_at_least(counts, "minio-js", 249, allow_missing, errors);
     check_pass_at_least(counts, "minio-py", 22, allow_missing, errors);
     check_fail_zero(counts, "s3cmd", allow_missing, errors);
     check_fail_zero(counts, "s3select", allow_missing, errors);
@@ -610,7 +602,7 @@ mod tests {
         let mut errors = Vec::new();
         check_gate(&logs, &[], &mut errors);
 
-        assert_eq!(errors.len(), 5, "three unexpected failures plus two stale entries: {errors:?}");
+        assert_eq!(errors.len(), 4, "three unexpected failures plus one stale entry: {errors:?}");
         assert!(
             errors
                 .iter()
@@ -646,24 +638,21 @@ mod tests {
     /// block, which is how mint writes a suite.
     fn full_log() -> String {
         const PASSES: &[(&str, usize)] = &[
-            ("aws-sdk-go-v2", 6),
+            ("aws-sdk-go-v2", 24),
             ("aws-sdk-php", 3),
             ("aws-sdk-ruby", 14),
             ("awscli", 3),
             ("healthcheck", 3),
             ("mc", 29),
             ("minio-go", 3),
-            ("minio-java", 59),
-            ("minio-js", 248),
+            ("minio-java", 61),
+            ("minio-js", 249),
             ("minio-py", 23),
             ("s3cmd", 3),
             ("s3select", 3),
             ("versioning", 19),
         ];
-        const FAILURES: &[(&str, &str)] = &[
-            ("aws-sdk-go-v2", "ConditionalDeleteWithIncorrectETag"),
-            ("minio-java", "putObjectFanOut()"),
-        ];
+        const FAILURES: &[(&str, &str)] = &[("minio-java", "putObjectFanOut()")];
 
         let mut lines = Vec::new();
         for (suite, passes) in PASSES {
