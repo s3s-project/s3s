@@ -11,6 +11,7 @@ publish = false
 workspace = true
 
 [dependencies]
+anyhow.workspace = true
 scoped-writer = "0.3.0"
 heck = "0.5.0"
 std-next.workspace = true

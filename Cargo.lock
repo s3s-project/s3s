@@ -3828,6 +3828,7 @@ dependencies = [
 name = "s3s-codegen"
 version = "0.0.0"
 dependencies = [
+ "anyhow",
  "heck",
  "http",
  "numeric_cast",
@@ -3935,10 +3936,9 @@ dependencies = [
 
 [[package]]
 name = "s3s-model"
-version = "0.17.0"
+version = "0.18.0-alpha.1"
 dependencies = [
  "anyhow",
- "numeric_cast",
  "serde",
  "serde_json",
 ]

@@ -73,7 +73,7 @@ sync-version:
     cargo set-version -p s3s-sigv4      0.17.0
     cargo set-version -p s3s-rfc2047    0.17.0
     cargo set-version -p s3s-aws        0.17.0
-    cargo set-version -p s3s-model      0.17.0
+    cargo set-version -p s3s-model      0.18.0-alpha.1
     cargo set-version -p s3s-policy     0.17.0
     cargo set-version -p s3s-test       0.17.0
     cargo set-version -p s3s-proxy      0.17.0
