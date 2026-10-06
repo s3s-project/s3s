@@ -20,16 +20,7 @@ use hyper::http::Extensions;
 use hyper::http::uri::PathAndQuery;
 use hyper::{HeaderMap, Method, StatusCode, Uri};
 
-/// Headers that must not be forwarded to the backend.
-///
-/// Only `transfer-encoding` is dropped: `hyper` manages chunked framing
-/// itself. The `host` header is part of the `SigV4` signature that `mc`
-/// computed against the proxy's address, and the backend verifies the
-/// signature against it. The `content-length` header is preserved too:
-/// `MinIO` admin endpoints require it even for empty bodies (e.g.
-/// `set-user-status`), and the aggregated body below has the exact same
-/// length.
-const HOP_BY_HOP_HEADERS: &[&str] = &["transfer-encoding"];
+use crate::hop_by_hop;
 
 /// Defensive cap for admin request bodies forwarded to the backend.
 ///
@@ -69,12 +60,6 @@ impl MinioAdminRoute {
         let base = endpoint_url.as_str().trim_end_matches('/');
         reqwest::Url::parse(&format!("{base}{path_and_query}")).ok()
     }
-
-    /// Whether `name` is a hop-by-hop header that `reqwest` manages itself.
-    #[must_use]
-    fn is_hop_by_hop(name: &str) -> bool {
-        HOP_BY_HOP_HEADERS.iter().any(|header| header.eq_ignore_ascii_case(name))
-    }
 }
 
 #[async_trait::async_trait]
@@ -98,7 +83,10 @@ impl S3Route for MinioAdminRoute {
 
         let mut request = self.client.request(req.method.clone(), target.clone());
         for (name, value) in &req.headers {
-            if Self::is_hop_by_hop(name.as_str()) {
+            // Connection-specific headers are dropped (RFC 9110 section 7.6.1);
+            // `host` is part of the signature, and `content-length` is preserved
+            // because MinIO admin endpoints require it even for empty bodies.
+            if hop_by_hop::is_connection_specific(&req.headers, name.as_str()) {
                 continue;
             }
             request = request.header(name, value);
@@ -108,7 +96,10 @@ impl S3Route for MinioAdminRoute {
             .build()
             .map_err(|e| bad_gateway_with_source(Box::new(e)))?;
 
-        tracing::debug!(target = %target, request_headers = ?request.headers(), "forwarding MinIO admin request");
+        // The request headers are deliberately not logged: admin requests carry
+        // the client's `authorization` header, and a debug dump would put a
+        // signature (and any session token) into the log.
+        tracing::debug!(target = %target, "forwarding MinIO admin request");
 
         let response = self
             .client
@@ -116,8 +107,10 @@ impl S3Route for MinioAdminRoute {
             .await
             .map_err(|e| bad_gateway_with_source(Box::new(e)))?;
 
+        // Response headers are filtered the same way request headers are: the
+        // connection-specific ones belong to this hop (RFC 9110 section 7.6.1).
         let status = response.status();
-        let headers = response.headers().clone();
+        let headers = hop_by_hop::without_connection_specific(response.headers());
         let resp_body = response.bytes().await.map_err(|e| bad_gateway_with_source(Box::new(e)))?;
 
         let mut out = S3Response::new(Body::from(resp_body));
@@ -208,15 +201,81 @@ mod tests {
         assert!(MinioAdminRoute::backend_url(&endpoint, None).is_none());
     }
 
-    #[test]
-    fn hop_by_hop_headers_are_detected() {
-        for name in ["transfer-encoding", "Transfer-Encoding"] {
-            assert!(MinioAdminRoute::is_hop_by_hop(name), "{name} should be hop-by-hop");
+    /// Serves one request with a raw response head and body.
+    async fn serve_raw(head: &'static str, body: &'static [u8]) -> (std::net::SocketAddr, tokio::task::JoinHandle<()>) {
+        use tokio::io::AsyncReadExt as _;
+        use tokio::io::AsyncWriteExt as _;
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let addr = listener.local_addr().expect("local addr");
+
+        let handle = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.expect("accept");
+            let mut buf = Vec::new();
+            let mut chunk = [0_u8; 4096];
+            loop {
+                if buf.windows(4).any(|window| window == b"\r\n\r\n") {
+                    break;
+                }
+                let read = socket.read(&mut chunk).await.expect("read");
+                assert!(read > 0, "connection closed before the request head");
+                buf.extend_from_slice(&chunk[..read]);
+            }
+            socket.write_all(head.as_bytes()).await.expect("write head");
+            socket.write_all(body).await.expect("write body");
+            socket.flush().await.expect("flush");
+        });
+
+        (addr, handle)
+    }
+
+    fn admin_request() -> S3Request<Body> {
+        S3Request {
+            input: Body::empty(),
+            method: Method::PUT,
+            uri: Uri::from_static("/minio/admin/v3/add-user?accessKey=probe"),
+            headers: HeaderMap::new(),
+            extensions: Extensions::new(),
+            credentials: None,
+            region: None,
+            service: None,
+            trailing_headers: None,
         }
-        // `host` (part of the `SigV4` signature) and `content-length` (required
-        // by MinIO admin endpoints even for empty bodies) are preserved.
-        for name in ["authorization", "host", "content-length", "accept", "x-test"] {
-            assert!(!MinioAdminRoute::is_hop_by_hop(name), "{name} should be forwarded");
+    }
+
+    #[tokio::test]
+    async fn connection_specific_response_headers_are_not_forwarded() {
+        let (addr, server) = serve_raw(
+            "HTTP/1.1 200 OK\r\ncontent-length: 2\r\nx-backend: yes\r\nconnection: x-foo\r\nx-foo: 1\r\nkeep-alive: timeout=5\r\n\r\n",
+            b"ok",
+        )
+        .await;
+        let route = MinioAdminRoute::new(
+            reqwest::Url::parse(&format!("http://{addr}")).expect("valid base url"),
+            reqwest::Client::new(),
+        );
+
+        let response = route.call(admin_request()).await.expect("the admin route answers");
+
+        server.await.expect("server task");
+        assert_eq!(response.status, Some(StatusCode::OK));
+        assert_eq!(
+            response.headers.get("content-length").and_then(|value| value.to_str().ok()),
+            Some("2"),
+            "the body length is kept"
+        );
+        assert_eq!(
+            response.headers.get("x-backend").and_then(|value| value.to_str().ok()),
+            Some("yes"),
+            "an end-to-end header is kept"
+        );
+        for name in ["connection", "x-foo", "keep-alive", "transfer-encoding"] {
+            assert!(
+                response.headers.get(name).is_none(),
+                "{name} must not be forwarded to the client: {:?}",
+                response.headers
+            );
         }
+        assert_eq!(response.output.bytes().as_deref(), Some(b"ok".as_slice()));
     }
 }

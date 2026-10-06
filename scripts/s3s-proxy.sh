@@ -28,4 +28,5 @@ s3s-proxy \
     --domain        localhost:8014          \
     --endpoint-url  http://localhost:9000   \
     --enable-minio-route                    \
+    --enable-auth-passthrough               \
     --enable-sig-v2

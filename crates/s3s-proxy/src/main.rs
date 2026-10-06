@@ -14,14 +14,23 @@ use std::sync::Arc;
 use aws_credential_types::provider::ProvideCredentials;
 
 use clap::Parser;
+use s3s::route::S3Route;
 use tracing::info;
+use tracing::warn;
 
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::server::conn::auto::Builder as ConnBuilder;
 
 mod admin_route;
+mod auth_passthrough;
+mod hop_by_hop;
 mod proxy_service;
+mod route_chain;
+mod sts_route;
 
+// A CLI options struct: every passthrough rule is a flag by design, so the
+// switches outnumber what `struct_excessive_bools` accepts.
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Parser)]
 struct Opt {
     #[clap(long, default_value = "localhost")]
@@ -50,6 +59,45 @@ struct Opt {
     /// server.
     #[clap(long)]
     enable_minio_route: bool,
+
+    /// Forward requests whose credentials this proxy does not know instead of
+    /// rejecting them.
+    ///
+    /// A user created through the backend's admin API, or the temporary
+    /// credentials an STS `AssumeRole` call hands out, cannot be verified
+    /// locally. When this is enabled such a request is forwarded verbatim and the
+    /// backend decides: the proxy no longer authenticates it. Disabled by
+    /// default.
+    #[clap(long)]
+    enable_auth_passthrough: bool,
+
+    /// Disable the STS protocol part of the authentication passthrough.
+    ///
+    /// `POST /` with a form body asks the backend to issue temporary
+    /// credentials. It is forwarded when the request is signed with a credential
+    /// this proxy knows, which is what an STS client uses, and can be turned off
+    /// on its own.
+    #[clap(long, requires = "enable_auth_passthrough")]
+    no_auth_passthrough_sts: bool,
+
+    /// Disable the object-level part of the authentication passthrough.
+    ///
+    /// Requests carrying an unknown credential are then rejected locally again.
+    #[clap(long, requires = "enable_auth_passthrough")]
+    no_auth_passthrough_object: bool,
+
+    /// Allow an extra query parameter on object-level requests forwarded by the
+    /// authentication passthrough.
+    ///
+    /// The default set covers object reads, writes, deletes, listings and
+    /// multipart uploads; a query parameter outside it keeps the request on the
+    /// typed path. Repeat the flag to allow more than one.
+    #[clap(
+        long = "auth-passthrough-allow-query",
+        value_name = "KEY",
+        requires = "enable_auth_passthrough"
+    )]
+    auth_passthrough_allow_query: Vec<String>,
 }
 
 fn setup_tracing() {
@@ -63,6 +111,125 @@ fn setup_tracing() {
         .with_env_filter(env_filter)
         .with_ansi(enable_color)
         .init();
+}
+
+/// Upper bound, in bytes, on a request body the authentication passthrough
+/// buffers before forwarding it.
+///
+/// A forwarded request keeps its bytes (the signature covers the payload), so
+/// the body is read into memory; the bound is the configured maximum object size,
+/// with a fixed fallback when the configuration disables that limit. It bounds
+/// one request, not the proxy: the default is 5 GiB, so a client can make the
+/// proxy hold that much per forwarded request.
+fn passthrough_max_body_size(config: &S3Config) -> u64 {
+    /// The AWS single-PUT object size limit, used when the configuration does
+    /// not set one.
+    const FALLBACK_MAX_BODY_SIZE: u64 = 5 * 1024 * 1024 * 1024;
+
+    config.put_object_max_size.unwrap_or(FALLBACK_MAX_BODY_SIZE)
+}
+
+/// Builds the S3 service: the authenticated typed path plus its custom routes.
+///
+/// Custom routes forward requests the typed path cannot serve: the `MinIO` admin
+/// API (signed with a credential the proxy knows, so it passes the service's own
+/// verification) and the STS protocol shape.
+fn build_service(
+    opt: &Opt,
+    credentials: Option<&aws_credential_types::Credentials>,
+    proxy: s3s_aws::Proxy,
+    minio_client: Option<&reqwest::Client>,
+    sts_route: Option<sts_route::StsRoute>,
+    config: Arc<S3Config>,
+) -> Result<s3s::service::S3Service, Box<dyn Error + Send + Sync>> {
+    let mut b = S3ServiceBuilder::new(proxy);
+
+    // Enable authentication
+    if let Some(cred) = credentials {
+        b.set_auth(SimpleAuth::from_single(cred.access_key_id(), cred.secret_access_key()));
+    }
+
+    // Apply the configuration the caller built, which is also what bounds a
+    // forwarded request body.
+    b.set_config(Arc::new(StaticConfigProvider::new(config)));
+
+    // Forward MinIO admin API requests to the backend through a custom route.
+    // Admin requests are SigV4-protected and pass the S3 signature verification,
+    // so routing them through the S3 service reuses its authentication: unsigned
+    // admin requests are denied before they reach the backend.
+    let mut routes: Vec<Box<dyn S3Route>> = Vec::new();
+    if let Some(client) = minio_client {
+        routes.push(Box::new(admin_route::MinioAdminRoute::new(
+            reqwest::Url::parse(&opt.endpoint_url)?,
+            client.clone(),
+        )));
+    }
+    if let Some(route) = sts_route {
+        routes.push(Box::new(route));
+    }
+    if !routes.is_empty() {
+        b.set_route(route_chain::RouteChain::new(routes));
+    }
+
+    // Enable parsing virtual-hosted-style requests
+    if let Some(domain) = &opt.domain {
+        b.set_host(SingleDomain::new(domain)?);
+    }
+
+    Ok(b.build())
+}
+
+/// Sets up the authentication passthrough.
+///
+/// The object-level rule is enforced in the proxy service: it must run before
+/// the S3 service, which authenticates every request it sees. The STS protocol
+/// rule is a route, because that request is signed with a credential the proxy
+/// knows and therefore passes the S3 service's own verification.
+#[allow(clippy::type_complexity)]
+fn setup_auth_passthrough(
+    opt: &Opt,
+    credentials: Option<&aws_credential_types::Credentials>,
+    config: &S3Config,
+) -> Result<(Option<auth_passthrough::AuthPassthrough>, Option<sts_route::StsRoute>), Box<dyn Error + Send + Sync>> {
+    if !opt.enable_auth_passthrough {
+        return Ok((None, None));
+    }
+    let Some(cred) = credentials else {
+        return Err("--enable-auth-passthrough requires credentials: without them the proxy cannot tell a known access key from an unknown one".into());
+    };
+
+    let sts_enabled = !opt.no_auth_passthrough_sts;
+    let object_enabled = !opt.no_auth_passthrough_object;
+    warn!(
+        "authentication passthrough enabled: a request carrying a credential this proxy does not know is no longer authenticated locally, the backend decides"
+    );
+    let max_body_size = passthrough_max_body_size(config);
+    info!(
+        sts = sts_enabled,
+        object = object_enabled,
+        extra_query_keys = ?opt.auth_passthrough_allow_query,
+        max_body_size,
+        "authentication passthrough rules"
+    );
+
+    let endpoint_url = reqwest::Url::parse(&opt.endpoint_url)?;
+    // No overall timeout: a forwarded object transfer may take as long as the
+    // client and the backend need.
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(5))
+        .build()?;
+
+    let sts = sts_enabled.then(|| sts_route::StsRoute::new(endpoint_url.clone(), client.clone(), max_body_size));
+    let object = object_enabled.then(|| {
+        auth_passthrough::AuthPassthrough::new(
+            endpoint_url,
+            client,
+            cred.access_key_id().to_owned(),
+            opt.auth_passthrough_allow_query.clone(),
+            max_body_size,
+        )
+    });
+    Ok((object, sts))
 }
 
 #[tokio::main]
@@ -79,15 +246,19 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
         aws_sdk_s3::Client::from_conf(builder.build())
     };
 
+    // One credential serves all three roles: the MinIO client, the proxy's own
+    // authentication of clients, and the access key it knows when the
+    // authentication passthrough asks whether a credential is known.
+    let credentials = match sdk_conf.credentials_provider() {
+        Some(provider) => Some(provider.provide_credentials().await?),
+        None => None,
+    };
+
     #[cfg(feature = "minio")]
     let proxy = {
         // MinIO-only extensions (e.g. ListenBucketNotification) have no
         // aws-sdk-s3 counterpart; forward them through the official MinIO SDK.
-        let cred = sdk_conf
-            .credentials_provider()
-            .ok_or("missing credentials provider")?
-            .provide_credentials()
-            .await?;
+        let cred = credentials.as_ref().ok_or("missing credentials provider")?;
         let provider =
             minio::s3::creds::StaticProvider::new(cred.access_key_id(), cred.secret_access_key(), cred.session_token());
         let minio_client = minio::s3::MinioClient::new(opt.endpoint_url.parse()?, Some(provider), None, None)?;
@@ -110,49 +281,28 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
         None
     };
 
-    // Setup S3 service
-    let service = {
-        let mut b = S3ServiceBuilder::new(proxy);
+    // One configuration serves both the S3 service and the passthrough bound, so
+    // the two cannot drift apart.
+    let mut config = S3Config::default();
+    config.enable_sig_v2 = opt.enable_sig_v2;
+    let config = Arc::new(config);
 
-        // Enable authentication
-        if let Some(cred_provider) = sdk_conf.credentials_provider() {
-            let cred = cred_provider.provide_credentials().await?;
-            b.set_auth(SimpleAuth::from_single(cred.access_key_id(), cred.secret_access_key()));
-        }
+    let (auth_passthrough, sts_route) = setup_auth_passthrough(&opt, credentials.as_ref(), &config)?;
 
-        // Apply configuration
-        {
-            let mut config = S3Config::default();
-            config.enable_sig_v2 = opt.enable_sig_v2;
-            b.set_config(Arc::new(StaticConfigProvider::new(Arc::new(config))));
-        }
-
-        // Forward MinIO admin API requests to the backend through a custom
-        // route. Admin requests are SigV4-protected and pass the S3 signature
-        // verification, so routing them through the S3 service reuses its
-        // authentication: unsigned admin requests are denied before they
-        // reach the backend.
-        if let Some(client) = &minio_client {
-            b.set_route(admin_route::MinioAdminRoute::new(reqwest::Url::parse(&opt.endpoint_url)?, client.clone()));
-        }
-
-        // Enable parsing virtual-hosted-style requests
-        if let Some(domain) = opt.domain {
-            b.set_host(SingleDomain::new(&domain)?);
-        }
-
-        b.build()
-    };
+    let service = build_service(&opt, credentials.as_ref(), proxy, minio_client.as_ref(), sts_route, config)?;
 
     // Wrap in the proxy service, optionally forwarding MinIO health/metrics
     // endpoints to the backend at the HTTP layer, bypassing the S3 service so
     // its signature verification never rejects the Bearer token the prometheus
     // endpoints require.
-    let service = if let Some(client) = minio_client {
+    let mut service = if let Some(client) = minio_client {
         proxy_service::ProxyService::with_minio_health(service, reqwest::Url::parse(&opt.endpoint_url)?, client)
     } else {
         proxy_service::ProxyService::new(service)
     };
+    if let Some(passthrough) = auth_passthrough {
+        service = service.with_auth_passthrough(passthrough);
+    }
 
     // Run server
     let listener = TcpListener::bind((opt.host.as_str(), opt.port)).await?;
