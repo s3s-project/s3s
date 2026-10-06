@@ -33,7 +33,7 @@ impl GetObject {
 
         let part_number: Option<PartNumber> = http::parse_opt_query(req, "partNumber")?;
 
-        let range: Option<Range> = http::parse_opt_header(req, &RANGE)?;
+        let range: Option<Range> = http::parse_opt_range_header(req);
 
         let request_payer: Option<RequestPayer> = http::parse_opt_header(req, &X_AMZ_REQUEST_PAYER)?;
 
@@ -60,6 +60,13 @@ impl GetObject {
             http::parse_opt_header(req, &X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5)?;
 
         let version_id: Option<ObjectVersionId> = http::parse_opt_query(req, "versionId")?;
+
+        if range.is_some() && part_number.is_some() {
+            return Err(s3_error!(
+                InvalidRequest,
+                "Cannot specify both Range header and partNumber query parameter"
+            ));
+        }
 
         Ok(GetObjectInput {
             bucket,

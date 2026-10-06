@@ -179,14 +179,17 @@ async fn empty_content_type_header_is_ignored() {
 #[tokio::test]
 async fn invalid_optional_header_value_reports_invalid_argument() {
     let service = service_with(TestS3, S3Config::default());
+    // A `Range` field is never rejected any more: a value that cannot be served
+    // is ignored (see `tests/range_header.rs`). Use a header whose value still
+    // fails to parse, so this generic path stays covered.
     let req = get("/bucket/key")
-        .header("range", "bytes=abc")
+        .header("if-modified-since", "not-a-date")
         .body(Body::empty())
         .expect("valid request");
     let (status, body) = send(&service, req).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert!(body.contains("<Code>InvalidArgument</Code>"), "{body}");
-    assert!(body.contains("invalid header: range"), "{body}");
+    assert!(body.contains("invalid header: if-modified-since"), "{body}");
 }
 
 #[tokio::test]

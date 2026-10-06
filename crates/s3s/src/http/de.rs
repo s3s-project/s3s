@@ -64,6 +64,24 @@ where
     T::try_from_header_value(val).map_err(|err| invalid_header(err, name, val))
 }
 
+/// Parses the `Range` header for `GetObject` and `HeadObject`.
+///
+/// A `Range` field that cannot be served as a single byte range is ignored
+/// instead of rejected, matching Amazon S3 (`200 OK` with the whole object).
+/// Only the first field line is used, as S3 and `MinIO` do; an empty value
+/// counts as absent and a value that is not UTF-8 is ignored.
+pub(crate) fn parse_opt_range_header(req: &Request) -> Option<crate::dto::Range> {
+    let val = req.headers.get_all(crate::header::RANGE).iter().next()?;
+
+    if val.is_empty() {
+        return None;
+    }
+
+    let header = val.to_str().ok()?;
+
+    crate::dto::parse_lenient(header)
+}
+
 pub fn parse_opt_header<T>(req: &Request, name: &HeaderName) -> S3Result<Option<T>>
 where
     T: TryFromHeaderValue,

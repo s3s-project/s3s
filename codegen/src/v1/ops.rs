@@ -829,6 +829,10 @@ fn codegen_op_http_de_fn(op: &Operation, rust_types: &RustTypes) {
                                         field.name,
                                         field.type_,
                                     );
+                                } else if field.name == "range" {
+                                    // A Range field that cannot be served as a single byte range
+                                    // is ignored instead of rejected, as Amazon S3 does.
+                                    g!("let {}: Option<{}> = http::parse_opt_range_header(req);", field.name, field.type_);
                                 } else {
                                     g!(
                                         "let {}: Option<{}> = http::parse_opt_header(req, &{})?;",
@@ -916,6 +920,18 @@ fn codegen_op_http_de_fn(op: &Operation, rust_types: &RustTypes) {
 
                         _ => unimplemented!(),
                     }
+                    g!();
+                }
+
+                let has_range = ty.fields.iter().any(|field| field.name == "range");
+                let has_part_number = ty.fields.iter().any(|field| field.name == "part_number");
+                if has_range && has_part_number {
+                    // AWS answers 400 InvalidRequest when both are present.
+                    g!("if range.is_some() && part_number.is_some() {{");
+                    g!(
+                        "    return Err(s3_error!(InvalidRequest, \"Cannot specify both Range header and partNumber query parameter\"));"
+                    );
+                    g!("}}");
                     g!();
                 }
 
