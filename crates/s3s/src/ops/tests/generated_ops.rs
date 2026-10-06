@@ -159,3 +159,149 @@ fn list_directory_buckets_serialize_http() {
     let resp = generated::ListDirectoryBuckets::serialize_http(output).unwrap();
     assert_eq!(resp.status, hyper::StatusCode::OK);
 }
+
+/// RFC 9110 requires a recipient to ignore an `If-Modified-Since` /
+/// `If-Unmodified-Since` value that is not a valid HTTP date (§13.1.3, §13.1.4).
+#[test]
+fn get_object_ignores_invalid_conditional_dates() {
+    use crate::http::Body;
+    use crate::path::S3Path;
+
+    let mut req = crate::http::Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri("http://localhost/my-bucket/my-key")
+            .header("if-modified-since", "not-a-date")
+            .header("if-unmodified-since", "not-a-date")
+            .body(Body::empty())
+            .unwrap(),
+    );
+    req.s3ext.s3_path = Some(S3Path::Object {
+        bucket: "my-bucket".into(),
+        key: "my-key".into(),
+    });
+
+    let input = generated::GetObject::deserialize_http(&mut req).expect("invalid conditional dates must be ignored");
+    assert!(input.if_modified_since.is_none());
+    assert!(input.if_unmodified_since.is_none());
+}
+
+#[test]
+fn head_object_ignores_invalid_conditional_dates() {
+    use crate::http::Body;
+    use crate::path::S3Path;
+
+    let mut req = crate::http::Request::from(
+        hyper::Request::builder()
+            .method(Method::HEAD)
+            .uri("http://localhost/my-bucket/my-key")
+            .header("if-modified-since", "not-a-date")
+            .body(Body::empty())
+            .unwrap(),
+    );
+    req.s3ext.s3_path = Some(S3Path::Object {
+        bucket: "my-bucket".into(),
+        key: "my-key".into(),
+    });
+
+    let input = generated::HeadObject::deserialize_http(&mut req).expect("invalid conditional date must be ignored");
+    assert!(input.if_modified_since.is_none());
+}
+
+#[test]
+fn get_object_parses_valid_conditional_dates() {
+    use crate::http::Body;
+    use crate::path::S3Path;
+
+    let mut req = crate::http::Request::from(
+        hyper::Request::builder()
+            .method(Method::GET)
+            .uri("http://localhost/my-bucket/my-key")
+            .header("if-modified-since", "Wed, 21 Oct 2015 07:28:00 GMT")
+            .body(Body::empty())
+            .unwrap(),
+    );
+    req.s3ext.s3_path = Some(S3Path::Object {
+        bucket: "my-bucket".into(),
+        key: "my-key".into(),
+    });
+
+    let input = generated::GetObject::deserialize_http(&mut req).expect("a valid HTTP date must be parsed");
+    assert!(input.if_modified_since.is_some());
+}
+
+/// The copy-source and rename-source conditionals are ignored the same way the standard
+/// conditional dates are: an invalid value leaves the condition absent.
+#[test]
+fn copy_object_ignores_invalid_copy_source_conditional_dates() {
+    use crate::http::Body;
+    use crate::path::S3Path;
+
+    let mut req = crate::http::Request::from(
+        hyper::Request::builder()
+            .method(Method::PUT)
+            .uri("http://localhost/my-bucket/my-key")
+            .header("x-amz-copy-source", "/source-bucket/source-key")
+            .header("x-amz-copy-source-if-modified-since", "not-a-date")
+            .header("x-amz-copy-source-if-unmodified-since", "not-a-date")
+            .body(Body::empty())
+            .unwrap(),
+    );
+    req.s3ext.s3_path = Some(S3Path::Object {
+        bucket: "my-bucket".into(),
+        key: "my-key".into(),
+    });
+
+    let input = generated::CopyObject::deserialize_http(&mut req).expect("invalid copy-source dates must be ignored");
+    assert!(input.copy_source_if_modified_since.is_none());
+    assert!(input.copy_source_if_unmodified_since.is_none());
+}
+
+/// A valid copy-source conditional date is still parsed.
+#[test]
+fn copy_object_parses_valid_copy_source_conditional_dates() {
+    use crate::http::Body;
+    use crate::path::S3Path;
+
+    let mut req = crate::http::Request::from(
+        hyper::Request::builder()
+            .method(Method::PUT)
+            .uri("http://localhost/my-bucket/my-key")
+            .header("x-amz-copy-source", "/source-bucket/source-key")
+            .header("x-amz-copy-source-if-modified-since", "Wed, 21 Oct 2015 07:28:00 GMT")
+            .body(Body::empty())
+            .unwrap(),
+    );
+    req.s3ext.s3_path = Some(S3Path::Object {
+        bucket: "my-bucket".into(),
+        key: "my-key".into(),
+    });
+
+    let input = generated::CopyObject::deserialize_http(&mut req).expect("a valid copy-source date must be parsed");
+    assert!(input.copy_source_if_modified_since.is_some());
+}
+
+/// The rename-source conditionals follow the same rule.
+#[test]
+fn rename_object_ignores_invalid_rename_source_conditional_date() {
+    use crate::http::Body;
+    use crate::path::S3Path;
+
+    let mut req = crate::http::Request::from(
+        hyper::Request::builder()
+            .method(Method::PUT)
+            .uri("http://localhost/my-bucket/my-key?renameObject")
+            .header("x-amz-rename-source", "/source-bucket/source-key")
+            .header("x-amz-rename-source-if-modified-since", "not-a-date")
+            .body(Body::empty())
+            .unwrap(),
+    );
+    req.s3ext.s3_path = Some(S3Path::Object {
+        bucket: "my-bucket".into(),
+        key: "my-key".into(),
+    });
+    req.s3ext.qs = Some(crate::http::OrderedQs::from_vec_unchecked(vec![("renameObject".into(), String::new())]));
+
+    let input = generated::RenameObject::deserialize_http(&mut req).expect("invalid rename-source dates must be ignored");
+    assert!(input.source_if_modified_since.is_none());
+}

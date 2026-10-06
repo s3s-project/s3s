@@ -22,25 +22,31 @@ impl RenameObject {
         let destination_if_match: Option<IfMatch> = http::parse_opt_header(req, &IF_MATCH)?;
 
         let destination_if_modified_since: Option<IfModifiedSince> =
-            http::parse_opt_header_timestamp(req, &IF_MODIFIED_SINCE, TimestampFormat::HttpDate)?;
+            http::parse_opt_header_timestamp_ignoring_invalid(req, &IF_MODIFIED_SINCE, TimestampFormat::HttpDate);
 
         let destination_if_none_match: Option<IfNoneMatch> = http::parse_opt_header(req, &IF_NONE_MATCH)?;
 
         let destination_if_unmodified_since: Option<IfUnmodifiedSince> =
-            http::parse_opt_header_timestamp(req, &IF_UNMODIFIED_SINCE, TimestampFormat::HttpDate)?;
+            http::parse_opt_header_timestamp_ignoring_invalid(req, &IF_UNMODIFIED_SINCE, TimestampFormat::HttpDate);
 
         let rename_source: RenameSource = http::parse_header(req, &X_AMZ_RENAME_SOURCE)?;
 
         let source_if_match: Option<RenameSourceIfMatch> = http::parse_opt_header(req, &X_AMZ_RENAME_SOURCE_IF_MATCH)?;
 
-        let source_if_modified_since: Option<RenameSourceIfModifiedSince> =
-            http::parse_opt_header_timestamp(req, &X_AMZ_RENAME_SOURCE_IF_MODIFIED_SINCE, TimestampFormat::HttpDate)?;
+        let source_if_modified_since: Option<RenameSourceIfModifiedSince> = http::parse_opt_header_timestamp_ignoring_invalid(
+            req,
+            &X_AMZ_RENAME_SOURCE_IF_MODIFIED_SINCE,
+            TimestampFormat::HttpDate,
+        );
 
         let source_if_none_match: Option<RenameSourceIfNoneMatch> =
             http::parse_opt_header(req, &X_AMZ_RENAME_SOURCE_IF_NONE_MATCH)?;
 
-        let source_if_unmodified_since: Option<RenameSourceIfUnmodifiedSince> =
-            http::parse_opt_header_timestamp(req, &X_AMZ_RENAME_SOURCE_IF_UNMODIFIED_SINCE, TimestampFormat::HttpDate)?;
+        let source_if_unmodified_since: Option<RenameSourceIfUnmodifiedSince> = http::parse_opt_header_timestamp_ignoring_invalid(
+            req,
+            &X_AMZ_RENAME_SOURCE_IF_UNMODIFIED_SINCE,
+            TimestampFormat::HttpDate,
+        );
 
         Ok(RenameObjectInput {
             bucket,

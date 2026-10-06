@@ -745,6 +745,26 @@ fn codegen_op_http_de(op: &Operation, rust_types: &RustTypes) {
     g!();
 }
 
+/// The header fields whose value must not fail the request when it cannot be a valid date.
+///
+/// RFC 9110 requires a recipient to ignore an `If-Modified-Since` or `If-Unmodified-Since` value
+/// that is not a valid HTTP date (§13.1.3, §13.1.4), and the service ignores such a value in the
+/// copy-source and rename-source conditions as well.
+const LENIENT_TIMESTAMP_HEADERS: [&str; 6] = [
+    "if-modified-since",
+    "if-unmodified-since",
+    "x-amz-copy-source-if-modified-since",
+    "x-amz-copy-source-if-unmodified-since",
+    "x-amz-rename-source-if-modified-since",
+    "x-amz-rename-source-if-unmodified-since",
+];
+
+fn is_lenient_timestamp_header(name: &str) -> bool {
+    LENIENT_TIMESTAMP_HEADERS
+        .iter()
+        .any(|header| name.eq_ignore_ascii_case(header))
+}
+
 #[allow(clippy::too_many_lines)]
 fn codegen_op_http_de_fn(op: &Operation, rust_types: &RustTypes) {
     let input = op.input.as_str();
@@ -815,13 +835,29 @@ fn codegen_op_http_de_fn(op: &Operation, rust_types: &RustTypes) {
                             } else if let rust::Type::Timestamp(ts_ty) = field_type {
                                 assert!(field.option_type);
                                 let fmt = ts_ty.format.as_deref().unwrap_or("HttpDate");
-                                g!(
-                                    "let {}: Option<{}> = http::parse_opt_header_timestamp(req, &{}, TimestampFormat::{})?;",
-                                    field.name,
-                                    field.type_,
-                                    header,
-                                    fmt
-                                );
+                                match field.http_header.as_deref() {
+                                    // A conditional date that cannot be a valid date is ignored
+                                    // instead of rejected (RFC 9110 §13.1.3, §13.1.4, Amazon S3):
+                                    // that parser cannot fail, so the call carries no `?`.
+                                    Some(name) if is_lenient_timestamp_header(name) => {
+                                        g!(
+                                            "let {}: Option<{}> = http::parse_opt_header_timestamp_ignoring_invalid(req, &{}, TimestampFormat::{});",
+                                            field.name,
+                                            field.type_,
+                                            header,
+                                            fmt
+                                        );
+                                    }
+                                    _ => {
+                                        g!(
+                                            "let {}: Option<{}> = http::parse_opt_header_timestamp(req, &{}, TimestampFormat::{})?;",
+                                            field.name,
+                                            field.type_,
+                                            header,
+                                            fmt
+                                        );
+                                    }
+                                }
                             } else if field.option_type {
                                 if field.name == "checksum_algorithm" {
                                     g!(

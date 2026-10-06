@@ -41,14 +41,21 @@ impl CopyObject {
 
         let copy_source_if_match: Option<CopySourceIfMatch> = http::parse_opt_header(req, &X_AMZ_COPY_SOURCE_IF_MATCH)?;
 
-        let copy_source_if_modified_since: Option<CopySourceIfModifiedSince> =
-            http::parse_opt_header_timestamp(req, &X_AMZ_COPY_SOURCE_IF_MODIFIED_SINCE, TimestampFormat::HttpDate)?;
+        let copy_source_if_modified_since: Option<CopySourceIfModifiedSince> = http::parse_opt_header_timestamp_ignoring_invalid(
+            req,
+            &X_AMZ_COPY_SOURCE_IF_MODIFIED_SINCE,
+            TimestampFormat::HttpDate,
+        );
 
         let copy_source_if_none_match: Option<CopySourceIfNoneMatch> =
             http::parse_opt_header(req, &X_AMZ_COPY_SOURCE_IF_NONE_MATCH)?;
 
         let copy_source_if_unmodified_since: Option<CopySourceIfUnmodifiedSince> =
-            http::parse_opt_header_timestamp(req, &X_AMZ_COPY_SOURCE_IF_UNMODIFIED_SINCE, TimestampFormat::HttpDate)?;
+            http::parse_opt_header_timestamp_ignoring_invalid(
+                req,
+                &X_AMZ_COPY_SOURCE_IF_UNMODIFIED_SINCE,
+                TimestampFormat::HttpDate,
+            );
 
         let copy_source_sse_customer_algorithm: Option<CopySourceSSECustomerAlgorithm> =
             http::parse_opt_header(req, &X_AMZ_COPY_SOURCE_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM)?;
@@ -190,14 +197,21 @@ impl CopyObject {
 
         let copy_source_if_match: Option<CopySourceIfMatch> = http::parse_opt_header(req, &X_AMZ_COPY_SOURCE_IF_MATCH)?;
 
-        let copy_source_if_modified_since: Option<CopySourceIfModifiedSince> =
-            http::parse_opt_header_timestamp(req, &X_AMZ_COPY_SOURCE_IF_MODIFIED_SINCE, TimestampFormat::HttpDate)?;
+        let copy_source_if_modified_since: Option<CopySourceIfModifiedSince> = http::parse_opt_header_timestamp_ignoring_invalid(
+            req,
+            &X_AMZ_COPY_SOURCE_IF_MODIFIED_SINCE,
+            TimestampFormat::HttpDate,
+        );
 
         let copy_source_if_none_match: Option<CopySourceIfNoneMatch> =
             http::parse_opt_header(req, &X_AMZ_COPY_SOURCE_IF_NONE_MATCH)?;
 
         let copy_source_if_unmodified_since: Option<CopySourceIfUnmodifiedSince> =
-            http::parse_opt_header_timestamp(req, &X_AMZ_COPY_SOURCE_IF_UNMODIFIED_SINCE, TimestampFormat::HttpDate)?;
+            http::parse_opt_header_timestamp_ignoring_invalid(
+                req,
+                &X_AMZ_COPY_SOURCE_IF_UNMODIFIED_SINCE,
+                TimestampFormat::HttpDate,
+            );
 
         let copy_source_sse_customer_algorithm: Option<CopySourceSSECustomerAlgorithm> =
             http::parse_opt_header(req, &X_AMZ_COPY_SOURCE_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM)?;
