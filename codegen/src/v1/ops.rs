@@ -517,7 +517,7 @@ fn codegen_post_object_fork_op(rust_types: &RustTypes) {
             "        let result = s3.post_object(post_req).await;",
             "        let s3_resp = match result {",
             "            Ok(val) => val,",
-            "            Err(err) => return crate::ops::serialize_error(err, false),",
+            "            Err(err) => return crate::ops::serialize_error_for_method(&req.method, err, false),",
             "        };",
             "        // Serialize with POST-specific response behavior",
             "        let mut resp = Self::serialize_http(",
@@ -1193,7 +1193,7 @@ fn codegen_op_http_call(op: &Operation, rust_types: &RustTypes) {
     g([
         "let s3_resp = match result {",
         "    Ok(val) => val,",
-        "    Err(err) => return crate::ops::serialize_error(err, false),",
+        "    Err(err) => return crate::ops::serialize_error_for_method(&req.method, err, false),",
         "};",
     ]);
 
