@@ -90,8 +90,12 @@ const EXPECTED_FAILURES: &[(&str, &[(&str, usize)])] = &[(
     // `NotImplemented` reports three more `NA`, for the bucket-CORS cases,
     // which pass here instead.
     //
-    // `aws-sdk-java-v2` is a different suite: it logs nothing at all over
-    // plain HTTP and is therefore listed in `NON_PARTICIPATING_GROUPS`.
+    // `aws-sdk-java-v2` has no entry here either: `scripts/mint.sh` sets
+    // `ENABLE_HTTP_TESTS=1`, the switch the image's patch 0006 adds, patch 0007
+    // gives the CRT case an object it can range over instead of a zero byte
+    // object, and the suite reports seven passes, one per case. That count is its
+    // floor in `check_counters`, and a failure there is a defect to report rather
+    // than an entry to add here.
     &[("putObjectFanOut()", 1)],
 )];
 
@@ -109,9 +113,10 @@ const EXPECTED_FAILURES: &[(&str, &[(&str, usize)])] = &[(
 /// arrive unnoticed.
 ///
 /// `NON_PARTICIPATING_GROUPS` names the suites that cannot produce a line with the
-/// configuration this repository runs mint with; the rest must appear. One of them
-/// producing lines is a notice rather than an error, because the change it
-/// announces is the fix.
+/// configuration this repository runs mint with; it is empty today because the
+/// suite that was in it now runs over plain HTTP. Every suite here must appear, and
+/// a non-participating suite producing lines is a notice rather than an error,
+/// because the change it announces is the fix.
 const EXPECTED_GROUPS: &[&str] = &[
     "aws-sdk-go-v2",
     "aws-sdk-java-v2",
@@ -129,18 +134,19 @@ const EXPECTED_GROUPS: &[&str] = &[
     "versioning",
 ];
 
-/// The suites that produce no log line, and why.
+/// The suites that produce no log line, and why. Empty today.
 ///
-/// `aws-sdk-java-v2` returns from every one of its cases before running it
-/// unless the endpoint is reached over TLS, and mint runs over plain HTTP here,
-/// so the suite exits zero without logging anything. Its absence is therefore
-/// expected. A line from one of these suites is reported on stdout: the reason
-/// no longer holds, so the suite belongs in `EXPECTED_GROUPS` with a counter
-/// check, and leaving that transition unnoticed is what this list is for.
-const NON_PARTICIPATING_GROUPS: &[(&str, &str)] = &[(
-    "aws-sdk-java-v2",
-    "every case returns before running unless the endpoint is reached over TLS, and mint runs over plain HTTP here",
-)];
+/// `aws-sdk-java-v2` was the only member: every one of its cases returned before
+/// running it unless the endpoint was reached over TLS, and mint runs over plain
+/// HTTP here. The image now runs those cases over plain HTTP behind
+/// `ENABLE_HTTP_TESTS`, which `scripts/mint.sh` sets, so the suite logs its seven
+/// lines and is held to a floor like every other suite.
+///
+/// The list stays as the escape hatch for a suite that cannot log at all. A line
+/// from a member is reported on stdout rather than failing the gate: the reason
+/// no longer holds, so the suite belongs in `EXPECTED_GROUPS` with a counter check,
+/// and leaving that transition unnoticed is what this list is for.
+const NON_PARTICIPATING_GROUPS: &[(&str, &str)] = &[];
 
 /// Whether the invocation makes no claim about a suite, either because mint did
 /// not start it (`--allow-missing`) or because it cannot log at all.
@@ -185,7 +191,7 @@ impl Mint {
         // Every check runs to completion so every violation is reported; the exit
         // code is decided afterwards.
         let mut notices = Vec::new();
-        check_non_participating(&observed, &mut notices);
+        check_non_participating(&observed, NON_PARTICIPATING_GROUPS, &mut notices);
 
         let mut errors = Vec::new();
         check_allow_missing(&self.allow_missing, &observed, &mut errors, &mut notices);
@@ -371,6 +377,10 @@ fn check_counters(counts: &HashMap<String, Counters>, allow_missing: &[String], 
     }
 
     check_pass_at_least(counts, "aws-sdk-go-v2", 24, allow_missing, errors);
+    // Seven cases, one line each. The switch that runs them over plain HTTP is in
+    // `scripts/mint.sh`; no failure is expected, so there is no entry in
+    // `EXPECTED_FAILURES`.
+    check_pass_at_least(counts, "aws-sdk-java-v2", 7, allow_missing, errors);
     check_fail_zero(counts, "aws-sdk-php", allow_missing, errors);
     // No known failure is left in this suite.
     check_pass_at_least(counts, "aws-sdk-ruby", 13, allow_missing, errors);
@@ -447,8 +457,8 @@ fn check_unexpected_groups(observed: &BTreeSet<&str>, errors: &mut Vec<String>) 
 /// `EXPECTED_GROUPS` with a counter check. This is a notice rather than an error:
 /// the change it announces is the fix, and the per-function gate already fails if
 /// the new lines carry a failure.
-fn check_non_participating(observed: &BTreeSet<&str>, notices: &mut Vec<String>) {
-    for (group, reason) in NON_PARTICIPATING_GROUPS {
+fn check_non_participating(observed: &BTreeSet<&str>, groups: &[(&str, &str)], notices: &mut Vec<String>) {
+    for (group, reason) in groups {
         if observed.contains(group) {
             notices.push(format!(
                 "suite \"{group}\" is declared non-participating but produced log lines: {reason}"
@@ -531,8 +541,8 @@ fn check_gate(logs: &[MintLog], allow_missing: &[String], errors: &mut Vec<Strin
 #[cfg(test)]
 mod tests {
     use super::{
-        Mint, check_expected_groups, check_gate, check_non_participating, check_unexpected_groups, counters, normalize_function,
-        parse_log,
+        EXPECTED_GROUPS, Mint, check_expected_groups, check_gate, check_non_participating, check_unexpected_groups, counters,
+        is_non_participating, normalize_function, parse_log,
     };
     use std::collections::BTreeSet;
     use std::io::Write as _;
@@ -633,12 +643,12 @@ mod tests {
     }
 
     /// A log that satisfies every assertion of a full run: each suite the image
-    /// runs contributes lines (the non-participating one excepted), the pass
-    /// floors are met, and every expected failure appears once inside its suite's
-    /// block, which is how mint writes a suite.
+    /// runs contributes lines, the pass floors are met, and every expected failure
+    /// appears once inside its suite's block, which is how mint writes a suite.
     fn full_log() -> String {
         const PASSES: &[(&str, usize)] = &[
             ("aws-sdk-go-v2", 24),
+            ("aws-sdk-java-v2", 7),
             ("aws-sdk-php", 3),
             ("aws-sdk-ruby", 14),
             ("awscli", 3),
@@ -685,10 +695,10 @@ mod tests {
         counters(&logs).order.into_iter().collect()
     }
 
-    /// Positive control: the log a full run produces passes, without the suite
-    /// that cannot log.
+    /// Positive control: the log a full run produces passes, now that every suite
+    /// in the image logs its lines.
     #[test]
-    fn a_full_log_passes_without_the_non_participating_suite() {
+    fn a_full_log_passes() {
         let mint = Mint {
             log: log_file("full", &full_log()),
             allow_missing: Vec::new(),
@@ -798,24 +808,35 @@ mod tests {
     }
 
     /// A non-participating suite that logs anyway is reported: its reason no
-    /// longer holds. The notice does not fail the gate, because the change it
-    /// announces is the fix.
+    /// longer holds. The pinned image has no such suite today, so the check is
+    /// exercised with a synthetic list; the notice stays a notice rather than an
+    /// error, because the change it announces is the fix.
     #[test]
     fn a_non_participating_suite_that_logs_is_reported() {
-        let log = full_log() + &format!("{}\n", entry("aws-sdk-java-v2", "PASS"));
+        let groups = [("aws-sdk-java-v2", "every case returns before running")];
+        let log = full_log();
         let observed = observed_suites(&log, "non-participating");
         let observed: BTreeSet<&str> = observed.iter().map(String::as_str).collect();
 
         let mut notices = Vec::new();
-        check_non_participating(&observed, &mut notices);
+        check_non_participating(&observed, &groups, &mut notices);
         assert_eq!(notices.len(), 1, "{notices:?}");
         assert!(notices[0].contains("aws-sdk-java-v2"), "{notices:?}");
+        assert!(
+            notices[0].contains("every case returns before running"),
+            "the reason travels with the notice: {notices:?}"
+        );
+    }
 
-        let mint = Mint {
-            log: log_file("non-participating-run", &log),
-            allow_missing: Vec::new(),
-        };
-        assert!(mint.run().expect("run"), "the notice must not fail the gate");
+    /// The closed-out state: the java suite is expected, held to a floor, and no
+    /// longer declared non-participating.
+    #[test]
+    fn the_java_suite_participates() {
+        assert!(EXPECTED_GROUPS.contains(&"aws-sdk-java-v2"), "the suite is part of the image's set");
+        assert!(
+            !is_non_participating("aws-sdk-java-v2"),
+            "the suite logs seven lines over plain HTTP now, so it cannot stay in the list"
+        );
     }
 
     /// `--allow-missing` drops every assertion of the named suite, so a local
