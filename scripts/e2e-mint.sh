@@ -11,8 +11,9 @@
 # default 120 seconds. The mint run itself is piped through `tee`, so this script's
 # exit status does not carry it: a failing suite is reported by the gate step that
 # reads the mint log, and this script only exits non-zero when the proxy never
-# becomes ready.
-PROXY_URL="http://localhost:8014"
+# becomes ready. The probe runs on the host, outside the container, and names the
+# bound address instead of the name, which may resolve elsewhere on the host.
+PROXY_URL="http://127.0.0.1:8014"
 PROXY_LOG="target/s3s-proxy.log"
 PROXY_READY_TIMEOUT="${MINT_PROXY_READY_TIMEOUT:-120}"
 

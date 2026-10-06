@@ -13,6 +13,10 @@ mkdir -p /tmp/mint
 # patch 0006 makes them return early unless `ENABLE_HTTPS=1` or this switch is
 # set, and this run is plaintext. Without the switch the suite exits zero without
 # logging a line and the group has no row in the report at all.
+# The suites run inside this container, where `localhost` resolves to `127.0.0.1`
+# - the address the proxy binds now. The name has to stay: the minio-js suite
+# registers its two assume-role cases only when the endpoint string contains
+# `localhost`, and those cases are part of that suite's pass floor.
 docker run \
     -e "SERVER_ENDPOINT=localhost:8014"   \
     -e "ACCESS_KEY=minioadmin" \

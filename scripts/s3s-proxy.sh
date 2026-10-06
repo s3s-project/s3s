@@ -22,8 +22,12 @@ if [ -z "$RUST_LOG" ]; then
 fi
 export RUST_BACKTRACE=full
 
+# Bind IPv4 explicitly: `localhost` resolves to whichever address family the
+# resolver prefers, and on a host that prefers `::1` binding the name would leave
+# the proxy on IPv6 only. The suites run inside the mint container, where
+# `localhost` resolves to `127.0.0.1`, so that is the address to listen on.
 s3s-proxy \
-    --host          localhost               \
+    --host          127.0.0.1               \
     --port          8014                    \
     --domain        localhost:8014          \
     --endpoint-url  http://localhost:9000   \
