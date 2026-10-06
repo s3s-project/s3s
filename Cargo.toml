@@ -37,7 +37,7 @@ s3s-compiler = { path = "crates/s3s-compiler", version = "0.18.0-alpha.1" }
 s3s-e2e = { path = "crates/s3s-e2e", version = "0.17.0" }
 s3s-fs = { path = "crates/s3s-fs", version = "0.17.0" }
 s3s-http3 = { path = "crates/s3s-http3", version = "0.17.0-alpha.1" }
-s3s-model = { path = "crates/s3s-model", version = "0.17.0" }
+s3s-model = { path = "crates/s3s-model", version = "0.18.0-alpha.1" }
 s3s-multipart = { path = "crates/s3s-multipart", version = "0.17.0" }
 s3s-policy = { path = "crates/s3s-policy", version = "0.17.0" }
 s3s-proxy = { path = "crates/s3s-proxy", version = "0.17.0" }

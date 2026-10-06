@@ -71,7 +71,7 @@ The other workspace members are supporting crates:
 - `s3s-time` — the date and time wire formats of the S3 API (RFC 3339 date-time, IMF-fixdate, epoch seconds), and the value type behind `s3s::dto::Timestamp`.
 - `s3s-chunked` — the `aws-chunked` streaming request-body decoder, initialized as a placeholder while the implementation is under development.
 - `s3s-sigv2`, `s3s-sigv4` — AWS Signature Version 2 and Version 4 parsing, canonicalization and signing.
-- `s3s-model` — the S3 protocol model used by the code generator: the Smithy model types and the S3 error codes.
+- `s3s-model` — the S3 protocol model used by the code generator: the S3 error codes.
 - `s3s-policy` — the S3 policy language model with wildcard pattern matching.
 - `s3s-proxy` — a proxy implementation used by the end-to-end tests.
 - `s3s-test` — a reusable test harness for S3-compatible services.
