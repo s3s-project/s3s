@@ -527,8 +527,14 @@ fn codegen_post_object_fork_op(rust_types: &RustTypes) {
             "            success_action_status,",
             "            &s3_resp.output,",
             "        )?;",
+            "        if let Some(status) = s3_resp.status {",
+            "            resp.status = status;",
+            "        }",
             "        resp.headers.extend(s3_resp.headers);",
             "        resp.extensions.extend(s3_resp.extensions);",
+            "        if http::is_bodyless_status(resp.status) {",
+            "            http::strip_bodyless(&mut resp);",
+            "        }",
             "        Ok(resp)",
             "    }",
             "}",
@@ -1192,6 +1198,9 @@ fn codegen_op_http_call(op: &Operation, rust_types: &RustTypes) {
     ]);
 
     g!("let mut resp = Self::serialize_http(s3_resp.output)?;");
+    g!("if let Some(status) = s3_resp.status {{");
+    g!("    resp.status = status;");
+    g!("}}");
 
     if op.name == "GetObject" {
         g!("resp.headers.extend(overridden_headers);");
@@ -1201,6 +1210,10 @@ fn codegen_op_http_call(op: &Operation, rust_types: &RustTypes) {
     }
 
     g!("resp.extensions.extend(s3_resp.extensions);");
+
+    g!("if http::is_bodyless_status(resp.status) {{");
+    g!("    http::strip_bodyless(&mut resp);");
+    g!("}}");
 
     g!("Ok(resp)");
 

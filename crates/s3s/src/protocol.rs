@@ -190,7 +190,15 @@ pub struct S3Response<T> {
     pub output: T,
 
     /// HTTP status code.
-    /// This field overrides the status code implied by the output.
+    ///
+    /// When set, this overrides the status code implied by the output: the
+    /// modeled code of the operation, or a code derived from the output such
+    /// as `206 Partial Content` for a ranged `GetObject`. Statuses that must
+    /// not carry a body (`1xx`, `204`, `205` and `304`) are answered
+    /// without one, as required by RFC 9110 §6.4.1.
+    ///
+    /// A custom route (`S3Route`) has no modeled status code, so it answers
+    /// `200 OK` unless this field is set.
     pub status: Option<StatusCode>,
 
     /// HTTP headers.

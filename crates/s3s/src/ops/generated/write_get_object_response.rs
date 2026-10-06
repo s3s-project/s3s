@@ -207,8 +207,14 @@ impl crate::ops::Operation for WriteGetObjectResponse {
             Err(err) => return crate::ops::serialize_error(err, false),
         };
         let mut resp = Self::serialize_http(s3_resp.output)?;
+        if let Some(status) = s3_resp.status {
+            resp.status = status;
+        }
         resp.headers.extend(s3_resp.headers);
         resp.extensions.extend(s3_resp.extensions);
+        if http::is_bodyless_status(resp.status) {
+            http::strip_bodyless(&mut resp);
+        }
         Ok(resp)
     }
 }

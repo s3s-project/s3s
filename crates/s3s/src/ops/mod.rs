@@ -137,9 +137,7 @@ pub(crate) fn serialize_error(mut e: S3Error, no_decl: bool) -> S3Result<Respons
         // RFC 9110 §6.4.1: 1xx/204/205/304 responses MUST NOT carry a body. The
         // XML body is skipped above; drop any body-describing headers too
         // (e.g. `content-type` from a custom error or the error's own headers).
-        res.headers.remove(hyper::header::CONTENT_LENGTH);
-        res.headers.remove(hyper::header::CONTENT_TYPE);
-        http::strip_body(&mut res);
+        http::strip_bodyless(&mut res);
     }
     drop(e);
     Ok(res)
