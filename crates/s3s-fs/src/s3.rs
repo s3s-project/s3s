@@ -5,6 +5,7 @@ use crate::fs::FileSystem;
 use crate::fs::InternalInfo;
 use crate::utils::*;
 
+use http::StatusCode;
 use s3s::S3;
 use s3s::S3Result;
 use s3s::crypto::Checksum;
@@ -594,6 +595,22 @@ impl S3 for FileSystem {
             None => self.get_md5_sum(&input.bucket, &input.key).await?,
         };
 
+        let current = ETag::Strong(md5_sum.clone());
+        match evaluate_read_condition(input.if_match.as_ref(), input.if_none_match.as_ref(), &current) {
+            ReadCondition::PreconditionFailed => return Err(s3_error!(PreconditionFailed)),
+            ReadCondition::NotModified => {
+                return Ok(S3Response::with_status(
+                    GetObjectOutput {
+                        e_tag: Some(current),
+                        last_modified: Some(last_modified),
+                        ..Default::default()
+                    },
+                    StatusCode::NOT_MODIFIED,
+                ));
+            }
+            ReadCondition::Proceed => {}
+        }
+
         let checksum = match &info {
             // S3 skips returning the checksum if a range is specified that is
             // less than the whole file
@@ -670,6 +687,22 @@ impl S3 for FileSystem {
             Some(e_tag) => e_tag,
             None => self.get_md5_sum(&input.bucket, &input.key).await?,
         };
+
+        let current = ETag::Strong(md5_sum.clone());
+        match evaluate_read_condition(input.if_match.as_ref(), input.if_none_match.as_ref(), &current) {
+            ReadCondition::PreconditionFailed => return Err(s3_error!(PreconditionFailed)),
+            ReadCondition::NotModified => {
+                return Ok(S3Response::with_status(
+                    HeadObjectOutput {
+                        e_tag: Some(current),
+                        last_modified: Some(last_modified),
+                        ..Default::default()
+                    },
+                    StatusCode::NOT_MODIFIED,
+                ));
+            }
+            ReadCondition::Proceed => {}
+        }
 
         let checksum = match &info {
             Some(info) => crate::checksum::from_internal_info(info),
@@ -852,25 +885,22 @@ impl S3 for FileSystem {
         // If-None-Match: * means "only create if the object doesn't exist".
         // If-Match: <etag> means "only overwrite if ETag matches" (CAS).
         let object_path = self.get_object_path(&bucket, &key)?;
-        if let Some(ref condition) = if_none_match
-            && condition.is_any()
-            && object_path.exists()
-        {
-            return Err(s3_error!(PreconditionFailed, "Object already exists"));
+        // If-None-Match: * means "only write if the object does not exist". A tag
+        // or a list is not implemented, which is what Amazon S3 answers for it.
+        if let Some(ref condition) = if_none_match {
+            if !condition.is_any() {
+                return Err(s3_error!(NotImplemented));
+            }
+            if object_path.exists() {
+                return Err(s3_error!(PreconditionFailed, "Object already exists"));
+            }
         }
         if let Some(ref condition) = if_match {
             if !object_path.exists() {
                 return Err(s3_error!(PreconditionFailed, "Object does not exist"));
             }
-            if !condition.is_any() {
-                let info = self.load_internal_info(&bucket, &key).await?;
-                let etag_value = match info.as_ref().and_then(crate::checksum::load_e_tag) {
-                    Some(v) => v,
-                    None => self.get_md5_sum(&bucket, &key).await?,
-                };
-                if !condition.matches_strong(&ETag::Strong(etag_value)) {
-                    return Err(s3_error!(PreconditionFailed, "ETag does not match"));
-                }
+            if !condition.is_any() && !condition.matches_strong(&self.current_etag(&bucket, &key).await?) {
+                return Err(s3_error!(PreconditionFailed, "ETag does not match"));
             }
         }
 
@@ -1474,25 +1504,22 @@ impl S3 for FileSystem {
 
         // Check conditional headers before modifying any state
         let object_path = self.get_object_path(&bucket, &key)?;
-        if let Some(ref condition) = if_none_match
-            && condition.is_any()
-            && object_path.exists()
-        {
-            return Err(s3_error!(PreconditionFailed, "Object already exists"));
+        // If-None-Match: * means "only write if the object does not exist". A tag
+        // or a list is not implemented, which is what Amazon S3 answers for it.
+        if let Some(ref condition) = if_none_match {
+            if !condition.is_any() {
+                return Err(s3_error!(NotImplemented));
+            }
+            if object_path.exists() {
+                return Err(s3_error!(PreconditionFailed, "Object already exists"));
+            }
         }
         if let Some(ref condition) = if_match {
             if !object_path.exists() {
                 return Err(s3_error!(PreconditionFailed, "Object does not exist"));
             }
-            if !condition.is_any() {
-                let info = self.load_internal_info(&bucket, &key).await?;
-                let etag_value = match info.as_ref().and_then(crate::checksum::load_e_tag) {
-                    Some(e_tag) => e_tag,
-                    None => self.get_md5_sum(&bucket, &key).await?,
-                };
-                if !condition.matches_strong(&ETag::Strong(etag_value)) {
-                    return Err(s3_error!(PreconditionFailed, "ETag does not match"));
-                }
+            if !condition.is_any() && !condition.matches_strong(&self.current_etag(&bucket, &key).await?) {
+                return Err(s3_error!(PreconditionFailed, "ETag does not match"));
             }
         }
 
@@ -1789,6 +1816,36 @@ fn join_key(parent: &str, name: &str) -> String {
     } else {
         format!("{parent}/{name}")
     }
+}
+
+/// What the conditional headers of a read request ask for.
+enum ReadCondition {
+    /// Answer the object.
+    Proceed,
+    /// `If-None-Match` matched the current representation: answer `304 Not Modified`.
+    NotModified,
+    /// `If-Match` did not match: answer `412 Precondition Failed`.
+    PreconditionFailed,
+}
+
+/// Evaluates `If-Match` (strong) and `If-None-Match` (weak) against the current
+/// representation, as RFC 9110 §13.1.1 and §13.1.2 require.
+fn evaluate_read_condition(
+    if_match: Option<&ETagCondition>,
+    if_none_match: Option<&ETagCondition>,
+    current: &ETag,
+) -> ReadCondition {
+    if let Some(condition) = if_match
+        && !condition.matches_strong(current)
+    {
+        return ReadCondition::PreconditionFailed;
+    }
+    if let Some(condition) = if_none_match
+        && condition.matches_weak(current)
+    {
+        return ReadCondition::NotModified;
+    }
+    ReadCondition::Proceed
 }
 
 impl FileSystem {

@@ -314,6 +314,19 @@ impl FileSystem {
         Ok(md5_sum)
     }
 
+    /// The current strong entity tag of an object, for conditional evaluation.
+    ///
+    /// The stored tag is preferred; a stored one is absent for objects written
+    /// before it was recorded or by another writer, so the body is hashed then.
+    pub(crate) async fn current_etag(&self, bucket: &str, key: &str) -> Result<dto::ETag> {
+        let info = self.load_internal_info(bucket, key).await?;
+        let value = match info.as_ref().and_then(crate::checksum::load_e_tag) {
+            Some(e_tag) => e_tag,
+            None => self.get_md5_sum(bucket, key).await?,
+        };
+        Ok(dto::ETag::Strong(value))
+    }
+
     /// Write a computed `e_tag` into the object's `internal.json`, best effort.
     ///
     /// The sidecar is re-read here and merged, so a checksum that a concurrent write stored in the

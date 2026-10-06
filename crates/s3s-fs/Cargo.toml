@@ -62,6 +62,7 @@ futures.workspace = true
 h3 = { version = "0.0.8", features = ["tracing"], optional = true }
 h3-quinn = { version = "0.0.10", features = ["tracing"], optional = true }
 hex-simd.workspace = true
+http.workspace = true
 hyper-util = { workspace = true, optional = true, features = [
     "server-auto",
     "server-graceful",
