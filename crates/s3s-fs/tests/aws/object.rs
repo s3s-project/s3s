@@ -24,9 +24,9 @@ pub fn register(tcx: &mut TestContext) {
     case!(tcx, FsServer, Object, test_content_encoding_preservation);
     case!(tcx, FsServer, Object, test_put_object_atomic_write);
     case!(tcx, FsServer, Object, test_put_object_checksum_failure_preserves_existing_object);
-    case!(tcx, FsServer, Object, test_head_object_no_such_key);
-    case!(tcx, FsServer, Object, test_head_object_directory_prefix_returns_no_such_key);
-    case!(tcx, FsServer, Object, test_head_object_no_such_bucket);
+    case!(tcx, FsServer, Object, test_head_object_missing_object_reports_not_found);
+    case!(tcx, FsServer, Object, test_head_object_directory_prefix_reports_not_found);
+    case!(tcx, FsServer, Object, test_head_object_missing_bucket_reports_not_found);
     case!(tcx, FsServer, Object, test_head_object_etag_and_checksum);
 }
 
@@ -342,22 +342,27 @@ impl Object {
         Ok(())
     }
 
-    async fn test_head_object_no_such_key(self: Arc<Self>) -> Result<()> {
+    /// A HEAD response carries no body, so a client cannot read an error code
+    /// out of it: `HeadObject` models `NotFound` and nothing else (RFC 9110 §9.3.2),
+    /// which is also what Amazon S3 answers for a missing object.
+    async fn test_head_object_missing_object_reports_not_found(self: Arc<Self>) -> Result<()> {
         let c = &self.s3;
-        let bucket = format!("test-head-no-such-key-{}", Uuid::new_v4());
+        let bucket = format!("test-head-missing-object-{}", Uuid::new_v4());
         let bucket = bucket.as_str();
         create_bucket(c, bucket).await?;
 
         let result = c.head_object().bucket(bucket).key("nonexistent-object").send().await;
-        let err = result.expect_err("Expected NoSuchKey for missing object");
+        let err = result.expect_err("Expected NotFound for a missing object");
         let service_err = err.into_service_error();
-        assert_eq!(service_err.code(), Some("NoSuchKey"), "Expected NoSuchKey, got: {:?}", service_err.code());
+        assert_eq!(service_err.code(), Some("NotFound"), "Expected NotFound, got: {:?}", service_err.code());
 
         delete_bucket(c, bucket).await?;
         Ok(())
     }
 
-    async fn test_head_object_directory_prefix_returns_no_such_key(self: Arc<Self>) -> Result<()> {
+    /// See `test_head_object_missing_object_reports_not_found` for why a HEAD error
+    /// reports `NotFound`.
+    async fn test_head_object_directory_prefix_reports_not_found(self: Arc<Self>) -> Result<()> {
         let c = &self.s3;
         let bucket = format!("test-head-directory-prefix-{}", Uuid::new_v4());
         let bucket = bucket.as_str();
@@ -371,29 +376,26 @@ impl Object {
             .await?;
 
         let result = c.head_object().bucket(bucket).key("prefix").send().await;
-        let err = result.expect_err("Expected NoSuchKey for a directory-like prefix");
+        let err = result.expect_err("Expected NotFound for a directory-like prefix");
         let service_err = err.into_service_error();
-        assert_eq!(service_err.code(), Some("NoSuchKey"), "Expected NoSuchKey, got: {:?}", service_err.code());
+        assert_eq!(service_err.code(), Some("NotFound"), "Expected NotFound, got: {:?}", service_err.code());
 
         delete_object(c, bucket, key).await?;
         delete_bucket(c, bucket).await?;
         Ok(())
     }
 
-    async fn test_head_object_no_such_bucket(self: Arc<Self>) -> Result<()> {
+    /// See `test_head_object_missing_object_reports_not_found` for why a HEAD error
+    /// reports `NotFound`.
+    async fn test_head_object_missing_bucket_reports_not_found(self: Arc<Self>) -> Result<()> {
         let c = &self.s3;
-        let bucket = format!("test-head-no-such-bucket-{}", Uuid::new_v4());
+        let bucket = format!("test-head-missing-bucket-{}", Uuid::new_v4());
         let bucket = bucket.as_str();
 
         let result = c.head_object().bucket(bucket).key("some-key").send().await;
-        let err = result.expect_err("Expected NoSuchBucket for missing bucket");
+        let err = result.expect_err("Expected NotFound for a missing bucket");
         let service_err = err.into_service_error();
-        assert_eq!(
-            service_err.code(),
-            Some("NoSuchBucket"),
-            "Expected NoSuchBucket, got: {:?}",
-            service_err.code()
-        );
+        assert_eq!(service_err.code(), Some("NotFound"), "Expected NotFound, got: {:?}", service_err.code());
 
         Ok(())
     }

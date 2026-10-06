@@ -63,7 +63,7 @@ impl crate::ops::Operation for ListBucketInventoryConfigurations {
         let result = s3.list_bucket_inventory_configurations(s3_req).await;
         let s3_resp = match result {
             Ok(val) => val,
-            Err(err) => return crate::ops::serialize_error(err, false),
+            Err(err) => return crate::ops::serialize_error_for_method(&req.method, err, false),
         };
         let mut resp = Self::serialize_http(s3_resp.output)?;
         if let Some(status) = s3_resp.status {

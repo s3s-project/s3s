@@ -1745,7 +1745,12 @@ async fn every_operation_reaches_its_handler() {
             failures.push(format!("{}: status {status}, body {body}", case.name));
             continue;
         }
-        if !body.contains("<Code>NotImplemented</Code>") {
+        // A HEAD response carries no body (RFC 9110 §9.3.2).
+        if case.method == "HEAD" {
+            if !body.is_empty() {
+                failures.push(format!("{}: unexpected body {body}", case.name));
+            }
+        } else if !body.contains("<Code>NotImplemented</Code>") {
             failures.push(format!("{}: unexpected body {body}", case.name));
         }
     }
@@ -1773,7 +1778,12 @@ async fn default_bodies_report_not_implemented() {
             failures.push(format!("{}: status {status}, body {body}", case.name));
             continue;
         }
-        if !body.contains("<Code>NotImplemented</Code>") {
+        // A HEAD response carries no body (RFC 9110 §9.3.2).
+        if case.method == "HEAD" {
+            if !body.is_empty() {
+                failures.push(format!("{}: unexpected body {body}", case.name));
+            }
+        } else if !body.contains("<Code>NotImplemented</Code>") {
             failures.push(format!("{}: unexpected body {body}", case.name));
         }
     }

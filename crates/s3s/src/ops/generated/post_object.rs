@@ -139,7 +139,7 @@ impl crate::ops::Operation for PostObject {
         let result = s3.post_object(post_req).await;
         let s3_resp = match result {
             Ok(val) => val,
-            Err(err) => return crate::ops::serialize_error(err, false),
+            Err(err) => return crate::ops::serialize_error_for_method(&req.method, err, false),
         };
         // Serialize with POST-specific response behavior
         let mut resp =
