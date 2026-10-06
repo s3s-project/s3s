@@ -107,8 +107,10 @@ impl S3Route for MinioAdminRoute {
             .await
             .map_err(|e| bad_gateway_with_source(Box::new(e)))?;
 
+        // Response headers are filtered the same way request headers are: the
+        // connection-specific ones belong to this hop (RFC 9110 section 7.6.1).
         let status = response.status();
-        let headers = response.headers().clone();
+        let headers = hop_by_hop::without_connection_specific(response.headers());
         let resp_body = response.bytes().await.map_err(|e| bad_gateway_with_source(Box::new(e)))?;
 
         let mut out = S3Response::new(Body::from(resp_body));
@@ -197,5 +199,83 @@ mod tests {
     fn backend_url_without_path_and_query_is_none() {
         let endpoint = reqwest::Url::parse("http://localhost:9000").expect("valid base url");
         assert!(MinioAdminRoute::backend_url(&endpoint, None).is_none());
+    }
+
+    /// Serves one request with a raw response head and body.
+    async fn serve_raw(head: &'static str, body: &'static [u8]) -> (std::net::SocketAddr, tokio::task::JoinHandle<()>) {
+        use tokio::io::AsyncReadExt as _;
+        use tokio::io::AsyncWriteExt as _;
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let addr = listener.local_addr().expect("local addr");
+
+        let handle = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.expect("accept");
+            let mut buf = Vec::new();
+            let mut chunk = [0_u8; 4096];
+            loop {
+                if buf.windows(4).any(|window| window == b"\r\n\r\n") {
+                    break;
+                }
+                let read = socket.read(&mut chunk).await.expect("read");
+                assert!(read > 0, "connection closed before the request head");
+                buf.extend_from_slice(&chunk[..read]);
+            }
+            socket.write_all(head.as_bytes()).await.expect("write head");
+            socket.write_all(body).await.expect("write body");
+            socket.flush().await.expect("flush");
+        });
+
+        (addr, handle)
+    }
+
+    fn admin_request() -> S3Request<Body> {
+        S3Request {
+            input: Body::empty(),
+            method: Method::PUT,
+            uri: Uri::from_static("/minio/admin/v3/add-user?accessKey=probe"),
+            headers: HeaderMap::new(),
+            extensions: Extensions::new(),
+            credentials: None,
+            region: None,
+            service: None,
+            trailing_headers: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn connection_specific_response_headers_are_not_forwarded() {
+        let (addr, server) = serve_raw(
+            "HTTP/1.1 200 OK\r\ncontent-length: 2\r\nx-backend: yes\r\nconnection: x-foo\r\nx-foo: 1\r\nkeep-alive: timeout=5\r\n\r\n",
+            b"ok",
+        )
+        .await;
+        let route = MinioAdminRoute::new(
+            reqwest::Url::parse(&format!("http://{addr}")).expect("valid base url"),
+            reqwest::Client::new(),
+        );
+
+        let response = route.call(admin_request()).await.expect("the admin route answers");
+
+        server.await.expect("server task");
+        assert_eq!(response.status, Some(StatusCode::OK));
+        assert_eq!(
+            response.headers.get("content-length").and_then(|value| value.to_str().ok()),
+            Some("2"),
+            "the body length is kept"
+        );
+        assert_eq!(
+            response.headers.get("x-backend").and_then(|value| value.to_str().ok()),
+            Some("yes"),
+            "an end-to-end header is kept"
+        );
+        for name in ["connection", "x-foo", "keep-alive", "transfer-encoding"] {
+            assert!(
+                response.headers.get(name).is_none(),
+                "{name} must not be forwarded to the client: {:?}",
+                response.headers
+            );
+        }
+        assert_eq!(response.output.bytes().as_deref(), Some(b"ok".as_slice()));
     }
 }
