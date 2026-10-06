@@ -144,8 +144,14 @@ impl crate::ops::Operation for PostObject {
         // Serialize with POST-specific response behavior
         let mut resp =
             Self::serialize_http(&bucket, &key, success_action_redirect.as_deref(), success_action_status, &s3_resp.output)?;
+        if let Some(status) = s3_resp.status {
+            resp.status = status;
+        }
         resp.headers.extend(s3_resp.headers);
         resp.extensions.extend(s3_resp.extensions);
+        if http::is_bodyless_status(resp.status) {
+            http::strip_bodyless(&mut resp);
+        }
         Ok(resp)
     }
 }

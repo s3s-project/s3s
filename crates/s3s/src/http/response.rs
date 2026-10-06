@@ -54,6 +54,14 @@ pub fn strip_body(res: &mut Response) {
     res.body = Body::empty();
 }
 
+/// Clears the body and the body-describing headers of a response whose status
+/// must not carry a body (RFC 9110 §6.4.1).
+pub fn strip_bodyless(res: &mut Response) {
+    res.headers.remove(hyper::header::CONTENT_LENGTH);
+    res.headers.remove(hyper::header::CONTENT_TYPE);
+    strip_body(res);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -114,5 +122,24 @@ mod tests {
         assert!(!res.headers.contains_key(hyper::header::TRANSFER_ENCODING));
         assert!(res.headers.contains_key(hyper::header::CONTENT_LENGTH));
         assert!(res.headers.contains_key(hyper::header::CONTENT_TYPE));
+    }
+
+    #[test]
+    fn strip_bodyless_clears_body_and_body_describing_headers() {
+        let mut res = Response::with_status(StatusCode::NO_CONTENT);
+        res.headers
+            .insert(hyper::header::CONTENT_LENGTH, HeaderValue::from_static("123"));
+        res.headers
+            .insert(hyper::header::CONTENT_TYPE, HeaderValue::from_static("application/xml"));
+        res.headers
+            .insert(hyper::header::TRANSFER_ENCODING, HeaderValue::from_static("chunked"));
+        res.body = Body::from(Bytes::from_static(b"<Error/>"));
+
+        strip_bodyless(&mut res);
+
+        assert!(http_body::Body::is_end_stream(&res.body));
+        assert!(!res.headers.contains_key(hyper::header::TRANSFER_ENCODING));
+        assert!(!res.headers.contains_key(hyper::header::CONTENT_LENGTH));
+        assert!(!res.headers.contains_key(hyper::header::CONTENT_TYPE));
     }
 }
