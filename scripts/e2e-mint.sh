@@ -8,8 +8,10 @@
 # Poll the health endpoint the proxy forwards to the backend instead - it answers
 # only once the proxy listens and the backend is ready - and print the proxy log
 # when it never comes up. Override MINT_PROXY_READY_TIMEOUT to wait longer than the
-# default 120 seconds. The script keeps the exit status of the mint pipeline, which
-# the gate step in CI reports on.
+# default 120 seconds. The mint run itself is piped through `tee`, so this script's
+# exit status does not carry it: a failing suite is reported by the gate step that
+# reads the mint log, and this script only exits non-zero when the proxy never
+# becomes ready.
 PROXY_URL="http://localhost:8014"
 PROXY_LOG="target/s3s-proxy.log"
 PROXY_READY_TIMEOUT="${MINT_PROXY_READY_TIMEOUT:-120}"
