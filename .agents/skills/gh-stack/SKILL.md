@@ -73,7 +73,7 @@ When the remote head is not what you last pushed, stop and reconcile (`gh stack 
 - Merge from the bottom. When layer 1 lands, GitHub retargets layer 2's base to `main`; merge it next. `gh stack merge` merges the layers in order.
 - The GitHub UI offers **Rebase stack** and **Enqueue stack**; the CLI equivalents are `gh stack rebase` followed by `gh stack push`, and enqueueing the bottom pull request.
 - CI runs on `pull_request` and again on `merge_group`: the queue re-runs the required checks, so read the `merge_group` run before treating a queue failure as a code failure.
-- After the last layer merges, delete the head branches (remote and local), remove the worktree, and drop the stack with `gh stack unstack` if the stack object lingers.
+- After the last layer merges, delete the head branches (remote and local) and remove the worktree. A fully merged stack needs no `gh stack unstack`; that command is for abandoning or restructuring a stack whose layers will not merge in order.
 
 ## Watching a stack
 
