@@ -32,7 +32,7 @@ Fuzzing lives in its own workspace and has its own skill (`fuzz-testing`), as do
 
 ## End-to-end suites
 
-The end-to-end suites are shell scripts under `scripts/` (MinIO, `s3s-fs`, `s3s-proxy`, mint, Ceph s3-tests, rclone, boto3) with their instructions in `CONTRIBUTING.md`. Two of them are gates with expected-failure baselines: `cargo run -p xtask -- report mint <log.json>` and `cargo run -p xtask -- report s3-tests <junit.xml>`, which keep the counters and the allow-list of known failures honest. CI runs them behind path filters, so a green pull request does not mean they ran.
+The end-to-end suites are shell scripts under `scripts/` (silo, `s3s-fs`, `s3s-proxy`, mint, Ceph s3-tests, rclone, boto3) with their instructions in `CONTRIBUTING.md`. Two of them are gates with expected-failure baselines: `cargo run -p xtask -- report mint <log.json>` and `cargo run -p xtask -- report s3-tests <junit.xml>`, which keep the counters and the allow-list of known failures honest. CI runs them behind path filters, so a green pull request does not mean they ran.
 
 ## The wasm build
 

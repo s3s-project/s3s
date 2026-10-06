@@ -54,8 +54,8 @@ struct Counters {
 /// entry after a mint image upgrade is reported instead of being silently
 /// ignored).
 ///
-/// Baseline re-recorded on 2026-10-04 against the pinned image in
-/// `scripts/mint.env` and the pinned `MinIO` image. What is left is the s3s
+/// Baseline recorded against the pinned mint image in `scripts/mint.env` and
+/// the pinned backend image in `scripts/minio.env`. What is left is the s3s
 /// defects s3s owns, the `MinIO` extensions it does not implement, and the two
 /// limits of the proxy or the backend, each mapped to a tracked known issue.
 ///
@@ -67,10 +67,16 @@ struct Counters {
 const EXPECTED_FAILURES: &[(&str, &[(&str, usize)])] = &[
     (
         "aws-sdk-go-v2",
-        // Backend: the pinned MinIO ignores `If-Match` on `DeleteObject`, so a
-        // delete with a wrong ETag succeeds instead of being rejected.
-        // FIXME: https://github.com/minio/mint/blob/master/run/core/aws-sdk-go-v2/main.go#L294
-        &[("ConditionalDeleteWithIncorrectETag", 1)],
+        // Backend: `If-Match: *` against a key that does not exist answers 404
+        // `NoSuchKey`, as Amazon S3 does. The case expects 412, so it fails
+        // until the expectation is fixed in the image.
+        // FIXME: https://github.com/minio/mint/blob/master/run/core/aws-sdk-go-v2/main.go#L479
+        //
+        // This entry is tied to the image pinned in `scripts/mint.env`: once
+        // that image carries the fixed expectation the case passes, the entry
+        // becomes stale (which the gate reports) and has to be removed, with
+        // the `aws-sdk-go-v2` counter below raised to the measured pass count.
+        &[("ConditionalDeleteWithWildcardMissing", 1)],
     ),
     (
         "minio-java",
@@ -83,6 +89,16 @@ const EXPECTED_FAILURES: &[(&str, &[(&str, usize)])] = &[
         // `getObjectAcl()` used to be listed here. Under the `minio` feature the
         // grantee repeats its type as the `<Type>` child element MinIO writes,
         // so the case passes.
+        //
+        // The suite reports 58 passes and 12 `NA` with no failure, and the
+        // `NA` cases have two different causes: six are waived because the
+        // backend answers `NotImplemented` (the encryption and CORS cases),
+        // and six never execute because the environment variables they need
+        // are not set (the notification and replication cases). They are
+        // neither passes nor failures, so they carry no counter.
+        //
+        // `aws-sdk-java-v2` is a different suite: it logs nothing at all over
+        // plain HTTP and is therefore listed in `NON_PARTICIPATING_GROUPS`.
         &[("putObjectFanOut()", 1)],
     ),
 ];

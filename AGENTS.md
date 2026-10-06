@@ -44,7 +44,7 @@ Tools and internal:
   Full list in `justfile`.
 - Code is generated from AWS Smithy models (`data/`); after changing generation code,
   always run `just codegen` (must stay idempotent).
-- Testing: unit tests, integration tests, and Docker-based E2E (MinIO, `s3s-fs`, MinT,
+- Testing: unit tests, integration tests, and Docker-based E2E (silo, `s3s-fs`, MinT,
   Ceph s3-tests). Human-oriented workflow: `CONTRIBUTING.md`.
 - Style: clippy strict lints (`all`, `pedantic`, `cargo` = deny); `unsafe` forbidden;
   ruff for Python; Conventional Commits.
