@@ -19,6 +19,7 @@ use crate::http::{self, OrderedQs};
 use crate::http::{Body, Multipart, MultipartLimits};
 use crate::post_policy::PostPolicy;
 use crate::protocol::TrailingHeaders;
+use crate::region::Region;
 use crate::stream::ByteStream as _;
 use crate::stream::aws_chunked_stream::AwsChunkedStream;
 use crate::stream::upload_stream::UploadStream;
@@ -35,6 +36,7 @@ use s3s_sigv4::PostSignatureV4;
 use s3s_sigv4::PresignedUrlV4;
 use s3s_sigv4::{AuthorizationV4, CredentialV4, ParseAuthorizationError};
 
+use std::fmt;
 use std::mem;
 use std::ops::Not;
 use std::sync::Arc;
@@ -366,23 +368,94 @@ fn validate_clock_skew(request_time: jiff::Timestamp, now: jiff::Timestamp, conf
     Ok(())
 }
 
-pub(super) fn validate_sig_v4_region(region: &str, config: &S3Config) -> S3Result<()> {
+/// Which mechanism carried the credential scope, for the error a rejected region produces.
+///
+/// The service names the same violation differently on each path, so the check has to know
+/// where the credential came from: the authorization header, a presigned URL, or a POST policy.
+/// It selects the error code and the message prefix of every rejection in
+/// `validate_sig_v4_region`: an empty region, a value that is not a region name, a region
+/// longer than the configured bound, and a region other than the configured one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum SigV4Mechanism {
+    HeaderAuth,
+    PresignedUrl,
+    PostPolicy,
+}
+
+/// Builds the rejection for a credential region the endpoint does not accept.
+///
+/// Each mechanism prefixes the body the way Amazon S3 does on its path: the authorization
+/// header keeps `AuthorizationHeaderMalformed`, a presigned URL uses
+/// `AuthorizationQueryParametersError`, and a POST policy uses `InvalidArgument`.
+fn region_rejection(mechanism: SigV4Mechanism, body: fmt::Arguments<'_>) -> S3Error {
+    match mechanism {
+        SigV4Mechanism::HeaderAuth => S3Error::with_message_fmt(
+            S3ErrorCode::AuthorizationHeaderMalformed,
+            format_args!("The authorization header is malformed; {body}"),
+        ),
+        SigV4Mechanism::PresignedUrl => S3Error::with_message_fmt(
+            S3ErrorCode::AuthorizationQueryParametersError,
+            format_args!("Error parsing the X-Amz-Credential parameter; {body}"),
+        ),
+        SigV4Mechanism::PostPolicy => S3Error::with_message_fmt(S3ErrorCode::InvalidArgument, body),
+    }
+}
+
+/// Reports a region that does not belong to this endpoint.
+///
+/// The `expecting` clause is present when the deployment names its region in
+/// `expected_region`; with that configured the message is the one Amazon S3 returns.
+fn region_mismatch(region: &str, config: &S3Config, mechanism: SigV4Mechanism) -> S3Error {
+    match &config.expected_region {
+        Some(expected_region) => region_rejection(
+            mechanism,
+            format_args!("the region '{region}' is wrong; expecting '{}'", expected_region.as_str()),
+        ),
+        None => region_rejection(mechanism, format_args!("the region '{region}' is wrong")),
+    }
+}
+
+/// Rejects an empty credential region, unless the deployment accepts one.
+///
+/// An empty region is refused before the secret key is looked up, the way Amazon S3 answers it.
+/// [`S3Config::sig_v4_allow_empty_region`] accepts one instead: nothing in this crate defaults it
+/// to `true`, the caller decides. `s3s-proxy` sets it in the `minio` build that serves the
+/// clients signing admin calls and the credentials `AssumeRole` returns with an empty region.
+fn reject_empty_region(mechanism: SigV4Mechanism, allow_empty: bool) -> S3Result<()> {
+    if allow_empty {
+        return Ok(());
+    }
+
+    Err(region_rejection(
+        mechanism,
+        format_args!("a non-empty region must be provided in the credential."),
+    ))
+}
+
+pub(super) fn validate_sig_v4_region(region: &str, config: &S3Config, mechanism: SigV4Mechanism) -> S3Result<()> {
+    if region.is_empty() {
+        return reject_empty_region(mechanism, config.sig_v4_allow_empty_region);
+    }
+
+    // A region name matches `[a-z0-9-]+`. Amazon S3 treats any other value as a region that does
+    // not belong to the endpoint, so the mismatch shape is used here as well.
+    if !Region::is_valid(region) {
+        return Err(region_mismatch(region, config, mechanism));
+    }
+
     if let Some(max_region_len) = config.sig_v4_max_region_len
         && region.len() > max_region_len
     {
-        return Err(s3_error!(
-            AuthorizationHeaderMalformed,
-            "The authorization header is malformed; the region is longer than {max_region_len} bytes."
+        return Err(region_rejection(
+            mechanism,
+            format_args!("the region is longer than {max_region_len} bytes."),
         ));
     }
 
     if let Some(expected_region) = &config.expected_region
         && region != expected_region.as_str()
     {
-        return Err(s3_error!(
-            AuthorizationHeaderMalformed,
-            "The authorization header is malformed; the region is wrong; expecting '{expected_region}'."
-        ));
+        return Err(region_mismatch(region, config, mechanism));
     }
 
     Ok(())
@@ -713,7 +786,7 @@ impl<'a> SignatureContext<'a> {
         let region = credential.aws_region;
         let config = self.config.snapshot();
 
-        validate_sig_v4_region(region, &config)?;
+        validate_sig_v4_region(region, &config, SigV4Mechanism::PostPolicy)?;
         validate_sig_v4_clock_skew(&amz_date, jiff::Timestamp::now(), &config)?;
 
         let access_key = credential.access_key_id.to_owned();
@@ -791,7 +864,7 @@ impl<'a> SignatureContext<'a> {
 
         {
             // check expiration
-            validate_sig_v4_region(region, &config)?;
+            validate_sig_v4_region(region, &config, SigV4Mechanism::PresignedUrl)?;
 
             let now = jiff::Timestamp::now();
 
@@ -932,7 +1005,7 @@ impl<'a> SignatureContext<'a> {
             return Err(s3_error!(SignatureDoesNotMatch, "credential scope date does not match x-amz-date"));
         }
 
-        validate_sig_v4_region(region, &config)?;
+        validate_sig_v4_region(region, &config, SigV4Mechanism::HeaderAuth)?;
         validate_sig_v4_clock_skew(&amz_date, jiff::Timestamp::now(), &config)?;
 
         let amz_content_sha256 = extract_amz_content_sha256(self.hs)?;

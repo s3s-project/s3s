@@ -317,7 +317,67 @@ async fn v4_presigned_url_rejects_wrong_region() {
         .v4_check_presigned_url()
         .await
         .expect_err("presigned URL for another region should be rejected");
-    assert_eq!(err.code(), &S3ErrorCode::AuthorizationHeaderMalformed);
+    assert_eq!(err.code(), &S3ErrorCode::AuthorizationQueryParametersError);
+    assert_eq!(
+        err.message(),
+        Some("Error parsing the X-Amz-Credential parameter; the region 'us-east-1' is wrong; expecting 'us-west-2'")
+    );
+}
+
+/// An empty credential region on a presigned URL is answered with the query-parameter error and
+/// the message Amazon S3 uses for it (the header path keeps its own code and message).
+#[tokio::test]
+async fn v4_presigned_url_rejects_empty_region_as_query_error() {
+    use crate::config::{S3ConfigProvider, StaticConfigProvider};
+    use std::sync::Arc;
+
+    let qs = OrderedQs::parse(concat!(
+        "X-Amz-Algorithm=AWS4-HMAC-SHA256",
+        "&X-Amz-Credential=AKIAIOSFODNN7EXAMPLE%2F20130524%2F%2Fs3%2Faws4_request",
+        "&X-Amz-Date=20130524T000000Z",
+        "&X-Amz-Expires=3600",
+        "&X-Amz-SignedHeaders=host",
+        "&X-Amz-Signature=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    ))
+    .unwrap();
+
+    let auth = crate::ops::tests::NeverGetSecretKeyAuth;
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(S3Config::default())));
+
+    let method = Method::GET;
+    let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+    let headers = headers_from_slice(&[("host", "s3.amazonaws.com")]);
+    let mut body = Body::empty();
+    let mut cx = SignatureContext {
+        path_encoding: crate::auth::SigV4PathEncoding::S3,
+        auth: Some(&auth),
+        config: &config,
+        req_version: ::http::Version::HTTP_11,
+        req_method: &method,
+        req_uri: &uri,
+        req_body: &mut body,
+        qs: Some(&qs),
+        hs: &headers,
+        decoded_uri_path: "/test.txt",
+        raw_uri_path: "/test.txt",
+        vh_bucket: None,
+        content_length: None,
+        mime: None,
+        decoded_content_length: None,
+        transformed_body: None,
+        multipart: None,
+        trailing_headers: None,
+    };
+
+    let err = cx
+        .v4_check_presigned_url()
+        .await
+        .expect_err("an empty region must be rejected before the key lookup");
+    assert_eq!(err.code(), &S3ErrorCode::AuthorizationQueryParametersError);
+    assert_eq!(
+        err.message(),
+        Some("Error parsing the X-Amz-Credential parameter; a non-empty region must be provided in the credential.")
+    );
 }
 
 #[tokio::test]

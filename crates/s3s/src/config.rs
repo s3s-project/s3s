@@ -246,6 +246,19 @@ pub struct S3Config {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sig_v4_max_region_len: Option<usize>,
 
+    /// Whether an empty region is accepted in a `SigV4` credential scope.
+    ///
+    /// An empty region is refused before the secret key is looked up, the way Amazon S3
+    /// answers it. Set this to `true` for clients that sign requests with an empty region:
+    /// `MinIO` clients do it for admin calls and for the credentials `AssumeRole` returns,
+    /// and the service they talk to accepts them.
+    ///
+    /// Nothing in this crate defaults it to `true`: the caller decides. `s3s-proxy` sets it in
+    /// its `minio` build, which is the build that serves those clients.
+    ///
+    /// Default: `false`
+    pub sig_v4_allow_empty_region: bool,
+
     /// Services accepted in `SigV4` credential scopes.
     ///
     /// Requests signed for services outside this list are rejected with
@@ -441,6 +454,7 @@ impl Default for S3Config {
             presigned_url_max_skew_time_secs: 900, // 15 minutes
             expected_region: None,
             sig_v4_max_region_len: Some(DEFAULT_SIG_V4_MAX_REGION_LEN),
+            sig_v4_allow_empty_region: false,
             sig_v4_allowed_services: default_sig_v4_allowed_services(),
             enable_sig_v2: false,
             presigned_url_max_expires_secs: DEFAULT_PRESIGNED_URL_MAX_EXPIRES_SECS,
@@ -672,6 +686,7 @@ mod tests {
             presigned_url_max_skew_time_secs: 600,
             expected_region: Some("us-west-2".parse().expect("valid test region")),
             sig_v4_max_region_len: Some(128),
+            sig_v4_allow_empty_region: true,
             sig_v4_allowed_services: vec!["s3".to_owned(), "sts".to_owned(), "s3tables".to_owned()],
             enable_sig_v2: true,
             presigned_url_max_expires_secs: 86_400,

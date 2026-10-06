@@ -285,6 +285,11 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     // the two cannot drift apart.
     let mut config = S3Config::default();
     config.enable_sig_v2 = opt.enable_sig_v2;
+    // The `minio` build is the one that serves a MinIO backend, and MinIO clients sign some
+    // credential scopes with an empty region: `mc admin`, the admin APIs of the language SDKs,
+    // and the credentials `AssumeRole` returns. The service they talk to accepts them, so this
+    // build accepts them too; every other region rule stays in force.
+    config.sig_v4_allow_empty_region = cfg!(feature = "minio");
     let config = Arc::new(config);
 
     let (auth_passthrough, sts_route) = setup_auth_passthrough(&opt, credentials.as_ref(), &config)?;

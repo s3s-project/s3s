@@ -199,7 +199,8 @@ async fn post_object_rejects_wrong_region() {
     let Err(err) = super::prepare(&mut req, &ccx).await else {
         panic!("POST policy signed for another region should be rejected");
     };
-    assert_eq!(err.code(), &crate::error::S3ErrorCode::AuthorizationHeaderMalformed);
+    assert_eq!(err.code(), &crate::error::S3ErrorCode::InvalidArgument);
+    assert_eq!(err.message(), Some("the region 'us-east-1' is wrong; expecting 'us-west-2'"));
 }
 
 #[tokio::test]

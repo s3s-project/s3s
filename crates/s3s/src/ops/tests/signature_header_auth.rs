@@ -456,6 +456,63 @@ async fn v4_header_auth_rejects_wrong_region() {
     assert_eq!(err.code(), &S3ErrorCode::AuthorizationHeaderMalformed);
 }
 
+/// An empty credential region in the authorization header is rejected before the secret key is
+/// looked up; the panicking auth below pins that order.
+#[tokio::test]
+async fn v4_header_auth_rejects_empty_region_before_key_lookup() {
+    use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
+    use std::sync::Arc;
+
+    let access_key = "AKIAIOSFODNN7EXAMPLE";
+    // Panics when the secret key is looked up: the region gate must run first.
+    let auth = crate::ops::tests::NeverGetSecretKeyAuth;
+    let s3_config = S3Config {
+        presigned_url_max_skew_time_secs: u32::MAX,
+        ..Default::default()
+    };
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(s3_config)));
+
+    let authorization = format!(
+        "AWS4-HMAC-SHA256 Credential={access_key}/20130524//s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    );
+    let headers = headers_from_slice(&[
+        ("authorization", authorization.as_str()),
+        ("host", "s3.amazonaws.com"),
+        ("x-amz-content-sha256", "UNSIGNED-PAYLOAD"),
+        ("x-amz-date", "20130524T000000Z"),
+    ]);
+    let method = Method::GET;
+    let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+    let mut body = Body::empty();
+    let mut cx = SignatureContext {
+        path_encoding: crate::auth::SigV4PathEncoding::S3,
+        auth: Some(&auth),
+        config: &config,
+        req_version: ::http::Version::HTTP_11,
+        req_method: &method,
+        req_uri: &uri,
+        req_body: &mut body,
+        qs: None,
+        hs: &headers,
+        decoded_uri_path: "/test.txt",
+        raw_uri_path: "/test.txt",
+        vh_bucket: None,
+        content_length: Some(0),
+        mime: None,
+        decoded_content_length: None,
+        transformed_body: None,
+        multipart: None,
+        trailing_headers: None,
+    };
+
+    let err = cx.v4_check_header_auth().await.expect_err("empty region must be rejected");
+    assert_eq!(err.code(), &S3ErrorCode::AuthorizationHeaderMalformed);
+    assert_eq!(
+        err.message(),
+        Some("The authorization header is malformed; a non-empty region must be provided in the credential.")
+    );
+}
+
 #[tokio::test]
 async fn v4_header_auth_rejects_unsupported_algorithm() {
     use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
