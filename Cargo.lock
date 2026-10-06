@@ -3844,6 +3844,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "s3s-compiler"
+version = "0.18.0-alpha.1"
+
+[[package]]
 name = "s3s-e2e"
 version = "0.17.0"
 dependencies = [
