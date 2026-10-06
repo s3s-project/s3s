@@ -36,3 +36,52 @@ fn sig_v4_service_validation_uses_configured_allowlist() {
     config.sig_v4_allowed_services.push("s3tables".to_owned());
     validate_sig_v4_service("s3tables", &config).expect("configured service should be accepted");
 }
+
+#[test]
+fn sig_v4_region_validation_bounds_the_region_length_in_bytes() {
+    let config = S3Config::default();
+
+    validate_sig_v4_region(&"r".repeat(64), &config).expect("a 64-byte region should be accepted");
+    validate_sig_v4_region(&"地".repeat(21), &config).expect("a 63-byte region should be accepted");
+
+    for region in ["r".repeat(65), "地".repeat(22)] {
+        let err = validate_sig_v4_region(&region, &config).expect_err("a region longer than 64 bytes should be rejected");
+        assert_eq!(err.code(), &S3ErrorCode::AuthorizationHeaderMalformed);
+        assert_eq!(
+            err.message(),
+            Some("The authorization header is malformed; the region is longer than 64 bytes.")
+        );
+    }
+
+    // The limit is configurable.
+    let config = S3Config {
+        sig_v4_max_region_len: Some(8),
+        ..Default::default()
+    };
+    validate_sig_v4_region(&"r".repeat(8), &config).expect("a region at the configured limit should be accepted");
+    let err =
+        validate_sig_v4_region("us-east-1", &config).expect_err("a region longer than the configured limit should be rejected");
+    assert_eq!(err.code(), &S3ErrorCode::AuthorizationHeaderMalformed);
+    assert_eq!(
+        err.message(),
+        Some("The authorization header is malformed; the region is longer than 8 bytes.")
+    );
+
+    // Disabling the limit accepts any length.
+    let config = S3Config {
+        sig_v4_max_region_len: None,
+        ..Default::default()
+    };
+    validate_sig_v4_region(&"r".repeat(70), &config).expect("a disabled limit should accept any region length");
+
+    // The length limit is independent of the configured region, and it is reported first.
+    let config = S3Config {
+        expected_region: Some("us-west-2".parse().expect("valid test region")),
+        ..Default::default()
+    };
+    let err = validate_sig_v4_region(&"r".repeat(65), &config).expect_err("the length limit should win over a mismatch");
+    assert_eq!(
+        err.message(),
+        Some("The authorization header is malformed; the region is longer than 64 bytes.")
+    );
+}

@@ -1393,3 +1393,136 @@ async fn repeated_authorization_is_not_served_as_anonymous() {
         "the anonymous request must reach the handler"
     );
 }
+
+#[tokio::test]
+async fn v4_header_auth_rejects_a_region_longer_than_64_bytes() {
+    use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
+    use std::sync::Arc;
+
+    let access_key = "AKIAIOSFODNN7EXAMPLE";
+    // The secret key is never looked up: the region length is rejected before verification.
+    let auth = crate::ops::tests::NeverGetSecretKeyAuth;
+    let s3_config = S3Config {
+        presigned_url_max_skew_time_secs: u32::MAX,
+        ..Default::default()
+    };
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(s3_config)));
+
+    let region = "r".repeat(65);
+    let authorization = format!(
+        "AWS4-HMAC-SHA256 Credential={access_key}/20130524/{region}/s3/aws4_request,          SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature={}",
+        "0".repeat(64)
+    );
+    let headers = headers_from_slice(&[
+        ("authorization", authorization.as_str()),
+        ("host", "s3.amazonaws.com"),
+        ("x-amz-content-sha256", "UNSIGNED-PAYLOAD"),
+        ("x-amz-date", "20130524T000000Z"),
+    ]);
+    let method = Method::GET;
+    let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+    let mut body = Body::empty();
+    let mut cx = SignatureContext {
+        path_encoding: crate::auth::SigV4PathEncoding::S3,
+        auth: Some(&auth),
+        config: &config,
+        req_version: ::http::Version::HTTP_11,
+        req_method: &method,
+        req_uri: &uri,
+        req_body: &mut body,
+        qs: None,
+        hs: &headers,
+        decoded_uri_path: "/test.txt",
+        raw_uri_path: "/test.txt",
+        vh_bucket: None,
+        content_length: Some(0),
+        mime: None,
+        decoded_content_length: None,
+        transformed_body: None,
+        multipart: None,
+        trailing_headers: None,
+    };
+
+    let err = cx
+        .v4_check_header_auth()
+        .await
+        .expect_err("a region longer than 64 bytes should be rejected");
+    assert_eq!(err.code(), &S3ErrorCode::AuthorizationHeaderMalformed);
+    assert_eq!(
+        err.message(),
+        Some("The authorization header is malformed; the region is longer than 64 bytes.")
+    );
+}
+
+#[tokio::test]
+async fn v4_header_auth_accepts_a_64_byte_region_when_the_signature_matches() {
+    use crate::auth::SimpleAuth;
+    use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
+    use std::sync::Arc;
+
+    let access_key = "AKIAIOSFODNN7EXAMPLE";
+    let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+    let auth = SimpleAuth::from_single(access_key, secret_key.clone());
+    let s3_config = S3Config {
+        presigned_url_max_skew_time_secs: u32::MAX,
+        ..Default::default()
+    };
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(s3_config)));
+
+    let region = "r".repeat(64);
+    let method = Method::GET;
+    let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+    let amz_date = AmzDate::parse("20130524T000000Z").unwrap();
+    let headers_for_signing = [
+        ("host", "s3.amazonaws.com"),
+        ("x-amz-content-sha256", "UNSIGNED-PAYLOAD"),
+        ("x-amz-date", "20130524T000000Z"),
+    ];
+    let canonical_request = s3s_sigv4::create_canonical_request(
+        method.as_str(),
+        "/test.txt",
+        &[] as &[(&str, &str)],
+        headers_for_signing,
+        s3s_sigv4::Payload::Unsigned,
+    );
+    let string_to_sign = s3s_sigv4::create_string_to_sign(&canonical_request, &amz_date, &region, "s3");
+    let signature = s3s_sigv4::calculate_signature(&string_to_sign, secret_key.expose(), &amz_date, &region, "s3");
+    let authorization = format!(
+        "AWS4-HMAC-SHA256 Credential={access_key}/20130524/{region}/s3/aws4_request,          SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature={}",
+        signature.as_str(),
+    );
+    let headers = headers_from_slice(&[
+        ("authorization", authorization.as_str()),
+        ("host", "s3.amazonaws.com"),
+        ("x-amz-content-sha256", "UNSIGNED-PAYLOAD"),
+        ("x-amz-date", "20130524T000000Z"),
+    ]);
+
+    let mut body = Body::empty();
+    let mut cx = SignatureContext {
+        path_encoding: crate::auth::SigV4PathEncoding::S3,
+        auth: Some(&auth),
+        config: &config,
+        req_version: ::http::Version::HTTP_11,
+        req_method: &method,
+        req_uri: &uri,
+        req_body: &mut body,
+        qs: None,
+        hs: &headers,
+        decoded_uri_path: "/test.txt",
+        raw_uri_path: "/test.txt",
+        vh_bucket: None,
+        content_length: Some(0),
+        mime: None,
+        decoded_content_length: None,
+        transformed_body: None,
+        multipart: None,
+        trailing_headers: None,
+    };
+
+    let cred = cx
+        .v4_check_header_auth()
+        .await
+        .expect("a correctly signed 64-byte region should pass verification");
+    assert_eq!(cred.region.as_deref(), Some(region.as_str()));
+}
