@@ -26,6 +26,10 @@ pub fn register(tcx: &mut TestContext) {
     case!(tcx, FsServer, Conditional, test_put_object_if_match_legacy_md5_fallback);
     case!(tcx, FsServer, Conditional, test_put_object_if_match_rejects_weak_etag);
     case!(tcx, FsServer, Conditional, test_put_object_if_match_etag_list);
+    case!(tcx, FsServer, Conditional, test_get_object_if_none_match_not_modified);
+    case!(tcx, FsServer, Conditional, test_head_object_if_none_match_not_modified);
+    case!(tcx, FsServer, Conditional, test_get_object_if_match_precondition);
+    case!(tcx, FsServer, Conditional, test_put_object_if_none_match_non_wildcard_not_implemented);
 }
 
 impl Conditional {
@@ -483,6 +487,195 @@ impl Conditional {
         delete_object(c, bucket, key).await?;
         delete_bucket(c, bucket).await?;
 
+        Ok(())
+    }
+
+    /// A read answers `304 Not Modified` when `If-None-Match` matches, for a single
+    /// tag and for a list with a matching member, and answers the object when
+    /// nothing matches (RFC 9110 §13.1.2, weak comparison).
+    async fn test_get_object_if_none_match_not_modified(self: Arc<Self>) -> Result<()> {
+        let c = &self.s3;
+        let bucket = format!("get-inm-{}", Uuid::new_v4());
+        let bucket = bucket.as_str();
+        let key = "test-file.txt";
+
+        create_bucket(c, bucket).await?;
+        let put = c
+            .put_object()
+            .bucket(bucket)
+            .key(key)
+            .body(ByteStream::from_static(b"content"))
+            .send()
+            .await?;
+        let etag = put.e_tag().expect("put_object answers the e_tag").to_owned();
+
+        let err = c
+            .get_object()
+            .bucket(bucket)
+            .key(key)
+            .if_none_match(etag.clone())
+            .send()
+            .await
+            .expect_err("a matching If-None-Match must answer 304");
+        // The SDK has no modeled error for 304, so the status shows up in the debug form.
+        let text = format!("{err:?}");
+        assert!(text.contains("304"), "expected 304 Not Modified, got: {text}");
+
+        let err = c
+            .get_object()
+            .bucket(bucket)
+            .key(key)
+            .if_none_match(format!("\"not-the-etag\", {etag}"))
+            .send()
+            .await
+            .expect_err("a list with a matching member must answer 304");
+        let text = format!("{err:?}");
+        assert!(text.contains("304"), "expected 304 Not Modified, got: {text}");
+
+        let read = c
+            .get_object()
+            .bucket(bucket)
+            .key(key)
+            .if_none_match("\"not-the-etag\", \"nor-this-one\"")
+            .send()
+            .await?;
+        let body = read.body.collect().await?.into_bytes();
+        assert_eq!(body.as_ref(), b"content", "a list without a match answers the object");
+
+        delete_object(c, bucket, key).await?;
+        delete_bucket(c, bucket).await?;
+        Ok(())
+    }
+
+    /// `HEAD` answers `304 Not Modified` for the same condition.
+    async fn test_head_object_if_none_match_not_modified(self: Arc<Self>) -> Result<()> {
+        let c = &self.s3;
+        let bucket = format!("head-inm-{}", Uuid::new_v4());
+        let bucket = bucket.as_str();
+        let key = "test-file.txt";
+
+        create_bucket(c, bucket).await?;
+        let put = c
+            .put_object()
+            .bucket(bucket)
+            .key(key)
+            .body(ByteStream::from_static(b"content"))
+            .send()
+            .await?;
+        let etag = put.e_tag().expect("put_object answers the e_tag").to_owned();
+
+        let err = c
+            .head_object()
+            .bucket(bucket)
+            .key(key)
+            .if_none_match(etag)
+            .send()
+            .await
+            .expect_err("a matching If-None-Match must answer 304");
+        let text = format!("{err:?}");
+        assert!(text.contains("304"), "expected 304 Not Modified, got: {text}");
+
+        delete_object(c, bucket, key).await?;
+        delete_bucket(c, bucket).await?;
+        Ok(())
+    }
+
+    /// `If-Match` answers the object when it matches and `412 Precondition Failed`
+    /// when it does not; `*` matches any existing object and fails without one
+    /// (RFC 9110 §13.1.1, strong comparison).
+    async fn test_get_object_if_match_precondition(self: Arc<Self>) -> Result<()> {
+        let c = &self.s3;
+        let bucket = format!("get-im-{}", Uuid::new_v4());
+        let bucket = bucket.as_str();
+        let key = "test-file.txt";
+
+        create_bucket(c, bucket).await?;
+        let put = c
+            .put_object()
+            .bucket(bucket)
+            .key(key)
+            .body(ByteStream::from_static(b"content"))
+            .send()
+            .await?;
+        let etag = put.e_tag().expect("put_object answers the e_tag").to_owned();
+
+        let read = c.get_object().bucket(bucket).key(key).if_match(etag.clone()).send().await?;
+        let body = read.body.collect().await?.into_bytes();
+        assert_eq!(body.as_ref(), b"content", "a matching If-Match answers the object");
+
+        let err = c
+            .get_object()
+            .bucket(bucket)
+            .key(key)
+            .if_match("\"not-the-etag\"")
+            .send()
+            .await
+            .expect_err("a mismatching If-Match must answer 412");
+        assert_eq!(err.into_service_error().code(), Some("PreconditionFailed"));
+
+        let read = c.get_object().bucket(bucket).key(key).if_match("*").send().await?;
+        let body = read.body.collect().await?.into_bytes();
+        assert_eq!(body.as_ref(), b"content", "If-Match: * matches an existing object");
+
+        // The missing object is reported before the condition is evaluated, which
+        // is what Amazon S3 answers for the same request.
+        let err = c
+            .get_object()
+            .bucket(bucket)
+            .key("missing.txt")
+            .if_match("*")
+            .send()
+            .await
+            .expect_err("a missing key is reported as NoSuchKey, not as a failed condition");
+        assert_eq!(err.into_service_error().code(), Some("NoSuchKey"));
+
+        delete_object(c, bucket, key).await?;
+        delete_bucket(c, bucket).await?;
+        Ok(())
+    }
+
+    /// A non-wildcard `If-None-Match` on a write is not implemented, as a single
+    /// tag or as a list, which is what Amazon S3 answers for it.
+    async fn test_put_object_if_none_match_non_wildcard_not_implemented(self: Arc<Self>) -> Result<()> {
+        let c = &self.s3;
+        let bucket = format!("put-inm-tag-{}", Uuid::new_v4());
+        let bucket = bucket.as_str();
+        let key = "test-file.txt";
+
+        create_bucket(c, bucket).await?;
+        let put = c
+            .put_object()
+            .bucket(bucket)
+            .key(key)
+            .body(ByteStream::from_static(b"content"))
+            .send()
+            .await?;
+        let etag = put.e_tag().expect("put_object answers the e_tag").to_owned();
+
+        let err = c
+            .put_object()
+            .bucket(bucket)
+            .key(key)
+            .body(ByteStream::from_static(b"single tag"))
+            .if_none_match(etag.clone())
+            .send()
+            .await
+            .expect_err("a single tag is not implemented");
+        assert_eq!(err.into_service_error().code(), Some("NotImplemented"));
+
+        let err = c
+            .put_object()
+            .bucket(bucket)
+            .key(key)
+            .body(ByteStream::from_static(b"list member"))
+            .if_none_match(format!("\"not-the-etag\", {etag}"))
+            .send()
+            .await
+            .expect_err("a list is not implemented");
+        assert_eq!(err.into_service_error().code(), Some("NotImplemented"));
+
+        delete_object(c, bucket, key).await?;
+        delete_bucket(c, bucket).await?;
         Ok(())
     }
 }
