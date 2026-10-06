@@ -7,7 +7,7 @@
 //! Port of `scripts/report-mint.py`: the tables, the output format and the
 //! exit codes are kept as they were.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
@@ -22,6 +22,14 @@ use serde::Deserialize;
 pub(crate) struct Mint {
     /// Path to the mint log, one JSON object per line.
     log: PathBuf,
+
+    /// The suite did not run in this invocation, so none of its assertions
+    /// apply. Repeat the flag or separate the names with commas. A full run
+    /// needs no flag: by default every suite the pinned image runs must appear
+    /// in the log. A name that is not one of those suites is rejected, so a typo
+    /// cannot weaken the gate.
+    #[arg(long, value_name = "GROUP", value_delimiter = ',')]
+    allow_missing: Vec<String>,
 }
 
 /// One line of the mint log (<https://github.com/minio/mint#mint-log-format>).
@@ -79,6 +87,63 @@ const EXPECTED_FAILURES: &[(&str, &[(&str, usize)])] = &[
     ),
 ];
 
+/// The suites the pinned mint image runs, in the order the image lists them.
+///
+/// The existence check is both ways: a suite here that the log does not carry
+/// fails the gate, and a suite in the log that is not here fails it too. A suite
+/// that is absent is a coverage hole, because the image reports a suite it could
+/// not run on its console and the log does not carry that line; a suite that is
+/// extra means the log and the image disagree.
+///
+/// The list is the image's `run/core` directory. An image upgrade that adds a
+/// suite therefore fails this gate until the suite is listed here and given a
+/// counter check in `check_counters`, which is the point: a new suite must not
+/// arrive unnoticed.
+///
+/// `NON_PARTICIPATING_GROUPS` names the suites that cannot produce a line with the
+/// configuration this repository runs mint with; the rest must appear. One of them
+/// producing lines is a notice rather than an error, because the change it
+/// announces is the fix.
+const EXPECTED_GROUPS: &[&str] = &[
+    "aws-sdk-go-v2",
+    "aws-sdk-java-v2",
+    "aws-sdk-php",
+    "aws-sdk-ruby",
+    "awscli",
+    "healthcheck",
+    "mc",
+    "minio-go",
+    "minio-java",
+    "minio-js",
+    "minio-py",
+    "s3cmd",
+    "s3select",
+    "versioning",
+];
+
+/// The suites that produce no log line, and why.
+///
+/// `aws-sdk-java-v2` returns from every one of its cases before running it
+/// unless the endpoint is reached over TLS, and mint runs over plain HTTP here,
+/// so the suite exits zero without logging anything. Its absence is therefore
+/// expected. A line from one of these suites is reported on stdout: the reason
+/// no longer holds, so the suite belongs in `EXPECTED_GROUPS` with a counter
+/// check, and leaving that transition unnoticed is what this list is for.
+const NON_PARTICIPATING_GROUPS: &[(&str, &str)] = &[(
+    "aws-sdk-java-v2",
+    "every case returns before running unless the endpoint is reached over TLS, and mint runs over plain HTTP here",
+)];
+
+/// Whether the invocation makes no claim about a suite, either because mint did
+/// not start it (`--allow-missing`) or because it cannot log at all.
+fn is_tolerated(name: &str, allow_missing: &[String]) -> bool {
+    is_non_participating(name) || allow_missing.iter().any(|allowed| allowed == name)
+}
+
+fn is_non_participating(name: &str) -> bool {
+    NON_PARTICIPATING_GROUPS.iter().any(|(group, _)| *group == name)
+}
+
 /// The awscli runner uses the full command line as the test function name,
 /// including a random bucket name; normalize it so the name is stable across
 /// runs.
@@ -86,7 +151,7 @@ static AWS_CLI_BUCKET: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"awscli-mi
 
 impl Mint {
     pub(crate) fn run(self) -> Result<bool> {
-        let logs = parse_log(&self.log)?;
+        let (logs, unparsed) = parse_log(&self.log)?;
         let counts = counters(&logs);
 
         for name in &counts.order {
@@ -97,11 +162,36 @@ impl Mint {
         let totals = counts.total();
         print_counter("summary", totals);
 
-        // Both gates run to completion so every violation is reported; the exit
+        // A line that is not a JSON object is named with its position, and does
+        // not decide the exit code on its own: a suite is free to print a banner,
+        // and the assertions below are about the suites that print nothing.
+        if !unparsed.is_empty() {
+            println!();
+            for line in &unparsed {
+                println!("error parsing log line {}:{}: {}", self.log.display(), line.number, line.text);
+            }
+        }
+
+        let observed: BTreeSet<&str> = counts.order.iter().map(String::as_str).collect();
+
+        // Every check runs to completion so every violation is reported; the exit
         // code is decided afterwards.
+        let mut notices = Vec::new();
+        check_non_participating(&observed, &mut notices);
+
         let mut errors = Vec::new();
-        check_counters(&counts.by_name, &mut errors);
-        check_gate(&logs, &mut errors);
+        check_allow_missing(&self.allow_missing, &observed, &mut errors, &mut notices);
+        check_expected_groups(&observed, &self.allow_missing, &mut errors);
+        check_unexpected_groups(&observed, &mut errors);
+        check_counters(&counts.by_name, &self.allow_missing, &mut errors);
+        check_gate(&logs, &self.allow_missing, &mut errors);
+
+        if !notices.is_empty() {
+            println!();
+            for notice in &notices {
+                println!("note: {notice}");
+            }
+        }
 
         if errors.is_empty() {
             return Ok(true);
@@ -116,15 +206,25 @@ impl Mint {
     }
 }
 
+/// A log line that is not a JSON object, with its 1-based position in the file.
+#[derive(Debug)]
+struct UnparsedLine {
+    number: usize,
+    text: String,
+}
+
 /// Read the log, skipping the lines that are not JSON objects.
 ///
 /// Unlike the script, a line that parses but lacks a field is reported here
-/// instead of aborting the run.
-fn parse_log(path: &Path) -> Result<Vec<MintLog>> {
+/// instead of aborting the run. The position of every unparsable line is kept so
+/// the caller can name it, which is what tells a suite that printed a banner
+/// apart from a suite that printed nothing.
+fn parse_log(path: &Path) -> Result<(Vec<MintLog>, Vec<UnparsedLine>)> {
     let text = fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
     let mut logs = Vec::new();
+    let mut unparsed = Vec::new();
 
-    for raw in text.lines() {
+    for (index, raw) in text.lines().enumerate() {
         let line = raw.trim();
         if line.is_empty() {
             continue;
@@ -140,11 +240,14 @@ fn parse_log(path: &Path) -> Result<Vec<MintLog>> {
                 }
                 logs.push(entry);
             }
-            Err(_) => println!("error parsing log line: {line}"),
+            Err(_) => unparsed.push(UnparsedLine {
+                number: index + 1,
+                text: line.to_owned(),
+            }),
         }
     }
 
-    Ok(logs)
+    Ok((logs, unparsed))
 }
 
 /// Counters per suite, in first-appearance order.
@@ -232,45 +335,141 @@ fn normalize_function(name: &str, function: &str) -> String {
 /// the mint image stopped sending an unsigned `x-amz-acl` on a presigned PUT.
 /// A floor that has to be lowered, or a `check_fail_zero` that has to become a
 /// count, needs the reason written next to it.
-fn check_counters(counts: &HashMap<String, Counters>, errors: &mut Vec<String>) {
-    fn check_pass_at_least(counts: &HashMap<String, Counters>, name: &str, minimum: usize, errors: &mut Vec<String>) {
+fn check_counters(counts: &HashMap<String, Counters>, allow_missing: &[String], errors: &mut Vec<String>) {
+    fn check_pass_at_least(
+        counts: &HashMap<String, Counters>,
+        name: &str,
+        minimum: usize,
+        allow_missing: &[String],
+        errors: &mut Vec<String>,
+    ) {
+        if is_tolerated(name, allow_missing) {
+            return;
+        }
         let pass_count = counts.get(name).map_or(0, |counter| counter.pass);
         if pass_count < minimum {
             errors.push(format!("group counter: \"{name}\" passed {pass_count}, expected at least {minimum}"));
         }
     }
 
-    fn check_fail_zero(counts: &HashMap<String, Counters>, name: &str, errors: &mut Vec<String>) {
+    fn check_fail_zero(counts: &HashMap<String, Counters>, name: &str, allow_missing: &[String], errors: &mut Vec<String>) {
+        if is_tolerated(name, allow_missing) {
+            return;
+        }
         let fail_count = counts.get(name).map_or(0, |counter| counter.fail);
         if fail_count != 0 {
             errors.push(format!("group counter: \"{name}\" failed {fail_count} test(s), expected 0"));
         }
     }
 
-    check_pass_at_least(counts, "aws-sdk-go-v2", 5, errors);
-    check_fail_zero(counts, "aws-sdk-php", errors);
+    check_pass_at_least(counts, "aws-sdk-go-v2", 5, allow_missing, errors);
+    check_fail_zero(counts, "aws-sdk-php", allow_missing, errors);
     // No known failure is left in this suite.
-    check_pass_at_least(counts, "aws-sdk-ruby", 13, errors);
-    check_fail_zero(counts, "awscli", errors);
+    check_pass_at_least(counts, "aws-sdk-ruby", 13, allow_missing, errors);
+    check_fail_zero(counts, "awscli", allow_missing, errors);
     // `test_admin_users` passes now that the authentication passthrough lets the
     // dynamically created user reach the backend.
-    check_pass_at_least(counts, "mc", 29, errors);
-    check_fail_zero(counts, "minio-go", errors);
+    check_pass_at_least(counts, "mc", 29, allow_missing, errors);
+    check_fail_zero(counts, "minio-go", allow_missing, errors);
     // The one known failure needs a MinIO extension; the twelve
     // bucket-configuration cases report NA against the pinned backend and are
     // counted separately, so they are not part of this floor.
-    check_pass_at_least(counts, "minio-java", 58, errors);
+    check_pass_at_least(counts, "minio-java", 58, allow_missing, errors);
     // The assume-role case passes now that the STS protocol shape is forwarded
     // and the temporary credentials reach the backend.
-    check_pass_at_least(counts, "minio-js", 248, errors);
-    check_pass_at_least(counts, "minio-py", 22, errors);
-    check_fail_zero(counts, "s3cmd", errors);
-    check_fail_zero(counts, "s3select", errors);
-    check_pass_at_least(counts, "versioning", 18, errors);
+    check_pass_at_least(counts, "minio-js", 248, allow_missing, errors);
+    check_pass_at_least(counts, "minio-py", 22, allow_missing, errors);
+    check_fail_zero(counts, "s3cmd", allow_missing, errors);
+    check_fail_zero(counts, "s3select", allow_missing, errors);
+    check_pass_at_least(counts, "versioning", 18, allow_missing, errors);
+}
+
+/// Every suite the image runs must contribute at least one line, unless the
+/// invocation does not claim it.
+///
+/// This is the assertion the counter checks cannot make. A suite without a
+/// counter check (like `healthcheck`), a suite whose lines all failed to parse,
+/// and a suite that never started are all absent from the log, and only absence
+/// is observable here.
+fn check_expected_groups(observed: &BTreeSet<&str>, allow_missing: &[String], errors: &mut Vec<String>) {
+    let missing: Vec<&str> = EXPECTED_GROUPS
+        .iter()
+        .copied()
+        .filter(|group| !observed.contains(group) && !is_tolerated(group, allow_missing))
+        .collect();
+    if missing.is_empty() {
+        return;
+    }
+
+    let seen: Vec<&str> = observed.iter().copied().collect();
+    errors.push(format!(
+        "suite(s) missing from the mint log: {} (log has: {})",
+        missing.join(", "),
+        seen.join(", ")
+    ));
+}
+
+/// A suite in the log that the image does not run is an error.
+///
+/// The expected set is the image's `run/core` directory, so a name outside it
+/// means the log and the image disagree: either the image gained a suite that has
+/// to be listed and given a counter check, or the log did not come from the
+/// pinned image. Both are worth failing on before the numbers are read.
+fn check_unexpected_groups(observed: &BTreeSet<&str>, errors: &mut Vec<String>) {
+    let unexpected: Vec<&str> = observed
+        .iter()
+        .copied()
+        .filter(|group| !EXPECTED_GROUPS.contains(group))
+        .collect();
+    if unexpected.is_empty() {
+        return;
+    }
+
+    let seen: Vec<&str> = observed.iter().copied().collect();
+    errors.push(format!(
+        "suite(s) in the mint log that the image does not run: {}; add them to EXPECTED_GROUPS and give them a counter check in check_counters (log has: {})",
+        unexpected.join(", "),
+        seen.join(", ")
+    ));
+}
+
+/// Report a non-participating suite that produced lines anyway.
+///
+/// The reason it is listed as non-participating no longer holds, so it belongs in
+/// `EXPECTED_GROUPS` with a counter check. This is a notice rather than an error:
+/// the change it announces is the fix, and the per-function gate already fails if
+/// the new lines carry a failure.
+fn check_non_participating(observed: &BTreeSet<&str>, notices: &mut Vec<String>) {
+    for (group, reason) in NON_PARTICIPATING_GROUPS {
+        if observed.contains(group) {
+            notices.push(format!(
+                "suite \"{group}\" is declared non-participating but produced log lines: {reason}"
+            ));
+        }
+    }
+}
+
+/// Validate the `--allow-missing` names, and report the ones that had no effect.
+///
+/// A name the image does not run is an error, because a typo would silently
+/// weaken the gate. A name whose suite did produce lines is a notice: the flag
+/// was not needed for this log.
+fn check_allow_missing(allow_missing: &[String], observed: &BTreeSet<&str>, errors: &mut Vec<String>, notices: &mut Vec<String>) {
+    for name in allow_missing {
+        if !EXPECTED_GROUPS.contains(&name.as_str()) {
+            errors.push(format!("--allow-missing names a suite the image does not run: \"{name}\""));
+            continue;
+        }
+        if observed.contains(name.as_str()) {
+            notices.push(format!(
+                "--allow-missing names \"{name}\", which produced log lines; the flag has no effect here"
+            ));
+        }
+    }
 }
 
 /// Evaluate the per-function gate; an empty list of errors means it passed.
-fn check_gate(logs: &[MintLog], errors: &mut Vec<String>) {
+fn check_gate(logs: &[MintLog], allow_missing: &[String], errors: &mut Vec<String>) {
     let mut order: Vec<(String, String)> = Vec::new();
     let mut appearances: HashSet<(String, String)> = HashSet::new();
     let mut fail_counts: HashMap<(String, String), usize> = HashMap::new();
@@ -290,7 +489,11 @@ fn check_gate(logs: &[MintLog], errors: &mut Vec<String>) {
         for (function, max_fail) in *functions {
             let key = ((*name).to_owned(), (*function).to_owned());
             if !appearances.contains(&key) {
-                errors.push(format!("expected failure entry is stale: \"{name}\" \"{function}\" did not run"));
+                // A suite this invocation does not claim cannot make its baseline
+                // entry stale.
+                if !is_tolerated(name, allow_missing) {
+                    errors.push(format!("expected failure entry is stale: \"{name}\" \"{function}\" did not run"));
+                }
                 continue;
             }
             let fail_count = fail_counts.get(&key).copied().unwrap_or(0);
@@ -319,7 +522,11 @@ fn check_gate(logs: &[MintLog], errors: &mut Vec<String>) {
 
 #[cfg(test)]
 mod tests {
-    use super::{Mint, check_gate, counters, normalize_function, parse_log};
+    use super::{
+        Mint, check_expected_groups, check_gate, check_non_participating, check_unexpected_groups, counters, normalize_function,
+        parse_log,
+    };
+    use std::collections::BTreeSet;
     use std::io::Write as _;
 
     fn log_file(name: &str, contents: &str) -> std::path::PathBuf {
@@ -340,8 +547,10 @@ mod tests {
             &format!("{}\nNot json\n{}\n{}\n", entry("b", "PASS"), entry("a", "FAIL"), entry("b", "NA")),
         );
 
-        let logs = parse_log(&path).expect("parse");
+        let (logs, unparsed) = parse_log(&path).expect("parse");
         assert_eq!(logs.len(), 3, "the non-JSON line is skipped");
+        assert_eq!(unparsed.len(), 1, "the non-JSON line is kept for the report");
+        assert_eq!(unparsed[0].number, 2, "its position is 1-based");
 
         let counts = counters(&logs);
         assert_eq!(counts.order, ["b", "a"], "the name keeps its first position");
@@ -355,7 +564,7 @@ mod tests {
     fn splits_the_function_out_of_the_name() {
         let path = log_file("split", &format!("{}\n", entry("minio-js:listObjects(bucket)", "FAIL")));
 
-        let logs = parse_log(&path).expect("parse");
+        let (logs, _) = parse_log(&path).expect("parse");
         assert_eq!(logs[0].name, "minio-js");
         assert_eq!(logs[0].function.as_deref(), Some("listObjects(bucket)"));
     }
@@ -381,9 +590,9 @@ mod tests {
             ),
         );
 
-        let logs = parse_log(&path).expect("parse");
+        let (logs, _) = parse_log(&path).expect("parse");
         let mut errors = Vec::new();
-        check_gate(&logs, &mut errors);
+        check_gate(&logs, &[], &mut errors);
 
         assert_eq!(errors.len(), 5, "three unexpected failures plus two stale entries: {errors:?}");
         assert!(
@@ -410,7 +619,227 @@ mod tests {
     fn a_partial_log_fails_the_counter_gate() {
         let mint = Mint {
             log: log_file("table", &format!("{}\n{}\n", entry("awscli", "PASS"), entry("mc", "FAIL"))),
+            allow_missing: Vec::new(),
         };
         assert!(!mint.run().expect("run"), "the missing suites must be reported");
+    }
+
+    /// A log that satisfies every assertion of a full run: each suite the image
+    /// runs contributes lines (the non-participating one excepted), the pass
+    /// floors are met, and every expected failure appears once inside its suite's
+    /// block, which is how mint writes a suite.
+    fn full_log() -> String {
+        const PASSES: &[(&str, usize)] = &[
+            ("aws-sdk-go-v2", 6),
+            ("aws-sdk-php", 3),
+            ("aws-sdk-ruby", 14),
+            ("awscli", 3),
+            ("healthcheck", 3),
+            ("mc", 29),
+            ("minio-go", 3),
+            ("minio-java", 59),
+            ("minio-js", 248),
+            ("minio-py", 23),
+            ("s3cmd", 3),
+            ("s3select", 3),
+            ("versioning", 19),
+        ];
+        const FAILURES: &[(&str, &str)] = &[
+            ("aws-sdk-go-v2", "ConditionalDeleteWithIncorrectETag"),
+            ("minio-java", "putObjectFanOut()"),
+        ];
+
+        let mut lines = Vec::new();
+        for (suite, passes) in PASSES {
+            for index in 0..*passes {
+                lines.push(format!(
+                    "{{\"name\":\"{suite}\",\"function\":\"{suite}_case_{index}\",\"status\":\"PASS\"}}"
+                ));
+            }
+            for (failure_suite, function) in FAILURES.iter().filter(|(name, _)| name == suite) {
+                lines.push(format!("{{\"name\":\"{failure_suite}:{function}\",\"status\":\"FAIL\"}}"));
+            }
+        }
+        lines.join("\n") + "\n"
+    }
+
+    /// The same log without every line of one suite, in both the plain and the
+    /// prefixed name form mint uses for a failure entry.
+    fn without_suite(log: &str, suite: &str) -> String {
+        let plain = format!("\"name\":\"{suite}\"");
+        let prefixed = format!("\"name\":\"{suite}:");
+        let kept: Vec<&str> = log
+            .lines()
+            .filter(|line| !line.contains(&plain) && !line.contains(&prefixed))
+            .collect();
+        kept.join("\n") + "\n"
+    }
+
+    fn observed_suites(log: &str, name: &str) -> BTreeSet<String> {
+        let (logs, _) = parse_log(&log_file(name, log)).expect("parse");
+        counters(&logs).order.into_iter().collect()
+    }
+
+    /// Positive control: the log a full run produces passes, without the suite
+    /// that cannot log.
+    #[test]
+    fn a_full_log_passes_without_the_non_participating_suite() {
+        let mint = Mint {
+            log: log_file("full", &full_log()),
+            allow_missing: Vec::new(),
+        };
+        assert!(mint.run().expect("run"), "a full log must pass");
+    }
+
+    /// A suite the image runs that is absent from the log is named, even when no
+    /// counter check covers it: `healthcheck` has none.
+    #[test]
+    fn a_missing_suite_is_named_by_the_expected_suite_check() {
+        let log = without_suite(&full_log(), "healthcheck");
+        let observed = observed_suites(&log, "missing-named");
+        let observed: BTreeSet<&str> = observed.iter().map(String::as_str).collect();
+
+        let mut errors = Vec::new();
+        check_expected_groups(&observed, &[], &mut errors);
+        assert_eq!(errors.len(), 1, "{errors:?}");
+        assert!(errors[0].contains("healthcheck"), "{errors:?}");
+        assert!(errors[0].contains("log has:"), "the message lists what the log has: {errors:?}");
+
+        let mint = Mint {
+            log: log_file("missing-suite", &log),
+            allow_missing: Vec::new(),
+        };
+        assert!(!mint.run().expect("run"), "a suite that vanished from the log must fail the gate");
+    }
+
+    /// A suite whose lines all fail to parse contributes nothing, so it counts as
+    /// missing; its banner lines are still reported with their positions.
+    #[test]
+    fn a_suite_with_only_unparsable_lines_is_missing() {
+        let log = full_log().replace("\"name\":\"healthcheck\"", "\"name\" \"healthcheck\"");
+        let path = log_file("unparsable-suite", &log);
+
+        let (_, unparsed) = parse_log(&path).expect("parse");
+        assert_eq!(unparsed.len(), 3, "every banner line is kept");
+        assert!(unparsed.iter().all(|line| line.number > 0), "each line keeps its position");
+
+        let mint = Mint {
+            log: path,
+            allow_missing: Vec::new(),
+        };
+        assert!(!mint.run().expect("run"), "a suite that contributes no parsed line is missing");
+    }
+
+    /// A banner line is reported with its file and position and does not decide
+    /// the exit code: the mc suite prints one before its JSON lines.
+    #[test]
+    fn unparsable_lines_are_reported_without_failing_the_gate() {
+        let log = format!("Dependency validation complete\n{}", full_log());
+        let path = log_file("unparsable-line", &log);
+
+        let (_, unparsed) = parse_log(&path).expect("parse");
+        assert_eq!(unparsed.len(), 1);
+        assert_eq!(unparsed[0].number, 1);
+        assert_eq!(unparsed[0].text, "Dependency validation complete");
+
+        let mint = Mint {
+            log: path,
+            allow_missing: Vec::new(),
+        };
+        assert!(mint.run().expect("run"), "a banner line alone must not fail the gate");
+    }
+
+    /// A suite in the log that the image does not run fails the gate and is named,
+    /// so an image upgrade that adds one is not read as a clean run either.
+    #[test]
+    fn an_unknown_suite_in_the_log_fails_the_gate() {
+        let log = full_log() + &format!("{}\n", entry("brand-new-suite", "PASS"));
+        let observed = observed_suites(&log, "unknown-suite");
+        let observed: BTreeSet<&str> = observed.iter().map(String::as_str).collect();
+
+        let mut errors = Vec::new();
+        check_unexpected_groups(&observed, &mut errors);
+        assert_eq!(errors.len(), 1, "{errors:?}");
+        assert!(errors[0].contains("brand-new-suite"), "{errors:?}");
+        assert!(
+            errors[0].contains("EXPECTED_GROUPS") && errors[0].contains("check_counters"),
+            "the message says what to update: {errors:?}"
+        );
+
+        let mint = Mint {
+            log: log_file("unknown-suite-run", &log),
+            allow_missing: Vec::new(),
+        };
+        assert!(!mint.run().expect("run"), "an unknown suite must fail the gate");
+    }
+
+    /// A suite name carrying its function after a colon is that same suite, so the
+    /// existence check must not report it as unknown.
+    #[test]
+    fn a_colon_suffixed_name_is_the_same_suite() {
+        let log = full_log() + &format!("{}\n", entry("minio-go: testFunctional", "PASS"));
+        let observed = observed_suites(&log, "colon-name");
+        let observed: BTreeSet<&str> = observed.iter().map(String::as_str).collect();
+
+        let mut errors = Vec::new();
+        check_unexpected_groups(&observed, &mut errors);
+        assert!(errors.is_empty(), "{errors:?}");
+
+        let mint = Mint {
+            log: log_file("colon-name-run", &log),
+            allow_missing: Vec::new(),
+        };
+        assert!(mint.run().expect("run"), "a colon-suffixed name belongs to its suite");
+    }
+
+    /// A non-participating suite that logs anyway is reported: its reason no
+    /// longer holds. The notice does not fail the gate, because the change it
+    /// announces is the fix.
+    #[test]
+    fn a_non_participating_suite_that_logs_is_reported() {
+        let log = full_log() + &format!("{}\n", entry("aws-sdk-java-v2", "PASS"));
+        let observed = observed_suites(&log, "non-participating");
+        let observed: BTreeSet<&str> = observed.iter().map(String::as_str).collect();
+
+        let mut notices = Vec::new();
+        check_non_participating(&observed, &mut notices);
+        assert_eq!(notices.len(), 1, "{notices:?}");
+        assert!(notices[0].contains("aws-sdk-java-v2"), "{notices:?}");
+
+        let mint = Mint {
+            log: log_file("non-participating-run", &log),
+            allow_missing: Vec::new(),
+        };
+        assert!(mint.run().expect("run"), "the notice must not fail the gate");
+    }
+
+    /// `--allow-missing` drops every assertion of the named suite, so a local
+    /// run of a subset passes; without the flag the same log fails.
+    #[test]
+    fn allow_missing_tolerates_a_suite_that_did_not_run() {
+        let log = without_suite(&full_log(), "versioning");
+
+        let strict = Mint {
+            log: log_file("allow-missing-off", &log),
+            allow_missing: Vec::new(),
+        };
+        assert!(!strict.run().expect("run"), "without the flag the missing floor must fail");
+
+        let tolerated = Mint {
+            log: log_file("allow-missing-on", &log),
+            allow_missing: vec!["versioning".to_owned()],
+        };
+        assert!(tolerated.run().expect("run"), "the flag tolerates the suite and its floor");
+    }
+
+    /// A name the image does not run is rejected, so a typo cannot weaken the
+    /// gate.
+    #[test]
+    fn allow_missing_rejects_an_unknown_suite() {
+        let mint = Mint {
+            log: log_file("allow-missing-typo", &full_log()),
+            allow_missing: vec!["minio-jss".to_owned()],
+        };
+        assert!(!mint.run().expect("run"), "the typo must be reported");
     }
 }
