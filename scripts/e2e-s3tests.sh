@@ -45,7 +45,7 @@ check_docker() {
 wait_for_minio() {
     local attempt
     for attempt in {1..30}; do
-        if curl -s -o /dev/null http://localhost:9000/minio/health/live; then
+        if curl -s -o /dev/null http://127.0.0.1:9000/minio/health/live; then
             return 0
         fi
         sleep 1
@@ -57,7 +57,7 @@ wait_for_minio() {
 wait_for_proxy() {
     local attempt
     for attempt in {1..30}; do
-        if curl -s -o /dev/null http://localhost:8014/; then
+        if curl -s -o /dev/null http://127.0.0.1:8014/; then
             return 0
         fi
         sleep 1
@@ -116,7 +116,7 @@ export AWS_SECRET_ACCESS_KEY=minioadmin
 export AWS_REGION=us-east-1
 
 s3s-proxy \
-    --host          localhost       \
+    --host          127.0.0.1       \
     --port          8014            \
     --domain        localhost:8014  \
     --endpoint-url  http://localhost:9000 \
@@ -154,7 +154,7 @@ fi
 
 cat > "$CONF_PATH" <<'EOF'
 [DEFAULT]
-host = localhost
+host = 127.0.0.1
 port = 8014
 is_secure = False
 ssl_verify = False
