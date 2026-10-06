@@ -341,13 +341,18 @@ fn normalize_function(name: &str, function: &str) -> String {
 
 /// Evaluate the group-level counter assertions.
 ///
-/// Both images are pinned by digest (see `scripts/mint.env` and
-/// `scripts/minio.env`), so a full run produces the same counts every time and
-/// the pass floors below are the counts a full run produces. Their job is to
-/// catch a suite that stops early: that is what hid three real failures - the
-/// `minio-java` and `aws-sdk-ruby` suites stopped at their first failure until
-/// the mint image stopped sending an unsigned `x-amz-acl` on a presigned PUT.
-/// A floor that has to be lowered, or a `check_fail_zero` that has to become a
+/// Every suite in `EXPECTED_GROUPS` carries the same three-part contract, and this
+/// function states all three parts for each of them:
+///
+/// 1. the suite appears in the log, which `check_expected_groups` asserts;
+/// 2. it reports at least the passes a full run of the pinned image produces, so a
+///    suite that stops early fails here;
+/// 3. it reports no failure at all, unless the failure is registered by name in
+///    `EXPECTED_FAILURES`, which `check_gate` holds to its count.
+///
+/// The floors are the passes a full run produces: both images are pinned by digest
+/// (see `scripts/mint.env` and `scripts/minio.env`), so the numbers are stable. A
+/// floor that has to be lowered, or a `check_fail_zero` that has to become a
 /// count, needs the reason written next to it.
 fn check_counters(counts: &HashMap<String, Counters>, allow_missing: &[String], errors: &mut Vec<String>) {
     fn check_pass_at_least(
@@ -377,38 +382,54 @@ fn check_counters(counts: &HashMap<String, Counters>, allow_missing: &[String], 
     }
 
     check_pass_at_least(counts, "aws-sdk-go-v2", 24, allow_missing, errors);
+    check_fail_zero(counts, "aws-sdk-go-v2", allow_missing, errors);
     // Seven cases, one line each. The switch that runs them over plain HTTP is in
     // `scripts/mint.sh`; no failure is expected, so there is no entry in
     // `EXPECTED_FAILURES`.
     check_pass_at_least(counts, "aws-sdk-java-v2", 7, allow_missing, errors);
+    check_fail_zero(counts, "aws-sdk-java-v2", allow_missing, errors);
+    check_pass_at_least(counts, "aws-sdk-php", 13, allow_missing, errors);
     check_fail_zero(counts, "aws-sdk-php", allow_missing, errors);
     // No known failure is left in this suite.
     check_pass_at_least(counts, "aws-sdk-ruby", 13, allow_missing, errors);
+    check_fail_zero(counts, "aws-sdk-ruby", allow_missing, errors);
+    check_pass_at_least(counts, "awscli", 18, allow_missing, errors);
     check_fail_zero(counts, "awscli", allow_missing, errors);
+    check_pass_at_least(counts, "healthcheck", 6, allow_missing, errors);
+    check_fail_zero(counts, "healthcheck", allow_missing, errors);
     // `test_admin_users` passes now that the authentication passthrough lets the
     // dynamically created user reach the backend.
     check_pass_at_least(counts, "mc", 29, allow_missing, errors);
+    check_fail_zero(counts, "mc", allow_missing, errors);
+    check_pass_at_least(counts, "minio-go", 2, allow_missing, errors);
     check_fail_zero(counts, "minio-go", allow_missing, errors);
     // The one known failure needs a MinIO extension; the nine bucket
     // configuration cases the suite cannot run here report `NA` and are
-    // counted separately, so they are not part of this floor.
+    // counted separately, so they are not part of this floor. This is the only
+    // suite without a `check_fail_zero`: its failure is the entry in
+    // `EXPECTED_FAILURES`, which allows exactly that one case to fail and fails
+    // the gate for every other failure in the suite.
     check_pass_at_least(counts, "minio-java", 61, allow_missing, errors);
     // The assume-role case passes now that the STS protocol shape is forwarded
     // and the temporary credentials reach the backend.
     check_pass_at_least(counts, "minio-js", 249, allow_missing, errors);
+    check_fail_zero(counts, "minio-js", allow_missing, errors);
     check_pass_at_least(counts, "minio-py", 22, allow_missing, errors);
+    check_fail_zero(counts, "minio-py", allow_missing, errors);
+    check_pass_at_least(counts, "s3cmd", 8, allow_missing, errors);
     check_fail_zero(counts, "s3cmd", allow_missing, errors);
+    check_pass_at_least(counts, "s3select", 11, allow_missing, errors);
     check_fail_zero(counts, "s3select", allow_missing, errors);
     check_pass_at_least(counts, "versioning", 18, allow_missing, errors);
+    check_fail_zero(counts, "versioning", allow_missing, errors);
 }
 
 /// Every suite the image runs must contribute at least one line, unless the
 /// invocation does not claim it.
 ///
-/// This is the assertion the counter checks cannot make. A suite without a
-/// counter check (like `healthcheck`), a suite whose lines all failed to parse,
-/// and a suite that never started are all absent from the log, and only absence
-/// is observable here.
+/// This is the assertion the counter checks cannot make. A suite whose lines all
+/// failed to parse, and a suite that never started, are both absent from the log,
+/// and only absence is observable here.
 fn check_expected_groups(observed: &BTreeSet<&str>, allow_missing: &[String], errors: &mut Vec<String>) {
     let missing: Vec<&str> = EXPECTED_GROUPS
         .iter()
@@ -541,8 +562,8 @@ fn check_gate(logs: &[MintLog], allow_missing: &[String], errors: &mut Vec<Strin
 #[cfg(test)]
 mod tests {
     use super::{
-        EXPECTED_GROUPS, Mint, check_expected_groups, check_gate, check_non_participating, check_unexpected_groups, counters,
-        is_non_participating, normalize_function, parse_log,
+        EXPECTED_FAILURES, EXPECTED_GROUPS, Mint, check_expected_groups, check_gate, check_non_participating,
+        check_unexpected_groups, counters, is_non_participating, normalize_function, parse_log,
     };
     use std::collections::BTreeSet;
     use std::io::Write as _;
@@ -649,18 +670,18 @@ mod tests {
         const PASSES: &[(&str, usize)] = &[
             ("aws-sdk-go-v2", 24),
             ("aws-sdk-java-v2", 7),
-            ("aws-sdk-php", 3),
-            ("aws-sdk-ruby", 14),
-            ("awscli", 3),
-            ("healthcheck", 3),
+            ("aws-sdk-php", 13),
+            ("aws-sdk-ruby", 13),
+            ("awscli", 18),
+            ("healthcheck", 6),
             ("mc", 29),
-            ("minio-go", 3),
+            ("minio-go", 2),
             ("minio-java", 61),
             ("minio-js", 249),
-            ("minio-py", 23),
-            ("s3cmd", 3),
-            ("s3select", 3),
-            ("versioning", 19),
+            ("minio-py", 22),
+            ("s3cmd", 8),
+            ("s3select", 11),
+            ("versioning", 18),
         ];
         const FAILURES: &[(&str, &str)] = &[("minio-java", "putObjectFanOut()")];
 
@@ -688,6 +709,44 @@ mod tests {
             .filter(|line| !line.contains(&plain) && !line.contains(&prefixed))
             .collect();
         kept.join("\n") + "\n"
+    }
+
+    /// The same log with one pass of a suite removed: the suite is still there, one
+    /// line short of a full run.
+    fn without_one_pass(log: &str, suite: &str) -> String {
+        let needle = format!("\"name\":\"{suite}\"");
+        let mut removed = false;
+        let mut kept = Vec::new();
+        for line in log.lines() {
+            if !removed && line.contains(&needle) && line.contains("\"status\":\"PASS\"") {
+                removed = true;
+                continue;
+            }
+            kept.push(line);
+        }
+        assert!(removed, "the fixture has a pass line for {suite}");
+        kept.join("\n") + "\n"
+    }
+
+    /// The same log with an unregistered failure appended to the end of a suite's
+    /// block, which is how mint writes a suite: the failure belongs to that run.
+    fn with_failure_in_suite(log: &str, suite: &str, function: &str) -> String {
+        let needle = format!("\"name\":\"{suite}\"");
+        let lines: Vec<&str> = log.lines().collect();
+        let mut out = String::new();
+        let mut inserted = false;
+        for (index, line) in lines.iter().enumerate() {
+            out.push_str(line);
+            out.push('\n');
+            let ends_the_block = line.contains(&needle) && !lines.get(index + 1).is_some_and(|next| next.contains(&needle));
+            if ends_the_block && !inserted {
+                out.push_str(&entry(&format!("{suite}:{function}"), "FAIL"));
+                out.push('\n');
+                inserted = true;
+            }
+        }
+        assert!(inserted, "the fixture has a block for {suite}");
+        out
     }
 
     fn observed_suites(log: &str, name: &str) -> BTreeSet<String> {
@@ -731,11 +790,14 @@ mod tests {
     /// missing; its banner lines are still reported with their positions.
     #[test]
     fn a_suite_with_only_unparsable_lines_is_missing() {
-        let log = full_log().replace("\"name\":\"healthcheck\"", "\"name\" \"healthcheck\"");
+        let full = full_log();
+        let broken = full.matches("\"name\":\"healthcheck\"").count();
+        assert!(broken > 0, "the fixture has healthcheck lines");
+        let log = full.replace("\"name\":\"healthcheck\"", "\"name\" \"healthcheck\"");
         let path = log_file("unparsable-suite", &log);
 
         let (_, unparsed) = parse_log(&path).expect("parse");
-        assert_eq!(unparsed.len(), 3, "every banner line is kept");
+        assert_eq!(unparsed.len(), broken, "every banner line is kept");
         assert!(unparsed.iter().all(|line| line.number > 0), "each line keeps its position");
 
         let mint = Mint {
@@ -792,7 +854,17 @@ mod tests {
     /// existence check must not report it as unknown.
     #[test]
     fn a_colon_suffixed_name_is_the_same_suite() {
-        let log = full_log() + &format!("{}\n", entry("minio-go: testFunctional", "PASS"));
+        // Two lines, not one: `counters` keeps the last consecutive run of a name,
+        // so this appended run replaces the `minio-go` block of the fixture and has
+        // to meet that suite's floor of two by itself. One line would fall below the
+        // floor and fail the run assertion below for a reason that has nothing to do
+        // with the name normalisation this test is about.
+        let log = full_log()
+            + &format!(
+                "{}\n{}\n",
+                entry("minio-go: testFunctional", "PASS"),
+                entry("minio-go: testFunctional", "PASS")
+            );
         let observed = observed_suites(&log, "colon-name");
         let observed: BTreeSet<&str> = observed.iter().map(String::as_str).collect();
 
@@ -837,6 +909,57 @@ mod tests {
             !is_non_participating("aws-sdk-java-v2"),
             "the suite logs seven lines over plain HTTP now, so it cannot stay in the list"
         );
+    }
+
+    /// The floor is live for `healthcheck`, the suite that had no counter check at
+    /// all before: one pass short of its six must fail the gate.
+    #[test]
+    fn the_healthcheck_floor_is_live() {
+        let log = without_one_pass(&full_log(), "healthcheck");
+        let observed = observed_suites(&log, "healthcheck-short");
+        let observed: BTreeSet<&str> = observed.iter().map(String::as_str).collect();
+        let counts = counters(&parse_log(&log_file("healthcheck-short-counts", &log)).expect("parse").0);
+        assert_eq!(counts.by_name["healthcheck"].pass, 5, "the fixture is one line short");
+
+        let mint = Mint {
+            log: log_file("healthcheck-short", &log),
+            allow_missing: Vec::new(),
+        };
+        assert!(!mint.run().expect("run"), "a short healthcheck suite must fail the gate");
+        assert!(observed.contains("healthcheck"), "the suite is still in the log");
+    }
+
+    /// Part two of the contract, for every suite in the expected set: one pass short
+    /// of a full run fails the gate.
+    #[test]
+    fn every_expected_suite_has_a_pass_floor() {
+        for suite in EXPECTED_GROUPS {
+            let log = without_one_pass(&full_log(), suite);
+            let mint = Mint {
+                log: log_file(&format!("floor-{suite}"), &log),
+                allow_missing: Vec::new(),
+            };
+            assert!(!mint.run().expect("run"), "a suite one pass short must fail: {suite}");
+        }
+    }
+
+    /// Part three of the contract, for every suite in the expected set: a failure
+    /// that is not registered by name fails the gate. The registered suites are the
+    /// ones `EXPECTED_FAILURES` holds to their own count.
+    #[test]
+    fn every_expected_suite_forbids_unregistered_failures() {
+        let registered: Vec<&str> = EXPECTED_FAILURES.iter().map(|(name, _)| *name).collect();
+        for suite in EXPECTED_GROUPS {
+            if registered.contains(suite) {
+                continue;
+            }
+            let log = with_failure_in_suite(&full_log(), suite, "unregistered_case");
+            let mint = Mint {
+                log: log_file(&format!("failzero-{suite}"), &log),
+                allow_missing: Vec::new(),
+            };
+            assert!(!mint.run().expect("run"), "an unregistered failure must fail: {suite}");
+        }
     }
 
     /// `--allow-missing` drops every assertion of the named suite, so a local
