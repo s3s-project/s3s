@@ -27,6 +27,7 @@ pub use self::copy_source::*;
 
 mod range;
 pub use self::range::Range;
+pub(crate) use self::range::parse_lenient;
 
 mod content_type;
 pub use self::content_type::*;

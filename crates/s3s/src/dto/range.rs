@@ -16,7 +16,6 @@ use crate::http;
 
 use std::ops;
 
-use atoi::FromRadix10Checked;
 use stdx::str::StrExt;
 
 /// HTTP Range header
@@ -69,36 +68,22 @@ impl Range {
         let err = || ParseRangeError { _priv: () };
         let s = header.strip_prefix("bytes=").ok_or_else(err)?.as_bytes();
 
-        if let [b'-', s @ ..] = s {
-            // suffix range
-            let length = parse_u64_full(s).ok_or_else(err)?;
-            return Ok(Range::Suffix { length });
+        // Strict: no unit-case folding, no comma handling, no overflow saturation.
+        // The dispatch path uses [`parse_lenient`] instead.
+        let range = parse_single_spec(s, false).ok_or_else(err)?;
+
+        // Keep the historical `i64` bound on the strict API: downstream code does
+        // arithmetic on these values in `i64`.
+        if let Range::Int { first, last } = range {
+            if first > (i64::MAX as u64) {
+                return Err(err());
+            }
+            if last.is_some_and(|last| last > (i64::MAX as u64)) {
+                return Err(err());
+            }
         }
 
-        // int range
-        let (first, s) = parse_u64_once(s).ok_or_else(err)?;
-        if first > (i64::MAX as u64) {
-            return Err(err());
-        }
-
-        let [b'-', s @ ..] = s else { return Err(err()) };
-
-        if s.is_empty() {
-            // int range from
-            return Ok(Range::Int { first, last: None });
-        }
-
-        // int range inclusive
-        let last = parse_u64_full(s).ok_or_else(err)?;
-        if last > (i64::MAX as u64) {
-            return Err(err());
-        }
-
-        if first > last {
-            return Err(err());
-        }
-
-        Ok(Range::Int { first, last: Some(last) })
+        Ok(range)
     }
 
     #[must_use]
@@ -166,18 +151,151 @@ impl http::TryFromHeaderValue for Range {
     }
 }
 
-fn parse_u64_full(s: &[u8]) -> Option<u64> {
-    match u64::from_radix_10_checked(s) {
-        (Some(x), pos) if pos == s.len() => Some(x),
-        _ => None,
-    }
+/// One decimal numeral inside a byte-range specifier.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Decimal {
+    /// Fits in [`u64`].
+    Value(u64),
+    /// Syntactically valid but larger than [`u64::MAX`].
+    Overflow,
+    /// Empty, or not `1*DIGIT`.
+    Invalid,
 }
 
-fn parse_u64_once(s: &[u8]) -> Option<(u64, &[u8])> {
-    match u64::from_radix_10_checked(s) {
-        (Some(x), pos) if pos > 0 => Some((x, s.get(pos..)?)),
-        _ => None,
+fn parse_decimal(digits: &[u8]) -> Decimal {
+    if digits.is_empty() {
+        return Decimal::Invalid;
     }
+
+    let mut value = 0_u64;
+    for byte in digits {
+        if !byte.is_ascii_digit() {
+            return Decimal::Invalid;
+        }
+
+        let digit = u64::from(byte - b'0');
+        match value.checked_mul(10).and_then(|value| value.checked_add(digit)) {
+            Some(next) => value = next,
+            None => return Decimal::Overflow,
+        }
+    }
+
+    Decimal::Value(value)
+}
+
+fn parse_decimal_prefix(s: &[u8]) -> (Decimal, &[u8]) {
+    let end = s.iter().position(|byte| !byte.is_ascii_digit()).unwrap_or(s.len());
+    let Some((digits, rest)) = s.split_at_checked(end) else {
+        return (Decimal::Invalid, s);
+    };
+
+    (parse_decimal(digits), rest)
+}
+
+/// Parses one byte-range specifier, i.e. the part after `bytes=`.
+///
+/// With `lenient`, a numeral larger than [`u64::MAX`] is saturated instead of
+/// rejected: `first-pos` becomes [`u64::MAX`] (unsatisfiable, answered with
+/// `416`) and an overflowing `last-pos` is treated as absent, i.e. "to the end"
+/// (RFC 9110 Section 14.1.2). Without `lenient`, every overflow is a parse error.
+fn parse_single_spec(s: &[u8], lenient: bool) -> Option<Range> {
+    // suffix-range = "-" suffix-length
+    if let [b'-', digits @ ..] = s {
+        if digits.is_empty() {
+            // `bytes=-` has an empty suffix-length, but `suffix-length = 1*DIGIT`.
+            return None;
+        }
+
+        return match parse_decimal(digits) {
+            Decimal::Value(length) => Some(Range::Suffix { length }),
+            Decimal::Overflow if lenient => Some(Range::Suffix { length: u64::MAX }),
+            Decimal::Overflow | Decimal::Invalid => None,
+        };
+    }
+
+    // int-range = first-pos "-" [ last-pos ]
+    let (first, rest) = parse_decimal_prefix(s);
+    let first = match first {
+        Decimal::Value(first) => first,
+        Decimal::Overflow if lenient => u64::MAX,
+        Decimal::Overflow | Decimal::Invalid => return None,
+    };
+
+    let [b'-', digits @ ..] = rest else { return None };
+
+    if digits.is_empty() {
+        return Some(Range::Int { first, last: None });
+    }
+
+    let last = match parse_decimal(digits) {
+        Decimal::Value(last) => Some(last),
+        // An overflowing `last-pos` means "to the end"; RFC 9110 Section 14.1.2.
+        Decimal::Overflow if lenient => None,
+        Decimal::Overflow | Decimal::Invalid => return None,
+    };
+
+    if last.is_some_and(|last| first > last) {
+        return None;
+    }
+
+    Some(Range::Int { first, last })
+}
+
+/// Parses a `Range` header field value for request dispatch.
+///
+/// Everything that cannot be served as exactly one byte range is ignored
+/// (returns `None`) instead of being rejected, matching Amazon S3: the request
+/// is then answered with the whole representation and `200 OK`.
+///
+/// Ignored: an unknown range unit (RFC 9110 Section 14.2 requires an origin
+/// server to ignore it), a syntax error, a range set with no specifier, and
+/// multiple ranges (S3 does not support retrieving multiple ranges per
+/// request). Empty list elements are skipped (Section 5.6.1.2) and the unit
+/// name is matched case-insensitively (Section 14.1).
+pub(crate) fn parse_lenient(header: &str) -> Option<Range> {
+    let (unit, rest) = header.split_once('=')?;
+
+    if !unit.eq_ignore_ascii_case("bytes") {
+        return None;
+    }
+
+    let is_ows = |c: char| c == ' ' || c == '\t';
+
+    let mut iter = rest.split(',').peekable();
+    let mut first = true;
+    let mut spec = None;
+
+    while let Some(element) = iter.next() {
+        let is_last = iter.peek().is_none();
+
+        // OWS is allowed on both sides of the list separators, but not around
+        // `=`: `bytes=0-1, 3-4` is valid, `bytes= 0-3` is not (Section 5.6.1).
+        let element = if first {
+            if element.starts_with(is_ows) {
+                return None;
+            }
+            element
+        } else {
+            element.trim_start_matches(is_ows)
+        };
+
+        let element = if is_last { element } else { element.trim_end_matches(is_ows) };
+
+        first = false;
+
+        if element.is_empty() {
+            continue;
+        }
+
+        if spec.is_some() {
+            // Multiple ranges: S3 answers the whole representation instead.
+            return None;
+        }
+
+        spec = Some(element);
+    }
+
+    parse_single_spec(spec?.as_bytes(), true)
 }
 
 #[cfg(test)]
@@ -322,5 +440,101 @@ mod tests {
     #[test]
     fn parse_first_greater_than_last() {
         assert!(Range::parse("bytes=500-100").is_err());
+    }
+
+    #[test]
+    fn strict_parse_rejects_an_empty_suffix_length() {
+        // `suffix-length = 1*DIGIT`: `bytes=-` is not `bytes=-0`.
+        assert!(Range::parse("bytes=-").is_err());
+        assert_eq!(Range::parse("bytes=-0").unwrap(), range_suffix(0));
+    }
+
+    #[test]
+    fn strict_parse_still_rejects_overflow() {
+        let huge = "9".repeat(30);
+        assert!(Range::parse(&format!("bytes=0-{huge}")).is_err());
+        assert!(Range::parse(&format!("bytes={huge}-")).is_err());
+        assert!(Range::parse(&format!("bytes=-{huge}")).is_err());
+    }
+
+    #[test]
+    fn lenient_accepts_a_single_byte_range() {
+        let cases = [
+            ("bytes=0-3", range_int_inclusive(0, 3)),
+            ("bytes=00-03", range_int_inclusive(0, 3)),
+            ("bytes=0-", range_int_from(0)),
+            ("bytes=-5", range_suffix(5)),
+            ("bytes=-0", range_suffix(0)),
+            ("bytes=100-200", range_int_inclusive(100, 200)),
+            // RFC 9110 Section 14.1: range unit names are case-insensitive.
+            ("BYTES=0-3", range_int_inclusive(0, 3)),
+            ("bYtEs=0-3", range_int_inclusive(0, 3)),
+            // RFC 9110 Section 5.6.1.2: empty list elements are ignored.
+            ("bytes=,0-3", range_int_inclusive(0, 3)),
+            ("bytes=0-3,", range_int_inclusive(0, 3)),
+            ("bytes=0-3, ", range_int_inclusive(0, 3)),
+            ("bytes=0-3,,", range_int_inclusive(0, 3)),
+            // OWS is allowed around the list separators.
+            ("bytes=0-3 ,", range_int_inclusive(0, 3)),
+            ("bytes=, 0-3", range_int_inclusive(0, 3)),
+        ];
+
+        for (input, expected) in &cases {
+            assert_eq!(parse_lenient(input), Some(*expected), "{input}");
+        }
+    }
+
+    #[test]
+    fn lenient_ignores_unsupported_range_fields() {
+        let cases = [
+            // Unknown range unit: RFC 9110 Section 14.2 requires ignoring it.
+            "chars=0-1",
+            "items=0-3",
+            "items=abc-def",
+            // Multiple ranges: S3 does not retrieve multiple ranges per request.
+            "bytes=0-1,3-4",
+            "bytes=0-1, 3-4",
+            "bytes=0-3,bytes=5-6",
+            "bytes=0-1,,3-4",
+            "bytes=0-3, ,0-4",
+            // Invalid syntax.
+            "bytes=",
+            "bytes",
+            "bytes=,",
+            "bytes=5-3",
+            "bytes=abc",
+            "bytes=-",
+            "bytes=+0-3",
+            "bytes=0x1-3",
+            "bytes=0-3;",
+            "bytes=0-3/2",
+            "bytes =0-3",
+            "bytes= 0-3",
+            "bytes=0-3 ",
+            "bytes=0-\t3",
+        ];
+
+        for input in &cases {
+            assert_eq!(parse_lenient(input), None, "{input}");
+        }
+    }
+
+    #[test]
+    fn lenient_saturates_overflowing_numerals() {
+        let huge = "9".repeat(30);
+
+        // An overflowing last-pos means "to the end" (Section 14.1.2).
+        assert_eq!(parse_lenient(&format!("bytes=0-{huge}")), Some(range_int_from(0)));
+        // An overflowing first-pos is unsatisfiable for any representation.
+        assert_eq!(
+            parse_lenient(&format!("bytes={huge}-")),
+            Some(Range::Int {
+                first: u64::MAX,
+                last: None
+            })
+        );
+        assert!(parse_lenient(&format!("bytes={huge}-")).unwrap().check(10).is_err());
+        // An overflowing suffix-length covers the whole representation.
+        assert_eq!(parse_lenient(&format!("bytes=-{huge}")), Some(range_suffix(u64::MAX)));
     }
 }
