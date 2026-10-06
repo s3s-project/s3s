@@ -88,11 +88,7 @@ Then you can explore it with your favorite S3 client!
 
 ### Run E2E tests
 
-MinIO-backed E2E tests start a MinIO container. MinIO stopped publishing free
-community images and removed the `minio/minio` Docker Hub repository, so s3s
-builds the last upstream state from source and publishes it to
-`ghcr.io/s3s-project/minio`; the pinned digest lives in
-[`scripts/minio.env`](./scripts/minio.env).
+The E2E tests that need a backend start [silo](https://github.com/pgsty/silo), a community continuation of MinIO: its releases carry the security fix and the streaming-flush fix that the last published MinIO image lacks. silo is a third-party build, not an official MinIO one; the pinned digest lives in [`scripts/minio.env`](./scripts/minio.env).
 
 Install `s3s-proxy`
 
@@ -120,7 +116,7 @@ Install `s3s-proxy`
 just install-proxy
 ```
 
-Run a minimal Ceph `s3-tests` run against `s3s-proxy` (backed by MinIO):
+Run a minimal Ceph `s3-tests` run against `s3s-proxy` (backed by silo):
 
 ```bash
 ./scripts/e2e-s3tests.sh
@@ -128,7 +124,7 @@ Run a minimal Ceph `s3-tests` run against `s3s-proxy` (backed by MinIO):
 
 This script has additional prerequisites:
 
-- Docker must be installed and a local Docker daemon running (used to start MinIO).
+- Docker must be installed and a local Docker daemon running (used to start the backend).
 - Network access is required on first run so the script can clone the `ceph/s3-tests` repository.
 
 ### Run the rclone S3 integration test
