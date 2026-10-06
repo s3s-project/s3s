@@ -44,7 +44,18 @@ impl Region {
     ///
     /// Returns `true` if every byte matches `[a-z0-9-]` and the string
     /// is non-empty.
-    fn is_valid(s: &str) -> bool {
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use s3s::region::Region;
+    ///
+    /// assert!(Region::is_valid("us-east-1"));
+    /// assert!(!Region::is_valid("US-EAST-1"));
+    /// assert!(!Region::is_valid(""));
+    /// ```
+    #[must_use]
+    pub fn is_valid(s: &str) -> bool {
         !s.is_empty() && s.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
     }
 
