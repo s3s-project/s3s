@@ -24,9 +24,11 @@ pub(crate) struct S3Tests {
     report: PathBuf,
 }
 
-/// Baseline results as of 2026-02-08; reduce these as compatibility improves.
-const ALLOWED_FAILURES: u64 = 326;
-const ALLOWED_ERRORS: u64 = 302;
+/// Baseline results as of 2026-10-07, measured against the pinned suite image
+/// (`ghcr.io/s3s-project/s3-tests`, upstream 5522d1c3 plus the fixture patches);
+/// reduce these as compatibility improves.
+const ALLOWED_FAILURES: u64 = 525;
+const ALLOWED_ERRORS: u64 = 2;
 
 /// Mapping from the last component of the pytest classname to an S3 capability
 /// category.
@@ -346,25 +348,25 @@ mod tests {
     fn the_baseline_gate_reports_the_totals() {
         let over = Report {
             totals: Totals {
-                tests: 1043,
-                failures: 400,
-                errors: 302,
-                skipped: 84,
+                tests: 1055,
+                failures: 526,
+                errors: 3,
+                skipped: 163,
             },
             ..Report::default()
         };
         let error = check_baselines(&over).expect_err("over the baseline");
         assert_eq!(
             error.to_string(),
-            "s3-tests regressions: failures 400 (allowed 326), errors 302 (allowed 302)"
+            "s3-tests regressions: failures 526 (allowed 525), errors 3 (allowed 2)"
         );
 
         let at_the_limit = Report {
             totals: Totals {
-                tests: 1043,
-                failures: 326,
-                errors: 302,
-                skipped: 84,
+                tests: 1053,
+                failures: 525,
+                errors: 2,
+                skipped: 163,
             },
             ..Report::default()
         };
