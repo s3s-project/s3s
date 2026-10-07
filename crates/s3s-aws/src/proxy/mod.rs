@@ -77,15 +77,20 @@ mod tests {
     use std::net::SocketAddr;
     use std::sync::{Arc, Mutex};
 
+    use hyper::StatusCode;
     use hyper::http::{Extensions, HeaderMap, Method, Uri};
     use s3s::S3;
     use s3s::S3Request;
-    use s3s::dto::DeleteObjectInput;
+    use s3s::dto::{DeleteObjectInput, ETagCondition, GetObjectInput};
     use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
     use tokio::net::TcpListener;
 
-    /// Serves exactly one request: records its head and answers `204 No Content`.
-    async fn record_one_request() -> (SocketAddr, Arc<Mutex<String>>, tokio::task::JoinHandle<()>) {
+    /// Serves exactly one request: records its head and answers the given raw response.
+    ///
+    /// The response is a full HTTP/1.1 head, so a test can answer a status the SDK models as an
+    /// error (a `304` has no modeled output and no modeled error) and attach the headers a real
+    /// backend would send.
+    async fn serve_recorded(response: &'static str) -> (SocketAddr, Arc<Mutex<String>>, tokio::task::JoinHandle<()>) {
         let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
         let addr = listener.local_addr().expect("local addr");
         let seen = Arc::new(Mutex::new(String::new()));
@@ -103,13 +108,15 @@ mod tests {
                 head.extend_from_slice(&chunk[..read]);
             }
             *recorder.lock().expect("lock") = String::from_utf8_lossy(&head).into_owned();
-            socket
-                .write_all(b"HTTP/1.1 204 No Content\r\ncontent-length: 0\r\n\r\n")
-                .await
-                .expect("write response");
+            socket.write_all(response.as_bytes()).await.expect("write response");
         });
 
         (addr, seen, handle)
+    }
+
+    /// Serves exactly one request: records its head and answers `204 No Content`.
+    async fn record_one_request() -> (SocketAddr, Arc<Mutex<String>>, tokio::task::JoinHandle<()>) {
+        serve_recorded("HTTP/1.1 204 No Content\r\ncontent-length: 0\r\n\r\n").await
     }
 
     fn proxy_for(addr: SocketAddr) -> Proxy {
@@ -145,6 +152,75 @@ mod tests {
             service: None,
             trailing_headers: None,
         }
+    }
+
+    /// The entity tag a conditional read was matched against.
+    const NOT_MODIFIED_ETAG: &str = "\"37b51d194a7513e45b56f6524f2d51f2\"";
+    /// The modification time a conditional read reports.
+    const NOT_MODIFIED_LAST_MODIFIED: &str = "Wed, 07 Oct 2026 18:33:28 GMT";
+    /// A real backend answers a conditional read hit with the entity headers the condition was
+    /// matched against, plus headers that describe *its* body.
+    const NOT_MODIFIED_RESPONSE: &str = concat!(
+        "HTTP/1.1 304 Not Modified\r\n",
+        "etag: \"37b51d194a7513e45b56f6524f2d51f2\"\r\n",
+        "last-modified: Wed, 07 Oct 2026 18:33:28 GMT\r\n",
+        "content-length: 0\r\n",
+        "content-type: application/xml\r\n",
+        "\r\n",
+    );
+
+    fn get_object_request(bucket: &str, key: &str, if_none_match: &str) -> S3Request<GetObjectInput> {
+        let input = GetObjectInput {
+            bucket: bucket.to_owned(),
+            key: key.to_owned(),
+            if_none_match: Some(ETagCondition::parse_http_header(if_none_match.as_bytes()).expect("etag condition")),
+            ..Default::default()
+        };
+        S3Request {
+            input,
+            method: Method::GET,
+            uri: Uri::from_static("/"),
+            headers: HeaderMap::new(),
+            extensions: Extensions::default(),
+            credentials: None,
+            region: None,
+            service: None,
+            trailing_headers: None,
+        }
+    }
+
+    /// A conditional read hit is a `304 Not Modified` carrying the entity tag the condition was
+    /// matched against; a client caches on that tag. The SDK has no modeled output for a `304`,
+    /// so the proxy reports the status through the error channel: the entity headers have to
+    /// survive on the error, or the answer carries nothing the client can use.
+    #[tokio::test]
+    async fn get_object_not_modified_keeps_entity_headers() {
+        let (addr, _seen, server) = serve_recorded(NOT_MODIFIED_RESPONSE).await;
+        let proxy = proxy_for(addr);
+
+        let err = proxy
+            .get_object(get_object_request("bucket", "key", NOT_MODIFIED_ETAG))
+            .await
+            .expect_err("the SDK reports a 304 as an error");
+
+        assert_eq!(err.status_code(), Some(StatusCode::NOT_MODIFIED));
+        let headers = err.headers().expect("a 304 must carry the entity headers");
+        assert_eq!(
+            headers.get(hyper::header::ETAG).and_then(|value| value.to_str().ok()),
+            Some(NOT_MODIFIED_ETAG)
+        );
+        assert_eq!(
+            headers
+                .get(hyper::header::LAST_MODIFIED)
+                .and_then(|value| value.to_str().ok()),
+            Some(NOT_MODIFIED_LAST_MODIFIED)
+        );
+        // Negative controls: headers that describe the backend's body or connection must not be
+        // copied, because the client never receives that body.
+        assert!(!headers.contains_key(hyper::header::CONTENT_LENGTH), "{headers:?}");
+        assert!(!headers.contains_key(hyper::header::CONTENT_TYPE), "{headers:?}");
+
+        server.await.expect("server task");
     }
 
     /// The `MinIO` extension member has no `aws-sdk-s3` counterpart, so the header
