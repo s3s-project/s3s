@@ -625,8 +625,8 @@ mod tests {
         assert_eq!(e.code(), &S3ErrorCode::InvalidPolicyDocument);
     }
 
-    /// `content-length-range` is not checked against a size here: the file part
-    /// bounds `content_length_range` reports.
+    /// `content-length-range` is not checked against a size here: the bounds it
+    /// reports are enforced on the file stream.
     #[test]
     fn test_validate_condition_skips_content_length_range() {
         let multipart = create_test_multipart(vec![], None);
