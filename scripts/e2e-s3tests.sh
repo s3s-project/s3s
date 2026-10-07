@@ -127,7 +127,9 @@ wait_for_proxy
 ensure_proxy_running
 ensure_minio_running "$MINIO_CONTAINER_ID"
 
-if [ -d "$S3TESTS_DIR/.git" ]; then
+if [ "$S3TESTS_IMAGE_REF" != "local" ]; then
+    : # the suite comes from the pinned image; nothing to prepare on the host
+elif [ -d "$S3TESTS_DIR/.git" ]; then
     git -C "$S3TESTS_DIR" fetch --depth 1 origin "$S3TESTS_REF"
     git -C "$S3TESTS_DIR" reset --hard FETCH_HEAD
 else
@@ -137,19 +139,21 @@ else
     git -C "$S3TESTS_DIR" fetch --depth 1 origin "$S3TESTS_REF"
     git -C "$S3TESTS_DIR" reset --hard FETCH_HEAD
 fi
-if command -v sha256sum >/dev/null 2>&1; then
-    REQUIREMENTS_HASH=$(sha256sum "$S3TESTS_DIR/requirements.txt" | cut -d' ' -f1)
-elif command -v shasum >/dev/null 2>&1; then
-    REQUIREMENTS_HASH=$(shasum -a 256 "$S3TESTS_DIR/requirements.txt" | cut -d' ' -f1)
-else
-    REQUIREMENTS_HASH=$(python3 -c "import hashlib; print(hashlib.sha256(open('$S3TESTS_DIR/requirements.txt','rb').read()).hexdigest())")
-fi
-HASH_FILE="$S3TESTS_DIR/.venv/.requirements-hash"
-VENV_PYTHON="$S3TESTS_DIR/.venv/bin/python"
-if [ ! -d "$S3TESTS_DIR/.venv" ] || [ ! -x "$VENV_PYTHON" ] || ! "$VENV_PYTHON" -c "import sys" >/dev/null 2>&1 || [ ! -f "$HASH_FILE" ] || [ "$(cat "$HASH_FILE")" != "$REQUIREMENTS_HASH" ]; then
-    python3 -m venv --clear "$S3TESTS_DIR/.venv"
-    "$S3TESTS_DIR/.venv/bin/pip" install -r "$S3TESTS_DIR/requirements.txt"
-    echo "$REQUIREMENTS_HASH" > "$HASH_FILE"
+if [ "$S3TESTS_IMAGE_REF" = "local" ]; then
+    if command -v sha256sum >/dev/null 2>&1; then
+        REQUIREMENTS_HASH=$(sha256sum "$S3TESTS_DIR/requirements.txt" | cut -d' ' -f1)
+    elif command -v shasum >/dev/null 2>&1; then
+        REQUIREMENTS_HASH=$(shasum -a 256 "$S3TESTS_DIR/requirements.txt" | cut -d' ' -f1)
+    else
+        REQUIREMENTS_HASH=$(python3 -c "import hashlib; print(hashlib.sha256(open('$S3TESTS_DIR/requirements.txt','rb').read()).hexdigest())")
+    fi
+    HASH_FILE="$S3TESTS_DIR/.venv/.requirements-hash"
+    VENV_PYTHON="$S3TESTS_DIR/.venv/bin/python"
+    if [ ! -d "$S3TESTS_DIR/.venv" ] || [ ! -x "$VENV_PYTHON" ] || ! "$VENV_PYTHON" -c "import sys" >/dev/null 2>&1 || [ ! -f "$HASH_FILE" ] || [ "$(cat "$HASH_FILE")" != "$REQUIREMENTS_HASH" ]; then
+        python3 -m venv --clear "$S3TESTS_DIR/.venv"
+        "$S3TESTS_DIR/.venv/bin/pip" install -r "$S3TESTS_DIR/requirements.txt"
+        echo "$REQUIREMENTS_HASH" > "$HASH_FILE"
+    fi
 fi
 
 cat > "$CONF_PATH" <<'EOF'
@@ -212,14 +216,30 @@ if [ ${#S3TEST_ARGS[@]} -eq 0 ]; then
     S3TEST_ARGS=(s3tests)
 fi
 
-pushd "$S3TESTS_DIR"
 set +e
-S3TEST_CONF="$CONF_PATH" \
-    "$S3TESTS_DIR/.venv/bin/pytest" \
-    "${S3TEST_ARGS[@]}" \
-    --junitxml="$REPORT_DIR/junit.xml" > "$TARGET_DIR/s3-tests.log" 2>&1
-PYTEST_STATUS=$?; set -e
-popd
+if [ "$S3TESTS_IMAGE_REF" = "local" ]; then
+    pushd "$S3TESTS_DIR"
+    S3TEST_CONF="$CONF_PATH" \
+        "$S3TESTS_DIR/.venv/bin/pytest" \
+        "${S3TEST_ARGS[@]}" \
+        --junitxml="$REPORT_DIR/junit.xml" > "$TARGET_DIR/s3-tests.log" 2>&1
+    PYTEST_STATUS=$?
+    popd
+else
+    if [ -z "$S3TESTS_IMAGE_REF" ]; then
+        echo "S3TESTS_IMAGE_REF is empty; set it to an image reference or to 'local'" >&2
+        exit 1
+    fi
+    # The image already carries the pinned suite and its patch series: mount the conf
+    # read-only, collect the JUnit report from /out, and let the entrypoint add the
+    # --junitxml flag. --network host lets the container reach the proxy on 127.0.0.1.
+    docker run --rm --network host \
+        -v "$CONF_PATH:/conf/s3tests.conf:ro" \
+        -v "$REPORT_DIR:/out" \
+        "$S3TESTS_IMAGE_REF" "${S3TEST_ARGS[@]}" > "$TARGET_DIR/s3-tests.log" 2>&1
+    PYTEST_STATUS=$?
+fi
+set -e
 
 REPORT_STATUS=0
 if [ -f "$REPORT_DIR/junit.xml" ]; then

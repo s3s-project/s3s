@@ -270,24 +270,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
-      - name: Clone s3-tests
-        run: |
-          . scripts/source-s3tests-ref.sh
-          git init /tmp/s3-tests
-          git -C /tmp/s3-tests remote add origin https://github.com/ceph/s3-tests.git
-          git -C /tmp/s3-tests fetch --depth 1 origin "$S3TESTS_REF"
-          git -C /tmp/s3-tests reset --hard FETCH_HEAD
-      - name: Get s3-tests requirements hash
-        id: s3tests-hash
-        run: echo "hash=$(sha256sum /tmp/s3-tests/requirements.txt | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
-      - name: Get Python version
-        id: python-version
-        run: python3 -c "import os, platform; f=open(os.environ['GITHUB_OUTPUT'],'a'); f.write(f'version={platform.python_version()}\n'); f.close()"
-      - name: Restore s3tests venv cache
-        uses: actions/cache@v6
-        with:
-          path: /tmp/s3-tests/.venv
-          key: s3tests-venv-${{ runner.os }}-py${{ steps.python-version.outputs.version }}-${{ steps.s3tests-hash.outputs.hash }}
+      # The suite comes from the pinned image (scripts/s3tests.env), so nothing is
+      # cloned and no venv cache is needed: one tag identifies one exact suite.
       - name: Pull the pinned backend image
         run: |
           . scripts/minio.env
