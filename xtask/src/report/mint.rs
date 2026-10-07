@@ -58,30 +58,43 @@ struct Counters {
 /// the pinned backend image in `scripts/minio.env`. The counters and the
 /// entries below are calibrated on that backend, so overriding
 /// `MINIO_IMAGE_REF` to run the gate against another one does not satisfy
-/// them. One entry is left: a `MinIO` extension s3s does not implement. What
-/// the earlier entries covered - the s3s defects and the limits of the proxy
-/// or the backend - is fixed, or the backend the suites run against answers
-/// it, so no entry is left for them.
+/// them. No entry is active: what the earlier entries covered - the s3s
+/// defects and the limits of the proxy or the backend - is fixed, or the
+/// backend the suites run against answers it. The last entry is kept
+/// commented out below, with the condition that brings it back.
 ///
 /// The run this list is scored against enables the proxy's authentication
 /// passthrough: a request carrying a credential the proxy does not know is
 /// forwarded verbatim and the backend decides, so the dynamically created user
 /// of `mc test_admin_users` and the temporary credentials of the `minio-js`
-/// assume-role case are no longer expected to fail.
-const EXPECTED_FAILURES: &[(&str, &[(&str, usize)])] = &[(
-    "minio-java",
-    // MinIO extension s3s does not implement: `putObjectFanOut()` sends the
-    // `x-minio-fanout-list` form field, which the POST policy validation
-    // rejects because it is not a policy condition. The case only runs at
-    // all because the image stopped sending an unsigned `x-amz-acl` on its
-    // presigned PUT.
+/// assume-role case are no longer expected to fail. It also enables the POST
+/// Object passthrough (`scripts/s3s-proxy.sh`), which retired the last entry.
+const EXPECTED_FAILURES: &[(&str, &[(&str, usize)])] = &[
+    // Retired by the POST Object passthrough: a form upload now reaches the backend
+    // as it arrived instead of being re-framed by the core, so this case no longer
+    // fails here. It sends the `x-minio-fanout-list` form field, a `MinIO` extension
+    // the core's POST policy validation rejects because it is not a policy
+    // condition; the backend implements the extension, so the forwarded request
+    // succeeds. The case no longer appears in the log at all, and an entry that
+    // does not appear is reported as stale - which is why it cannot stay listed
+    // while it passes.
+    //
+    // Re-enable it when the POST Object model becomes a first-class operation: a
+    // core that parses and validates the form again would answer the same
+    // `AccessDenied` for `x-minio-fanout-list`, and the case would be expected to
+    // fail here again.
+    //
+    // ("minio-java", &[("putObjectFanOut()", 1)]),
+    //
+    // The case only ran at all because the image stopped sending an unsigned
+    // `x-amz-acl` on its presigned PUT.
     //
     // `getObjectAcl()` used to be listed here. Under the `minio` feature the
     // grantee repeats its type as the `<Type>` child element MinIO writes,
     // so the case passes.
     //
-    // The suite reports 61 passes, one failure and nine `NA` here. Its own
-    // conditions explain them: three bucket-encryption cases reach their
+    // The suite reports 61 passes and nine `NA` here with the passthrough on.
+    // Its own conditions explain the `NA`: three bucket-encryption cases reach their
     // request and the backend answers `NotImplemented`, which is the only
     // error code the suite logs `NA` for, and three bucket-notification plus
     // three bucket-replication cases return before sending a request because
@@ -96,8 +109,7 @@ const EXPECTED_FAILURES: &[(&str, &[(&str, usize)])] = &[(
     // object, and the suite reports seven passes, one per case. That count is its
     // floor in `check_counters`, and a failure there is a defect to report rather
     // than an entry to add here.
-    &[("putObjectFanOut()", 1)],
-)];
+];
 
 /// The suites the pinned mint image runs, in the order the image lists them.
 ///
@@ -198,7 +210,7 @@ impl Mint {
         check_expected_groups(&observed, &self.allow_missing, &mut errors);
         check_unexpected_groups(&observed, &mut errors);
         check_counters(&counts.by_name, &self.allow_missing, &mut errors);
-        check_gate(&logs, &self.allow_missing, &mut errors);
+        check_gate(&logs, EXPECTED_FAILURES, &self.allow_missing, &mut errors);
 
         if !notices.is_empty() {
             println!();
@@ -403,12 +415,14 @@ fn check_counters(counts: &HashMap<String, Counters>, allow_missing: &[String], 
     check_fail_zero(counts, "mc", allow_missing, errors);
     check_pass_at_least(counts, "minio-go", 2, allow_missing, errors);
     check_fail_zero(counts, "minio-go", allow_missing, errors);
-    // The one known failure needs a MinIO extension; the nine bucket
-    // configuration cases the suite cannot run here report `NA` and are
-    // counted separately, so they are not part of this floor. This is the only
-    // suite without a `check_fail_zero`: its failure is the entry in
-    // `EXPECTED_FAILURES`, which allows exactly that one case to fail and fails
-    // the gate for every other failure in the suite.
+    // The nine bucket configuration cases the suite cannot run here report `NA`
+    // and are counted separately, so they are not part of this floor. The one
+    // known failure this suite used to have needs a `MinIO` extension and is
+    // retired by the POST Object passthrough, so its entry in
+    // `EXPECTED_FAILURES` stays commented out and the floor is the 61 passes the
+    // suite reports with the passthrough on. This remains the only suite without
+    // a `check_fail_zero`, so re-enabling that entry is what would keep a
+    // regression there allowed rather than fatal.
     check_pass_at_least(counts, "minio-java", 61, allow_missing, errors);
     // The assume-role case passes now that the STS protocol shape is forwarded
     // and the temporary credentials reach the backend.
@@ -507,8 +521,10 @@ fn check_allow_missing(allow_missing: &[String], observed: &BTreeSet<&str>, erro
     }
 }
 
-/// Evaluate the per-function gate; an empty list of errors means it passed.
-fn check_gate(logs: &[MintLog], allow_missing: &[String], errors: &mut Vec<String>) {
+/// Evaluate the per-function gate against `expected`; an empty list of errors means
+/// it passed. The list is a parameter so a test can score a log against an entry the
+/// shipped list no longer carries (see `reports_unexpected_and_stale_entries`).
+fn check_gate(logs: &[MintLog], expected: &[(&str, &[(&str, usize)])], allow_missing: &[String], errors: &mut Vec<String>) {
     let mut order: Vec<(String, String)> = Vec::new();
     let mut appearances: HashSet<(String, String)> = HashSet::new();
     let mut fail_counts: HashMap<(String, String), usize> = HashMap::new();
@@ -524,7 +540,7 @@ fn check_gate(logs: &[MintLog], allow_missing: &[String], errors: &mut Vec<Strin
         }
     }
 
-    for (name, functions) in EXPECTED_FAILURES {
+    for (name, functions) in expected {
         for (function, max_fail) in *functions {
             let key = ((*name).to_owned(), (*function).to_owned());
             if !appearances.contains(&key) {
@@ -619,6 +635,11 @@ mod tests {
 
     #[test]
     fn reports_unexpected_and_stale_entries() {
+        // The shipped list is empty while the POST Object passthrough retires its last
+        // entry, so this test scores the log against a local one: the stale branch must
+        // stay covered for the day the entry comes back.
+        const ENTRIES: &[(&str, &[(&str, usize)])] = &[("minio-java", &[("putObjectFanOut()", 1)])];
+
         let path = log_file(
             "gate",
             &format!(
@@ -631,7 +652,7 @@ mod tests {
 
         let (logs, _) = parse_log(&path).expect("parse");
         let mut errors = Vec::new();
-        check_gate(&logs, &[], &mut errors);
+        check_gate(&logs, ENTRIES, &[], &mut errors);
 
         assert_eq!(errors.len(), 4, "three unexpected failures plus one stale entry: {errors:?}");
         assert!(
@@ -683,7 +704,9 @@ mod tests {
             ("s3select", 11),
             ("versioning", 18),
         ];
-        const FAILURES: &[(&str, &str)] = &[("minio-java", "putObjectFanOut()")];
+        // No suite has an expected failure while the POST Object passthrough retires the
+        // last entry, so a full log carries none.
+        const FAILURES: &[(&str, &str)] = &[];
 
         let mut lines = Vec::new();
         for (suite, passes) in PASSES {

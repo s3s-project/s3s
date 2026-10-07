@@ -436,48 +436,6 @@ fn reject_custom_route_body_too_large(content_length: Option<u64>, max_body_size
     Ok(())
 }
 
-/// Prepares the POST object file stream for the operation.
-///
-/// The file part is aggregated before dispatch, which is what makes its length
-/// exact: how many bytes the closing trailer takes depends on the closing form
-/// the client used — the final CRLF, transport padding and the epilogue are all
-/// optional — so a length derived from the request `Content-Length` before the
-/// body is read is exact for one form only. Aggregation is bounded by
-/// `max_file_size` and the limit is checked while reading, so an oversized file
-/// is rejected without buffering all of it, and downstream handlers (like
-/// s3s-proxy) get the `Content-Length` they need.
-///
-/// # Errors
-/// Returns an error if the file exceeds `max_file_size` or the file stream
-/// cannot be read.
-async fn prepare_post_object_stream(
-    file_stream: http::FileStream,
-    max_file_size: u64,
-) -> S3Result<(crate::stream::DynByteStream, u64)> {
-    let vec_bytes = http::aggregate_file_stream_limited(file_stream, max_file_size)
-        .await
-        .map_err(|e| match e {
-            http::MultipartError::FileTooLarge(..) => {
-                s3_error!(EntityTooLarge, "Your proposed upload exceeds the maximum allowed object size.")
-            }
-            // A body that ends early or carries another part after the file is
-            // the client's error, so the code the stream error carries is
-            // reported; a length disagreement or a failing transport keeps the
-            // previous 400-class mapping.
-            http::MultipartError::Underlying(source) => match source.downcast_ref::<http::FileStreamError>() {
-                Some(err @ (http::FileStreamError::Incomplete | http::FileStreamError::InvalidTrailer)) => {
-                    S3Error::with_source(err.to_s3_error_code(), source)
-                }
-                _ => S3Error::with_source(S3ErrorCode::InvalidRequest, source),
-            },
-            other => s3_error!(MalformedPOSTRequest, "failed to read the file part: {other}"),
-        })?;
-    // Use saturating_add to prevent overflow in release builds (security-relevant for content-length-range validation)
-    let file_size = vec_bytes.iter().map(|b| b.len() as u64).fold(0u64, u64::saturating_add);
-    let vec_stream = crate::stream::VecByteStream::new(vec_bytes);
-    Ok((crate::stream::into_dyn(vec_stream), file_size))
-}
-
 #[allow(clippy::declare_interior_mutable_const)]
 fn fmt_content_length(len: usize) -> http::HeaderValue {
     const ZERO: http::HeaderValue = http::HeaderValue::from_static("0");
@@ -708,17 +666,28 @@ fn parse_post_policy(multipart: &crate::http::Multipart) -> S3Result<Option<Post
     Ok(Some(policy))
 }
 
-fn post_object_max_file_size(policy: Option<&PostPolicy>, config_max: u64) -> u64 {
-    // Determine file size limit: use stricter of policy max or config max.
-    // Use the minimum of policy max and config max to prevent resource exhaustion.
-    // Note: policy min is validated later in policy.validate()
-    match policy.and_then(PostPolicy::content_length_range) {
-        Some((_, max)) => std::cmp::min(max, config_max),
-        None => config_max,
+/// Returns the byte range a POST object file part may have.
+///
+/// The policy's `content-length-range` carries the minimum and the maximum the
+/// credential holder asked for; the configured maximum bounds the resource a
+/// single POST can claim, so the tighter of the two maximums applies. Both ends
+/// are enforced on the file stream while it is read.
+///
+/// A minimum above the effective maximum describes a range no body can satisfy:
+/// that is the client's error, and it is answered before the stream is built so
+/// the wrapper never sees inverted bounds.
+fn post_object_file_size_range(policy: Option<&PostPolicy>, config_max: u64) -> S3Result<(u64, u64)> {
+    let (min, max) = match policy.and_then(PostPolicy::content_length_range) {
+        Some((min, max)) => (min, std::cmp::min(max, config_max)),
+        None => (0, config_max),
+    };
+    if min > max {
+        return Err(S3ErrorCode::EntityTooSmall.into());
     }
+    Ok((min, max))
 }
 
-async fn resolve_post_object(
+fn resolve_post_object(
     bucket: &str,
     multipart: &mut crate::http::Multipart,
     config: &S3Config,
@@ -730,20 +699,27 @@ async fn resolve_post_object(
     multipart.substitute_key_filename();
 
     let policy = parse_post_policy(multipart)?;
-    let max_file_size = post_object_max_file_size(policy.as_ref(), config.post_object_max_file_size);
+    let (min_file_size, max_file_size) = post_object_file_size_range(policy.as_ref(), config.post_object_max_file_size)?;
 
-    // Prepare the file stream for the operation: the file part is aggregated,
-    // so the length is the length of the data the body actually carried.
-    let file_stream = multipart.take_file_stream().expect("missing file stream");
-    let (post_stream, file_size) = prepare_post_object_stream(file_stream, max_file_size).await?;
+    // Prepare the file stream for the operation: the file part is forwarded as
+    // a stream whose exact length is not known before the body is read — how
+    // many bytes the closing trailer takes depends on the closing form the
+    // client used, so a length derived from the request `Content-Length` is
+    // exact for one closing form only. The range the policy requires is
+    // enforced while the stream is read instead.
+    let mut file_stream = multipart.take_file_stream().expect("missing file stream");
+    file_stream.set_expected_range(min_file_size, max_file_size);
+    let post_stream = crate::stream::into_dyn(file_stream);
 
     // Validate the policy conditions (if policy exists)
-    // Note: expiration was already checked above before reading the file
-    // Pass the URL bucket so that the "bucket" condition can be validated
-    // even when clients (like boto3) don't include it in form fields.
+    // Note: expiration was already checked above before reading the file, and
+    // `content-length-range` moved to the file stream, which is the only place
+    // that sees the size. Pass the URL bucket so that the "bucket" condition
+    // can be validated even when clients (like boto3) don't include it in form
+    // fields.
     let mut policy_out = None;
     if let Some(policy) = policy {
-        policy.validate_conditions_only(multipart, file_size, Some(bucket))?;
+        policy.validate_conditions_only(multipart, Some(bucket))?;
         policy_out = Some(policy);
     }
 
@@ -1040,7 +1016,7 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                 match s3_path {
                     S3Path::Root => return Err(unknown_operation()),
                     S3Path::Bucket { bucket } => {
-                        let (stream, policy) = resolve_post_object(bucket, multipart, &config).await?;
+                        let (stream, policy) = resolve_post_object(bucket, multipart, &config)?;
                         req.s3ext.post_object_stream = Some(stream);
                         req.s3ext.post_policy = policy;
                         break 'resolve &PostObject as &'static dyn Operation;

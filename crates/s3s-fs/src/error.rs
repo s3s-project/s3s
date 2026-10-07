@@ -70,6 +70,12 @@ impl From<Error> for S3Error {
                 None => S3Error::with_source(code, source),
             };
         }
+        // A POST object file part is streamed with the byte range the policy
+        // requires: a file outside it (or malformed) reports the client error
+        // code it carries instead of a generic 500.
+        if let Some(err) = source.downcast_ref::<s3s::FileStreamError>() {
+            return S3Error::with_source(err.to_s3_error_code(), source);
+        }
 
         S3Error::with_source(S3ErrorCode::InternalError, source)
     }
@@ -156,6 +162,12 @@ mod tests {
         assert_eq!(s3err.message(), Some("The request body terminated unexpectedly"));
         assert!(s3err.source().is_some(), "the stream error stays in the chain");
     }
+
+    // The file-size-range codes are covered next to the type that defines them:
+    // `s3s::http::multipart` tests every `FileStreamError` against the code its
+    // `to_s3_error_code` returns. `FileStreamError` is `#[non_exhaustive]`, so a
+    // downstream crate cannot build one to drive this downcast in a unit test;
+    // the branch below it is the same one the other stream errors take.
 
     #[test]
     fn keeps_internal_error_for_unrecognized_sources() {

@@ -195,7 +195,7 @@ pub mod validation;
 pub mod xml;
 
 pub use self::error::*;
-pub use self::http::{Body, BodySizeLimitExceeded};
+pub use self::http::{Body, BodySizeLimitExceeded, FileStreamError};
 pub use self::s3_op::S3Operation;
 pub use self::s3_trait::S3;
 
