@@ -78,6 +78,12 @@ struct Opt {
     /// parses that form before the S3 service is called, so a proxy cannot
     /// re-frame it at the service layer. With this enabled the request is
     /// forwarded as it arrived, at the HTTP layer, and the backend decides.
+    ///
+    /// Known limitation: without this flag a form upload becomes a `PutObject`
+    /// whose body length the proxy cannot know, so a backend that requires a
+    /// declared length rejects the forwarded request (`MinIO` answers 411,
+    /// `Amazon S3` 501) and the object is never created. A proxy deployment that
+    /// must accept form uploads therefore runs with this flag.
     #[clap(long)]
     enable_post_object_passthrough: bool,
 

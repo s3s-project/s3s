@@ -33,4 +33,5 @@ s3s-proxy \
     --endpoint-url  http://localhost:9000   \
     --enable-minio-route                    \
     --enable-auth-passthrough               \
+    --enable-post-object-passthrough        \
     --enable-sig-v2
