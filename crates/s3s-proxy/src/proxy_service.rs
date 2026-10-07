@@ -15,6 +15,7 @@
 //! reject it with a 400.
 
 use crate::auth_passthrough::AuthPassthrough;
+use crate::post_object_passthrough::PostObjectPassthrough;
 
 use s3s::service::S3Service;
 use s3s::{Body, HttpError, HttpResponse};
@@ -46,6 +47,9 @@ pub struct ProxyService {
     /// request it sees, and the point of this passthrough is that the backend
     /// authenticates instead.
     auth_passthrough: Option<AuthPassthrough>,
+    /// Optional POST Object passthrough: a form upload is forwarded unread,
+    /// because the core parses the form before a service is called.
+    post_object_passthrough: Option<PostObjectPassthrough>,
 }
 
 impl ProxyService {
@@ -57,6 +61,7 @@ impl ProxyService {
             inner,
             minio_health: None,
             auth_passthrough: None,
+            post_object_passthrough: None,
         }
     }
 
@@ -69,6 +74,7 @@ impl ProxyService {
             inner,
             minio_health: Some(MinioHealthPassthrough { endpoint_url, client }),
             auth_passthrough: None,
+            post_object_passthrough: None,
         }
     }
 
@@ -80,6 +86,17 @@ impl ProxyService {
     #[must_use]
     pub fn with_auth_passthrough(mut self, passthrough: AuthPassthrough) -> Self {
         self.auth_passthrough = Some(passthrough);
+        self
+    }
+
+    /// Adds the POST Object passthrough.
+    ///
+    /// A form upload is forwarded to the backend as it arrived instead of being
+    /// parsed and re-framed: the backend authenticates the policy inside the form
+    /// and answers, while the proxy only moves the bytes.
+    #[must_use]
+    pub fn with_post_object_passthrough(mut self, passthrough: PostObjectPassthrough) -> Self {
+        self.post_object_passthrough = Some(passthrough);
         self
     }
 }
@@ -170,6 +187,11 @@ impl Service<hyper::Request<Incoming>> for ProxyService {
     fn call(&self, req: hyper::Request<Incoming>) -> Self::Future {
         if let Some(passthrough) = &self.minio_health
             && MinioHealthPassthrough::is_match(req.method(), req.uri())
+        {
+            let this = passthrough.clone();
+            Box::pin(async move { Ok(this.forward(req).await) })
+        } else if let Some(passthrough) = &self.post_object_passthrough
+            && PostObjectPassthrough::is_match(req.method(), req.uri(), req.headers())
         {
             let this = passthrough.clone();
             Box::pin(async move { Ok(this.forward(req).await) })

@@ -24,6 +24,7 @@ use hyper_util::server::conn::auto::Builder as ConnBuilder;
 mod admin_route;
 mod auth_passthrough;
 mod hop_by_hop;
+mod post_object_passthrough;
 mod proxy_service;
 mod route_chain;
 mod sts_route;
@@ -70,6 +71,15 @@ struct Opt {
     /// default.
     #[clap(long)]
     enable_auth_passthrough: bool,
+
+    /// Forward POST Object form uploads to the backend without reading them.
+    ///
+    /// A form upload authenticates with a policy inside the form, and the core
+    /// parses that form before the S3 service is called, so a proxy cannot
+    /// re-frame it at the service layer. With this enabled the request is
+    /// forwarded as it arrived, at the HTTP layer, and the backend decides.
+    #[clap(long)]
+    enable_post_object_passthrough: bool,
 
     /// Disable the STS protocol part of the authentication passthrough.
     ///
@@ -307,6 +317,16 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     };
     if let Some(passthrough) = auth_passthrough {
         service = service.with_auth_passthrough(passthrough);
+    }
+    if opt.enable_post_object_passthrough {
+        warn!("POST Object passthrough enabled: a form upload is forwarded unread and the backend decides");
+        let endpoint_url = reqwest::Url::parse(&opt.endpoint_url)?;
+        // No overall timeout: a forwarded upload may take as long as the client
+        // and the backend need.
+        let client = reqwest::Client::builder()
+            .connect_timeout(std::time::Duration::from_secs(5))
+            .build()?;
+        service = service.with_post_object_passthrough(post_object_passthrough::PostObjectPassthrough::new(endpoint_url, client));
     }
 
     // Run server

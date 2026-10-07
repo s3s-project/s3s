@@ -148,12 +148,7 @@ impl AuthPassthrough {
         )
         .await;
 
-        let mut out = s3s::HttpResponse::new(response.output);
-        if let Some(status) = response.status {
-            *out.status_mut() = status;
-        }
-        *out.headers_mut() = response.headers;
-        out
+        into_http(response)
     }
 }
 
@@ -201,6 +196,46 @@ pub(crate) async fn forward_verbatim(
         }
     };
 
+    send_to_backend(client, method, target, headers, bytes.into(), || {
+        passthrough_log_line(method, uri, endpoint_url)
+    })
+    .await
+}
+
+/// Turns a backend answer into the proxy's answer.
+///
+/// Both passthroughs return the backend's status, headers and streamed body
+/// unchanged, so the conversion lives in one place and the two cannot drift
+/// apart.
+#[must_use]
+pub(crate) fn into_http(response: S3Response<Body>) -> s3s::HttpResponse {
+    let mut out = s3s::HttpResponse::new(response.output);
+    if let Some(status) = response.status {
+        *out.status_mut() = status;
+    }
+    *out.headers_mut() = response.headers;
+    out
+}
+
+/// Sends a prepared request to the backend and returns its streamed answer.
+///
+/// The caller decides what the body is. The authentication passthrough hands
+/// over bytes it had to read, because the signature it forwards covers the
+/// payload hash; the POST Object passthrough hands over the stream it is still
+/// receiving, because a form upload declares its own length and reading it
+/// first would hold the whole body in memory.
+///
+/// The log line arrives as a closure: every forwarded request takes this path,
+/// and the line is built only when it is recorded, so a disabled log level costs
+/// nothing.
+pub(crate) async fn send_to_backend(
+    client: &reqwest::Client,
+    method: &Method,
+    target: reqwest::Url,
+    headers: &HeaderMap,
+    body: reqwest::Body,
+    log_line: impl FnOnce() -> String,
+) -> S3Response<Body> {
     let mut request = client.request(method.clone(), target);
     for (name, value) in headers {
         // Connection-specific headers are dropped (RFC 9110 section 7.6.1); every
@@ -211,7 +246,7 @@ pub(crate) async fn forward_verbatim(
         }
         request = request.header(name, value);
     }
-    let request = match request.body(bytes).build() {
+    let request = match request.body(body).build() {
         Ok(request) => request,
         Err(err) => {
             tracing::warn!(category = transport_error_category(&err), "passthrough request could not be built");
@@ -219,7 +254,7 @@ pub(crate) async fn forward_verbatim(
         }
     };
 
-    tracing::debug!("{}", passthrough_log_line(method, uri, endpoint_url));
+    tracing::debug!("{}", log_line());
 
     let response = match client.execute(request).await {
         Ok(response) => response,
@@ -377,7 +412,7 @@ fn body_error_category(err: &s3s::StdError) -> &'static str {
 /// Builds the backend URL for a request path, preserving the path and query
 /// verbatim: re-encoding either of them would invalidate the signature.
 #[must_use]
-fn backend_url(endpoint_url: &reqwest::Url, path_and_query: Option<&str>) -> Option<reqwest::Url> {
+pub(crate) fn backend_url(endpoint_url: &reqwest::Url, path_and_query: Option<&str>) -> Option<reqwest::Url> {
     let path_and_query = path_and_query?;
     let base = endpoint_url.as_str().trim_end_matches('/');
     reqwest::Url::parse(&format!("{base}{path_and_query}")).ok()
@@ -505,7 +540,7 @@ fn passthrough_log_line(method: &Method, uri: &Uri, endpoint_url: &reqwest::Url)
 
 /// Builds an error response for a failure inside the passthrough.
 #[must_use]
-fn error_response(status: StatusCode, code: &str, message: &str) -> S3Response<Body> {
+pub(crate) fn error_response(status: StatusCode, code: &str, message: &str) -> S3Response<Body> {
     let body =
         format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?><Error><Code>{code}</Code><Message>{message}</Message></Error>");
     let mut out = S3Response::new(Body::from(body));
@@ -1079,5 +1114,30 @@ mod tests {
         .await;
 
         assert_eq!(response.status, Some(StatusCode::BAD_GATEWAY));
+    }
+
+    #[test]
+    fn an_answer_keeps_its_status_headers_and_body() {
+        use hyper::header::HeaderValue;
+
+        let mut response = S3Response::new(Body::from(b"ok".to_vec()));
+        response.status = Some(StatusCode::CREATED);
+        let mut headers = HeaderMap::new();
+        headers.insert("x-backend", HeaderValue::from_static("yes"));
+        response.headers = headers;
+
+        let http = into_http(response);
+        assert_eq!(http.status(), StatusCode::CREATED, "the backend's status is the proxy's");
+        assert_eq!(
+            http.headers().get("x-backend").and_then(|value| value.to_str().ok()),
+            Some("yes"),
+            "the backend's headers are the proxy's"
+        );
+        let body = http.into_body().bytes().expect("the test body is in memory");
+        assert_eq!(body.as_ref(), b"ok");
+
+        // Without a status the proxy's own default stands.
+        let default = into_http(S3Response::new(Body::from(b"ok".to_vec())));
+        assert_eq!(default.status(), StatusCode::OK);
     }
 }
