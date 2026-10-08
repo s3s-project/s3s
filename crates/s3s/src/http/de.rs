@@ -1304,6 +1304,50 @@ mod tests {
         );
     }
 
+    #[test]
+    fn parse_list_header_rejects_an_element_the_type_refuses() {
+        let mut req = make_request();
+        req.headers.insert("x-list", "1,oops".parse().unwrap());
+        let name = HeaderName::from_static("x-list");
+        let result: S3Result<List<i32>> = parse_list_header(&req, &name);
+        let error = result.expect_err("a non-numeric element is not an integer");
+        assert_eq!(error.code(), &S3ErrorCode::InvalidArgument);
+        let message = error.message().unwrap_or_default();
+        assert!(message.contains("x-list"), "the error must name the header it came from");
+    }
+
+    #[test]
+    fn parse_opt_list_header_rejects_an_element_the_type_refuses() {
+        let mut req = make_request();
+        req.headers.insert("x-list", "1,oops".parse().unwrap());
+        let name = HeaderName::from_static("x-list");
+        let result: S3Result<Option<List<i32>>> = parse_opt_list_header(&req, &name);
+        let error = result.expect_err("an optional header still rejects an element the type refuses");
+        assert_eq!(error.code(), &S3ErrorCode::InvalidArgument);
+    }
+
+    #[test]
+    fn parse_list_header_rejects_a_value_that_is_not_utf8() {
+        let mut req = make_request();
+        req.headers.insert("x-list", HeaderValue::from_bytes(b"a,\xff").unwrap());
+        let name = HeaderName::from_static("x-list");
+        let result: S3Result<List<String>> = parse_list_header(&req, &name);
+        let error = result.expect_err("an undecodable field value is not a list");
+        assert_eq!(error.code(), &S3ErrorCode::InvalidArgument);
+        let message = error.message().unwrap_or_default();
+        assert!(message.contains("x-list"), "the error must name the header it came from");
+    }
+
+    #[test]
+    fn parse_opt_list_header_rejects_a_value_that_is_not_utf8() {
+        let mut req = make_request();
+        req.headers.insert("x-list", HeaderValue::from_bytes(b"a,\xff").unwrap());
+        let name = HeaderName::from_static("x-list");
+        let result: S3Result<Option<List<String>>> = parse_opt_list_header(&req, &name);
+        let error = result.expect_err("an optional header still rejects an undecodable value");
+        assert_eq!(error.code(), &S3ErrorCode::InvalidArgument);
+    }
+
     // --- parse_field_value / parse_field_value_timestamp ---
 
     #[test]
