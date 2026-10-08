@@ -200,7 +200,7 @@ pub fn codegen(ops: &Operations, rust_types_base: &RustTypes, rust_types_minio: 
         ]);
 
         for op in ops.values() {
-            if op.name == "PostObject" {
+            if post_object::is_synthetic(&op.name) {
                 continue;
             }
             g!("mod {};", op.name.to_snake_case());
@@ -212,7 +212,7 @@ pub fn codegen(ops: &Operations, rust_types_base: &RustTypes, rust_types_minio: 
         g!();
 
         for op in ops.values() {
-            if op.name == "PostObject" {
+            if post_object::is_synthetic(&op.name) {
                 continue;
             }
             if op.is_minio {
@@ -266,7 +266,7 @@ fn op_has_header_fields(op: &Operation, rust_types: &RustTypes) -> bool {
 
 fn codegen_http(ops: &Operations, rust_types_base: &RustTypes, rust_types_minio: &RustTypes) {
     for op in ops.values() {
-        if op.name == "PostObject" {
+        if post_object::is_synthetic(&op.name) {
             continue;
         }
         codegen_op_unit(op, rust_types_base, rust_types_minio);
@@ -1083,7 +1083,7 @@ fn collect_routes<'a>(ops: &'a Operations, rust_types: &'a RustTypes) -> HashMap
     for op in ops.values() {
         // PostObject is resolved in ops::prepare() for multipart requests.
         // Do not put it into the generated router to avoid overlaps.
-        if op.name == "PostObject" {
+        if post_object::is_synthetic(&op.name) {
             continue;
         }
         let pat = PathPattern::parse(&op.http_uri);
@@ -1181,7 +1181,7 @@ fn has_request_payload(op: &Operation, rust_types: &RustTypes) -> bool {
 /// implementation without buffering: its input carries a `StreamingBlob`
 /// payload (`PutObject`, `UploadPart`, `WriteGetObjectResponse`).
 fn has_streaming_body(op: &Operation, rust_types: &RustTypes) -> bool {
-    if op.name == "PostObject" {
+    if post_object::is_synthetic(&op.name) {
         // Synthetic operation: the body is the multipart file stream governed
         // by `post_object_max_file_size`, not the request body wrapped by
         // `put_object_max_size`.

@@ -413,7 +413,7 @@ fn unify_operation_types(ops: &Operations, space: &mut RustTypes) {
 
     // unify operation input type
     for op in ops.values() {
-        if op.name == "PostObject" {
+        if post_object::is_synthetic(&op.name) {
             continue;
         }
         if op.name == "SelectObjectContent" {
@@ -440,7 +440,7 @@ fn unify_operation_types(ops: &Operations, space: &mut RustTypes) {
 
     // unify operation output type
     for op in ops.values() {
-        if op.name == "PostObject" {
+        if post_object::is_synthetic(&op.name) {
             continue;
         }
         let output_ty = if op.smithy_output == "Unit" {

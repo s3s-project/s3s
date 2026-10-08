@@ -25,7 +25,6 @@ use scoped_writer::g;
 /// The descriptor is the single source of truth for the name, the DTO type
 /// names and the placeholder Smithy shapes; the emitters read it instead of
 /// repeating the literals.
-#[allow(dead_code)] // read by the v1 emitters once they delegate here
 pub(crate) struct SyntheticOp {
     /// Operation name: the S3 trait method name and the generated file name.
     pub(crate) name: &'static str,
