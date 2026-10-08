@@ -6,6 +6,7 @@ use super::ops::Operations;
 use super::rust;
 
 use crate::declare_codegen;
+use crate::v2::post_object;
 
 use std::format as f;
 
@@ -35,7 +36,7 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
 
     for op in ops.values() {
         // PostObject is a synthetic API in s3s; aws-sdk-s3 has no corresponding operation.
-        if op.name == "PostObject" {
+        if post_object::is_synthetic(&op.name) {
             continue;
         }
         let method_name = op.name.to_snake_case();

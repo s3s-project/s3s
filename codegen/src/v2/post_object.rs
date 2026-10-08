@@ -414,6 +414,44 @@ pub(crate) fn codegen_post_only_fields(space: &mut RustTypes) {
     });
 }
 
+/// Emits the default bridge method of the synthetic operation into the `S3` trait.
+///
+/// The scaffold delegates to the operation it forks, so an implementation that only implements that one keeps serving the synthetic operation while it migrates.
+pub(crate) fn codegen_trait_default() {
+    g([
+        "/// POST Object (multipart form upload)",
+        "///",
+        "/// This is a synthetic method separated from `PutObject` so implementations can distinguish",
+        "/// POST vs PUT.",
+        "///",
+        "/// The default implementation is a migration scaffold, not a correct POST implementation: it",
+        "/// converts the request into a [`S3::put_object`] call, and the shape it forwards has no place",
+        "/// for the form (its fields, the file name and the policy), the framing facts (boundary, tail",
+        "/// length) or the `success_action_*` response semantics.",
+        "///",
+        "/// It is kept so that an implementation which only implements [`S3::put_object`] keeps serving",
+        "/// POST requests while it migrates; the scaffold may be removed in a future minor release.",
+        "///",
+        "/// An implementation that cares about POST semantics should implement this method explicitly",
+        "/// instead of relying on the default.",
+    ]);
+    g!("async fn post_object(&self, req: S3Request<PostObjectInput>) -> S3Result<S3Response<PostObjectOutput>> {{");
+    g!("let resp = self.put_object(req.map_input(crate::dto::post_object_input_into_put_object_input)).await?;");
+    g!("Ok(resp.map_output(crate::dto::put_object_output_into_post_object_output))");
+    g!("}}");
+    g!();
+}
+
+/// Emits the POST-specific notes of the access hook documentation.
+///
+/// The hook is an addition to the check of the operation it forks, not a replacement.
+pub(crate) fn codegen_access_hook() {
+    g!("/// ");
+    g!("/// POST Object is not a synonym for `PutObject`: the request carries a form (its fields,");
+    g!("/// the file name and the policy) and the response carries the `success_action_*`");
+    g!("/// semantics. The default path runs the `put_object` check as well, so this hook is an");
+    g!("/// addition to it rather than a replacement.");
+}
 /// Emits the conversion helpers between the forked DTO types and the synthetic ones.
 pub(crate) fn codegen_mapping_helpers(rust_types: &RustTypes) {
     let Some(rust::Type::Struct(put_in)) = rust_types.get("PutObjectInput") else { return };
