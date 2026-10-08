@@ -22,6 +22,7 @@ use bytes::Bytes;
 use futures::StreamExt;
 use http::{HeaderMap, Method, Request, StatusCode};
 use http_body_util::BodyExt;
+use md5::{Digest as _, Md5};
 use s3s::auth::{SecretKey, SimpleAuth};
 use s3s::config::{S3Config, StaticConfigProvider};
 use s3s::dto::{ETag, PutObjectInput, PutObjectOutput, StreamingBlob};
@@ -483,5 +484,14 @@ async fn a_successful_upload_reaches_the_implementation_byte_for_byte() {
     let stored = s3.stored();
     let stored = stored.first().expect("the upload reached the implementation");
     assert_eq!(stored.body, FILE_CONTENT.as_bytes());
-    assert_eq!(STORED_ETAG.len(), 32);
+
+    // Both pinned digests have to be the MD5 of the pinned bytes, not merely well-formed
+    // constants: deriving them here is what makes the claim above checkable.
+    let digest = Md5::digest(FILE_CONTENT.as_bytes());
+    let mut hex = String::new();
+    for byte in &digest {
+        write!(hex, "{byte:02x}").expect("writing to a String cannot fail");
+    }
+    assert_eq!(hex, STORED_ETAG);
+    assert_eq!(base64_simd::STANDARD.encode_to_string(digest.as_slice()), FILE_CONTENT_MD5);
 }
