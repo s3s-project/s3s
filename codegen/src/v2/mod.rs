@@ -6,4 +6,7 @@
 #[allow(dead_code)]
 pub mod smithy;
 
+/// The synthetic `PostObject` operation: its descriptor and its emitters.
+pub(crate) mod post_object;
+
 pub fn run() {}

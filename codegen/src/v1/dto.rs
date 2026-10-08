@@ -10,6 +10,7 @@ use super::{rust, smithy};
 
 use crate::declare_codegen;
 use crate::v1::Patch;
+use crate::v2::post_object;
 
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
@@ -300,55 +301,10 @@ pub fn collect_rust_types(model: &smithy::Model, ops: &Operations) -> RustTypes 
     patch_types(&mut space);
     unify_operation_types(ops, &mut space);
 
-    // POST Object is not a Smithy-modeled operation in the upstream S3 model.
-    // We still want to distinguish it from PutObject at the trait layer.
-    // Fork the unified DTO types so behavior can stay identical,
-    // while leaving room to extend PostObject* with POST-only fields later.
-    for (src, dst) in [("PutObjectInput", "PostObjectInput"), ("PutObjectOutput", "PostObjectOutput")] {
-        if let Some(src_ty) = space.get(src).cloned() {
-            let mut dst_ty = src_ty;
-            match &mut dst_ty {
-                rust::Type::Struct(s) => {
-                    dst.clone_into(&mut s.name);
-                }
-                _ => {
-                    // PutObject{Input,Output} are expected to be structs.
-                    unimplemented!("{src} is not a struct");
-                }
-            }
-            assert!(space.insert(dst.to_owned(), dst_ty).is_none());
-        }
-    }
+    // The synthetic operation is not in the upstream model; the v2 module owns it.
+    post_object::codegen_dto_clone(&mut space);
 
-    // Add POST Object specific fields to PostObjectInput
-    if let Some(rust::Type::Struct(post_in)) = space.get_mut("PostObjectInput") {
-        post_in.fields.push(rust::StructField {
-            name: o("success_action_redirect"),
-            type_: o("String"),
-            option_type: true,
-            position: o("s3s"),
-            doc: Some(o("The URL to which the client is redirected upon successful upload.")),
-            ..rust::StructField::default()
-        });
-        post_in.fields.push(rust::StructField {
-            name: o("success_action_status"),
-            type_: o("i32"),
-            option_type: true,
-            position: o("s3s"),
-            doc: Some(o(
-                "The status code returned to the client upon successful upload. Valid values are 200, 201, and 204.",
-            )),
-            ..rust::StructField::default()
-        });
-        post_in.fields.push(rust::StructField {
-            name: o("policy"),
-            type_: o("PostPolicy"),
-            option_type: true,
-            position: o("s3s"),
-            doc: Some(o("The POST policy document that was included in the request.")),
-            ..rust::StructField::default()
-        });
-    }
+    post_object::codegen_post_only_fields(&mut space);
 
     space
 }
@@ -457,7 +413,7 @@ fn unify_operation_types(ops: &Operations, space: &mut RustTypes) {
 
     // unify operation input type
     for op in ops.values() {
-        if op.name == "PostObject" {
+        if post_object::is_synthetic(&op.name) {
             continue;
         }
         if op.name == "SelectObjectContent" {
@@ -484,7 +440,7 @@ fn unify_operation_types(ops: &Operations, space: &mut RustTypes) {
 
     // unify operation output type
     for op in ops.values() {
-        if op.name == "PostObject" {
+        if post_object::is_synthetic(&op.name) {
             continue;
         }
         let output_ty = if op.smithy_output == "Unit" {
@@ -699,86 +655,11 @@ pub fn codegen(rust_types: &RustTypes, ops: &Operations, patch: Option<Patch>) {
     codegen_builders(rust_types, ops);
 
     codegen_dto_ext(rust_types);
-    codegen_post_object_mapping_helpers(rust_types);
+    post_object::codegen_mapping_helpers(rust_types);
 
     if matches!(patch, Some(Patch::Minio)) {
         super::minio::codegen_in_dto();
     }
-}
-
-fn codegen_post_object_mapping_helpers(rust_types: &RustTypes) {
-    let Some(rust::Type::Struct(put_in)) = rust_types.get("PutObjectInput") else { return };
-    let Some(rust::Type::Struct(put_out)) = rust_types.get("PutObjectOutput") else { return };
-    let Some(rust::Type::Struct(post_in)) = rust_types.get("PostObjectInput") else { return };
-    let Some(rust::Type::Struct(post_out)) = rust_types.get("PostObjectOutput") else { return };
-
-    // PostObjectInput has extra fields (success_action_redirect, success_action_status).
-    // We verify that the common fields (those from PutObjectInput) match.
-    assert!(post_in.fields.len() >= put_in.fields.len());
-    for (a, b) in put_in.fields.iter().zip(post_in.fields.iter()) {
-        assert_eq!(a.name, b.name);
-        assert_eq!(a.type_, b.type_);
-        assert_eq!(a.option_type, b.option_type);
-    }
-    assert_eq!(put_out.fields.len(), post_out.fields.len());
-    for (a, b) in put_out.fields.iter().zip(post_out.fields.iter()) {
-        assert_eq!(a.name, b.name);
-        assert_eq!(a.type_, b.type_);
-        assert_eq!(a.option_type, b.option_type);
-    }
-
-    // Collect POST-only field names (those not in PutObjectInput)
-    let put_in_field_names: std::collections::BTreeSet<_> = put_in.fields.iter().map(|f| f.name.as_str()).collect();
-    let post_only_fields: Vec<_> = post_in
-        .fields
-        .iter()
-        .filter(|f| !put_in_field_names.contains(f.name.as_str()))
-        .collect();
-
-    g!();
-    g([
-        "// NOTE: PostObject is a synthetic API in s3s.",
-        "// PostObjectInput has extra fields for POST-specific behavior (success_action_redirect, success_action_status).",
-    ]);
-
-    g!("pub(crate) fn put_object_input_into_post_object_input(x: PutObjectInput) -> PostObjectInput {{");
-    g!("    PostObjectInput {{");
-    for field in &put_in.fields {
-        g!("        {}: x.{},", field.name, field.name);
-    }
-    // POST-only fields get default values
-    for field in &post_only_fields {
-        g!("        {}: None,", field.name);
-    }
-    g!("    }}");
-    g!("}}");
-
-    g!("pub(crate) fn post_object_input_into_put_object_input(x: PostObjectInput) -> PutObjectInput {{");
-    g!("    PutObjectInput {{");
-    // Only copy fields that exist in PutObjectInput
-    for field in &put_in.fields {
-        g!("        {}: x.{},", field.name, field.name);
-    }
-    g!("    }}");
-    g!("}}");
-
-    g!("pub(crate) fn put_object_output_into_post_object_output(x: PutObjectOutput) -> PostObjectOutput {{");
-    g!("    PostObjectOutput {{");
-    for field in &put_out.fields {
-        g!("        {}: x.{},", field.name, field.name);
-    }
-    g!("    }}");
-    g!("}}");
-
-    // This function is currently unused but kept for symmetry and potential future use
-    g!("#[allow(dead_code)]");
-    g!("pub(crate) fn post_object_output_into_put_object_output(x: PostObjectOutput) -> PutObjectOutput {{");
-    g!("    PutObjectOutput {{");
-    for field in &post_out.fields {
-        g!("        {}: x.{},", field.name, field.name);
-    }
-    g!("    }}");
-    g!("}}");
 }
 
 fn codegen_struct(ty: &rust::Struct, rust_types: &RustTypes, ops: &Operations, needs_serde: bool, needs_custom_default: bool) {

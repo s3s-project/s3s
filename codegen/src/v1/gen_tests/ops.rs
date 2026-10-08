@@ -25,6 +25,7 @@ use crate::v1::dto::RustTypes;
 use crate::v1::ops::Operation;
 use crate::v1::ops::Operations;
 use crate::v1::rust;
+use crate::v2::post_object;
 
 use super::debug::Mode;
 use super::debug::spec;
@@ -38,11 +39,6 @@ use std::ops::Not;
 use heck::ToSnakeCase;
 use s3s_model::error_codes;
 use scoped_writer::g;
-
-/// The synthetic multipart operation. Its input is parsed from a verified
-/// multipart form, which needs a signed request, so the family covers it with a
-/// direct call instead of a request-table entry.
-const POST_OBJECT: &str = "PostObject";
 
 /// Operations whose optional XML payload still needs a non-empty body: the
 /// generated deserializer maps an empty body to `MalformedXML` for them.
@@ -77,7 +73,8 @@ pub(super) fn codegen(ops: &Operations, rust_types_base: &RustTypes, rust_types_
     assert_eq!(
         cases.len() + 1,
         ops.len(),
-        "every operation except {POST_OBJECT} must have a request case"
+        "every operation except {} must have a request case",
+        post_object::name()
     );
 
     write_test_file("ops.rs", || {
@@ -311,22 +308,8 @@ fn emit_harness() {
         "    String::from_utf8_lossy(&bytes).into_owned()",
         "}",
         "",
-        "/// Builds a request for the direct call of the synthetic multipart operation.",
-        "fn post_object_request() -> S3Request<PostObjectInput> {",
-        "    S3Request {",
-        "        input: PostObjectInput::default(),",
-        "        method: Method::POST,",
-        "        uri: Uri::from_static(\"/bucket/key\"),",
-        "        headers: HeaderMap::new(),",
-        "        extensions: Extensions::new(),",
-        "        credentials: None,",
-        "        region: None,",
-        "        service: None,",
-        "        trailing_headers: None,",
-        "    }",
-        "}",
-        "",
     ]);
+    post_object::codegen_test_fixture();
 
     g([
         "/// Every operation is reached through the real service pipeline, and the",
@@ -432,41 +415,14 @@ fn emit_harness() {
         "",
     ]);
 
-    g([
-        "/// The synthetic POST Object operation is covered by a direct call: its",
-        "/// input comes from a verified multipart form, which the request table",
-        "/// cannot produce. The default body delegates to put_object.",
-        "#[tokio::test]",
-        "async fn post_object_delegates_to_put_object() {",
-        "    let err = DefaultS3",
-        "        .post_object(post_object_request())",
-        "        .await",
-        "        .expect_err(\"the default body delegates to put_object, which reports NotImplemented\");",
-        "    assert_eq!(err.code().as_str(), \"NotImplemented\");",
-        "",
-        "    let recorder = RecordingS3::default();",
-        "    let err = recorder",
-        "        .post_object(post_object_request())",
-        "        .await",
-        "        .expect_err(\"the recording double reports NotImplemented\");",
-        "    assert_eq!(err.code().as_str(), \"NotImplemented\");",
-        "    assert_eq!(recorder.take().as_slice(), [\"PostObject\"].as_slice());",
-        "",
-        "    let mut req = post_object_request();",
-        "    PassThroughAccess",
-        "        .post_object(&mut req)",
-        "        .await",
-        "        .expect(\"the default access body allows the request\");",
-        "}",
-        "",
-    ]);
+    post_object::codegen_generated_test();
 }
 
 fn collect_cases(ops: &Operations, types: &RustTypes) -> Vec<Case> {
     let mut cases = Vec::new();
 
     for op in ops.values() {
-        if op.name == POST_OBJECT {
+        if post_object::is_synthetic(&op.name) {
             continue;
         }
 

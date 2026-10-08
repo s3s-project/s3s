@@ -5,6 +5,7 @@ use super::dto::RustTypes;
 use super::ops::Operations;
 use super::ops::is_op_input;
 use super::rust;
+use crate::v2::post_object;
 
 use crate::declare_codegen;
 
@@ -23,10 +24,12 @@ pub fn codegen(ops: &Operations, rust_types: &RustTypes) {
     g!();
 
     for (name, rust_type) in rust_types {
+        // PostObject is a synthetic API in s3s; aws-sdk-s3 has no corresponding types.
+        if post_object::is_synthetic_type(name) {
+            continue;
+        }
+
         match name.as_str() {
-            // PostObject is a synthetic API in s3s; aws-sdk-s3 has no corresponding types.
-            "PostObjectInput" => continue,
-            "PostObjectOutput" => continue,
             // ListenBucketNotification is a MinIO extension; aws-sdk-s3 has no corresponding types.
             "ListenBucketNotificationInput" => continue,
             "ListenBucketNotificationOutput" => continue,
