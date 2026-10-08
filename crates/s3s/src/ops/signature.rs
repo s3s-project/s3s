@@ -154,8 +154,8 @@ pub(super) fn extract_authorization_v4(hs: &HeaderMap) -> S3Result<Option<Author
 /// presigned URL.
 /// Headers whose prefix gives them the same weight as `x-amz-*`: routing and input
 /// parsing read them, so the signature has to cover them.
-fn is_guarded_extension_header(name: &str) -> bool {
-    name.starts_with("x-amz-") || name.starts_with("x-s3s-")
+fn is_guarded_extension_header(config: &S3Config, name: &str) -> bool {
+    name.starts_with("x-amz-") || (config.payload_length_extension && name.starts_with("x-s3s-"))
 }
 
 fn reject_unsigned_amz_headers(config: &S3Config, hs: &HeaderMap, signed_names: &[&str]) -> S3Result<()> {
@@ -163,7 +163,7 @@ fn reject_unsigned_amz_headers(config: &S3Config, hs: &HeaderMap, signed_names: 
     // Every other exception belongs in the configurable allowlists, one per guarded prefix.
     for name in hs.keys() {
         let name = name.as_str();
-        if !is_guarded_extension_header(name)
+        if !is_guarded_extension_header(config, name)
             || name == X_AMZ_CONTENT_SHA256.as_str()
             || config.unsigned_amz_header_allowlist.iter().any(|allow| allow == name)
             || config.unsigned_s3s_header_allowlist.iter().any(|allow| allow == name)

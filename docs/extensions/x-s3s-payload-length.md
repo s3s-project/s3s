@@ -83,4 +83,4 @@ Reusing `x-amz-decoded-content-length` for form uploads was not an option: the n
 
 ## Compatibility
 
-The header is optional. A client that does not send it sees no behaviour change at all, and an implementation that does not know it is free to ignore it — the request still works, it only loses the ability to frame the body without measuring it. Nothing about the stored bytes, the routing or the authorization depends on the header.
+The header is optional. A client that does not send it sees no behaviour change at all, and a deployment can turn the extension off (`S3Config::payload_length_extension`, enabled by default): the header is then an ordinary unknown header — nothing reads it, it is not required to be signed, and a form field of that name carries no declaration. and an implementation that does not know it is free to ignore it — the request still works, it only loses the ability to frame the body without measuring it. Nothing about the stored bytes, the routing or the authorization depends on the header.

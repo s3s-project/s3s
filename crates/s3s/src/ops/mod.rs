@@ -389,7 +389,7 @@ fn prepare_streaming_body(req: &mut Request, config: &S3Config) -> S3Result {
     // The `x-s3s-payload-length` extension declares the bytes the sender delivers, so it has to
     // agree with the length the framing carries. `POST Object` is excluded: its declaration lives
     // in the form as a field, and an HTTP header there is an unsigned header the POST path rejects.
-    if req.method != Method::POST {
+    if req.method != Method::POST && config.payload_length_extension {
         payload_length::enforce_declaration(&req.headers, known_length)?;
     }
     if let (Some(size), Some(limit)) = (known_length, config.put_object_max_size)
@@ -714,7 +714,9 @@ fn resolve_multipart_post(req: &mut Request, config: &S3Config) -> S3Result<Opti
         S3Path::Object { .. } => return Err(s3_error!(MethodNotAllowed)),
         S3Path::Bucket { bucket } => String::from(&**bucket),
     };
-    reject_declaration_header_on_post(&req.headers)?;
+    if config.payload_length_extension {
+        reject_declaration_header_on_post(&req.headers)?;
+    }
     let mut multipart = req.s3ext.multipart.take().expect("checked above");
     let (stream, policy) = resolve_post_object(&bucket, &mut multipart, config)?;
     req.s3ext.multipart = Some(multipart);
@@ -749,7 +751,12 @@ fn resolve_post_object(
     // The declaration of a form upload is a field, not a header, because a presigned POST signs
     // the policy document rather than the headers. It narrows the range the file stream enforces
     // instead of replacing it: the stream still counts the bytes actually delivered.
-    let (min_file_size, max_file_size) = match payload_length::declared_form_field(multipart.fields())? {
+    let declared = if config.payload_length_extension {
+        payload_length::declared_form_field(multipart.fields())?
+    } else {
+        None
+    };
+    let (min_file_size, max_file_size) = match declared {
         Some(declared) if policy_min.max(declared) > policy_max.min(declared) => {
             return Err(s3_error!(
                 EntityTooSmall,

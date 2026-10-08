@@ -365,6 +365,16 @@ pub struct S3Config {
     /// Default: true
     pub require_content_length: bool,
 
+    /// Whether the `x-s3s-payload-length` extension is recognised.
+    ///
+    /// Enabled by default. Turning it off makes the header an ordinary unknown header: it is not
+    /// required to be signed, nothing reads it, and a form field of that name carries no
+    /// declaration — so a deployment that does not want the extension's semantics does not have
+    /// to support them.
+    ///
+    /// Default: true
+    pub payload_length_extension: bool,
+
     /// Whether client-declared operation intent (OIR) routing is enabled.
     ///
     /// When enabled (default), s3s honors the `x-id` query parameter (signed
@@ -472,6 +482,7 @@ impl Default for S3Config {
             normalize_forward_slash_path: false,
             normalize_content_length: true,
             require_content_length: true,
+            payload_length_extension: true,
             operation_id_routing: true,
             allow_presigned_url: true,
             allow_post_signature: true,
@@ -711,12 +722,25 @@ mod tests {
             require_signed_host: false,
             unsigned_amz_header_allowlist: vec!["x-amz-cf-id".to_owned()],
             unsigned_s3s_header_allowlist: Vec::new(),
+            payload_length_extension: true,
         };
 
         let json = serde_json::to_string(&config).expect("serialize failed");
         let deserialized: S3Config = serde_json::from_str(&json).expect("deserialize failed");
 
         assert_eq!(config, deserialized);
+    }
+
+    #[test]
+    fn test_serde_enables_the_payload_length_extension_by_default() {
+        let config: S3Config = serde_json::from_str("{}").expect("deserialize failed");
+        assert!(config.payload_length_extension, "the extension is opt-out, not opt-in");
+    }
+
+    #[test]
+    fn test_serde_turns_the_payload_length_extension_off() {
+        let config: S3Config = serde_json::from_str(r#"{"payload_length_extension":false}"#).expect("deserialize failed");
+        assert!(!config.payload_length_extension);
     }
 
     #[test]

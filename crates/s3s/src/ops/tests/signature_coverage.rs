@@ -141,6 +141,22 @@ async fn the_declaration_header_must_be_signed_unless_allowlisted() {
     assert_eq!(test_s3.put_object.load(Ordering::SeqCst), 1, "the allowlisted request reaches PutObject");
 }
 
+/// With the extension turned off the header is an ordinary unknown header: unsigned, and served.
+#[tokio::test]
+async fn disabling_the_extension_leaves_the_declaration_header_unread() {
+    const URI: &str = "http://localhost/test-bucket/test-key.txt";
+    let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
+    let test_s3 = Arc::new(TestS3::default());
+    let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
+    let config = config_with(|config| config.payload_length_extension = false);
+    let ccx = test_context(&s3, &config, &auth);
+    let mut req = declaration_request(Method::PUT, Version::HTTP_11, URI, "0");
+
+    let response = super::call(&mut req, &ccx).await.expect("must be routed");
+    assert_eq!(response.status, StatusCode::OK, "an opt-out deployment must not read the header");
+    assert_eq!(test_s3.put_object.load(Ordering::SeqCst), 1);
+}
+
 fn copy_source_request(method: Method, version: Version, uri: &str, sign_copy_source: bool) -> Request {
     const COPY_SOURCE: (&str, &str) = ("x-amz-copy-source", "/source-bucket/source-key");
     let uri = uri.parse::<Uri>().unwrap();
