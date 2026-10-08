@@ -1036,6 +1036,12 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
                 match s3_path {
                     S3Path::Root => return Err(unknown_operation()),
                     S3Path::Bucket { bucket } => {
+                        // A form upload signs the policy document and not the headers, so the
+                        // declaration has to arrive as a form field: a header carrying it is an
+                        // unsigned header here, exactly like an unsigned `x-amz-*` one.
+                        if req.headers.contains_key(payload_length::X_S3S_PAYLOAD_LENGTH) {
+                            return Err(payload_length::unsigned_on_post());
+                        }
                         let (stream, policy) = resolve_post_object(bucket, multipart, &config)?;
                         req.s3ext.post_object_stream = Some(stream);
                         req.s3ext.post_policy = policy;

@@ -369,6 +369,21 @@ pub(crate) mod post_policy_test_helpers {
         secret_key: &SecretKey,
         with_content_type: bool,
     ) -> Request {
+        build_post_object_request_with(policy_json, file_content, secret_key, with_content_type, &[], &[])
+    }
+
+    /// Build a POST object request, adding form fields and headers on top of the base shape.
+    ///
+    /// Each entry of `extra_fields` is appended after the signed fields, so a policy condition
+    /// has to cover it; each entry of `extra_headers` is added to the request.
+    pub fn build_post_object_request_with(
+        policy_json: &str,
+        file_content: &str,
+        secret_key: &SecretKey,
+        with_content_type: bool,
+        extra_fields: &[(&str, &str)],
+        extra_headers: &[(&str, &str)],
+    ) -> Request {
         let boundary = "------------------------test12345678";
         let bucket = "test-bucket";
         let key = "test-key";
@@ -397,25 +412,28 @@ pub(crate) mod post_policy_test_helpers {
             if with_content_type {
                 f.push(("Content-Type", content_type));
             }
+            for (name, value) in extra_fields {
+                f.push((name, value));
+            }
             f
         };
 
         let body = build_multipart_fields(&fields, boundary)
             + build_multipart_file_field("file", "test.txt", content_type, file_content, boundary).as_str();
 
-        Request::from(
-            hyper::Request::builder()
-                .method(Method::POST)
-                .uri(format!("http://localhost/{bucket}"))
-                .header(crate::header::HOST, "localhost")
-                .header(
-                    crate::header::CONTENT_TYPE,
-                    hyper::header::HeaderValue::from_str(&format!("multipart/form-data; boundary={boundary}")).unwrap(),
-                )
-                .header(hyper::header::CONTENT_LENGTH, body.len())
-                .body(Body::from(Bytes::from(body)))
-                .unwrap(),
-        )
+        let mut builder = hyper::Request::builder()
+            .method(Method::POST)
+            .uri(format!("http://localhost/{bucket}"))
+            .header(crate::header::HOST, "localhost")
+            .header(
+                crate::header::CONTENT_TYPE,
+                hyper::header::HeaderValue::from_str(&format!("multipart/form-data; boundary={boundary}")).unwrap(),
+            )
+            .header(hyper::header::CONTENT_LENGTH, body.len());
+        for (name, value) in extra_headers {
+            builder = builder.header(*name, *value);
+        }
+        Request::from(builder.body(Body::from(Bytes::from(body))).unwrap())
     }
 
     /// Build a POST object request whose body is split into many small chunks.

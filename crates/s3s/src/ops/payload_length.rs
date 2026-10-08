@@ -96,6 +96,20 @@ pub(crate) fn enforce_declaration(headers: &HeaderMap, framing: Option<u64>) -> 
     }
 }
 
+/// The rejection for a `POST Object` that carries the declaration as an HTTP header.
+///
+/// A form upload is authenticated by the policy document inside the form, and the signature
+/// covers that document rather than the headers, so the value has to be a form field that the
+/// policy conditions cover. A header cannot carry a signed declaration here.
+pub(crate) fn unsigned_on_post() -> S3Error {
+    S3Error::with_message(
+        S3ErrorCode::AccessDenied,
+        format!(
+            "There were headers present in the request which were not signed: {X_S3S_PAYLOAD_LENGTH} is a form field on a POST Object, covered by the policy conditions."
+        ),
+    )
+}
+
 fn invalid_declaration(reason: &str) -> S3Error {
     S3Error::with_message(S3ErrorCode::InvalidRequest, format!("Invalid {X_S3S_PAYLOAD_LENGTH}: {reason}."))
 }
