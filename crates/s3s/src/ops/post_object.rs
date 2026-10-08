@@ -45,7 +45,6 @@ pub(crate) fn serialize_http(
     output: &PostObjectOutput,
 ) -> S3Result<http::Response> {
     let etag_str = output.e_tag.as_ref().map(ETag::value).unwrap_or_default();
-    let location = format!("/{bucket}/{key}");
 
     // Handle success_action_redirect: return 303 See Other with Location header
     if let Some(redirect_url) = success_action_redirect {
@@ -72,6 +71,7 @@ pub(crate) fn serialize_http(
     let mut res = match success_action_status {
         Some(201) => {
             // 201 Created with XML body using PostResponse DTO
+            let location = format!("/{bucket}/{key}");
             let post_response = crate::dto::PostResponse {
                 location: &location,
                 bucket,
@@ -293,4 +293,6 @@ mod tests {
             "the redirect keeps the location the client asked for"
         );
     }
+
+
 }
