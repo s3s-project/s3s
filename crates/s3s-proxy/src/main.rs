@@ -23,6 +23,7 @@ use hyper_util::server::conn::auto::Builder as ConnBuilder;
 
 mod admin_route;
 mod auth_passthrough;
+mod cors_preflight_route;
 mod hop_by_hop;
 mod post_object_passthrough;
 mod proxy_service;
@@ -87,6 +88,16 @@ struct Opt {
     #[clap(long)]
     enable_post_object_passthrough: bool,
 
+    /// Forward CORS preflight requests (OPTIONS) to the backend.
+    ///
+    /// The typed path has no OPTIONS route and answers it `NotImplemented`; with
+    /// this enabled the preflight is forwarded verbatim and the backend decides
+    /// from the bucket's CORS configuration. Disabled by default, like the other
+    /// passthrough rules: without it an OPTIONS request keeps the typed-path
+    /// answer.
+    #[clap(long)]
+    enable_cors_preflight_passthrough: bool,
+
     /// Disable the STS protocol part of the authentication passthrough.
     ///
     /// `POST /` with a form body asks the backend to issue temporary
@@ -149,7 +160,8 @@ fn passthrough_max_body_size(config: &S3Config) -> u64 {
 ///
 /// Custom routes forward requests the typed path cannot serve: the `MinIO` admin
 /// API (signed with a credential the proxy knows, so it passes the service's own
-/// verification) and the STS protocol shape.
+/// verification), the STS protocol shape, and the CORS preflight (an OPTIONS
+/// request, which is not modeled at all and carries no signature to verify).
 fn build_service(
     opt: &Opt,
     credentials: Option<&aws_credential_types::Credentials>,
@@ -166,7 +178,9 @@ fn build_service(
     }
 
     // Apply the configuration the caller built, which is also what bounds a
-    // forwarded request body.
+    // forwarded request body. The bound is read before the configuration is
+    // moved into the provider.
+    let route_max_body_size = passthrough_max_body_size(&config);
     b.set_config(Arc::new(StaticConfigProvider::new(config)));
 
     // Forward MinIO admin API requests to the backend through a custom route.
@@ -181,6 +195,22 @@ fn build_service(
         )));
     }
     if let Some(route) = sts_route {
+        routes.push(Box::new(route));
+    }
+    // Forward CORS preflight requests to the backend when the operator opts in.
+    // OPTIONS is not a modeled S3 operation, so the typed path answers it with
+    // NotImplemented; the preflight is a CORS decision the backend makes against
+    // the bucket's CORS configuration, and it carries no signature this service
+    // could verify. Without the flag the route is absent and an OPTIONS request
+    // keeps its typed-path answer, exactly as before.
+    if let Some(route) = cors_preflight_route::CorsPreflightRoute::from_config(
+        opt.enable_cors_preflight_passthrough,
+        reqwest::Url::parse(&opt.endpoint_url)?,
+        reqwest::Client::builder()
+            .connect_timeout(std::time::Duration::from_secs(5))
+            .build()?,
+        route_max_body_size,
+    ) {
         routes.push(Box::new(route));
     }
     if !routes.is_empty() {
@@ -381,4 +411,116 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     info!("server is stopped");
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::net::SocketAddr;
+
+    use hyper::StatusCode;
+    use hyper::http::Request;
+    use s3s::Body;
+    use s3s::HttpRequest;
+    use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+    use tokio::net::TcpListener;
+
+    /// Serves exactly one request, answers 403 with a marker header.
+    async fn serve_preflight_backend() -> SocketAddr {
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let addr = listener.local_addr().expect("local addr");
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.expect("accept");
+            let mut buf = Vec::new();
+            let mut chunk = [0_u8; 4096];
+            loop {
+                if buf.windows(4).any(|window| window == b"\r\n\r\n") {
+                    break;
+                }
+                let read = socket.read(&mut chunk).await.expect("read");
+                assert!(read > 0, "connection closed before the request head");
+                buf.extend_from_slice(&chunk[..read]);
+            }
+            socket
+                .write_all(b"HTTP/1.1 403 Forbidden\r\ncontent-length: 0\r\nx-backend: cors\r\n\r\n")
+                .await
+                .expect("write response");
+            socket.flush().await.expect("flush");
+        });
+        addr
+    }
+
+    fn opt(endpoint_url: String, enable_cors_preflight_passthrough: bool) -> Opt {
+        let mut args = vec!["s3s-proxy".to_owned(), "--endpoint-url".to_owned(), endpoint_url];
+        if enable_cors_preflight_passthrough {
+            args.push("--enable-cors-preflight-passthrough".to_owned());
+        }
+        Opt::parse_from(args)
+    }
+
+    fn backend_proxy(endpoint_url: &str) -> s3s_aws::Proxy {
+        let conf = aws_sdk_s3::config::Builder::new()
+            .behavior_version(aws_sdk_s3::config::BehaviorVersion::latest())
+            .region(aws_sdk_s3::config::Region::new("us-east-1"))
+            .endpoint_url(endpoint_url)
+            .credentials_provider(aws_credential_types::Credentials::new("test", "test", None, None, "test"))
+            .build();
+        let builder = s3s_aws::Proxy::builder(aws_sdk_s3::Client::from_conf(conf));
+        // Mirror the production build: the minio feature needs a minio client.
+        #[cfg(feature = "minio")]
+        let builder = {
+            let provider = minio::s3::creds::StaticProvider::new("test", "test", None);
+            let minio_client =
+                minio::s3::MinioClient::new(endpoint_url.parse().expect("endpoint url"), Some(provider), None, None)
+                    .expect("minio client");
+            builder.minio_client(minio_client)
+        };
+        builder.build()
+    }
+
+    fn build(opt: &Opt) -> Result<s3s::service::S3Service, Box<dyn Error + Send + Sync>> {
+        build_service(opt, None, backend_proxy(&opt.endpoint_url), None, None, Arc::new(S3Config::default()))
+    }
+
+    fn options_request() -> HttpRequest {
+        Request::builder()
+            .method(hyper::Method::OPTIONS)
+            .uri("/bucket/key")
+            .header("origin", "example.origin")
+            .header("access-control-request-method", "GET")
+            .body(Body::empty())
+            .expect("valid request")
+    }
+
+    /// Flag off: the production wiring installs no route, so an OPTIONS request
+    /// keeps the typed-path answer. This is the flag-off half of the switch and
+    /// the red state of the fix.
+    #[tokio::test]
+    async fn flag_off_wires_no_route_and_options_stays_501() {
+        let opt = opt("http://127.0.0.1:1".to_owned(), false);
+        let service = build(&opt).expect("service builds");
+        let resp = service.call(options_request()).await.expect("service call");
+        assert_eq!(resp.status(), StatusCode::NOT_IMPLEMENTED);
+    }
+
+    /// Flag on: the same wiring installs the route, and the preflight reaches the
+    /// backend, whose answer is returned unchanged.
+    #[tokio::test]
+    async fn flag_on_wires_the_route_and_the_preflight_is_forwarded() {
+        let addr = serve_preflight_backend().await;
+        let opt = opt(format!("http://{addr}"), true);
+        let service = build(&opt).expect("service builds");
+        let resp = service.call(options_request()).await.expect("service call");
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+        assert_eq!(resp.headers().get("x-backend").expect("marker header"), "cors");
+    }
+
+    /// The malformed-endpoint branch of the wiring: the error propagates instead
+    /// of building a service that cannot forward anything.
+    #[tokio::test]
+    async fn a_malformed_endpoint_url_is_an_error() {
+        let opt = opt("not-a-url".to_owned(), true);
+        assert!(build(&opt).is_err(), "a malformed endpoint url must not build a service");
+    }
 }
