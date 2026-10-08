@@ -281,36 +281,72 @@ pub fn parse_opt_header_timestamp_ignoring_invalid(req: &Request, name: &HeaderN
     Timestamp::parse(fmt, s).ok()
 }
 
+/// Parses a required list header: one whose values are elements separated by commas.
+///
+/// A list header may be split over several field lines, and one field line may carry several
+/// elements; the two forms mean the same list (RFC 9110 §5.6.1), so both are read. The elements
+/// are split on commas with the optional whitespace around them removed, and the empty ones are
+/// skipped, so a field that carries no element counts as a missing header.
 pub fn parse_list_header<T>(req: &Request, name: &HeaderName) -> S3Result<List<T>>
 where
     T: TryFromHeaderValue,
     T::Error: std::error::Error + Send + Sync + 'static,
 {
-    let mut list = List::new();
-    for val in req.headers.get_all(name) {
-        let ans = T::try_from_header_value(val).map_err(|err| invalid_header(err, name, val))?;
-        list.push(ans);
-    }
+    let list = parse_list_header_elements(req, name)?;
+
     if list.is_empty() {
         return Err(missing_header(name));
     }
+
     Ok(list)
 }
 
+/// Parses an optional list header; see [`parse_list_header`] for the element syntax.
+///
+/// A header whose values carry no element counts as absent, the way [`parse_opt_header`] reads a
+/// present but empty single-valued header.
 pub fn parse_opt_list_header<T>(req: &Request, name: &HeaderName) -> S3Result<Option<List<T>>>
 where
     T: TryFromHeaderValue,
     T::Error: std::error::Error + Send + Sync + 'static,
 {
-    let mut list = List::new();
-    for val in req.headers.get_all(name) {
-        let ans = T::try_from_header_value(val).map_err(|err| invalid_header(err, name, val))?;
-        list.push(ans);
-    }
+    let list = parse_list_header_elements(req, name)?;
+
     if list.is_empty() {
         return Ok(None);
     }
+
     Ok(Some(list))
+}
+
+/// Reads every element of a list header, in field order.
+///
+/// Each field line is decoded as UTF-8 and split on commas. A field line that cannot be decoded,
+/// or an element the element type refuses, is rejected as an invalid header carrying the name of
+/// the header it came from.
+fn parse_list_header_elements<T>(req: &Request, name: &HeaderName) -> S3Result<List<T>>
+where
+    T: TryFromHeaderValue,
+    T::Error: std::error::Error + Send + Sync + 'static,
+{
+    let mut list = List::new();
+
+    for val in req.headers.get_all(name) {
+        let value = val.to_str().map_err(|err| invalid_header(err, name, val))?;
+
+        let elements = value
+            .split(',')
+            .map(|element| element.trim_matches([' ', '\t']))
+            .filter(|element| !element.is_empty());
+
+        for element in elements {
+            let element = HeaderValue::from_bytes(element.as_bytes()).map_err(|err| invalid_header(err, name, val))?;
+            let ans = T::try_from_header_value(&element).map_err(|err| invalid_header(err, name, val))?;
+            list.push(ans);
+        }
+    }
+
+    Ok(list)
 }
 
 fn missing_query(name: &str) -> S3Error {
@@ -1182,6 +1218,134 @@ mod tests {
         let name = HeaderName::from_static("x-list");
         let list: Option<List<String>> = parse_opt_list_header(&req, &name).unwrap();
         assert!(list.is_none());
+    }
+
+    #[test]
+    fn parse_list_header_splits_commas() {
+        let mut req = make_request();
+        req.headers.insert("x-list", "a,b".parse().unwrap());
+        let name = HeaderName::from_static("x-list");
+        let list: List<String> = parse_list_header(&req, &name).unwrap();
+        assert_eq!(list, vec!["a".to_string(), "b".to_string()]);
+    }
+
+    #[test]
+    fn parse_list_header_splits_every_field_line() {
+        let mut req = make_request();
+        req.headers.append("x-list", "a,b".parse().unwrap());
+        req.headers.append("x-list", "c".parse().unwrap());
+        let name = HeaderName::from_static("x-list");
+        let list: List<String> = parse_list_header(&req, &name).unwrap();
+        assert_eq!(list, vec!["a".to_string(), "b".to_string(), "c".to_string()]);
+    }
+
+    #[test]
+    fn parse_list_header_trims_optional_whitespace() {
+        let mut req = make_request();
+        req.headers.insert("x-list", "a , b".parse().unwrap());
+        let name = HeaderName::from_static("x-list");
+        let list: List<String> = parse_list_header(&req, &name).unwrap();
+        assert_eq!(list, vec!["a".to_string(), "b".to_string()]);
+    }
+
+    #[test]
+    fn parse_list_header_ignores_empty_elements() {
+        let mut req = make_request();
+        req.headers.insert("x-list", "a,,b,".parse().unwrap());
+        let name = HeaderName::from_static("x-list");
+        let list: List<String> = parse_list_header(&req, &name).unwrap();
+        assert_eq!(list, vec!["a".to_string(), "b".to_string()]);
+    }
+
+    #[test]
+    fn parse_list_header_empty_value_is_missing() {
+        let mut req = make_request();
+        req.headers.insert("x-list", "".parse().unwrap());
+        let name = HeaderName::from_static("x-list");
+        let result: S3Result<List<String>> = parse_list_header(&req, &name);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_opt_list_header_splits_commas() {
+        let mut req = make_request();
+        req.headers.insert("x-list", "a,b".parse().unwrap());
+        let name = HeaderName::from_static("x-list");
+        let list: Option<List<String>> = parse_opt_list_header(&req, &name).unwrap();
+        assert_eq!(list, Some(vec!["a".to_string(), "b".to_string()]));
+    }
+
+    #[test]
+    fn parse_opt_list_header_empty_value_is_none() {
+        let mut req = make_request();
+        req.headers.insert("x-list", "".parse().unwrap());
+        let name = HeaderName::from_static("x-list");
+        let list: Option<List<String>> = parse_opt_list_header(&req, &name).unwrap();
+        assert!(list.is_none());
+    }
+
+    #[test]
+    fn parse_list_header_splits_object_attributes() {
+        // Guards the GetObjectAttributes regression: a comma-joined value such as
+        // ETag,ObjectSize used to become one element, which the proxy forwarded as
+        // a quoted single attribute name and the backend rejected.
+        use crate::dto::ObjectAttributes;
+
+        let mut req = make_request();
+        req.headers
+            .insert(crate::header::X_AMZ_OBJECT_ATTRIBUTES, "ETag,ObjectSize".parse().unwrap());
+        let list: List<ObjectAttributes> = parse_list_header(&req, &crate::header::X_AMZ_OBJECT_ATTRIBUTES).unwrap();
+        assert_eq!(
+            list,
+            vec![
+                ObjectAttributes::from_static(ObjectAttributes::ETAG),
+                ObjectAttributes::from_static(ObjectAttributes::OBJECT_SIZE),
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_list_header_rejects_an_element_the_type_refuses() {
+        let mut req = make_request();
+        req.headers.insert("x-list", "1,oops".parse().unwrap());
+        let name = HeaderName::from_static("x-list");
+        let result: S3Result<List<i32>> = parse_list_header(&req, &name);
+        let error = result.expect_err("a non-numeric element is not an integer");
+        assert_eq!(error.code(), &S3ErrorCode::InvalidArgument);
+        let message = error.message().unwrap_or_default();
+        assert!(message.contains("x-list"), "the error must name the header it came from");
+    }
+
+    #[test]
+    fn parse_opt_list_header_rejects_an_element_the_type_refuses() {
+        let mut req = make_request();
+        req.headers.insert("x-list", "1,oops".parse().unwrap());
+        let name = HeaderName::from_static("x-list");
+        let result: S3Result<Option<List<i32>>> = parse_opt_list_header(&req, &name);
+        let error = result.expect_err("an optional header still rejects an element the type refuses");
+        assert_eq!(error.code(), &S3ErrorCode::InvalidArgument);
+    }
+
+    #[test]
+    fn parse_list_header_rejects_a_value_that_is_not_utf8() {
+        let mut req = make_request();
+        req.headers.insert("x-list", HeaderValue::from_bytes(b"a,\xff").unwrap());
+        let name = HeaderName::from_static("x-list");
+        let result: S3Result<List<String>> = parse_list_header(&req, &name);
+        let error = result.expect_err("an undecodable field value is not a list");
+        assert_eq!(error.code(), &S3ErrorCode::InvalidArgument);
+        let message = error.message().unwrap_or_default();
+        assert!(message.contains("x-list"), "the error must name the header it came from");
+    }
+
+    #[test]
+    fn parse_opt_list_header_rejects_a_value_that_is_not_utf8() {
+        let mut req = make_request();
+        req.headers.insert("x-list", HeaderValue::from_bytes(b"a,\xff").unwrap());
+        let name = HeaderName::from_static("x-list");
+        let result: S3Result<Option<List<String>>> = parse_opt_list_header(&req, &name);
+        let error = result.expect_err("an optional header still rejects an undecodable value");
+        assert_eq!(error.code(), &S3ErrorCode::InvalidArgument);
     }
 
     // --- parse_field_value / parse_field_value_timestamp ---
