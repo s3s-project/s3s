@@ -694,6 +694,45 @@ fn post_object_file_size_range(policy: Option<&PostPolicy>, config_max: u64) -> 
     Ok((min, max))
 }
 
+/// Resolves a multipart `POST Object` request, when this is one.
+///
+/// The declaration of a form upload is a form field covered by the policy conditions, so a
+/// header carrying it is rejected here. The file part becomes the operation's stream, with the
+/// policy range enforced while it is read.
+fn resolve_multipart_post(req: &mut Request, config: &S3Config) -> S3Result<Option<&'static dyn Operation>> {
+    if req.s3ext.multipart.is_none() || req.method != Method::POST {
+        return Ok(None);
+    }
+    // The path is read into an owned name first, so nothing borrows the request while the
+    // multipart is taken out and the stream is stored back.
+    let bucket = match req.s3ext.s3_path.as_ref().expect("classified above") {
+        S3Path::Root => return Err(unknown_operation()),
+        // A multipart POST whose path names an object is not a modeled S3 operation:
+        // `PostObject` binds to `/{Bucket}` only — the key is carried by the `key` form field,
+        // never the URL path. AWS and `MinIO` reject such requests with `MethodNotAllowed`;
+        // keep that behavior.
+        S3Path::Object { .. } => return Err(s3_error!(MethodNotAllowed)),
+        S3Path::Bucket { bucket } => String::from(&**bucket),
+    };
+    reject_declaration_header_on_post(&req.headers)?;
+    let mut multipart = req.s3ext.multipart.take().expect("checked above");
+    let (stream, policy) = resolve_post_object(&bucket, &mut multipart, config)?;
+    req.s3ext.multipart = Some(multipart);
+    req.s3ext.post_object_stream = Some(stream);
+    req.s3ext.post_policy = policy;
+    Ok(Some(&PostObject as &'static dyn Operation))
+}
+
+/// A form upload signs the policy document inside the form and not the headers, so the
+/// declaration has to arrive as a form field covered by the policy conditions: a header
+/// carrying it is an unsigned header here, exactly like an unsigned `x-amz-*` one.
+fn reject_declaration_header_on_post(headers: &HeaderMap) -> S3Result<()> {
+    if headers.contains_key(payload_length::X_S3S_PAYLOAD_LENGTH) {
+        return Err(payload_length::unsigned_on_post());
+    }
+    Ok(())
+}
+
 fn resolve_post_object(
     bucket: &str,
     multipart: &mut crate::http::Multipart,
@@ -1029,32 +1068,10 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
         op
     } else {
         'resolve: {
-            let s3_path = req.s3ext.s3_path.as_ref().expect("classified above");
-            if let Some(multipart) = &mut req.s3ext.multipart
-                && req.method == Method::POST
-            {
-                match s3_path {
-                    S3Path::Root => return Err(unknown_operation()),
-                    S3Path::Bucket { bucket } => {
-                        // A form upload signs the policy document and not the headers, so the
-                        // declaration has to arrive as a form field: a header carrying it is an
-                        // unsigned header here, exactly like an unsigned `x-amz-*` one.
-                        if req.headers.contains_key(payload_length::X_S3S_PAYLOAD_LENGTH) {
-                            return Err(payload_length::unsigned_on_post());
-                        }
-                        let (stream, policy) = resolve_post_object(bucket, multipart, &config)?;
-                        req.s3ext.post_object_stream = Some(stream);
-                        req.s3ext.post_policy = policy;
-                        break 'resolve &PostObject as &'static dyn Operation;
-                    }
-                    // A multipart POST whose path names an object is not a modeled S3
-                    // operation: `PostObject` binds to `/{Bucket}` only — the key is
-                    // carried by the `key` form field, never the URL path. AWS and
-                    // MinIO reject such requests with `MethodNotAllowed`; keep that
-                    // behavior.
-                    S3Path::Object { .. } => return Err(s3_error!(MethodNotAllowed)),
-                }
+            if let Some(op) = resolve_multipart_post(req, &config)? {
+                break 'resolve op;
             }
+            let s3_path = req.s3ext.s3_path.as_ref().expect("classified above");
             resolve_operation(req, s3_path, host_header.as_deref(), ccx)?
         }
     };
