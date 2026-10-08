@@ -294,5 +294,14 @@ mod tests {
         );
     }
 
-
+    /// An object tag that cannot become a header value is refused with an internal error rather
+    /// than answering without a tag or panicking.
+    #[test]
+    fn an_unprintable_object_tag_is_refused() {
+        let output = output_with_etag("\"bad\u{1}\"");
+        let err = serialize_http("bucket", "key", None, None, &output)
+            .err()
+            .expect("the tag cannot become a header value");
+        assert_eq!(*err.code(), S3ErrorCode::InternalError);
+    }
 }
