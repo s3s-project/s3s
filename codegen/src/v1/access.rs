@@ -52,6 +52,13 @@ pub fn codegen(ops: &Operations) {
         g!("/// Checks whether the {} request has accesses to the resources.", op.name);
         g!("/// ");
         g!("/// This method returns `Ok(())` by default.");
+        if op.name == "PostObject" {
+            g!("/// ");
+            g!("/// POST Object is not a synonym for `PutObject`: the request carries a form (its fields,");
+            g!("/// the file name and the policy) and the response carries the `success_action_*`");
+            g!("/// semantics. The default path runs the `put_object` check as well, so this hook is an");
+            g!("/// addition to it rather than a replacement.");
+        }
         if op.is_minio {
             g!("#[cfg(feature = \"minio\")]");
         }

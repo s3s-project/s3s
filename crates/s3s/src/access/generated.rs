@@ -623,6 +623,11 @@ pub trait S3Access: Send + Sync + 'static {
     /// Checks whether the PostObject request has accesses to the resources.
     ///
     /// This method returns `Ok(())` by default.
+    ///
+    /// POST Object is not a synonym for `PutObject`: the request carries a form (its fields,
+    /// the file name and the policy) and the response carries the `success_action_*`
+    /// semantics. The default path runs the `put_object` check as well, so this hook is an
+    /// addition to it rather than a replacement.
     async fn post_object(&self, _req: &mut S3Request<PostObjectInput>) -> S3Result<()> {
         Ok(())
     }

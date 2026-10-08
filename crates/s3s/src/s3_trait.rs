@@ -5065,7 +5065,18 @@ pub trait S3: Send + Sync + 'static {
     /// POST Object (multipart form upload)
     ///
     /// This is a synthetic method separated from `PutObject` so implementations can distinguish
-    /// POST vs PUT. By default it delegates to [`S3::put_object`] to keep behavior identical.
+    /// POST vs PUT.
+    ///
+    /// The default implementation is a migration scaffold, not a correct POST implementation: it
+    /// converts the request into a [`S3::put_object`] call, and the shape it forwards has no place
+    /// for the form (its fields, the file name and the policy), the framing facts (boundary, tail
+    /// length) or the `success_action_*` response semantics.
+    ///
+    /// It is kept so that an implementation which only implements [`S3::put_object`] keeps serving
+    /// POST requests while it migrates; the scaffold may be removed in a future minor release.
+    ///
+    /// An implementation that cares about POST semantics should implement this method explicitly
+    /// instead of relying on the default.
     async fn post_object(&self, req: S3Request<PostObjectInput>) -> S3Result<S3Response<PostObjectOutput>> {
         let resp = self
             .put_object(req.map_input(crate::dto::post_object_input_into_put_object_input))
