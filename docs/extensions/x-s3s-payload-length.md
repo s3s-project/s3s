@@ -58,7 +58,7 @@ The header carries the same weight as an `x-amz-*` header, because routing and i
 A declaration never replaces a check, it adds one:
 
 - On `POST Object` the declared value is enforced while the file part is read, together with the `content-length-range` policy condition and the configured maximum, whichever bound is tighter. The condition is still evaluated against the bytes actually delivered.
-- On the other body-carrying operations the value must agree with the length the framing carries: fewer bytes are answered with `400 EntityTooSmall`, more with `400 EntityTooLarge`, and a request whose framing declares no length at all is rejected rather than accepted: a deployment that requires a content length answers `411 MissingContentLength` (the default), and where that requirement is turned off, the declaration itself is answered with `400 InvalidRequest`.
+- On the other body-carrying operations the value must agree with the length the framing carries: fewer bytes are answered with `400 EntityTooSmall`, more with `400 EntityTooLarge`, and a request whose framing declares no length at all is rejected rather than accepted — a signed request that carries a whole-payload checksum is answered `411 MissingContentLength` first, because the signature path needs the length to validate that checksum, and where the authentication path does not need it the declaration itself answers `400 InvalidRequest`.
 - No failure delivers an object: a request that disagrees with its declaration is rejected while it is read.
 
 ## Relation to `x-amz-decoded-content-length`
