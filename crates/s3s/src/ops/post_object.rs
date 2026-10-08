@@ -235,4 +235,23 @@ mod tests {
         assert_eq!(*err.code(), S3ErrorCode::InvalidArgument);
         assert_eq!(err.message(), Some(r#"invalid field value: success_action_status: "abc""#));
     }
+
+    #[tokio::test]
+    async fn redirect_fields_are_validated_while_serializing_not_while_parsing() {
+        // parse_field_value is infallible for String: every text value parses, so the ?
+        // on the two redirect lookups has no reachable error path. The value is validated
+        // when the response is serialized instead.
+        let mut req = prepared_post_request(("success_action_redirect", "not a url")).await;
+        let input = deserialize_http(&mut req).expect("a text value parses");
+        assert_eq!(input.success_action_redirect.as_deref(), Some("not a url"));
+
+        let mut req = prepared_post_request(("redirect", "also not a url")).await;
+        let input = deserialize_http(&mut req).expect("a text value parses through the fallback");
+        assert_eq!(input.success_action_redirect.as_deref(), Some("also not a url"));
+
+        let err = serialize_http("bucket", "key", Some("not a url"), None, &PostObjectOutput::default())
+            .err()
+            .expect("the redirect is rejected when the response is serialized");
+        assert_eq!(*err.code(), S3ErrorCode::InvalidArgument);
+    }
 }
