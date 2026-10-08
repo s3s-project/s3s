@@ -17,6 +17,7 @@ use self::signature::{CredentialsExt, SignatureContext};
 mod get_object;
 mod multipart;
 mod payload_length;
+mod post_object;
 
 #[cfg(test)]
 mod tests;
