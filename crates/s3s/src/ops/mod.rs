@@ -706,7 +706,20 @@ fn resolve_post_object(
     multipart.substitute_key_filename();
 
     let policy = parse_post_policy(multipart)?;
-    let (min_file_size, max_file_size) = post_object_file_size_range(policy.as_ref(), config.post_object_max_file_size)?;
+    let (policy_min, policy_max) = post_object_file_size_range(policy.as_ref(), config.post_object_max_file_size)?;
+    // The declaration of a form upload is a field, not a header, because a presigned POST signs
+    // the policy document rather than the headers. It narrows the range the file stream enforces
+    // instead of replacing it: the stream still counts the bytes actually delivered.
+    let (min_file_size, max_file_size) = match payload_length::declared_form_field(multipart.fields())? {
+        Some(declared) if policy_min.max(declared) > policy_max.min(declared) => {
+            return Err(s3_error!(
+                EntityTooSmall,
+                "The declared payload length {declared} is outside the range the policy allows."
+            ));
+        }
+        Some(declared) => (policy_min.max(declared), policy_max.min(declared)),
+        None => (policy_min, policy_max),
+    };
 
     // Prepare the file stream for the operation: the file part is forwarded as
     // a stream whose exact length is not known before the body is read — how

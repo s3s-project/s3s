@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2023-2026 The s3s Authors
+
 //! The `x-s3s-payload-length` extension: a signed declaration of the payload length.
 //!
 //! The value is the number of bytes the sender delivers after transfer decoding and before
@@ -32,14 +35,33 @@ pub(crate) fn declared_payload_length(headers: &HeaderMap) -> S3Result<Option<u6
     let raw = value
         .to_str()
         .map_err(|_| invalid_declaration("the value is not valid text"))?;
+    parse_declaration(raw).map(Some)
+}
+
+/// Parses a declared value, whether it arrived as a header or as a form field.
+pub(crate) fn parse_declaration(raw: &str) -> S3Result<u64> {
     let well_formed =
         !raw.is_empty() && raw.bytes().all(|byte| byte.is_ascii_digit()) && (raw.len() == 1 || !raw.starts_with('0'));
     if !well_formed {
         return Err(invalid_declaration("the value must be a decimal integer without a leading zero"));
     }
     raw.parse::<u64>()
-        .map(Some)
         .map_err(|_| invalid_declaration("the value does not fit in 64 bits"))
+}
+
+/// Reads the declaration of a form upload, where the value is a form field rather than a header:
+/// a presigned `POST` signs the policy document, so a header cannot carry the extension.
+pub(crate) fn declared_form_field(fields: &[(String, String)]) -> S3Result<Option<u64>> {
+    let mut found: Option<&str> = None;
+    for (name, value) in fields {
+        if name.eq_ignore_ascii_case(X_S3S_PAYLOAD_LENGTH) {
+            if found.is_some() {
+                return Err(invalid_declaration("the field appears more than once"));
+            }
+            found = Some(value.as_str());
+        }
+    }
+    found.map(parse_declaration).transpose()
 }
 
 /// Checks the declaration against the length the framing carries.
@@ -144,7 +166,40 @@ mod tests {
     }
 
     #[test]
+    fn a_form_field_carries_the_declaration() {
+        let fields = vec![
+            ("key".to_owned(), "public/file.txt".to_owned()),
+            (X_S3S_PAYLOAD_LENGTH.to_owned(), "1024".to_owned()),
+        ];
+        assert_eq!(declared_form_field(&fields).expect("ok"), Some(1024));
+        assert_eq!(declared_form_field(&[]).expect("ok"), None);
+    }
+
+    #[test]
+    fn a_repeated_form_field_is_rejected() {
+        let fields = vec![
+            (X_S3S_PAYLOAD_LENGTH.to_owned(), "1".to_owned()),
+            (X_S3S_PAYLOAD_LENGTH.to_owned(), "2".to_owned()),
+        ];
+        let err = declared_form_field(&fields).expect_err("repeated");
+        assert_eq!(err.code(), &S3ErrorCode::InvalidRequest);
+    }
+
+    #[test]
     fn an_absent_header_is_not_enforced() {
         enforce_declaration(&HeaderMap::new(), None).expect("absent");
+    }
+
+    /// The only test that goes through the wiring rather than the two helpers: with the
+    /// enforcement short-circuited this one fails, which is what keeps the wiring honest.
+    #[test]
+    fn the_enforcement_rejects_a_declaration_that_disagrees_with_the_framing() {
+        let err = enforce_declaration(&headers(&["10"]), Some(9)).expect_err("too small");
+        assert_eq!(err.code(), &S3ErrorCode::EntityTooSmall);
+        let err = enforce_declaration(&headers(&["10"]), Some(11)).expect_err("too large");
+        assert_eq!(err.code(), &S3ErrorCode::EntityTooLarge);
+        let err = enforce_declaration(&headers(&["10"]), None).expect_err("no framing");
+        assert_eq!(err.code(), &S3ErrorCode::InvalidRequest);
+        enforce_declaration(&headers(&["10"]), Some(10)).expect("match");
     }
 }
