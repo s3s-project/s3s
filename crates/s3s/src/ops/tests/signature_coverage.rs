@@ -133,12 +133,31 @@ async fn the_declaration_header_must_be_signed_unless_allowlisted() {
     // agrees with the framing it declares.
     let test_s3 = Arc::new(TestS3::default());
     let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
-    let config = test_config_with_allowlist(&[NAME]);
+    let config = test_config_with_s3s_allowlist(&[NAME]);
     let ccx = test_context(&s3, &config, &auth);
     let mut allowed = declaration_request(Method::PUT, Version::HTTP_11, URI, "0");
     let response = super::call(&mut allowed, &ccx).await.expect("must be routed");
     assert_eq!(response.status, StatusCode::OK, "an allowlisted declaration must be served");
     assert_eq!(test_s3.put_object.load(Ordering::SeqCst), 1, "the allowlisted request reaches PutObject");
+
+    // The other family's allowlist does not exempt an extension header: each guard reads the list
+    // that belongs to its own prefix.
+    let test_s3 = Arc::new(TestS3::default());
+    let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
+    let config = test_config_with_allowlist(&[NAME]);
+    let ccx = test_context(&s3, &config, &auth);
+    let mut crossed = declaration_request(Method::PUT, Version::HTTP_11, URI, "0");
+    let response = super::call(&mut crossed, &ccx).await.expect("must be routed");
+    assert_eq!(
+        response.status,
+        StatusCode::FORBIDDEN,
+        "the x-amz- allowlist must not exempt an x-s3s- header"
+    );
+    assert_eq!(
+        test_s3.put_object.load(Ordering::SeqCst),
+        0,
+        "a rejected request must not reach PutObject"
+    );
 }
 
 /// With the extension turned off the header is an ordinary unknown header: unsigned, and served.
@@ -155,6 +174,18 @@ async fn disabling_the_extension_leaves_the_declaration_header_unread() {
     let response = super::call(&mut req, &ccx).await.expect("must be routed");
     assert_eq!(response.status, StatusCode::OK, "an opt-out deployment must not read the header");
     assert_eq!(test_s3.put_object.load(Ordering::SeqCst), 1);
+}
+
+/// Each header family names its exceptions in its own allowlist: an `x-s3s-*` name belongs in
+/// [`S3Config::unsigned_s3s_header_allowlist`], an `x-amz-*` name in
+/// [`S3Config::unsigned_amz_header_allowlist`].
+fn test_config_with_s3s_allowlist(entries: &[&str]) -> Arc<dyn S3ConfigProvider> {
+    Arc::new(StaticConfigProvider::new(Arc::new(S3Config {
+        presigned_url_max_skew_time_secs: u32::MAX,
+        expected_region: Some(REGION.parse().expect("valid test region")),
+        unsigned_s3s_header_allowlist: entries.iter().map(|name| (*name).to_owned()).collect(),
+        ..Default::default()
+    })))
 }
 
 fn copy_source_request(method: Method, version: Version, uri: &str, sign_copy_source: bool) -> Request {

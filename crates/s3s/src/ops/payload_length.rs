@@ -14,6 +14,7 @@
 
 use hyper::HeaderMap;
 
+use crate::config::S3Config;
 use crate::error::{S3Error, S3ErrorCode, S3Result};
 
 /// The extension header: the payload length the sender declares.
@@ -98,6 +99,28 @@ pub(crate) fn enforce_declaration(headers: &HeaderMap, framing: Option<u64>) -> 
         Some(declared) => check_declared_payload_length(declared, framing),
         None => Ok(()),
     }
+}
+
+/// Rejects a declaration header the signed-header list does not cover.
+///
+/// The extension's headers carry the same weight as the protocol's request metadata — routing
+/// and input parsing read the declaration — so the signature has to cover them. A deployment that
+/// turned the extension off guards none of them, and
+/// [`S3Config::unsigned_s3s_header_allowlist`] names the exceptions.
+pub(crate) fn reject_unsigned_declaration(config: &S3Config, headers: &HeaderMap, signed_names: &[&str]) -> S3Result<()> {
+    if !config.payload_length_extension {
+        return Ok(());
+    }
+    for name in headers.keys() {
+        let name = name.as_str();
+        if !name.starts_with("x-s3s-") || config.unsigned_s3s_header_allowlist.iter().any(|allow| allow == name) {
+            continue;
+        }
+        if !signed_names.iter().any(|signed| signed.eq_ignore_ascii_case(name)) {
+            return Err(super::signature::unsigned_headers_error());
+        }
+    }
+    Ok(())
 }
 
 /// The rejection for a `POST Object` that carries the declaration as an HTTP header.
@@ -209,6 +232,50 @@ mod tests {
         ];
         let err = declared_form_field(&fields).expect_err("repeated");
         assert_eq!(err.code(), &S3ErrorCode::InvalidRequest);
+    }
+
+    fn enabled() -> S3Config {
+        S3Config {
+            payload_length_extension: true,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn an_unsigned_declaration_is_rejected_when_the_extension_is_on() {
+        let err = reject_unsigned_declaration(&enabled(), &headers(&["10"]), &[]).expect_err("unsigned");
+        assert_eq!(err.code(), &S3ErrorCode::AccessDenied);
+    }
+
+    #[test]
+    fn a_covered_declaration_passes_and_case_does_not_matter() {
+        reject_unsigned_declaration(&enabled(), &headers(&["10"]), &["X-S3S-Payload-Length"]).expect("covered");
+    }
+
+    #[test]
+    fn the_allowlist_of_the_extension_names_the_exceptions() {
+        let config = S3Config {
+            unsigned_s3s_header_allowlist: vec![X_S3S_PAYLOAD_LENGTH.to_owned()],
+            ..enabled()
+        };
+        reject_unsigned_declaration(&config, &headers(&["10"]), &[]).expect("allowlisted");
+    }
+
+    #[test]
+    fn this_guard_leaves_the_protocol_family_alone() {
+        let mut protocol = HeaderMap::new();
+        protocol.insert(HeaderName::from_static("x-amz-copy-source"), HeaderValue::from_static("/a/b"));
+        // `x-amz-*` is the protocol guard's business, not the extension's.
+        reject_unsigned_declaration(&enabled(), &protocol, &[]).expect("not this guard header");
+    }
+
+    #[test]
+    fn a_deployment_that_turned_the_extension_off_guards_nothing() {
+        let config = S3Config {
+            payload_length_extension: false,
+            ..enabled()
+        };
+        reject_unsigned_declaration(&config, &headers(&["10"]), &[]).expect("opt-out");
     }
 
     #[test]
