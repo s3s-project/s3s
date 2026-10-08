@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
-mod rust;
+// `v2::post_object` reads the rust type model, so the module is visible crate-wide;
+// this is a visibility change only and cannot change the generated output.
+pub(crate) mod rust;
 mod smithy;
 mod utils;
 
@@ -28,12 +30,18 @@ use std::io::BufWriter;
 
 pub use self::utils::o;
 
+// `v2::post_object` owns the synthetic operation and reads these v1 items;
+// re-exporting them is a visibility change only and cannot change what is generated.
+pub(crate) use self::dto::RustTypes;
+pub(crate) use self::ops::{OPS_GENERATED_DIR, Operation, Operations, codegen_file_header};
+
 fn write_file(path: &str, f: impl FnOnce()) {
     let mut writer = BufWriter::new(File::create(path).unwrap());
     scoped_writer::scoped(&mut writer, f);
 }
 
-pub(super) fn write_dir_file(dir: &str, name: &str, f: impl FnOnce()) {
+/// Visible to `v2::post_object`, which writes the operation module through it.
+pub(crate) fn write_dir_file(dir: &str, name: &str, f: impl FnOnce()) {
     std::fs::create_dir_all(dir).unwrap();
     write_file(&format!("{dir}/{name}"), f);
 }
