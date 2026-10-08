@@ -438,6 +438,17 @@ pub struct S3Config {
     /// Default: empty (no `x-amz-*` header may be unsigned)
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub unsigned_amz_header_allowlist: Vec<String>,
+
+    /// `x-s3s-*` headers listed here need not appear in the signed-header list.
+    ///
+    /// The counterpart of [`S3Config::unsigned_amz_header_allowlist`] for the `x-s3s-`
+    /// extension prefix, which carries the same weight: an unsigned header of that
+    /// prefix is answered with `AccessDenied`. Entries are exact, lowercase header
+    /// names; no prefix matching is performed.
+    ///
+    /// Default: empty (no `x-s3s-*` header may be unsigned)
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub unsigned_s3s_header_allowlist: Vec<String>,
 }
 
 impl Default for S3Config {
@@ -466,6 +477,7 @@ impl Default for S3Config {
             allow_post_signature: true,
             require_signed_host: true,
             unsigned_amz_header_allowlist: Vec::new(),
+            unsigned_s3s_header_allowlist: Vec::new(),
         }
     }
 }
@@ -698,6 +710,7 @@ mod tests {
             allow_post_signature: true,
             require_signed_host: false,
             unsigned_amz_header_allowlist: vec!["x-amz-cf-id".to_owned()],
+            unsigned_s3s_header_allowlist: Vec::new(),
         };
 
         let json = serde_json::to_string(&config).expect("serialize failed");

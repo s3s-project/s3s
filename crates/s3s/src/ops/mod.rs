@@ -16,6 +16,7 @@ use self::signature::{CredentialsExt, SignatureContext};
 
 mod get_object;
 mod multipart;
+mod payload_length;
 
 #[cfg(test)]
 mod tests;
@@ -385,6 +386,12 @@ fn prepare_streaming_body(req: &mut Request, config: &S3Config) -> S3Result {
     install_anonymous_aws_chunked_body(req, config)?;
     let content_length = extract_content_length(req)?;
     let known_length = content_length.or_else(|| req.body.remaining_length().exact().map(|x| x as u64));
+    // The `x-s3s-payload-length` extension declares the bytes the sender delivers, so it has to
+    // agree with the length the framing carries. `POST Object` is excluded: its declaration lives
+    // in the form as a field, and an HTTP header there is an unsigned header the POST path rejects.
+    if req.method != Method::POST {
+        payload_length::enforce_declaration(&req.headers, known_length)?;
+    }
     if let (Some(size), Some(limit)) = (known_length, config.put_object_max_size)
         && size > limit
     {

@@ -152,14 +152,21 @@ pub(super) fn extract_authorization_v4(hs: &HeaderMap) -> S3Result<Option<Author
 /// header name is absent from the signed-header list. A client that needs the header covered by
 /// `CanonicalHeaders` itself can list it in `SignedHeaders`, or in `X-Amz-SignedHeaders` for a
 /// presigned URL.
+/// Headers whose prefix gives them the same weight as `x-amz-*`: routing and input
+/// parsing read them, so the signature has to cover them.
+fn is_guarded_extension_header(name: &str) -> bool {
+    name.starts_with("x-amz-") || name.starts_with("x-s3s-")
+}
+
 fn reject_unsigned_amz_headers(config: &S3Config, hs: &HeaderMap, signed_names: &[&str]) -> S3Result<()> {
     // S3 treats x-amz-content-sha256 as the request's payload-hash input rather than ordinary request metadata.
-    // Every other exception belongs in the configurable `S3Config::unsigned_amz_header_allowlist`.
+    // Every other exception belongs in the configurable allowlists, one per guarded prefix.
     for name in hs.keys() {
         let name = name.as_str();
-        if !name.starts_with("x-amz-")
+        if !is_guarded_extension_header(name)
             || name == X_AMZ_CONTENT_SHA256.as_str()
             || config.unsigned_amz_header_allowlist.iter().any(|allow| allow == name)
+            || config.unsigned_s3s_header_allowlist.iter().any(|allow| allow == name)
         {
             continue;
         }
