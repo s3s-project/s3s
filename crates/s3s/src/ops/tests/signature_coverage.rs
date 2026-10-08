@@ -87,6 +87,60 @@ fn test_config_with_allowlist(entries: &[&str]) -> Arc<dyn S3ConfigProvider> {
     })))
 }
 
+/// A `PUT` carrying `x-s3s-payload-length`, never listed in the signed-header list.
+fn declaration_request(method: Method, version: Version, uri: &str, declared: &str) -> Request {
+    let uri = uri.parse::<Uri>().unwrap();
+    let authorization = sign_request(&method, &uri, EMPTY_SHA256, &[]);
+    let mut builder = hyper::Request::builder()
+        .method(method)
+        .version(version)
+        .uri(uri.clone())
+        .header(crate::header::X_AMZ_CONTENT_SHA256, EMPTY_SHA256)
+        .header(crate::header::X_AMZ_DATE, AMZ_DATE)
+        .header(crate::header::AUTHORIZATION, authorization)
+        .header(hyper::header::CONTENT_LENGTH, declared)
+        .header(hyper::header::HeaderName::from_static("x-s3s-payload-length"), declared);
+    if version == Version::HTTP_11 {
+        builder = builder.header(crate::header::HOST, uri.authority().unwrap().as_str());
+    }
+    Request::from(builder.body(empty_unknown_length_body()).unwrap())
+}
+
+/// The `x-s3s-` prefix carries the same weight as `x-amz-*` on both sides: an unsigned
+/// declaration is rejected by default, and `S3Config::unsigned_s3s_header_allowlist` is what
+/// permits it.
+#[tokio::test]
+async fn the_declaration_header_must_be_signed_unless_allowlisted() {
+    const URI: &str = "http://localhost/test-bucket/test-key.txt";
+    const NAME: &str = "x-s3s-payload-length";
+    let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
+
+    // Unsigned, with the default (empty) allowlists: rejected before routing.
+    let test_s3 = Arc::new(TestS3::default());
+    let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
+    let config = test_config();
+    let ccx = test_context(&s3, &config, &auth);
+    let mut rejected = declaration_request(Method::PUT, Version::HTTP_11, URI, "0");
+    let response = super::call(&mut rejected, &ccx).await.expect("must be routed");
+    assert_eq!(response.status, StatusCode::FORBIDDEN, "an unsigned declaration must be rejected");
+    assert_eq!(
+        test_s3.put_object.load(Ordering::SeqCst),
+        0,
+        "a rejected request must not reach PutObject"
+    );
+
+    // The same request, with the header named in the allowlist: served, and the declaration
+    // agrees with the framing it declares.
+    let test_s3 = Arc::new(TestS3::default());
+    let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
+    let config = test_config_with_allowlist(&[NAME]);
+    let ccx = test_context(&s3, &config, &auth);
+    let mut allowed = declaration_request(Method::PUT, Version::HTTP_11, URI, "0");
+    let response = super::call(&mut allowed, &ccx).await.expect("must be routed");
+    assert_eq!(response.status, StatusCode::OK, "an allowlisted declaration must be served");
+    assert_eq!(test_s3.put_object.load(Ordering::SeqCst), 1, "the allowlisted request reaches PutObject");
+}
+
 fn copy_source_request(method: Method, version: Version, uri: &str, sign_copy_source: bool) -> Request {
     const COPY_SOURCE: (&str, &str) = ("x-amz-copy-source", "/source-bucket/source-key");
     let uri = uri.parse::<Uri>().unwrap();
