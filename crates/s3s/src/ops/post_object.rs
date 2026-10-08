@@ -165,4 +165,74 @@ mod tests {
             .expect("a relative URL must be rejected");
         assert_eq!(*err.code(), S3ErrorCode::InvalidArgument);
     }
+
+    /// Builds a prepared POST request whose form carries one extra field.
+    ///
+    /// The policy conditions cover the extra field, so prepare accepts the form.
+    async fn prepared_post_request(extra_field: (&str, &str)) -> crate::http::Request {
+        use crate::auth::SecretKey;
+        use crate::ops::tests::common::post_policy_test_helpers as post;
+        use std::sync::Arc;
+
+        let (name, value) = extra_field;
+        let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post::TestS3NoOp);
+        let config = post::create_test_config(1024 * 1024);
+        let auth = post::create_test_auth();
+        let ccx = post::create_test_context(&s3, &config, &auth);
+        let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+
+        let field_ref = ["$", name].concat();
+        let policy_json = format!(
+            r#"{{"expiration":"2030-01-01T00:00:00.000Z","conditions":[["eq","{}","{}"],{}]}}"#,
+            field_ref,
+            value,
+            post::BASE_CONDITIONS,
+        );
+        let mut req =
+            post::build_post_object_request_with(policy_json.as_str(), "content", &secret_key, false, &[extra_field], &[]);
+        crate::ops::prepare(&mut req, &ccx).await.expect("the signed form prepares");
+        req
+    }
+
+    #[test]
+    fn deserialize_http_without_a_multipart_form_is_invalid_request() {
+        let mut req = crate::http::Request::from(
+            hyper::Request::builder()
+                .method(hyper::Method::POST)
+                .uri("http://localhost/bucket")
+                .body(crate::http::Body::empty())
+                .expect("a valid request"),
+        );
+
+        let err = deserialize_http(&mut req).expect_err("a request without a multipart form");
+        assert_eq!(*err.code(), S3ErrorCode::InvalidRequest);
+        assert_eq!(err.message(), Some("missing multipart form"));
+    }
+
+    #[test]
+    fn status_201_rejects_a_control_character_in_the_response_xml() {
+        let err = serialize_http("bucket", "key", None, Some(201), &output_with_etag("\u{1}"))
+            .err()
+            .expect("a control character must not reach the XML body");
+        assert_eq!(*err.code(), S3ErrorCode::InternalError);
+    }
+
+    #[tokio::test]
+    async fn deserialize_http_falls_back_to_the_legacy_redirect_field() {
+        let redirect = "https://example.com/callback";
+        let mut req = prepared_post_request(("redirect", redirect)).await;
+
+        let input = deserialize_http(&mut req).expect("the form parses");
+        assert_eq!(input.success_action_redirect.as_deref(), Some(redirect));
+        assert_eq!(input.success_action_status, None);
+    }
+
+    #[tokio::test]
+    async fn deserialize_http_rejects_a_malformed_success_action_status() {
+        let mut req = prepared_post_request(("success_action_status", "abc")).await;
+
+        let err = deserialize_http(&mut req).expect_err("a non-numeric status is rejected");
+        assert_eq!(*err.code(), S3ErrorCode::InvalidArgument);
+        assert_eq!(err.message(), Some(r#"invalid field value: success_action_status: "abc""#));
+    }
 }
