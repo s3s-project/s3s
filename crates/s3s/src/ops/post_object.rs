@@ -68,12 +68,7 @@ pub(crate) fn serialize_http(
         return Ok(res);
     }
 
-    // Handle success_action_status
-    match success_action_status {
-        Some(200) => {
-            // 200 OK with empty body
-            Ok(http::Response::with_status(http::StatusCode::OK))
-        }
+    let mut res = match success_action_status {
         Some(201) => {
             // 201 Created with XML body using PostResponse DTO
             let location = format!("/{bucket}/{key}");
@@ -85,13 +80,20 @@ pub(crate) fn serialize_http(
             };
             let mut res = http::Response::with_status(http::StatusCode::CREATED);
             http::set_xml_body(&mut res, &post_response)?;
-            Ok(res)
+            res
         }
-        _ => {
-            // 204 No Content (default, also for unrecognized values)
-            Ok(http::Response::with_status(http::StatusCode::NO_CONTENT))
-        }
+        Some(200) => http::Response::with_status(http::StatusCode::OK),
+        // 204 No Content (default, also for unrecognized values)
+        _ => http::Response::with_status(http::StatusCode::NO_CONTENT),
+    };
+
+    if let Some(etag) = output.e_tag.as_ref() {
+        let etag = etag
+            .to_http_header()
+            .map_err(|e| s3_error!(e, InternalError, "invalid object tag"))?;
+        res.headers.insert(hyper::header::ETAG, etag);
     }
+    Ok(res)
 }
 
 #[cfg(test)]
@@ -253,5 +255,53 @@ mod tests {
             .err()
             .expect("the redirect is rejected when the response is serialized");
         assert_eq!(*err.code(), S3ErrorCode::InvalidArgument);
+    }
+
+    /// A successful POST names the object it stored by the `ETag` it answered with, on every
+    /// status it can answer with.
+    #[test]
+    fn post_object_response_names_the_stored_object() {
+        use hyper::header::ETAG;
+        use hyper::header::LOCATION;
+
+        let output = output_with_etag("abc123");
+
+        for status in [None, Some(200), Some(201)] {
+            let res = serialize_http("bucket", "key", None, status, &output).expect("a POST response");
+            assert_eq!(
+                res.headers.get(ETAG).map(|value| value.to_str().expect("an ETag header")),
+                Some("\"abc123\""),
+                "the response carries the ETag, quoted as a header",
+            );
+            assert!(
+                res.headers.get(LOCATION).is_none(),
+                "no location is written when the caller supplied none",
+            );
+        }
+
+        // A redirect answers with the location the client asked for, and nothing else: the client
+        // is not fetching the object from this response.
+        let res = serialize_http("bucket", "key", Some("https://example.com/done"), None, &output).expect("a redirect response");
+        assert_eq!(res.status, StatusCode::SEE_OTHER);
+        assert!(
+            res.headers
+                .get(LOCATION)
+                .expect("a location header")
+                .to_str()
+                .expect("a UTF-8 location")
+                .starts_with("https://example.com/done?"),
+            "the redirect keeps the location the client asked for"
+        );
+    }
+
+    /// An object tag that cannot become a header value is refused with an internal error rather
+    /// than answering without a tag or panicking.
+    #[test]
+    fn an_unprintable_object_tag_is_refused() {
+        let output = output_with_etag("\"bad\u{1}\"");
+        let err = serialize_http("bucket", "key", None, None, &output)
+            .err()
+            .expect("the tag cannot become a header value");
+        assert_eq!(*err.code(), S3ErrorCode::InternalError);
     }
 }
