@@ -93,3 +93,76 @@ pub(crate) fn serialize_http(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::error::S3ErrorCode;
+    use hyper::StatusCode;
+
+    fn output_with_etag(value: &str) -> PostObjectOutput {
+        PostObjectOutput {
+            e_tag: Some(ETag::Strong(value.to_owned())),
+            ..Default::default()
+        }
+    }
+
+    fn assert_no_body(res: &http::Response) {
+        let bytes = res.body.bytes();
+        assert!(bytes.is_none_or(|bytes| bytes.is_empty()), "the response must not carry a body");
+    }
+
+    #[test]
+    fn the_default_status_is_204() {
+        let res = serialize_http("bucket", "key", None, None, &PostObjectOutput::default()).expect("no status");
+        assert_eq!(res.status, StatusCode::NO_CONTENT);
+        assert_no_body(&res);
+    }
+
+    #[test]
+    fn status_200_is_ok_without_a_body() {
+        let res = serialize_http("bucket", "key", None, Some(200), &output_with_etag("\"abc\"")).expect("200");
+        assert_eq!(res.status, StatusCode::OK);
+        assert_no_body(&res);
+    }
+
+    #[test]
+    fn status_201_writes_the_post_response_xml() {
+        let res = serialize_http("bucket", "key", None, Some(201), &output_with_etag("\"abc\"")).expect("201");
+        assert_eq!(res.status, StatusCode::CREATED);
+        let body = res.body.bytes().expect("the XML body is buffered");
+        let body = std::str::from_utf8(&body).expect("the body is UTF-8");
+        assert!(body.contains("<Location>/bucket/key</Location>"), "{body}");
+        assert!(body.contains("<Bucket>bucket</Bucket>"), "{body}");
+        assert!(body.contains("<Key>key</Key>"), "{body}");
+        assert!(body.contains("<ETag>&quot;abc&quot;</ETag>"), "{body}");
+    }
+
+    #[test]
+    fn an_unrecognized_status_is_204() {
+        let res = serialize_http("bucket", "key", None, Some(418), &PostObjectOutput::default()).expect("418");
+        assert_eq!(res.status, StatusCode::NO_CONTENT);
+        assert_no_body(&res);
+    }
+
+    #[test]
+    fn a_control_character_in_the_redirect_is_rejected() {
+        // The WHATWG URL parser strips tabs, so this sample only fails because of the
+        // explicit control-character check.
+        let redirect = "https://example.com/a\tb";
+        assert!(url::Url::parse(redirect).is_ok(), "the URL parser accepts the sample");
+
+        let err = serialize_http("bucket", "key", Some(redirect), None, &PostObjectOutput::default())
+            .err()
+            .expect("a control character must be rejected");
+        assert_eq!(*err.code(), S3ErrorCode::InvalidArgument);
+    }
+
+    #[test]
+    fn an_unparsable_redirect_is_an_invalid_argument() {
+        let err = serialize_http("bucket", "key", Some("not a url"), None, &PostObjectOutput::default())
+            .err()
+            .expect("a relative URL must be rejected");
+        assert_eq!(*err.code(), S3ErrorCode::InvalidArgument);
+    }
+}
