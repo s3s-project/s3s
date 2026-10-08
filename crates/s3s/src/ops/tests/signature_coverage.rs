@@ -176,6 +176,31 @@ async fn disabling_the_extension_leaves_the_declaration_header_unread() {
     assert_eq!(test_s3.put_object.load(Ordering::SeqCst), 1);
 }
 
+/// A declaration that disagrees with the framing is refused while the body is prepared, on the
+/// request path rather than only in the unit tests of the extension.
+#[tokio::test]
+async fn a_declaration_that_disagrees_with_the_framing_is_refused() {
+    const URI: &str = "http://localhost/test-bucket/test-key.txt";
+    const NAME: &str = "x-s3s-payload-length";
+    let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
+    let test_s3 = Arc::new(TestS3::default());
+    let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
+    let config = test_config_with_s3s_allowlist(&[NAME]);
+    let ccx = test_context(&s3, &config, &auth);
+    let mut req = declaration_request(Method::PUT, Version::HTTP_11, URI, "5");
+    // The declaration says five bytes and the framing says none; neither is in the signed-header
+    // list, so the exchange does not disturb the signature under test.
+    req.headers
+        .insert(hyper::header::CONTENT_LENGTH, hyper::header::HeaderValue::from_static("0"));
+
+    let err = super::prepare(&mut req, &ccx)
+        .await
+        .err()
+        .expect("a declaration that disagrees with the framing must be refused");
+    assert_eq!(err.code(), &crate::error::S3ErrorCode::EntityTooSmall);
+    assert_eq!(test_s3.put_object.load(Ordering::SeqCst), 0, "the request must not reach PutObject");
+}
+
 /// Each header family names its exceptions in its own allowlist: an `x-s3s-*` name belongs in
 /// [`S3Config::unsigned_s3s_header_allowlist`], an `x-amz-*` name in
 /// [`S3Config::unsigned_amz_header_allowlist`].

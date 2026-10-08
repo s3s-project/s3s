@@ -1022,6 +1022,68 @@ async fn post_object_declaration_above_the_policy_maximum_is_too_large() {
     assert_eq!(err.code(), &crate::error::S3ErrorCode::EntityTooLarge);
 }
 
+/// With the extension off the field is an ordinary form field: an out-of-range declaration is not
+/// an error, because nothing reads it.
+#[tokio::test]
+async fn post_object_declaration_is_ignored_when_the_extension_is_off() {
+    use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
+    use std::sync::Arc;
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(S3Config {
+        presigned_url_max_skew_time_secs: u32::MAX,
+        post_object_max_file_size: 10 * 1024,
+        expected_region: Some("us-east-1".parse().expect("valid test region")),
+        payload_length_extension: false,
+        ..Default::default()
+    })));
+    let auth = post_policy_test_helpers::create_test_auth();
+    let ccx = post_policy_test_helpers::create_test_context(&s3, &config, &auth);
+    // Declared 999 against a policy maximum of 300 would be `EntityTooLarge` while the extension is on.
+    let mut req = build_declared_post_request((0, 300), "999", 150);
+
+    super::prepare(&mut req, &ccx)
+        .await
+        .expect("an opt-out deployment reads no declaration");
+}
+
+/// A malformed declaration field is an `InvalidRequest`, not a silent no-op.
+#[tokio::test]
+async fn post_object_malformed_declaration_is_rejected() {
+    use std::sync::Arc;
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+    let config = post_policy_test_helpers::create_test_config(10 * 1024);
+    let auth = post_policy_test_helpers::create_test_auth();
+    let ccx = post_policy_test_helpers::create_test_context(&s3, &config, &auth);
+    let mut req = build_declared_post_request((0, 10240), "01", 150);
+
+    let err = super::prepare(&mut req, &ccx)
+        .await
+        .err()
+        .expect("a leading zero is not a declaration");
+    assert_eq!(err.code(), &crate::error::S3ErrorCode::InvalidRequest);
+}
+
+/// A form upload bound to the root path is not a modeled operation.
+#[tokio::test]
+async fn post_object_at_the_root_path_is_not_a_modeled_operation() {
+    use std::sync::Arc;
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+    let config = post_policy_test_helpers::create_test_config(10 * 1024);
+    let auth = post_policy_test_helpers::create_test_auth();
+    let ccx = post_policy_test_helpers::create_test_context(&s3, &config, &auth);
+    let mut req = build_declared_post_request((0, 10240), "150", 150);
+    req.uri = "http://localhost/".parse().expect("root uri");
+
+    let err = super::prepare(&mut req, &ccx)
+        .await
+        .err()
+        .expect("PostObject binds to /{Bucket}");
+    assert_eq!(err.code(), &crate::error::S3ErrorCode::NotImplemented);
+}
+
 #[tokio::test]
 async fn post_object_declaration_as_a_header_is_treated_as_unsigned() {
     use std::sync::Arc;
