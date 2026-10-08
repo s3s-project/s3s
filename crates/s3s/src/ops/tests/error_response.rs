@@ -130,3 +130,72 @@ fn head_not_modified_is_bodyless() {
     let res = ops::serialize_error_for_method(&Method::HEAD, s3_error!(NotModified), false).unwrap();
     assert!(Body::is_end_stream(&res.body));
 }
+
+/// Amazon S3 names the request in the `x-amz-request-id` response header on every answer, errors
+/// included, and a client reads the id from there (botocore fills `ResponseMetadata.RequestId`
+/// from that header and drops the `<RequestId>` element of an error body). An error that carries
+/// a request id answers the header with the same id the body names.
+#[test]
+fn error_response_carries_the_request_id_header() {
+    let mut err = s3_error!(NoSuchKey);
+    err.set_request_id("18DC52FF742CD29F");
+
+    let res = ops::serialize_error(err, false).unwrap();
+
+    assert_eq!(res.status, hyper::StatusCode::NOT_FOUND);
+    assert_eq!(
+        res.headers
+            .get(crate::header::X_AMZ_REQUEST_ID)
+            .and_then(|value| value.to_str().ok()),
+        Some("18DC52FF742CD29F")
+    );
+    let body = String::from_utf8(res.body.bytes().expect("body bytes").to_vec()).expect("utf-8 body");
+    assert!(body.contains("<RequestId>18DC52FF742CD29F</RequestId>"), "{body}");
+    // The header is added next to the headers the serializer wrote, not instead of them.
+    assert_eq!(res.headers.get(hyper::header::CONTENT_TYPE).unwrap(), "application/xml");
+}
+
+/// Negative control: an error without a request id must not gain a fabricated one.
+#[test]
+fn error_response_without_a_request_id_has_no_request_id_header() {
+    let res = ops::serialize_error(s3_error!(NoSuchKey), false).unwrap();
+
+    assert!(res.headers.get(crate::header::X_AMZ_REQUEST_ID).is_none(), "{:?}", res.headers);
+}
+
+/// A request id that cannot become a header value is left out instead of failing the response.
+/// (The XML body accepts it: only characters below 0x20 are rejected there, while a header value
+/// additionally rejects DEL and other non-visible bytes.)
+#[test]
+fn request_id_that_cannot_be_a_header_value_is_left_out() {
+    let mut err = s3_error!(NoSuchKey);
+    err.set_request_id("bad\u{7f}value");
+
+    let res = ops::serialize_error(err, false).unwrap();
+
+    assert_eq!(res.status, hyper::StatusCode::NOT_FOUND);
+    assert!(res.headers.get(crate::header::X_AMZ_REQUEST_ID).is_none(), "{:?}", res.headers);
+    let body = String::from_utf8(res.body.bytes().expect("body bytes").to_vec()).expect("utf-8 body");
+    assert!(body.contains("bad\u{7f}value"), "{body}");
+}
+
+/// A header the implementation set explicitly is kept as it is.
+#[test]
+fn explicit_request_id_header_is_kept() {
+    let mut err = s3_error!(NoSuchKey);
+    err.set_request_id("from-the-error");
+    err.set_headers({
+        let mut headers = hyper::HeaderMap::new();
+        headers.insert(crate::header::X_AMZ_REQUEST_ID, "explicit".parse().unwrap());
+        headers
+    });
+
+    let res = ops::serialize_error(err, false).unwrap();
+
+    assert_eq!(
+        res.headers
+            .get(crate::header::X_AMZ_REQUEST_ID)
+            .and_then(|value| value.to_str().ok()),
+        Some("explicit")
+    );
+}

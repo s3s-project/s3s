@@ -134,6 +134,17 @@ pub(crate) fn serialize_error(mut e: S3Error, no_decl: bool) -> S3Result<Respons
     if let Some(headers) = e.take_headers() {
         res.headers = headers;
     }
+    // Amazon S3 names the request in the `x-amz-request-id` response header on every answer,
+    // errors included; a client reads the id from there (botocore fills
+    // `ResponseMetadata.RequestId` from that header and drops the `<RequestId>` element of an
+    // error body). The id is already known here — it is the one the body names — so an error that
+    // carries one answers the header too. A header set through `S3Error::set_headers` wins.
+    if let Some(request_id) = e.request_id()
+        && !res.headers.contains_key(header::X_AMZ_REQUEST_ID)
+        && let Ok(value) = hyper::header::HeaderValue::from_str(request_id)
+    {
+        res.headers.insert(header::X_AMZ_REQUEST_ID, value);
+    }
     if bodyless {
         // RFC 9110 §6.4.1: 1xx/204/205/304 responses MUST NOT carry a body. The
         // XML body is skipped above; drop any body-describing headers too
