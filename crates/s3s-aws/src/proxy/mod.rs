@@ -168,6 +168,8 @@ mod tests {
         "content-type: application/xml\r\n",
         "\r\n",
     );
+    /// A backend is free to answer a conditional read without any of the entity headers.
+    const NOT_MODIFIED_WITHOUT_ENTITY_HEADERS_RESPONSE: &str = "HTTP/1.1 304 Not Modified\r\ncontent-length: 0\r\n\r\n";
 
     fn get_object_request(bucket: &str, key: &str, if_none_match: &str) -> S3Request<GetObjectInput> {
         let input = GetObjectInput {
@@ -219,6 +221,25 @@ mod tests {
         // copied, because the client never receives that body.
         assert!(!headers.contains_key(hyper::header::CONTENT_LENGTH), "{headers:?}");
         assert!(!headers.contains_key(hyper::header::CONTENT_TYPE), "{headers:?}");
+
+        server.await.expect("server task");
+    }
+
+    /// A `304` that carries none of the entity headers must still answer `304` and must not set
+    /// an empty header map on the error: there is nothing to forward, and an empty map would
+    /// replace the headers the error response already has.
+    #[tokio::test]
+    async fn get_object_not_modified_without_entity_headers_sets_no_headers() {
+        let (addr, _seen, server) = serve_recorded(NOT_MODIFIED_WITHOUT_ENTITY_HEADERS_RESPONSE).await;
+        let proxy = proxy_for(addr);
+
+        let err = proxy
+            .get_object(get_object_request("bucket", "key", NOT_MODIFIED_ETAG))
+            .await
+            .expect_err("the SDK reports a 304 as an error");
+
+        assert_eq!(err.status_code(), Some(StatusCode::NOT_MODIFIED));
+        assert!(err.headers().is_none(), "no entity header was sent: {:?}", err.headers());
 
         server.await.expect("server task");
     }
