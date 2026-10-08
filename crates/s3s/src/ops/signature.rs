@@ -152,6 +152,9 @@ pub(super) fn extract_authorization_v4(hs: &HeaderMap) -> S3Result<Option<Author
 /// header name is absent from the signed-header list. A client that needs the header covered by
 /// `CanonicalHeaders` itself can list it in `SignedHeaders`, or in `X-Amz-SignedHeaders` for a
 /// presigned URL.
+///
+/// The `x-s3s-*` extension headers carry the same weight and have their own guard, next to their
+/// own allowlist ([`S3Config::unsigned_s3s_header_allowlist`]).
 fn reject_unsigned_amz_headers(config: &S3Config, hs: &HeaderMap, signed_names: &[&str]) -> S3Result<()> {
     // S3 treats x-amz-content-sha256 as the request's payload-hash input rather than ordinary request metadata.
     // Every other exception belongs in the configurable `S3Config::unsigned_amz_header_allowlist`.
@@ -170,9 +173,9 @@ fn reject_unsigned_amz_headers(config: &S3Config, hs: &HeaderMap, signed_names: 
     Ok(())
 }
 
-/// The rejection shared by the unsigned-header checks: an `x-amz-*` header that the
-/// signed-header list does not cover, or `host` missing from that list.
-fn unsigned_headers_error() -> S3Error {
+/// The rejection shared by the unsigned-header checks: a header the signed-header list does not
+/// cover, or `host` missing from that list.
+pub(super) fn unsigned_headers_error() -> S3Error {
     s3_error!(AccessDenied, "There were headers present in the request which were not signed")
 }
 
@@ -902,6 +905,7 @@ impl<'a> SignatureContext<'a> {
         let expected_signature = Signature::from_hex(presigned_url.signature).ok_or_else(|| s3_error!(SignatureDoesNotMatch))?;
         let headers = collect_signed_headers(self.hs, &presigned_url.signed_headers, |name| self.signed_host_fallback(name))?;
         reject_unsigned_amz_headers(&config, self.hs, &presigned_url.signed_headers)?;
+        super::payload_length::reject_unsigned_declaration(&config, self.hs, &presigned_url.signed_headers)?;
 
         let method = &self.req_method;
         let amz_date = &presigned_url.amz_date;
@@ -1063,6 +1067,7 @@ impl<'a> SignatureContext<'a> {
 
         let headers = collect_signed_headers(self.hs, &authorization.signed_headers, |name| self.signed_host_fallback(name))?;
         reject_unsigned_amz_headers(&config, self.hs, &authorization.signed_headers)?;
+        super::payload_length::reject_unsigned_declaration(&config, self.hs, &authorization.signed_headers)?;
 
         let verifier = SignatureVerificationContext {
             expected_signature,

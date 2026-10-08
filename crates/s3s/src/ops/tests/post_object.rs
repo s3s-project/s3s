@@ -920,3 +920,196 @@ async fn post_object_with_single_authorization_is_served() {
     };
     assert_eq!(op.name(), "PostObject");
 }
+
+// The `x-s3s-payload-length` extension on a form upload: the declaration is a form field, and
+// the file stream enforces it together with the policy range.
+
+/// Builds a form upload whose policy covers a declaration field.
+fn build_declared_post_request(range: (u64, u64), declared: &str, file_len: usize) -> crate::http::Request {
+    let secret_key: crate::auth::SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+    let policy_json = &format!(
+        r#"{{"expiration":"2030-01-01T00:00:00.000Z","conditions":[["content-length-range",{},{}],["eq","$Content-Type","text/plain"],["eq","$x-s3s-payload-length","{}"],{}]}}"#,
+        range.0,
+        range.1,
+        declared,
+        post_policy_test_helpers::BASE_CONDITIONS,
+    );
+    let file_content = "a".repeat(file_len);
+    post_policy_test_helpers::build_post_object_request_with(
+        policy_json,
+        &file_content,
+        &secret_key,
+        true,
+        &[("x-s3s-payload-length", declared)],
+        &[],
+    )
+}
+
+#[tokio::test]
+async fn post_object_declared_length_matching_the_file_part_is_accepted() {
+    use std::sync::Arc;
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+    let config = post_policy_test_helpers::create_test_config(10 * 1024);
+    let auth = post_policy_test_helpers::create_test_auth();
+    let ccx = post_policy_test_helpers::create_test_context(&s3, &config, &auth);
+    let mut req = build_declared_post_request((0, 10_240), "150", 150);
+
+    super::prepare(&mut req, &ccx)
+        .await
+        .expect("a matching declaration is accepted");
+    let data = drain_post_object(&mut req).await.expect("the file is delivered");
+    assert_eq!(data.len(), 150);
+}
+
+#[tokio::test]
+async fn post_object_delivering_fewer_bytes_than_declared_is_too_small() {
+    use std::sync::Arc;
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+    let config = post_policy_test_helpers::create_test_config(10 * 1024);
+    let auth = post_policy_test_helpers::create_test_auth();
+    let ccx = post_policy_test_helpers::create_test_context(&s3, &config, &auth);
+    let mut req = build_declared_post_request((0, 10_240), "300", 150);
+
+    super::prepare(&mut req, &ccx).await.expect("prepare does not read the file");
+    let code = drain_post_object(&mut req).await.unwrap_err();
+    assert_eq!(code, crate::error::S3ErrorCode::EntityTooSmall, "fewer bytes than declared");
+}
+
+#[tokio::test]
+async fn post_object_delivering_more_bytes_than_declared_is_too_large() {
+    use std::sync::Arc;
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+    let config = post_policy_test_helpers::create_test_config(10 * 1024);
+    let auth = post_policy_test_helpers::create_test_auth();
+    let ccx = post_policy_test_helpers::create_test_context(&s3, &config, &auth);
+    let mut req = build_declared_post_request((0, 10_240), "100", 150);
+
+    super::prepare(&mut req, &ccx).await.expect("prepare does not read the file");
+    let code = drain_post_object(&mut req).await.unwrap_err();
+    assert_eq!(code, crate::error::S3ErrorCode::EntityTooLarge, "more bytes than declared");
+}
+
+#[tokio::test]
+async fn post_object_declaration_outside_the_policy_range_is_rejected_before_the_stream() {
+    use std::sync::Arc;
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+    let config = post_policy_test_helpers::create_test_config(10 * 1024);
+    let auth = post_policy_test_helpers::create_test_auth();
+    let ccx = post_policy_test_helpers::create_test_context(&s3, &config, &auth);
+    // The policy asks for at least 200 bytes; the declaration says 150: no body satisfies both.
+    let mut req = build_declared_post_request((200, 10_240), "150", 150);
+
+    let err = super::prepare(&mut req, &ccx).await.err().expect("the intersection is empty");
+    assert_eq!(err.code(), &crate::error::S3ErrorCode::EntityTooSmall);
+}
+
+#[tokio::test]
+async fn post_object_declaration_above_the_policy_maximum_is_too_large() {
+    use std::sync::Arc;
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+    let config = post_policy_test_helpers::create_test_config(10 * 1024);
+    let auth = post_policy_test_helpers::create_test_auth();
+    let ccx = post_policy_test_helpers::create_test_context(&s3, &config, &auth);
+    // The policy allows at most 300 bytes; the declaration says 400: no body satisfies both.
+    let mut req = build_declared_post_request((0, 300), "400", 400);
+
+    let err = super::prepare(&mut req, &ccx).await.err().expect("the intersection is empty");
+    assert_eq!(err.code(), &crate::error::S3ErrorCode::EntityTooLarge);
+}
+
+/// With the extension off the field is an ordinary form field: an out-of-range declaration is not
+/// an error, because nothing reads it.
+#[tokio::test]
+async fn post_object_declaration_is_ignored_when_the_extension_is_off() {
+    use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
+    use std::sync::Arc;
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(S3Config {
+        presigned_url_max_skew_time_secs: u32::MAX,
+        post_object_max_file_size: 10 * 1024,
+        expected_region: Some("us-east-1".parse().expect("valid test region")),
+        payload_length_extension: false,
+        ..Default::default()
+    })));
+    let auth = post_policy_test_helpers::create_test_auth();
+    let ccx = post_policy_test_helpers::create_test_context(&s3, &config, &auth);
+    // Declared 999 against a policy maximum of 300 would be `EntityTooLarge` while the extension is on.
+    let mut req = build_declared_post_request((0, 300), "999", 150);
+
+    super::prepare(&mut req, &ccx)
+        .await
+        .expect("an opt-out deployment reads no declaration");
+}
+
+/// A malformed declaration field is an `InvalidRequest`, not a silent no-op.
+#[tokio::test]
+async fn post_object_malformed_declaration_is_rejected() {
+    use std::sync::Arc;
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+    let config = post_policy_test_helpers::create_test_config(10 * 1024);
+    let auth = post_policy_test_helpers::create_test_auth();
+    let ccx = post_policy_test_helpers::create_test_context(&s3, &config, &auth);
+    let mut req = build_declared_post_request((0, 10240), "01", 150);
+
+    let err = super::prepare(&mut req, &ccx)
+        .await
+        .err()
+        .expect("a leading zero is not a declaration");
+    assert_eq!(err.code(), &crate::error::S3ErrorCode::InvalidRequest);
+}
+
+/// A form upload bound to the root path is not a modeled operation.
+#[tokio::test]
+async fn post_object_at_the_root_path_is_not_a_modeled_operation() {
+    use std::sync::Arc;
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+    let config = post_policy_test_helpers::create_test_config(10 * 1024);
+    let auth = post_policy_test_helpers::create_test_auth();
+    let ccx = post_policy_test_helpers::create_test_context(&s3, &config, &auth);
+    let mut req = build_declared_post_request((0, 10240), "150", 150);
+    req.uri = "http://localhost/".parse().expect("root uri");
+
+    let err = super::prepare(&mut req, &ccx)
+        .await
+        .err()
+        .expect("PostObject binds to /{Bucket}");
+    assert_eq!(err.code(), &crate::error::S3ErrorCode::NotImplemented);
+}
+
+#[tokio::test]
+async fn post_object_declaration_as_a_header_is_treated_as_unsigned() {
+    use std::sync::Arc;
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+    let config = post_policy_test_helpers::create_test_config(10 * 1024);
+    let auth = post_policy_test_helpers::create_test_auth();
+    let ccx = post_policy_test_helpers::create_test_context(&s3, &config, &auth);
+    let secret_key: crate::auth::SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+    let policy_json = &format!(
+        r#"{{"expiration":"2030-01-01T00:00:00.000Z","conditions":[["content-length-range",0,10240],["eq","$Content-Type","text/plain"],{}]}}"#,
+        post_policy_test_helpers::BASE_CONDITIONS,
+    );
+    let file_content = "a".repeat(150);
+    let mut req = post_policy_test_helpers::build_post_object_request_with(
+        policy_json,
+        &file_content,
+        &secret_key,
+        true,
+        &[],
+        &[("x-s3s-payload-length", "150")],
+    );
+
+    let err = super::prepare(&mut req, &ccx)
+        .await
+        .err()
+        .expect("a header is not a signed carrier on a form upload");
+    assert_eq!(err.code(), &crate::error::S3ErrorCode::AccessDenied);
+}

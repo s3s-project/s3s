@@ -16,6 +16,7 @@ use self::signature::{CredentialsExt, SignatureContext};
 
 mod get_object;
 mod multipart;
+mod payload_length;
 
 #[cfg(test)]
 mod tests;
@@ -385,6 +386,14 @@ fn prepare_streaming_body(req: &mut Request, config: &S3Config) -> S3Result {
     install_anonymous_aws_chunked_body(req, config)?;
     let content_length = extract_content_length(req)?;
     let known_length = content_length.or_else(|| req.body.remaining_length().exact().map(|x| x as u64));
+    // The `x-s3s-payload-length` extension declares the bytes the sender delivers, so it has to
+    // agree with the length the framing carries. `POST` is skipped because the declaration is
+    // about an upload: `POST Object` takes its declaration from a form field and its file stream
+    // never passes through here, and the one `POST` operation that does stream a body
+    // (`WriteGetObjectResponse`) sends a response rather than an upload.
+    if req.method != Method::POST && config.payload_length_extension {
+        payload_length::enforce_declaration(&req.headers, known_length)?;
+    }
     if let (Some(size), Some(limit)) = (known_length, config.put_object_max_size)
         && size > limit
     {
@@ -687,6 +696,50 @@ fn post_object_file_size_range(policy: Option<&PostPolicy>, config_max: u64) -> 
     Ok((min, max))
 }
 
+/// Resolves a multipart `POST Object` request, when this is one.
+///
+/// The declaration of a form upload is a form field covered by the policy conditions, so a
+/// header carrying it is rejected here. The file part becomes the operation's stream, with the
+/// policy range enforced while it is read.
+fn resolve_multipart_post(req: &mut Request, config: &S3Config) -> S3Result<Option<&'static dyn Operation>> {
+    if req.s3ext.multipart.is_none() || req.method != Method::POST {
+        return Ok(None);
+    }
+    // The path is read into an owned name first, so nothing borrows the request while the
+    // multipart is taken out and the stream is stored back.
+    let bucket = match req.s3ext.s3_path.as_ref().expect("classified above") {
+        S3Path::Root => return Err(unknown_operation()),
+        // A multipart POST whose path names an object is not a modeled S3 operation:
+        // `PostObject` binds to `/{Bucket}` only — the key is carried by the `key` form field,
+        // never the URL path. AWS and `MinIO` reject such requests with `MethodNotAllowed`;
+        // keep that behavior.
+        S3Path::Object { .. } => return Err(s3_error!(MethodNotAllowed)),
+        S3Path::Bucket { bucket } => String::from(&**bucket),
+    };
+    if config.payload_length_extension {
+        reject_declaration_header_on_post(&req.headers)?;
+    }
+    let mut multipart = req.s3ext.multipart.take().expect("checked above");
+    let resolved = resolve_post_object(&bucket, &mut multipart, config);
+    // The multipart goes back whatever the outcome: the take is only there to keep the
+    // resolution from borrowing the request.
+    req.s3ext.multipart = Some(multipart);
+    let (stream, policy) = resolved?;
+    req.s3ext.post_object_stream = Some(stream);
+    req.s3ext.post_policy = policy;
+    Ok(Some(&PostObject as &'static dyn Operation))
+}
+
+/// A form upload signs the policy document inside the form and not the headers, so the
+/// declaration has to arrive as a form field covered by the policy conditions: a header
+/// carrying it is an unsigned header here, exactly like an unsigned `x-amz-*` one.
+fn reject_declaration_header_on_post(headers: &HeaderMap) -> S3Result<()> {
+    if headers.contains_key(payload_length::X_S3S_PAYLOAD_LENGTH) {
+        return Err(payload_length::unsigned_on_post());
+    }
+    Ok(())
+}
+
 fn resolve_post_object(
     bucket: &str,
     multipart: &mut crate::http::Multipart,
@@ -699,7 +752,33 @@ fn resolve_post_object(
     multipart.substitute_key_filename();
 
     let policy = parse_post_policy(multipart)?;
-    let (min_file_size, max_file_size) = post_object_file_size_range(policy.as_ref(), config.post_object_max_file_size)?;
+    let (policy_min, policy_max) = post_object_file_size_range(policy.as_ref(), config.post_object_max_file_size)?;
+    // The declaration of a form upload is a field, not a header, because a presigned POST signs
+    // the policy document rather than the headers. It narrows the range the file stream enforces
+    // instead of replacing it: the stream still counts the bytes actually delivered.
+    let declared = if config.payload_length_extension {
+        payload_length::declared_form_field(multipart.fields())?
+    } else {
+        None
+    };
+    let (min_file_size, max_file_size) = match declared {
+        Some(declared) if declared > policy_max => {
+            return Err(s3_error!(
+                EntityTooLarge,
+                "The declared payload length {declared} is above the maximum of {policy_max} the policy allows."
+            ));
+        }
+        Some(declared) if declared < policy_min => {
+            return Err(s3_error!(
+                EntityTooSmall,
+                "The declared payload length {declared} is below the minimum of {policy_min} the policy allows."
+            ));
+        }
+        // Inside the policy range the intersection is the declaration itself: the file stream
+        // then enforces exactly the declared length, and the policy bounds hold by construction.
+        Some(declared) => (declared, declared),
+        None => (policy_min, policy_max),
+    };
 
     // Prepare the file stream for the operation: the file part is forwarded as
     // a stream whose exact length is not known before the body is read — how
@@ -852,10 +931,7 @@ fn apply_credentials(req: &mut Request, credentials: Option<CredentialsExt>, vh_
 }
 
 /// Resolves the client-declared operation intent from the `x-id` query
-/// parameter (signed under `SigV4` and sent by official SDKs). The former
-/// `x-s3s-operation-id` header extension was removed: it was a redundant,
-/// unsigned carrier with no confirmed benefit, and checking for a present
-/// header costs ~12 ns/op in the hot path.
+/// parameter (signed under `SigV4` and sent by official SDKs).
 ///
 /// The lookup is partitioned by (HTTP method, path shape) and each partition
 /// resolves the declared name through a generated `match` over the official
@@ -1009,26 +1085,10 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
         op
     } else {
         'resolve: {
-            let s3_path = req.s3ext.s3_path.as_ref().expect("classified above");
-            if let Some(multipart) = &mut req.s3ext.multipart
-                && req.method == Method::POST
-            {
-                match s3_path {
-                    S3Path::Root => return Err(unknown_operation()),
-                    S3Path::Bucket { bucket } => {
-                        let (stream, policy) = resolve_post_object(bucket, multipart, &config)?;
-                        req.s3ext.post_object_stream = Some(stream);
-                        req.s3ext.post_policy = policy;
-                        break 'resolve &PostObject as &'static dyn Operation;
-                    }
-                    // A multipart POST whose path names an object is not a modeled S3
-                    // operation: `PostObject` binds to `/{Bucket}` only — the key is
-                    // carried by the `key` form field, never the URL path. AWS and
-                    // MinIO reject such requests with `MethodNotAllowed`; keep that
-                    // behavior.
-                    S3Path::Object { .. } => return Err(s3_error!(MethodNotAllowed)),
-                }
+            if let Some(op) = resolve_multipart_post(req, &config)? {
+                break 'resolve op;
             }
+            let s3_path = req.s3ext.s3_path.as_ref().expect("classified above");
             resolve_operation(req, s3_path, host_header.as_deref(), ccx)?
         }
     };

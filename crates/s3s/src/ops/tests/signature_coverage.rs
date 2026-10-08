@@ -87,6 +87,132 @@ fn test_config_with_allowlist(entries: &[&str]) -> Arc<dyn S3ConfigProvider> {
     })))
 }
 
+/// A `PUT` carrying `x-s3s-payload-length`, never listed in the signed-header list.
+fn declaration_request(method: Method, version: Version, uri: &str, declared: &str) -> Request {
+    let uri = uri.parse::<Uri>().unwrap();
+    let authorization = sign_request(&method, &uri, EMPTY_SHA256, &[]);
+    let mut builder = hyper::Request::builder()
+        .method(method)
+        .version(version)
+        .uri(uri.clone())
+        .header(crate::header::X_AMZ_CONTENT_SHA256, EMPTY_SHA256)
+        .header(crate::header::X_AMZ_DATE, AMZ_DATE)
+        .header(crate::header::AUTHORIZATION, authorization)
+        .header(hyper::header::CONTENT_LENGTH, declared)
+        .header(hyper::header::HeaderName::from_static("x-s3s-payload-length"), declared);
+    if version == Version::HTTP_11 {
+        builder = builder.header(crate::header::HOST, uri.authority().unwrap().as_str());
+    }
+    Request::from(builder.body(empty_unknown_length_body()).unwrap())
+}
+
+/// The `x-s3s-` prefix carries the same weight as `x-amz-*` on both sides: an unsigned
+/// declaration is rejected by default, and `S3Config::unsigned_s3s_header_allowlist` is what
+/// permits it.
+#[tokio::test]
+async fn the_declaration_header_must_be_signed_unless_allowlisted() {
+    const URI: &str = "http://localhost/test-bucket/test-key.txt";
+    const NAME: &str = "x-s3s-payload-length";
+    let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
+
+    // Unsigned, with the default (empty) allowlists: rejected before routing.
+    let test_s3 = Arc::new(TestS3::default());
+    let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
+    let config = test_config();
+    let ccx = test_context(&s3, &config, &auth);
+    let mut rejected = declaration_request(Method::PUT, Version::HTTP_11, URI, "0");
+    let response = super::call(&mut rejected, &ccx).await.expect("must be routed");
+    assert_eq!(response.status, StatusCode::FORBIDDEN, "an unsigned declaration must be rejected");
+    assert_eq!(
+        test_s3.put_object.load(Ordering::SeqCst),
+        0,
+        "a rejected request must not reach PutObject"
+    );
+
+    // The same request, with the header named in the allowlist: served, and the declaration
+    // agrees with the framing it declares.
+    let test_s3 = Arc::new(TestS3::default());
+    let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
+    let config = test_config_with_s3s_allowlist(&[NAME]);
+    let ccx = test_context(&s3, &config, &auth);
+    let mut allowed = declaration_request(Method::PUT, Version::HTTP_11, URI, "0");
+    let response = super::call(&mut allowed, &ccx).await.expect("must be routed");
+    assert_eq!(response.status, StatusCode::OK, "an allowlisted declaration must be served");
+    assert_eq!(test_s3.put_object.load(Ordering::SeqCst), 1, "the allowlisted request reaches PutObject");
+
+    // The other family's allowlist does not exempt an extension header: each guard reads the list
+    // that belongs to its own prefix.
+    let test_s3 = Arc::new(TestS3::default());
+    let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
+    let config = test_config_with_allowlist(&[NAME]);
+    let ccx = test_context(&s3, &config, &auth);
+    let mut crossed = declaration_request(Method::PUT, Version::HTTP_11, URI, "0");
+    let response = super::call(&mut crossed, &ccx).await.expect("must be routed");
+    assert_eq!(
+        response.status,
+        StatusCode::FORBIDDEN,
+        "the x-amz- allowlist must not exempt an x-s3s- header"
+    );
+    assert_eq!(
+        test_s3.put_object.load(Ordering::SeqCst),
+        0,
+        "a rejected request must not reach PutObject"
+    );
+}
+
+/// With the extension turned off the header is an ordinary unknown header: unsigned, and served.
+#[tokio::test]
+async fn disabling_the_extension_leaves_the_declaration_header_unread() {
+    const URI: &str = "http://localhost/test-bucket/test-key.txt";
+    let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
+    let test_s3 = Arc::new(TestS3::default());
+    let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
+    let config = config_with(|config| config.payload_length_extension = false);
+    let ccx = test_context(&s3, &config, &auth);
+    let mut req = declaration_request(Method::PUT, Version::HTTP_11, URI, "0");
+
+    let response = super::call(&mut req, &ccx).await.expect("must be routed");
+    assert_eq!(response.status, StatusCode::OK, "an opt-out deployment must not read the header");
+    assert_eq!(test_s3.put_object.load(Ordering::SeqCst), 1);
+}
+
+/// A declaration that disagrees with the framing is refused while the body is prepared, on the
+/// request path rather than only in the unit tests of the extension.
+#[tokio::test]
+async fn a_declaration_that_disagrees_with_the_framing_is_refused() {
+    const URI: &str = "http://localhost/test-bucket/test-key.txt";
+    const NAME: &str = "x-s3s-payload-length";
+    let auth = SimpleAuth::from_single(ACCESS_KEY, SECRET_KEY);
+    let test_s3 = Arc::new(TestS3::default());
+    let s3: Arc<dyn crate::s3_trait::S3> = test_s3.clone();
+    let config = test_config_with_s3s_allowlist(&[NAME]);
+    let ccx = test_context(&s3, &config, &auth);
+    let mut req = declaration_request(Method::PUT, Version::HTTP_11, URI, "5");
+    // The declaration says five bytes and the framing says none; neither is in the signed-header
+    // list, so the exchange does not disturb the signature under test.
+    req.headers
+        .insert(hyper::header::CONTENT_LENGTH, hyper::header::HeaderValue::from_static("0"));
+
+    let err = super::prepare(&mut req, &ccx)
+        .await
+        .err()
+        .expect("a declaration that disagrees with the framing must be refused");
+    assert_eq!(err.code(), &crate::error::S3ErrorCode::EntityTooSmall);
+    assert_eq!(test_s3.put_object.load(Ordering::SeqCst), 0, "the request must not reach PutObject");
+}
+
+/// Each header family names its exceptions in its own allowlist: an `x-s3s-*` name belongs in
+/// [`S3Config::unsigned_s3s_header_allowlist`], an `x-amz-*` name in
+/// [`S3Config::unsigned_amz_header_allowlist`].
+fn test_config_with_s3s_allowlist(entries: &[&str]) -> Arc<dyn S3ConfigProvider> {
+    Arc::new(StaticConfigProvider::new(Arc::new(S3Config {
+        presigned_url_max_skew_time_secs: u32::MAX,
+        expected_region: Some(REGION.parse().expect("valid test region")),
+        unsigned_s3s_header_allowlist: entries.iter().map(|name| (*name).to_owned()).collect(),
+        ..Default::default()
+    })))
+}
+
 fn copy_source_request(method: Method, version: Version, uri: &str, sign_copy_source: bool) -> Request {
     const COPY_SOURCE: (&str, &str) = ("x-amz-copy-source", "/source-bucket/source-key");
     let uri = uri.parse::<Uri>().unwrap();

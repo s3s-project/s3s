@@ -1084,3 +1084,69 @@ async fn v4_presigned_url_accepts_expires_beyond_default_when_limit_is_zero() {
         .expect("X-Amz-Expires beyond the default must be accepted when the limit is zero");
     assert_eq!(cred.access_key, access_key);
 }
+
+/// A presigned request that carries the declaration unsigned is refused on that path too.
+#[tokio::test]
+async fn v4_presigned_url_rejects_an_unsigned_declaration() {
+    use crate::auth::{SecretKey, SimpleAuth};
+    use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
+    use std::sync::Arc;
+
+    let access_key = "AKIAIOSFODNN7EXAMPLE";
+    let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+    let auth = SimpleAuth::from_single(access_key, secret_key.clone());
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(S3Config {
+        presigned_url_max_skew_time_secs: u32::MAX,
+        expected_region: Some("us-east-1".parse().expect("valid test region")),
+        ..Default::default()
+    })));
+
+    let method = Method::GET;
+    let uri = Uri::from_static("https://s3.amazonaws.com/test-bucket/test-key.txt");
+    let decoded_uri_path = "/test-bucket/test-key.txt";
+    let amz_date =
+        AmzDate::parse(&fmt_current_amz_date(jiff::Timestamp::now())).expect("current time should produce a valid x-amz-date");
+    let headers_for_signing = [("host", "s3.amazonaws.com")];
+    let query_strings_for_signing = presigned_query_fields(&amz_date, "s3");
+    let canonical_request = s3s_sigv4::create_presigned_canonical_request(
+        method.as_str(),
+        decoded_uri_path,
+        &query_strings_for_signing,
+        headers_for_signing,
+    );
+    let string_to_sign = s3s_sigv4::create_string_to_sign(&canonical_request, &amz_date, "us-east-1", "s3");
+    let signature = s3s_sigv4::calculate_signature(&string_to_sign, secret_key.expose(), &amz_date, "us-east-1", "s3");
+    let mut signed_query_strings = query_strings_for_signing.clone();
+    signed_query_strings.push(("X-Amz-Signature".to_owned(), signature.as_str().to_owned()));
+    let qs = OrderedQs::from_vec_unchecked(signed_query_strings);
+
+    // The signature covers `host` only, so the declaration arrives unsigned.
+    let headers = headers_from_slice(&[("host", "s3.amazonaws.com"), ("x-s3s-payload-length", "0")]);
+    let mut body = Body::empty();
+    let mut cx = SignatureContext {
+        path_encoding: crate::auth::SigV4PathEncoding::S3,
+        auth: Some(&auth),
+        config: &config,
+        req_version: ::http::Version::HTTP_11,
+        req_method: &method,
+        req_uri: &uri,
+        req_body: &mut body,
+        qs: Some(&qs),
+        hs: &headers,
+        decoded_uri_path,
+        raw_uri_path: decoded_uri_path,
+        vh_bucket: None,
+        content_length: None,
+        mime: None,
+        decoded_content_length: None,
+        transformed_body: None,
+        multipart: None,
+        trailing_headers: None,
+    };
+
+    let err = cx
+        .v4_check_presigned_url()
+        .await
+        .expect_err("an unsigned declaration must be refused");
+    assert_eq!(err.code(), &S3ErrorCode::AccessDenied);
+}
