@@ -387,8 +387,10 @@ fn prepare_streaming_body(req: &mut Request, config: &S3Config) -> S3Result {
     let content_length = extract_content_length(req)?;
     let known_length = content_length.or_else(|| req.body.remaining_length().exact().map(|x| x as u64));
     // The `x-s3s-payload-length` extension declares the bytes the sender delivers, so it has to
-    // agree with the length the framing carries. `POST Object` is excluded: its declaration lives
-    // in the form as a field, and an HTTP header there is an unsigned header the POST path rejects.
+    // agree with the length the framing carries. `POST` is skipped because the declaration is
+    // about an upload: `POST Object` takes its declaration from a form field and its file stream
+    // never passes through here, and the one `POST` operation that does stream a body
+    // (`WriteGetObjectResponse`) sends a response rather than an upload.
     if req.method != Method::POST && config.payload_length_extension {
         payload_length::enforce_declaration(&req.headers, known_length)?;
     }

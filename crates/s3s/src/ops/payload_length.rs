@@ -199,6 +199,23 @@ mod tests {
     }
 
     #[test]
+    fn a_non_text_value_is_rejected() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            HeaderName::from_static(X_S3S_PAYLOAD_LENGTH),
+            HeaderValue::from_bytes(b"\xff").expect("opaque bytes are a valid header value"),
+        );
+        let err = declared_payload_length(&headers).expect_err("the value is not text");
+        assert_eq!(err.code(), &S3ErrorCode::InvalidRequest);
+    }
+
+    #[test]
+    fn a_malformed_declaration_is_reported_through_enforcement() {
+        let err = enforce_declaration(&headers(&["01"]), Some(1)).expect_err("a leading zero is not a declaration");
+        assert_eq!(err.code(), &S3ErrorCode::InvalidRequest);
+    }
+
+    #[test]
     fn a_matching_framing_passes() {
         check_declared_payload_length(10, Some(10)).expect("match");
     }
