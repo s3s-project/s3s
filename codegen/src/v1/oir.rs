@@ -7,6 +7,7 @@
 
 use super::ops::{OPS_GENERATED_DIR, Operations, PathPattern, codegen_file_header};
 use super::write_dir_file;
+use crate::v2::post_object;
 use scoped_writer::g;
 use std::collections::BTreeMap;
 
@@ -100,7 +101,7 @@ struct OirBucket {
 fn collect_oir_buckets(ops: &Operations) -> Vec<OirBucket> {
     let mut groups: BTreeMap<(String, PathPattern), Vec<(String, bool)>> = BTreeMap::new();
     for op in ops.values() {
-        if op.name == "PostObject" {
+        if post_object::is_synthetic(&op.name) {
             continue;
         }
         // The official `x-id` query value must equal the operation name so
