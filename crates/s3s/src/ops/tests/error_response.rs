@@ -163,6 +163,22 @@ fn error_response_without_a_request_id_has_no_request_id_header() {
     assert!(res.headers.get(crate::header::X_AMZ_REQUEST_ID).is_none(), "{:?}", res.headers);
 }
 
+/// A request id that cannot become a header value is left out instead of failing the response.
+/// (The XML body accepts it: only characters below 0x20 are rejected there, while a header value
+/// additionally rejects DEL and other non-visible bytes.)
+#[test]
+fn request_id_that_cannot_be_a_header_value_is_left_out() {
+    let mut err = s3_error!(NoSuchKey);
+    err.set_request_id("bad\u{7f}value");
+
+    let res = ops::serialize_error(err, false).unwrap();
+
+    assert_eq!(res.status, hyper::StatusCode::NOT_FOUND);
+    assert!(res.headers.get(crate::header::X_AMZ_REQUEST_ID).is_none(), "{:?}", res.headers);
+    let body = String::from_utf8(res.body.bytes().expect("body bytes").to_vec()).expect("utf-8 body");
+    assert!(body.contains("bad\u{7f}value"), "{body}");
+}
+
 /// A header the implementation set explicitly is kept as it is.
 #[test]
 fn explicit_request_id_header_is_kept() {
