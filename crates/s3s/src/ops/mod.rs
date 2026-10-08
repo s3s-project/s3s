@@ -918,10 +918,7 @@ fn apply_credentials(req: &mut Request, credentials: Option<CredentialsExt>, vh_
 }
 
 /// Resolves the client-declared operation intent from the `x-id` query
-/// parameter (signed under `SigV4` and sent by official SDKs). The former
-/// `x-s3s-operation-id` header extension was removed: it was a redundant,
-/// unsigned carrier with no confirmed benefit, and checking for a present
-/// header costs ~12 ns/op in the hot path.
+/// parameter (signed under `SigV4` and sent by official SDKs).
 ///
 /// The lookup is partitioned by (HTTP method, path shape) and each partition
 /// resolves the declared name through a generated `match` over the official
