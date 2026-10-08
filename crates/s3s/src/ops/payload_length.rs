@@ -103,24 +103,27 @@ pub(crate) fn enforce_declaration(headers: &HeaderMap, framing: Option<u64>) -> 
 
 /// Rejects a declaration header the signed-header list does not cover.
 ///
-/// The extension's headers carry the same weight as the protocol's request metadata — routing
-/// and input parsing read the declaration — so the signature has to cover them. A deployment that
-/// turned the extension off guards none of them, and
-/// [`S3Config::unsigned_s3s_header_allowlist`] names the exceptions.
+/// The declaration carries the same weight as the protocol's request metadata — routing and input
+/// parsing read it — so the signature has to cover it. The guard belongs to the extension and
+/// covers the header the extension defines: a deployment that turned the extension off guards
+/// nothing, and [`S3Config::unsigned_s3s_header_allowlist`] names the exceptions.
 pub(crate) fn reject_unsigned_declaration(config: &S3Config, headers: &HeaderMap, signed_names: &[&str]) -> S3Result<()> {
-    if !config.payload_length_extension {
+    if !config.payload_length_extension
+        || config
+            .unsigned_s3s_header_allowlist
+            .iter()
+            .any(|allow| allow == X_S3S_PAYLOAD_LENGTH)
+        || !headers.contains_key(X_S3S_PAYLOAD_LENGTH)
+    {
         return Ok(());
     }
-    for name in headers.keys() {
-        let name = name.as_str();
-        if !name.starts_with("x-s3s-") || config.unsigned_s3s_header_allowlist.iter().any(|allow| allow == name) {
-            continue;
-        }
-        if !signed_names.iter().any(|signed| signed.eq_ignore_ascii_case(name)) {
-            return Err(super::signature::unsigned_headers_error());
-        }
+    if signed_names
+        .iter()
+        .any(|signed| signed.eq_ignore_ascii_case(X_S3S_PAYLOAD_LENGTH))
+    {
+        return Ok(());
     }
-    Ok(())
+    Err(super::signature::unsigned_headers_error())
 }
 
 /// The rejection for a `POST Object` that carries the declaration as an HTTP header.
@@ -259,6 +262,15 @@ mod tests {
             ..enabled()
         };
         reject_unsigned_declaration(&config, &headers(&["10"]), &[]).expect("allowlisted");
+    }
+
+    #[test]
+    fn this_guard_covers_only_the_header_the_extension_defines() {
+        let mut other = HeaderMap::new();
+        other.insert(HeaderName::from_static("x-s3s-future-header"), HeaderValue::from_static("1"));
+        // The extension guards its own header; another `x-s3s-*` header is an ordinary
+        // unknown header until an extension claims it.
+        reject_unsigned_declaration(&enabled(), &other, &[]).expect("not the extension header");
     }
 
     #[test]

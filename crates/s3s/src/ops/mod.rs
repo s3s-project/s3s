@@ -718,8 +718,11 @@ fn resolve_multipart_post(req: &mut Request, config: &S3Config) -> S3Result<Opti
         reject_declaration_header_on_post(&req.headers)?;
     }
     let mut multipart = req.s3ext.multipart.take().expect("checked above");
-    let (stream, policy) = resolve_post_object(&bucket, &mut multipart, config)?;
+    let resolved = resolve_post_object(&bucket, &mut multipart, config);
+    // The multipart goes back whatever the outcome: the take is only there to keep the
+    // resolution from borrowing the request.
     req.s3ext.multipart = Some(multipart);
+    let (stream, policy) = resolved?;
     req.s3ext.post_object_stream = Some(stream);
     req.s3ext.post_policy = policy;
     Ok(Some(&PostObject as &'static dyn Operation))
@@ -757,13 +760,21 @@ fn resolve_post_object(
         None
     };
     let (min_file_size, max_file_size) = match declared {
-        Some(declared) if policy_min.max(declared) > policy_max.min(declared) => {
+        Some(declared) if declared > policy_max => {
             return Err(s3_error!(
-                EntityTooSmall,
-                "The declared payload length {declared} is outside the range the policy allows."
+                EntityTooLarge,
+                "The declared payload length {declared} is above the maximum of {policy_max} the policy allows."
             ));
         }
-        Some(declared) => (policy_min.max(declared), policy_max.min(declared)),
+        Some(declared) if declared < policy_min => {
+            return Err(s3_error!(
+                EntityTooSmall,
+                "The declared payload length {declared} is below the minimum of {policy_min} the policy allows."
+            ));
+        }
+        // Inside the policy range the intersection is the declaration itself: the file stream
+        // then enforces exactly the declared length, and the policy bounds hold by construction.
+        Some(declared) => (declared, declared),
         None => (policy_min, policy_max),
     };
 

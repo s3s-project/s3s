@@ -1008,6 +1008,21 @@ async fn post_object_declaration_outside_the_policy_range_is_rejected_before_the
 }
 
 #[tokio::test]
+async fn post_object_declaration_above_the_policy_maximum_is_too_large() {
+    use std::sync::Arc;
+
+    let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post_policy_test_helpers::TestS3NoOp);
+    let config = post_policy_test_helpers::create_test_config(10 * 1024);
+    let auth = post_policy_test_helpers::create_test_auth();
+    let ccx = post_policy_test_helpers::create_test_context(&s3, &config, &auth);
+    // The policy allows at most 300 bytes; the declaration says 400: no body satisfies both.
+    let mut req = build_declared_post_request((0, 300), "400", 400);
+
+    let err = super::prepare(&mut req, &ccx).await.err().expect("the intersection is empty");
+    assert_eq!(err.code(), &crate::error::S3ErrorCode::EntityTooLarge);
+}
+
+#[tokio::test]
 async fn post_object_declaration_as_a_header_is_treated_as_unsigned() {
     use std::sync::Arc;
 

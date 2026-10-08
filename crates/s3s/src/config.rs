@@ -449,14 +449,15 @@ pub struct S3Config {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub unsigned_amz_header_allowlist: Vec<String>,
 
-    /// `x-s3s-*` headers listed here need not appear in the signed-header list.
+    /// The `x-s3s-` extension headers listed here need not appear in the signed-header list.
     ///
-    /// The counterpart of [`S3Config::unsigned_amz_header_allowlist`] for the `x-s3s-`
-    /// extension prefix, which carries the same weight: an unsigned header of that
-    /// prefix is answered with `AccessDenied`. Entries are exact, lowercase header
+    /// The counterpart of [`S3Config::unsigned_amz_header_allowlist`] for the extension
+    /// namespace: an extension header is guarded by the extension that defines it (today the
+    /// `x-s3s-payload-length` declaration, while [`S3Config::payload_length_extension`] is on),
+    /// and an unsigned one is answered with `AccessDenied`. Entries are exact, lowercase header
     /// names; no prefix matching is performed.
     ///
-    /// Default: empty (no `x-s3s-*` header may be unsigned)
+    /// Default: empty (no extension header may be unsigned)
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub unsigned_s3s_header_allowlist: Vec<String>,
 }
