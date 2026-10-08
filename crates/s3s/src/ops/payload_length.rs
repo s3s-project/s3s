@@ -51,10 +51,14 @@ pub(crate) fn parse_declaration(raw: &str) -> S3Result<u64> {
 
 /// Reads the declaration of a form upload, where the value is a form field rather than a header:
 /// a presigned `POST` signs the policy document, so a header cannot carry the extension.
+///
+/// The field name is matched exactly, the way a multipart field name is: the policy condition
+/// that has to cover the field (`$x-s3s-payload-length`) is matched exactly too, so a differently
+/// cased field is a field no condition covers rather than this declaration.
 pub(crate) fn declared_form_field(fields: &[(String, String)]) -> S3Result<Option<u64>> {
     let mut found: Option<&str> = None;
     for (name, value) in fields {
-        if name.eq_ignore_ascii_case(X_S3S_PAYLOAD_LENGTH) {
+        if name == X_S3S_PAYLOAD_LENGTH {
             if found.is_some() {
                 return Err(invalid_declaration("the field appears more than once"));
             }
@@ -187,6 +191,14 @@ mod tests {
         ];
         assert_eq!(declared_form_field(&fields).expect("ok"), Some(1024));
         assert_eq!(declared_form_field(&[]).expect("ok"), None);
+    }
+
+    #[test]
+    fn a_differently_cased_form_field_is_not_the_declaration() {
+        // A multipart field name is opaque and the policy condition that must cover the field is
+        // matched exactly, so only the literal name is the declaration.
+        let fields = vec![("X-S3S-Payload-Length".to_owned(), "1024".to_owned())];
+        assert_eq!(declared_form_field(&fields).expect("ok"), None);
     }
 
     #[test]

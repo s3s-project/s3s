@@ -30,6 +30,22 @@ The value is the number of payload bytes after transfer decoding and before cont
 
 A value is a decimal integer without a sign, whitespace or a leading zero. The header may appear once; a request that repeats it, or carries a value that is not a decimal integer, is answered with `400 InvalidRequest`.
 
+## ABNF
+
+The field follows the HTTP grammar of RFC 9110 and the extension adds one rule. The value grammar applies to the field value after the optional whitespace a parser removes around it (RFC 9110 `field-value`), so `x-s3s-payload-length: 32` and `x-s3s-payload-length:32` are the same request.
+
+```abnf
+x-s3s-payload-length = payload-length
+payload-length       = "0" / ( %x31-39 *DIGIT )
+
+; %x31-39 is "1"-"9". A sign, a leading zero, a space inside the value and a value
+; that does not fit in 64 bits are not payload-length: each is answered with
+; 400 InvalidRequest.
+```
+
+- **Field name**: `x-s3s-payload-length`, matched case-insensitively, as HTTP field names are (RFC 9110 §5.1). It has to appear at most once — two values are ambiguous and ignoring them would drop a signed declaration — so a repeated field is `400 InvalidRequest` as well.
+- **Form field** (a presigned `POST` form): the name is the literal `x-s3s-payload-length`, because a multipart field name is an opaque, exactly matched string, and the policy condition that covers it names the same field, for example `["eq", "$x-s3s-payload-length", "32"]`. A differently cased field is a field no condition covers, and a form field that no condition covers is rejected by the policy check.
+
 ## Signing
 
 The header carries the same weight as an `x-amz-*` header, because routing and input parsing read it. It must be covered by the signature:
