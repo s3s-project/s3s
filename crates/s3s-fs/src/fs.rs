@@ -9,10 +9,11 @@ use s3s::crypto::Checksum;
 use s3s::crypto::Md5;
 use s3s::dto;
 use s3s::dto::PartNumber;
+use s3s::{S3Result, s3_error};
 
 use std::env;
 use std::ops::Not;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::SystemTime;
 
@@ -150,10 +151,23 @@ impl FileSystem {
     }
 
     /// resolve object path under the virtual root
-    pub(crate) fn get_object_path(&self, bucket: &str, key: &str) -> Result<PathBuf> {
+    pub(crate) fn get_object_path(&self, bucket: &str, key: &str) -> S3Result<PathBuf> {
         let dir = Path::new(&bucket);
         let file_path = Path::new(&key);
-        self.resolve_abs_path(dir.join(file_path))
+        // Filesystem normalization would make these keys refer to other objects.
+        let path_key = key.strip_suffix('/').unwrap_or(key);
+        if path_key
+            .split(std::path::is_separator)
+            .any(|part| matches!(part, "" | "." | ".."))
+            || (cfg!(windows) && key.contains('\\'))
+            || file_path.components().any(|part| !matches!(part, Component::Normal(_)))
+        {
+            return Err(s3_error!(
+                InvalidArgument,
+                "Object key cannot be represented as a literal filesystem path"
+            ));
+        }
+        self.resolve_abs_path(dir.join(file_path)).map_err(Into::into)
     }
 
     /// resolve bucket path under the virtual root
@@ -512,6 +526,48 @@ mod tests {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn object_paths_reject_normalization_aliases() {
+        let fs = FileSystem {
+            root: env::temp_dir(),
+            tmp_file_counter: AtomicU64::new(0),
+        };
+        for key in [
+            "",
+            ".",
+            "..",
+            "../victim",
+            "allowed/../victim",
+            "allowed/./victim",
+            "allowed//victim",
+            "allowed//",
+            "/victim",
+        ] {
+            let error = fs.get_object_path("bucket", key).unwrap_err();
+            assert_eq!(error.code(), &s3s::S3ErrorCode::InvalidArgument, "key {key:?}");
+        }
+        #[cfg(windows)]
+        for key in [
+            r"allowed\victim",
+            r"allowed\..\victim",
+            r"allowed\.\victim",
+            r"C:\victim",
+            r"C:victim",
+            r"\victim",
+        ] {
+            let error = fs.get_object_path("bucket", key).unwrap_err();
+            assert_eq!(error.code(), &s3s::S3ErrorCode::InvalidArgument, "key {key:?}");
+        }
+        for key in ["allowed/ok", "allowed/.config", "allowed/report..txt", "allowed/directory/"] {
+            assert_eq!(fs.get_object_path("bucket", key).unwrap(), fs.root.join("bucket").join(key));
+        }
+        #[cfg(not(windows))]
+        assert_eq!(
+            fs.get_object_path("bucket", r"allowed\literal").unwrap(),
+            fs.root.join("bucket").join(r"allowed\literal")
+        );
     }
 
     #[test]
