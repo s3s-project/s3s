@@ -81,6 +81,7 @@ mod tests {
         let credentials = Credentials {
             access_key: "AKIAIOSFODNN7EXAMPLE".to_owned(),
             secret_key: SecretKey::from("secret"),
+            session_token: None,
         };
         let s3_path = S3Path::object("bucket", "key");
         let s3_op = S3Operation { name: "GetObject" };

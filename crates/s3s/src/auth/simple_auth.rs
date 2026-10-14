@@ -114,4 +114,21 @@ mod tests {
         let result = auth.get_secret_key("UNKNOWN").await;
         assert!(result.is_err());
     }
+
+    /// The default `get_secret_key_with_context` ignores the session token and
+    /// delegates to `get_secret_key`, so a provider of long-term credentials needs no change.
+    #[tokio::test]
+    async fn get_secret_key_with_context_delegates_by_access_key() {
+        use crate::auth::S3AuthContext;
+
+        let auth = SimpleAuth::from_single("AKID", "secret");
+        let cx = S3AuthContext::new("AKID", Some("session-token"));
+        assert_eq!(cx.access_key(), "AKID");
+        assert_eq!(cx.session_token(), Some("session-token"));
+        let key = auth.get_secret_key_with_context(&cx).await.unwrap();
+        assert_eq!(key.expose(), "secret");
+
+        let cx = S3AuthContext::new("UNKNOWN", None);
+        assert!(auth.get_secret_key_with_context(&cx).await.is_err());
+    }
 }

@@ -894,6 +894,7 @@ fn apply_credentials(req: &mut Request, credentials: Option<CredentialsExt>, vh_
             req.s3ext.credentials = Some(Credentials {
                 access_key: cred.access_key,
                 secret_key: cred.secret_key,
+                session_token: cred.session_token,
             });
 
             let cred_region = cred

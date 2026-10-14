@@ -9,6 +9,7 @@
     clippy::unwrap_used
 )]
 use crate::auth::S3Auth;
+use crate::auth::S3AuthContext;
 use crate::auth::SecretKey;
 use crate::auth::SigV4PathEncoding;
 use crate::auth::signature::Signature;
@@ -52,6 +53,53 @@ use tracing::debug;
 pub(super) const MAX_STS_BODY_SIZE: usize = 8192;
 
 type SignedHeaderPairs<'a> = SmallVec<[(&'a str, &'a str); 16]>;
+
+/// The session token of a temporary credential, as a header (`SigV2` and `SigV4` header
+/// authentication, `SigV2` presigned URL), a `SigV2` presigned query parameter or a POST
+/// policy form field. The `SigV4` presigned parameter is [`X_AMZ_SECURITY_TOKEN_QUERY`].
+const X_AMZ_SECURITY_TOKEN: &str = "x-amz-security-token";
+
+/// The session token parameter of a `SigV4` presigned URL.
+const X_AMZ_SECURITY_TOKEN_QUERY: &str = "X-Amz-Security-Token";
+
+/// Reads the session token from one source.
+///
+/// A repeated token is rejected instead of being read as absent (the
+/// [`http::get_unique_header_str`] convention for a repeated header): a client never sends
+/// two tokens, and reading none would hand the credential to the auth provider without its
+/// token, so the failure would surface later as `InvalidAccessKeyId` or
+/// `SignatureDoesNotMatch` instead of naming the ambiguous value.
+fn unique_session_token<'a>(mut values: impl Iterator<Item = &'a str>, source: &str) -> S3Result<Option<&'a str>> {
+    let token = values.next();
+    if token.is_some() && values.next().is_some() {
+        return Err(invalid_request!("duplicate {source}: {X_AMZ_SECURITY_TOKEN}"));
+    }
+    Ok(token)
+}
+
+/// Reads the `x-amz-security-token` header; see [`unique_session_token`].
+fn header_session_token(hs: &HeaderMap) -> S3Result<Option<&str>> {
+    let mut values = hs.get_all(X_AMZ_SECURITY_TOKEN).iter();
+    let Some(value) = values.next() else {
+        return Ok(None);
+    };
+    if values.next().is_some() {
+        return Err(invalid_request!("duplicate header: {X_AMZ_SECURITY_TOKEN}"));
+    }
+    match http::header_value_to_str(value) {
+        Some(token) => Ok(Some(token)),
+        None => Err(invalid_request!("invalid header: {X_AMZ_SECURITY_TOKEN}")),
+    }
+}
+
+/// Reads a session token form field of a POST policy request; see [`unique_session_token`].
+fn form_session_token(fields: &[(String, String)]) -> S3Result<Option<&str>> {
+    let values = fields
+        .iter()
+        .filter(|(name, _)| name == X_AMZ_SECURITY_TOKEN)
+        .map(|(_, value)| value.as_str());
+    unique_session_token(values, "field")
+}
 
 pub(super) fn extract_amz_content_sha256(hs: &HeaderMap) -> S3Result<Option<AmzContentSha256>> {
     let Some(val) = http::get_unique_header_str(hs, crate::header::X_AMZ_CONTENT_SHA256.as_str()) else {
@@ -300,6 +348,7 @@ pub struct SignatureContext<'a> {
 pub struct CredentialsExt {
     pub access_key: String,
     pub secret_key: SecretKey,
+    pub session_token: Option<String>,
     pub region: Option<String>,
     pub service: Option<String>,
 }
@@ -538,6 +587,12 @@ impl<'a> SignatureContext<'a> {
         // borrowing `self`, so the returned slice lives as long as `'a`.
         let qs: Option<&'a OrderedQs> = self.qs;
         qs.map_or(&[], AsRef::as_ref)
+    }
+
+    /// The values of the query parameter `name`; empty without a query string.
+    fn query_pairs_of(&self, name: &str) -> impl Iterator<Item = &'a str> {
+        let qs: Option<&'a OrderedQs> = self.qs;
+        qs.into_iter().flat_map(move |qs| qs.get_all(name))
     }
 
     fn signed_host_fallback(&self, name: &'a str) -> Option<&'a str> {
@@ -793,7 +848,10 @@ impl<'a> SignatureContext<'a> {
         validate_sig_v4_clock_skew(&amz_date, jiff::Timestamp::now(), &config)?;
 
         let access_key = credential.access_key_id.to_owned();
-        let secret_key = auth.get_secret_key(&access_key).await?;
+        let session_token = form_session_token(multipart.fields())?.map(str::to_owned);
+        let secret_key = auth
+            .get_secret_key_with_context(&S3AuthContext::new(&access_key, session_token.as_deref()))
+            .await?;
 
         let service = credential.aws_service;
 
@@ -821,6 +879,7 @@ impl<'a> SignatureContext<'a> {
         Ok(CredentialsExt {
             access_key,
             secret_key,
+            session_token,
             region: Some(region),
             service: Some(service),
         })
@@ -896,7 +955,10 @@ impl<'a> SignatureContext<'a> {
 
         let auth = require_auth(self.auth)?;
         let access_key = presigned_url.credential.access_key_id;
-        let secret_key = auth.get_secret_key(access_key).await?;
+        let session_token = unique_session_token(self.query_pairs_of(X_AMZ_SECURITY_TOKEN_QUERY), "query parameter")?;
+        let secret_key = auth
+            .get_secret_key_with_context(&S3AuthContext::new(access_key, session_token))
+            .await?;
 
         let service = presigned_url.credential.aws_service;
 
@@ -967,6 +1029,7 @@ impl<'a> SignatureContext<'a> {
         Ok(CredentialsExt {
             access_key: access_key.into(),
             secret_key,
+            session_token: session_token.map(str::to_owned),
             region: Some(region.into()),
             service: Some(service.into()),
         })
@@ -1019,7 +1082,10 @@ impl<'a> SignatureContext<'a> {
         }
 
         let access_key = authorization.credential.access_key_id;
-        let secret_key = auth.get_secret_key(access_key).await?;
+        let session_token = header_session_token(self.hs)?;
+        let secret_key = auth
+            .get_secret_key_with_context(&S3AuthContext::new(access_key, session_token))
+            .await?;
 
         let is_stream = amz_content_sha256.is_some_and(|v| v.is_streaming());
 
@@ -1152,6 +1218,7 @@ impl<'a> SignatureContext<'a> {
         Ok(CredentialsExt {
             access_key: access_key.into(),
             secret_key,
+            session_token: session_token.map(str::to_owned),
             region: Some(region.into()),
             service: Some(service.into()),
         })
@@ -1221,7 +1288,10 @@ impl<'a> SignatureContext<'a> {
 
         let auth = require_auth(self.auth)?;
         let access_key = auth_v2.access_key;
-        let secret_key = auth.get_secret_key(access_key).await?;
+        let session_token = header_session_token(self.hs)?;
+        let secret_key = auth
+            .get_secret_key_with_context(&S3AuthContext::new(access_key, session_token))
+            .await?;
 
         let string_to_sign = s3s_sigv2::create_string_to_sign(
             s3s_sigv2::Mode::HeaderAuth,
@@ -1244,6 +1314,7 @@ impl<'a> SignatureContext<'a> {
         Ok(CredentialsExt {
             access_key: access_key.into(),
             secret_key,
+            session_token: session_token.map(str::to_owned),
             region: None,
             service: Some("s3".into()),
         })
@@ -1262,7 +1333,10 @@ impl<'a> SignatureContext<'a> {
         }
 
         let access_key = info.access_key_id.to_owned();
-        let secret_key = auth.get_secret_key(&access_key).await?;
+        let session_token = form_session_token(multipart.fields())?.map(str::to_owned);
+        let secret_key = auth
+            .get_secret_key_with_context(&S3AuthContext::new(&access_key, session_token.as_deref()))
+            .await?;
 
         // For v2 POST signature, the string to sign is the base64-encoded policy
         let string_to_sign = info.policy;
@@ -1278,6 +1352,7 @@ impl<'a> SignatureContext<'a> {
         Ok(CredentialsExt {
             access_key,
             secret_key,
+            session_token,
             region: None,
             service: Some("s3".into()),
         })
@@ -1314,7 +1389,15 @@ impl<'a> SignatureContext<'a> {
 
         let auth = require_auth(self.auth)?;
         let access_key = presigned_url.access_key;
-        let secret_key = auth.get_secret_key(access_key).await?;
+        // AWS documents the header for every SigV2 request; a presigned URL a browser follows
+        // cannot carry a header, so SigV2 signers (boto 2) put the token in the query string.
+        let session_token = match unique_session_token(self.query_pairs_of(X_AMZ_SECURITY_TOKEN), "query parameter")? {
+            Some(token) => Some(token),
+            None => header_session_token(self.hs)?,
+        };
+        let secret_key = auth
+            .get_secret_key_with_context(&S3AuthContext::new(access_key, session_token))
+            .await?;
 
         let string_to_sign = s3s_sigv2::create_string_to_sign(
             s3s_sigv2::Mode::PresignedUrl,
@@ -1336,6 +1419,7 @@ impl<'a> SignatureContext<'a> {
         Ok(CredentialsExt {
             access_key: access_key.into(),
             secret_key,
+            session_token: session_token.map(str::to_owned),
             region: None,
             service: Some("s3".into()),
         })

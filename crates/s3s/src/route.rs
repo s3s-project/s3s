@@ -393,6 +393,7 @@ mod tests {
         let credentials = Credentials {
             access_key: "AKIAIOSFODNN7EXAMPLE".to_owned(),
             secret_key: SecretKey::from("secret"),
+            session_token: None,
         };
         let mut req = make_request(Some(credentials));
 

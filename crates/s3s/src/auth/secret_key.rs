@@ -10,13 +10,19 @@ use zeroize::Zeroize;
 
 /// Authenticated S3 credentials.
 ///
-/// Contains the access key ID and the corresponding [`SecretKey`].
-#[derive(Debug, Clone)]
+/// Contains the access key ID, the corresponding [`SecretKey`] and, for a
+/// temporary credential, the session token the request carried.
+///
+/// The [`Debug`](std::fmt::Debug) implementation hides the session token and
+/// shows only whether one is present, like the secret key.
+#[derive(Clone)]
 pub struct Credentials {
     /// The access key ID.
     pub access_key: String,
     /// The secret key associated with the access key.
     pub secret_key: SecretKey,
+    /// The session token of a temporary credential; `None` for a long-term credential.
+    pub session_token: Option<String>,
 }
 
 /// An S3 secret key.
@@ -77,6 +83,18 @@ impl From<&str> for SecretKey {
 }
 
 const PLACEHOLDER: &str = "[SENSITIVE-SECRET-KEY]";
+
+const SESSION_TOKEN_PLACEHOLDER: &str = "[SENSITIVE-SESSION-TOKEN]";
+
+impl fmt::Debug for Credentials {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Credentials")
+            .field("access_key", &self.access_key)
+            .field("secret_key", &self.secret_key)
+            .field("session_token", &self.session_token.as_ref().map(|_| SESSION_TOKEN_PLACEHOLDER))
+            .finish()
+    }
+}
 
 impl fmt::Debug for SecretKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -167,12 +185,19 @@ mod tests {
 
     #[test]
     fn credentials_debug() {
-        let creds = Credentials {
+        let mut creds = Credentials {
             access_key: "AKID".to_owned(),
             secret_key: SecretKey::from("hunter2"),
+            session_token: None,
         };
         let debug = format!("{creds:?}");
         assert!(debug.contains("AKID"));
         assert!(!debug.contains("hunter2"));
+        assert!(debug.contains("session_token: None"));
+
+        creds.session_token = Some("FwoGZXIvYXdzEBYaDHqa0A".to_owned());
+        let debug = format!("{creds:?}");
+        assert!(!debug.contains("FwoGZXIvYXdzEBYaDHqa0A"));
+        assert!(debug.contains(SESSION_TOKEN_PLACEHOLDER));
     }
 }

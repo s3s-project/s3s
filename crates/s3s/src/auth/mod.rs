@@ -12,6 +12,7 @@
 //! credentials. The main components are:
 //!
 //! - [`S3Auth`]: Trait for implementing authentication providers
+//! - [`S3AuthContext`]: The access key and session token a request claims
 //! - [`SimpleAuth`]: Simple in-memory authentication for testing and development
 //! - [`SecretKey`]: Represents an AWS secret key
 //! - [`Credentials`]: Represents authenticated credentials
@@ -66,6 +67,38 @@
 //! }
 //! ```
 //!
+//! # Temporary credentials
+//!
+//! A temporary (STS-style) credential carries a session token next to its access key.
+//! When the secret key depends on that token, override
+//! [`S3Auth::get_secret_key_with_context`] instead of [`S3Auth::get_secret_key`]:
+//!
+//! ```
+//! use s3s::auth::{S3Auth, S3AuthContext, SecretKey};
+//! use s3s::S3Result;
+//!
+//! struct SessionAuth;
+//!
+//! #[async_trait::async_trait]
+//! impl S3Auth for SessionAuth {
+//!     async fn get_secret_key(&self, access_key: &str) -> S3Result<SecretKey> {
+//!         // Long-term credentials
+//! #       Err(s3s::s3_error!(InvalidAccessKeyId))
+//!     }
+//!
+//!     async fn get_secret_key_with_context(&self, cx: &S3AuthContext<'_>) -> S3Result<SecretKey> {
+//!         match cx.session_token() {
+//!             // Derive or look up the secret key of the temporary credential
+//!             Some(token) => Ok(SecretKey::from(format!("{}:{token}", cx.access_key()))),
+//!             None => self.get_secret_key(cx.access_key()).await,
+//!         }
+//!     }
+//! }
+//! ```
+//!
+//! The session token is also available to [`S3Access`](crate::access::S3Access) and to the
+//! operation handlers through [`Credentials::session_token`].
+//!
 //! # Security
 //!
 //! - Secret keys should be stored securely (e.g., in a secure database or secrets manager)
@@ -74,6 +107,9 @@
 //! - Use [`SimpleAuth`] only for testing, not production
 
 #![deny(missing_docs)]
+
+mod context;
+pub use self::context::S3AuthContext;
 
 mod secret_key;
 pub use self::secret_key::{Credentials, SecretKey};
@@ -183,4 +219,21 @@ pub trait S3Auth: Send + Sync + 'static {
     /// }
     /// ```
     async fn get_secret_key(&self, access_key: &str) -> S3Result<SecretKey>;
+
+    /// Gets the secret key for the credential a request claims.
+    ///
+    /// The signature verifier calls this method for every authenticated request.
+    /// The default implementation ignores the session token and delegates to
+    /// [`get_secret_key`](Self::get_secret_key), so a provider that only knows
+    /// long-term credentials needs no change.
+    ///
+    /// Override it when the secret key depends on the session token, as it does
+    /// for temporary credentials whose secret is derived from the token.
+    ///
+    /// # Errors
+    ///
+    /// Should return `InvalidAccessKeyId` error if the credential is not found.
+    async fn get_secret_key_with_context(&self, cx: &S3AuthContext<'_>) -> S3Result<SecretKey> {
+        self.get_secret_key(cx.access_key()).await
+    }
 }
