@@ -436,7 +436,7 @@ mod tests {
     fn terminated_stream_returns_none_on_second_poll() {
         with_cx(|cx| {
             let ds = final_with_error(Error::InvalidFormat, DataState::Data);
-            let mut ds = Box::pin(ds);
+            let mut ds = std::pin::pin!(ds);
             assert!(matches!(
                 ds.as_mut().poll_next_unpin(cx),
                 TaskPoll::Ready(Some(Err(Error::InvalidFormat)))
