@@ -9,10 +9,12 @@
 //! store. The expectations are the invariant baseline for `POST Object`, whose implementation is
 //! being moved from a bridge over `PutObject` to a first-class operation.
 //!
-//! Part of that baseline is a recorded deviation. Amazon S3 answers the 200, 201 and 204 success
-//! forms with an `ETag` header (and a `Location`); this crate currently answers without either. The
-//! deviation is deliberate and pinned here, so that closing it turns the assertions below red on
-//! purpose instead of changing the behaviour silently.
+//! Part of that baseline was a recorded deviation. Amazon S3 answers the 200, 201 and 204 success
+//! forms with an `ETag` header (and a `Location`); this crate now names the stored object with the
+//! same `ETag`, and still answers without a `Location` — spelling one depends on the addressing
+//! style the client used, which the serializer does not know. The remaining deviation is pinned
+//! here, so that closing it turns the assertions below red on purpose instead of changing the
+//! behaviour silently.
 
 use std::fmt::Write as _;
 use std::sync::{Arc, Mutex};
@@ -301,12 +303,21 @@ fn error_code(body: &str) -> Option<&str> {
     rest.get(..end)
 }
 
-/// Asserts the success forms do not name the stored object in a response header.
-///
-/// This is the recorded deviation described in the module docs: both headers are absent on this
-/// baseline, and closing the deviation has to fail here.
-fn assert_the_object_is_not_named_in_a_header(wire: &Wire) {
-    assert_eq!(header(wire, "etag"), None, "this baseline sends no ETag header: {}", wire.body);
+/// Asserts the success forms name the stored object by the `ETag` the implementation reported.
+fn assert_etag_names_the_object(wire: &Wire) {
+    let expected = format!("\"{STORED_ETAG}\"");
+    assert_eq!(
+        header(wire, "etag"),
+        Some(expected.as_str()),
+        "the response names the stored object: {}",
+        wire.body
+    );
+}
+
+/// Asserts no location is invented: spelling one depends on the addressing style the client used,
+/// which the serializer does not know. This is the remaining recorded deviation (see the module
+/// docs), so closing it has to fail here.
+fn assert_no_location_header(wire: &Wire) {
     assert_eq!(header(wire, "location"), None, "this baseline sends no Location header: {}", wire.body);
 }
 
@@ -324,7 +335,8 @@ async fn default_success_is_204_without_a_body() {
 
     assert_eq!(wire.status, StatusCode::NO_CONTENT, "{}", wire.body);
     assert_eq!(wire.body, "");
-    assert_the_object_is_not_named_in_a_header(&wire);
+    assert_etag_names_the_object(&wire);
+    assert_no_location_header(&wire);
     assert_eq!(s3.stored(), vec![stored_file(None)]);
 }
 
@@ -339,7 +351,8 @@ async fn success_action_status_200_is_200_without_a_body() {
 
     assert_eq!(wire.status, StatusCode::OK, "{}", wire.body);
     assert_eq!(wire.body, "");
-    assert_the_object_is_not_named_in_a_header(&wire);
+    assert_etag_names_the_object(&wire);
+    assert_no_location_header(&wire);
     assert_eq!(s3.stored(), vec![stored_file(None)]);
 }
 
@@ -355,7 +368,8 @@ async fn success_action_status_201_writes_the_post_response_xml() {
     assert_eq!(wire.status, StatusCode::CREATED, "{}", wire.body);
     assert_eq!(header(&wire, "content-type"), Some("application/xml"));
     assert_eq!(wire.body, POST_RESPONSE_XML);
-    assert_the_object_is_not_named_in_a_header(&wire);
+    assert_etag_names_the_object(&wire);
+    assert_no_location_header(&wire);
     assert_eq!(s3.stored(), vec![stored_file(None)]);
 }
 
@@ -370,7 +384,8 @@ async fn an_unrecognized_success_action_status_is_204() {
 
     assert_eq!(wire.status, StatusCode::NO_CONTENT, "{}", wire.body);
     assert_eq!(wire.body, "");
-    assert_the_object_is_not_named_in_a_header(&wire);
+    assert_etag_names_the_object(&wire);
+    assert_no_location_header(&wire);
     assert_eq!(s3.stored(), vec![stored_file(None)]);
 }
 
@@ -391,6 +406,22 @@ async fn success_action_redirect_is_303_with_the_appended_query() {
     );
     assert_eq!(wire.body, "");
     assert_eq!(s3.stored(), vec![stored_file(None)]);
+}
+
+/// The redirect answers with the location the client asked for and does not name the object: the
+/// client is not fetching it from this response, so no tag is added there.
+#[tokio::test]
+async fn success_action_redirect_carries_no_etag() {
+    let s3 = TestS3::new();
+    let service = service(s3.clone());
+    let redirect = "https://example.com/done";
+    let form = PostForm::new(FILE_CONTENT)
+        .field("success_action_redirect", redirect)
+        .condition(json!(["eq", "$success_action_redirect", redirect]));
+    let wire = send(&service, form.to_request()).await;
+
+    assert_eq!(wire.status, StatusCode::SEE_OTHER, "{}", wire.body);
+    assert_eq!(header(&wire, "etag"), None, "the redirect does not name the object: {}", wire.body);
 }
 
 #[tokio::test]
