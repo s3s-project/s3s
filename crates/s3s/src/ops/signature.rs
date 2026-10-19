@@ -1226,7 +1226,7 @@ impl<'a> SignatureContext<'a> {
         let string_to_sign = s3s_sigv2::create_string_to_sign(
             s3s_sigv2::Mode::HeaderAuth,
             method.as_str(),
-            self.req_uri.path(),
+            self.raw_uri_path,
             self.qs.map(AsRef::as_ref),
             &sig_v2_headers(self.hs)?,
             self.vh_bucket,
@@ -1319,7 +1319,7 @@ impl<'a> SignatureContext<'a> {
         let string_to_sign = s3s_sigv2::create_string_to_sign(
             s3s_sigv2::Mode::PresignedUrl,
             self.req_method.as_str(),
-            self.req_uri.path(),
+            self.raw_uri_path,
             self.qs.map(AsRef::as_ref),
             &sig_v2_headers(self.hs)?,
             self.vh_bucket,
