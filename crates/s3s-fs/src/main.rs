@@ -32,11 +32,11 @@ struct Opt {
     port: u16,
 
     /// Access key used for authentication.
-    #[arg(long)]
+    #[arg(long, env = "S3S_FS_ACCESS_KEY", hide_env_values = true)]
     access_key: Option<String>,
 
     /// Secret key used for authentication.
-    #[arg(long)]
+    #[arg(long, env = "S3S_FS_SECRET_KEY", hide_env_values = true)]
     secret_key: Option<String>,
 
     /// Domain names used for virtual-hosted-style requests.
