@@ -56,7 +56,7 @@ http3 = ["dep:s3s-http3", "dep:quinn", "dep:rcgen", "dep:h3", "dep:h3-quinn"]
 async-trait.workspace = true
 base64-simd.workspace = true
 bytes.workspace = true
-clap = { workspace = true, optional = true }
+clap = { workspace = true, optional = true, features = ["env"] }
 crc32c.workspace = true
 futures.workspace = true
 h3 = { version = "0.0.8", features = ["tracing"], optional = true }
