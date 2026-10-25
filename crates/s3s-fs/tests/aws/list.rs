@@ -29,6 +29,8 @@ pub fn register(tcx: &mut TestContext) {
     case!(tcx, FsServer, List, test_list_objects_v2_continuation_token_pagination);
     case!(tcx, FsServer, List, test_list_objects_v2_continuation_token_and_start_after_uses_max);
     case!(tcx, FsServer, List, test_list_objects_v2_max_keys_zero);
+    case!(tcx, FsServer, List, test_list_objects_v2_lists_etags);
+    case!(tcx, FsServer, List, test_list_objects_v2_url_encodes_keys);
 }
 
 impl List {
@@ -744,6 +746,77 @@ impl List {
         assert!(result.contents().is_empty(), "max_keys=0 should return no objects");
 
         // Cleanup
+        for key in &keys {
+            delete_object(c, bucket, key).await?;
+        }
+        delete_bucket(c, bucket).await?;
+
+        Ok(())
+    }
+
+    async fn test_list_objects_v2_lists_etags(self: Arc<Self>) -> Result<()> {
+        let c = &self.s3;
+        let bucket = format!("test-list-etags-{}", Uuid::new_v4());
+        let bucket = bucket.as_str();
+        create_bucket(c, bucket).await?;
+
+        let put = c
+            .put_object()
+            .bucket(bucket)
+            .key("a.txt")
+            .body(ByteStream::from_static(b"hello"))
+            .send()
+            .await?;
+
+        let result = c.list_objects_v2().bucket(bucket).send().await?;
+        let listed: Vec<_> = result.contents().iter().map(|obj| obj.e_tag()).collect();
+        assert_eq!(listed, [put.e_tag()], "a listed object carries the ETag its PUT returned");
+
+        delete_object(c, bucket, "a.txt").await?;
+        delete_bucket(c, bucket).await?;
+
+        Ok(())
+    }
+
+    async fn test_list_objects_v2_url_encodes_keys(self: Arc<Self>) -> Result<()> {
+        let c = &self.s3;
+        let bucket = format!("test-list-url-encoding-{}", Uuid::new_v4());
+        let bucket = bucket.as_str();
+        create_bucket(c, bucket).await?;
+
+        let keys = ["d/a b", "d/a+b", "e f/x"];
+        for key in &keys {
+            c.put_object()
+                .bucket(bucket)
+                .key(*key)
+                .body(ByteStream::from_static(b"x"))
+                .send()
+                .await?;
+        }
+
+        let encoded = c
+            .list_objects_v2()
+            .bucket(bucket)
+            .encoding_type(aws_sdk_s3::types::EncodingType::Url)
+            .send()
+            .await?;
+        let listed: Vec<_> = encoded.contents().iter().filter_map(|obj| obj.key()).collect();
+        assert_eq!(listed, ["d/a%20b", "d/a%2Bb", "e%20f/x"], "keys are url-encoded, `+` included");
+
+        let grouped = c
+            .list_objects_v2()
+            .bucket(bucket)
+            .delimiter("/")
+            .encoding_type(aws_sdk_s3::types::EncodingType::Url)
+            .send()
+            .await?;
+        let prefixes: Vec<_> = grouped.common_prefixes().iter().filter_map(|p| p.prefix()).collect();
+        assert_eq!(prefixes, ["d/", "e%20f/"], "common prefixes are url-encoded too");
+
+        let raw = c.list_objects_v2().bucket(bucket).send().await?;
+        let listed: Vec<_> = raw.contents().iter().filter_map(|obj| obj.key()).collect();
+        assert_eq!(listed, keys, "without encoding-type the keys are returned as stored");
+
         for key in &keys {
             delete_object(c, bucket, key).await?;
         }
