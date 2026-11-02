@@ -2236,6 +2236,7 @@ mod tests {
     use futures::{Stream, StreamExt};
     use http::{Extensions, HeaderMap, Method, Uri};
     use s3s::S3ErrorCode;
+    use tokio::task::JoinHandle;
     use uuid::Uuid;
 
     struct TestRoot(PathBuf);
@@ -2883,6 +2884,62 @@ mod tests {
         }
     }
 
+    async fn put(fs: &FileSystem, key: &str, body: &[u8]) {
+        let input = gated_put(key, body, &Arc::new(AtomicUsize::new(0)), 1);
+        fs.put_object(request(input)).await.unwrap();
+    }
+
+    async fn copy(fs: &FileSystem, source: &str, destination: &str) {
+        let input = CopyObjectInput::builder()
+            .bucket("bucket".to_owned())
+            .key(destination.to_owned())
+            .copy_source(CopySource::Bucket {
+                bucket: "bucket".into(),
+                key: source.into(),
+                version_id: None,
+            })
+            .build()
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(60), fs.copy_object(request(input)))
+            .await
+            .expect("a copy did not finish within 60 s")
+            .unwrap();
+    }
+
+    /// Starts two readers that read `key` until `stop` is set. Each returns how many reads it made
+    /// and how many of them were not paired.
+    fn spawn_readers(fs: &Arc<FileSystem>, key: &'static str, stop: &Arc<AtomicBool>) -> Vec<JoinHandle<(usize, usize)>> {
+        (0..2)
+            .map(|_| {
+                let fs = Arc::clone(fs);
+                let stop = Arc::clone(stop);
+                tokio::spawn(async move {
+                    let (mut total, mut torn) = (0_usize, 0_usize);
+                    while !stop.load(AtomicOrdering::SeqCst) {
+                        total += 1;
+                        if !get(&fs, key).await.is_paired() {
+                            torn += 1;
+                        }
+                    }
+                    (total, torn)
+                })
+            })
+            .collect()
+    }
+
+    /// Stops the readers and checks that each one ran and that every read it made was paired.
+    async fn assert_reads_paired(readers: Vec<JoinHandle<(usize, usize)>>, stop: &AtomicBool) {
+        stop.store(true, AtomicOrdering::SeqCst);
+        for reader in readers {
+            let (total, torn) = tokio::time::timeout(Duration::from_secs(60), reader)
+                .await
+                .expect("a reader did not stop within 60 s")
+                .unwrap();
+            assert!(total > 0, "a reader never ran");
+            assert_eq!(torn, 0, "{torn} of {total} reads paired a body with another write's files");
+        }
+    }
+
     /// The single successful writer among `results`, after checking that every other one was
     /// refused with `PreconditionFailed`.
     fn sole_winner(results: &[S3Result<S3Response<PutObjectOutput>>]) -> usize {
@@ -2953,22 +3010,7 @@ mod tests {
         fs.put_object(request(seed)).await.unwrap();
 
         let stop = Arc::new(AtomicBool::new(false));
-        let readers: Vec<_> = (0..2)
-            .map(|_| {
-                let fs = Arc::clone(&fs);
-                let stop = Arc::clone(&stop);
-                tokio::spawn(async move {
-                    let (mut total, mut torn) = (0_usize, 0_usize);
-                    while !stop.load(AtomicOrdering::SeqCst) {
-                        total += 1;
-                        if !get(&fs, "object").await.is_paired() {
-                            torn += 1;
-                        }
-                    }
-                    (total, torn)
-                })
-            })
-            .collect();
+        let readers = spawn_readers(&fs, "object", &stop);
 
         for round in 0..ROUNDS {
             let arrived = Arc::new(AtomicUsize::new(0));
@@ -2984,11 +3026,65 @@ mod tests {
             );
         }
 
-        stop.store(true, AtomicOrdering::SeqCst);
-        for reader in readers {
-            let (total, torn) = reader.await.unwrap();
-            assert!(total > 0, "a reader never ran");
-            assert_eq!(torn, 0, "{torn} of {total} reads paired a body with another write's files");
+        assert_reads_paired(readers, &stop).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn copies_and_reads_pair_each_body_with_its_checksum() {
+        const ROUNDS: usize = 40;
+        let (_root, fs) = new_fs("copy-race");
+        put(&fs, "source-a", b"the body of source a").await;
+        put(&fs, "source-b", b"a longer body, written to source b").await;
+        copy(&fs, "source-a", "copy").await;
+
+        let stop = Arc::new(AtomicBool::new(false));
+        let readers = spawn_readers(&fs, "copy", &stop);
+
+        let copier = {
+            let fs = Arc::clone(&fs);
+            tokio::spawn(async move {
+                for round in 0..ROUNDS {
+                    let source = if round % 2 == 0 { "source-b" } else { "source-a" };
+                    copy(&fs, source, "copy").await;
+                }
+            })
+        };
+        tokio::time::timeout(Duration::from_secs(60), copier)
+            .await
+            .expect("the copies did not finish within 60 s")
+            .unwrap();
+
+        assert_reads_paired(readers, &stop).await;
+        assert!(get(&fs, "copy").await.is_paired(), "the last copy's body, checksum and attributes differ");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn opposite_copies_finish_and_leave_both_objects_paired() {
+        const ROUNDS: usize = 40;
+        let (_root, fs) = new_fs("copy-swap");
+        put(&fs, "left", b"the body of left").await;
+        put(&fs, "right", b"a longer body, written to right").await;
+
+        let copiers: Vec<_> = [("left", "right"), ("right", "left")]
+            .into_iter()
+            .map(|(source, destination)| {
+                let fs = Arc::clone(&fs);
+                tokio::spawn(async move {
+                    for _ in 0..ROUNDS {
+                        copy(&fs, source, destination).await;
+                    }
+                })
+            })
+            .collect();
+        for copier in copiers {
+            tokio::time::timeout(Duration::from_secs(60), copier)
+                .await
+                .expect("copies in opposite directions did not finish within 60 s")
+                .unwrap();
+        }
+
+        for key in ["left", "right"] {
+            assert!(get(&fs, key).await.is_paired(), "{key}: the body, checksum and attributes differ");
         }
     }
 }
