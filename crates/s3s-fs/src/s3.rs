@@ -293,6 +293,44 @@ fn completed_part_checksum(part: &CompletedPart) -> s3s::dto::Checksum {
     }
 }
 
+impl FileSystem {
+    /// Checks a write's `If-None-Match` and `If-Match` conditions against the stored object.
+    ///
+    /// A write calls this before it streams its body, as an early refusal, and again under the
+    /// object's write lock, where the answer cannot change before the write publishes. The caller
+    /// holds the object's read or write lock either way, because an `ETag` computed here is
+    /// remembered in the object's internal info.
+    async fn check_write_conditions(
+        &self,
+        bucket: &str,
+        key: &str,
+        object_path: &Path,
+        if_none_match: Option<&ETagCondition>,
+        if_match: Option<&ETagCondition>,
+    ) -> S3Result<()> {
+        // If-None-Match: * means "only write if the object does not exist". A tag
+        // or a list is not implemented, which is what Amazon S3 answers for it.
+        if let Some(condition) = if_none_match {
+            if !condition.is_any() {
+                return Err(s3_error!(NotImplemented));
+            }
+            if object_path.exists() {
+                return Err(s3_error!(PreconditionFailed, "Object already exists"));
+            }
+        }
+        // If-Match: <etag> means "only overwrite if ETag matches" (CAS).
+        if let Some(condition) = if_match {
+            if !object_path.exists() {
+                return Err(s3_error!(PreconditionFailed, "Object does not exist"));
+            }
+            if !condition.is_any() && !condition.matches_strong(&self.current_etag(bucket, key).await?) {
+                return Err(s3_error!(PreconditionFailed, "ETag does not match"));
+            }
+        }
+        Ok(())
+    }
+}
+
 #[async_trait::async_trait]
 impl S3 for FileSystem {
     #[tracing::instrument]
@@ -321,6 +359,16 @@ impl S3 for FileSystem {
         let src_path = self.get_object_path(bucket, key)?;
         let dst_path = self.get_object_path(&input.bucket, &input.key)?;
 
+        // A copy onto itself only updates the object in place, so it holds the object's write lock
+        // throughout. Any other copy stages the destination's files under the source's read lock
+        // and takes the destination's write lock only to publish them, so copying a large body
+        // never blocks the destination's readers and writers. No copy holds two locks at once.
+        let self_replace = src_path == dst_path;
+        let (src_guard, dst_guard) = if self_replace {
+            (None, Some(self.lock_object_write(&input.bucket, &input.key).await))
+        } else {
+            (Some(self.lock_object_read(bucket, key).await), None)
+        };
         if src_path.exists().not() {
             return Err(s3_error!(NoSuchKey));
         }
@@ -369,31 +417,32 @@ impl S3 for FileSystem {
             return Err(s3_error!(PreconditionFailed));
         }
 
-        if let Some(dir_path) = dst_path.parent() {
-            try_!(fs::create_dir_all(&dir_path).await);
-        }
+        // Derive the destination ETag from the source ETag when available.
+        // This preserves non-MD5 ETag formats (e.g., multipart `{hash}-{part_count}`)
+        // and avoids re-hashing the copied bytes when the source has a stored ETag.
+        let dst_etag_str = match src_etag {
+            Some(etag) => etag.into_value(),
+            None => self.get_md5_sum(bucket, key).await?,
+        };
 
-        // `fs::copy(p, p)` truncates the file before reading it, so self-replace
-        // must preserve bytes in place while still updating LastModified.
-        let dst_last_modified = if src_path == dst_path {
+        // The destination's files are staged and renamed into place, never rewritten in place, so
+        // a reader still streaming the old body keeps reading the old bytes. A self-replace leaves
+        // the body untouched and only updates LastModified.
+        let mut staged = Vec::new();
+        let dst_last_modified = if self_replace {
             let now = SystemTime::now();
             let file = try_!(std::fs::OpenOptions::new().write(true).open(&dst_path));
             try_!(file.set_times(FileTimes::new().set_modified(now)));
             debug!(path = %dst_path.display(), "replace file in place");
             Timestamp::from(now)
         } else {
-            let _ = try_!(fs::copy(&src_path, &dst_path).await);
+            let body_file = self.prepare_file_write(&dst_path).await?.stage().await?;
+            let _ = try_!(fs::copy(&src_path, body_file.tmp_path()).await);
             debug!(from = %src_path.display(), to = %dst_path.display(), "copy file");
-            let dst_metadata = try_!(fs::metadata(&dst_path).await);
+            // A rename keeps the modification time, so the staged file already has the final one.
+            let dst_metadata = try_!(fs::metadata(body_file.tmp_path()).await);
+            staged.push(body_file);
             Timestamp::from(try_!(dst_metadata.modified()))
-        };
-
-        // Derive the destination ETag from the source ETag when available.
-        // This preserves non-MD5 ETag formats (e.g., multipart `{hash}-{part_count}`)
-        // and avoids re-hashing the destination file.
-        let dst_etag_str = match src_etag {
-            Some(etag) => etag.into_value(),
-            None => self.get_md5_sum(&input.bucket, &input.key).await?,
         };
 
         // `MetadataDirective` defaults to `COPY` per AWS API: when the
@@ -422,16 +471,15 @@ impl S3 for FileSystem {
                 checksum_type: None,
             };
             dst_attrs.expires = input.expires;
-            self.save_object_attributes(&input.bucket, &input.key, &dst_attrs, None)
-                .await?;
+            staged.push(self.stage_object_attributes(&input.bucket, &input.key, &dst_attrs).await?);
         } else {
             let src_metadata_path = self.get_metadata_path(bucket, key, None)?;
             if src_metadata_path.exists() {
                 let dst_metadata_path = self.get_metadata_path(&input.bucket, &input.key, None)?;
-                // Same self-replace guard as for the payload above — `fs::copy`
-                // would zero the metadata sidecar when src == dst.
+                // A self-replace keeps the sidecar it already has.
                 if src_metadata_path != dst_metadata_path {
-                    let _ = try_!(fs::copy(src_metadata_path, dst_metadata_path).await);
+                    let content = try_!(fs::read(&src_metadata_path).await);
+                    staged.push(self.stage_bytes(&dst_metadata_path, &content).await?);
                 }
             }
         }
@@ -439,8 +487,16 @@ impl S3 for FileSystem {
         {
             let mut info = src_info.unwrap_or_default();
             crate::checksum::save_e_tag(&mut info, &dst_etag_str);
-            self.save_internal_info(&input.bucket, &input.key, &info).await?;
+            staged.push(self.stage_internal_info(&input.bucket, &input.key, &info).await?);
         }
+
+        drop(src_guard);
+        let dst_guard = if let Some(guard) = dst_guard {
+            guard
+        } else {
+            self.lock_object_write(&input.bucket, &input.key).await
+        };
+        crate::fs::publish(dst_guard, staged).await?;
 
         let copy_object_result = CopyObjectResult {
             e_tag: Some(ETag::Strong(dst_etag_str)),
@@ -471,6 +527,7 @@ impl S3 for FileSystem {
     async fn delete_object(&self, req: S3Request<DeleteObjectInput>) -> S3Result<S3Response<DeleteObjectOutput>> {
         let input = req.input;
         let path = self.get_object_path(&input.bucket, &input.key)?;
+        let object_guard = self.lock_object_write(&input.bucket, &input.key).await;
         if path.exists().not() {
             if self.get_bucket_path(&input.bucket)?.exists().not() {
                 return Err(s3_error!(NoSuchBucket));
@@ -487,6 +544,7 @@ impl S3 for FileSystem {
         } else {
             try_!(fs::remove_file(&path).await);
         }
+        drop(object_guard);
         let output = DeleteObjectOutput::default(); // TODO: handle other fields
         Ok(S3Response::new(output))
     }
@@ -498,6 +556,7 @@ impl S3 for FileSystem {
         let mut deleted_objects: Vec<DeletedObject> = Vec::new();
         for object in input.delete.objects {
             let path = self.get_object_path(&input.bucket, &object.key)?;
+            let object_guard = self.lock_object_write(&input.bucket, &object.key).await;
             if object.key.ends_with('/') {
                 match fs::read_dir(&path).await {
                     Ok(mut dir) => {
@@ -520,6 +579,7 @@ impl S3 for FileSystem {
                     }
                 }
             }
+            drop(object_guard);
 
             let deleted_object = DeletedObject {
                 key: Some(object.key),
@@ -555,6 +615,9 @@ impl S3 for FileSystem {
         let input = req.input;
         let object_path = self.get_object_path(&input.bucket, &input.key)?;
 
+        // The body streams from the file opened here after the lock is released, so it stays the
+        // version that the sidecars loaded under the same lock describe.
+        let object_guard = self.lock_object_read(&input.bucket, &input.key).await;
         let mut file = fs::File::open(&object_path).await.map_err(|e| s3_error!(e, NoSuchKey))?;
 
         let file_metadata = try_!(file.metadata().await);
@@ -594,6 +657,7 @@ impl S3 for FileSystem {
             Some(e_tag) => e_tag,
             None => self.get_md5_sum(&input.bucket, &input.key).await?,
         };
+        drop(object_guard);
 
         let current = ETag::Strong(md5_sum.clone());
         match evaluate_read_condition(input.if_match.as_ref(), input.if_none_match.as_ref(), &current) {
@@ -665,6 +729,7 @@ impl S3 for FileSystem {
         let input = req.input;
         let path = self.get_object_path(&input.bucket, &input.key)?;
 
+        let object_guard = self.lock_object_read(&input.bucket, &input.key).await;
         if !path.exists() {
             if self.get_bucket_path(&input.bucket)?.exists().not() {
                 return Err(s3_error!(NoSuchBucket));
@@ -687,6 +752,7 @@ impl S3 for FileSystem {
             Some(e_tag) => e_tag,
             None => self.get_md5_sum(&input.bucket, &input.key).await?,
         };
+        drop(object_guard);
 
         let current = ETag::Strong(md5_sum.clone());
         match evaluate_read_condition(input.if_match.as_ref(), input.if_none_match.as_ref(), &current) {
@@ -881,27 +947,15 @@ impl S3 for FileSystem {
 
         let Some(body) = body else { return Err(s3_error!(IncompleteBody)) };
 
-        // Check conditional headers before modifying any state.
-        // If-None-Match: * means "only create if the object doesn't exist".
-        // If-Match: <etag> means "only overwrite if ETag matches" (CAS).
+        // Check conditional headers before modifying any state. They are checked again under the
+        // object's write lock before publishing; this early refusal only saves streaming a body
+        // that cannot be stored.
         let object_path = self.get_object_path(&bucket, &key)?;
-        // If-None-Match: * means "only write if the object does not exist". A tag
-        // or a list is not implemented, which is what Amazon S3 answers for it.
-        if let Some(ref condition) = if_none_match {
-            if !condition.is_any() {
-                return Err(s3_error!(NotImplemented));
-            }
-            if object_path.exists() {
-                return Err(s3_error!(PreconditionFailed, "Object already exists"));
-            }
-        }
-        if let Some(ref condition) = if_match {
-            if !object_path.exists() {
-                return Err(s3_error!(PreconditionFailed, "Object does not exist"));
-            }
-            if !condition.is_any() && !condition.matches_strong(&self.current_etag(&bucket, &key).await?) {
-                return Err(s3_error!(PreconditionFailed, "ETag does not match"));
-            }
+        if if_none_match.is_some() || if_match.is_some() {
+            let object_guard = self.lock_object_read(&bucket, &key).await;
+            self.check_write_conditions(&bucket, &key, &object_path, if_none_match.as_ref(), if_match.as_ref())
+                .await?;
+            drop(object_guard);
         }
 
         let mut checksum: s3s::checksum::ChecksumHasher = default();
@@ -957,7 +1011,11 @@ impl S3 for FileSystem {
             {
                 return Err(s3_error!(UnexpectedContent, "Unexpected request body when creating a directory object."));
             }
+            let object_guard = self.lock_object_write(&bucket, &key).await;
+            self.check_write_conditions(&bucket, &key, &object_path, if_none_match.as_ref(), if_match.as_ref())
+                .await?;
             try_!(fs::create_dir_all(&object_path).await);
+            drop(object_guard);
             let output = PutObjectOutput::default();
             return Ok(S3Response::new(output));
         }
@@ -1056,9 +1114,7 @@ impl S3 for FileSystem {
             return Err(s3_error!(BadDigest, "checksum_xxhash128 mismatch"));
         }
 
-        file_writer.done().await?;
-
-        debug!(path = %object_path.display(), ?size, %md5_sum, ?checksum, "write file");
+        let body_file = file_writer.stage().await?;
 
         // Save object attributes (including user metadata and standard attributes)
         let mut obj_attrs = ObjectAttributes {
@@ -1074,12 +1130,19 @@ impl S3 for FileSystem {
             checksum_type: None,
         };
         obj_attrs.expires = expires;
-        self.save_object_attributes(&bucket, &key, &obj_attrs, None).await?;
+        let attrs_file = self.stage_object_attributes(&bucket, &key, &obj_attrs).await?;
 
         let mut info: InternalInfo = default();
         crate::checksum::save_e_tag(&mut info, &md5_sum);
         crate::checksum::modify_internal_info(&mut info, &checksum);
-        self.save_internal_info(&bucket, &key, &info).await?;
+        let info_file = self.stage_internal_info(&bucket, &key, &info).await?;
+
+        let object_guard = self.lock_object_write(&bucket, &key).await;
+        self.check_write_conditions(&bucket, &key, &object_path, if_none_match.as_ref(), if_match.as_ref())
+            .await?;
+        crate::fs::publish(object_guard, vec![body_file, attrs_file, info_file]).await?;
+
+        debug!(path = %object_path.display(), ?size, %md5_sum, ?checksum, "write file");
 
         let output = PutObjectOutput {
             e_tag: Some(ETag::Strong(md5_sum)),
@@ -1299,7 +1362,9 @@ impl S3 for FileSystem {
         let src_path = self.get_object_path(src_bucket, src_key)?;
         let dst_path = self.resolve_upload_part_path(upload_id, part_number)?;
 
+        let src_guard = self.lock_object_read(src_bucket, src_key).await;
         let mut src_file = fs::File::open(&src_path).await.map_err(|e| s3_error!(e, NoSuchKey))?;
+        drop(src_guard);
         let file_len = try_!(src_file.metadata().await).len();
 
         let (start, content_length) = if let Some(copy_range) = &input.copy_source_range {
@@ -1502,25 +1567,15 @@ impl S3 for FileSystem {
             return Err(s3_error!(NotImplemented, "Unsupported multipart checksum type"));
         }
 
-        // Check conditional headers before modifying any state
+        // Check conditional headers before modifying any state. They are checked again under the
+        // object's write lock before publishing; this early refusal only saves assembling an
+        // object that cannot be stored.
         let object_path = self.get_object_path(&bucket, &key)?;
-        // If-None-Match: * means "only write if the object does not exist". A tag
-        // or a list is not implemented, which is what Amazon S3 answers for it.
-        if let Some(ref condition) = if_none_match {
-            if !condition.is_any() {
-                return Err(s3_error!(NotImplemented));
-            }
-            if object_path.exists() {
-                return Err(s3_error!(PreconditionFailed, "Object already exists"));
-            }
-        }
-        if let Some(ref condition) = if_match {
-            if !object_path.exists() {
-                return Err(s3_error!(PreconditionFailed, "Object does not exist"));
-            }
-            if !condition.is_any() && !condition.matches_strong(&self.current_etag(&bucket, &key).await?) {
-                return Err(s3_error!(PreconditionFailed, "ETag does not match"));
-            }
+        if if_none_match.is_some() || if_match.is_some() {
+            let object_guard = self.lock_object_read(&bucket, &key).await;
+            self.check_write_conditions(&bucket, &key, &object_path, if_none_match.as_ref(), if_match.as_ref())
+                .await?;
+            drop(object_guard);
         }
 
         let expected_checksum = s3s::dto::Checksum {
@@ -1582,7 +1637,7 @@ impl S3 for FileSystem {
                 try_!(file_writer.writer().write_all(&buf[..nread]).await);
                 size += nread as u64;
             }
-            // No flush per part: `done` flushes once, before it renames the temporary object.
+            // No flush per part: `stage` flushes once, before the temporary object is published.
             part_md5_hashes.push(part_md5.finalize());
 
             if part_number != total_parts_cnt && size < 5 * 1024 * 1024 {
@@ -1605,20 +1660,23 @@ impl S3 for FileSystem {
             return Err(s3_error!(BadDigest, "{} mismatch", field));
         }
 
-        file_writer.done().await?;
-
+        let mut staged = vec![file_writer.stage().await?];
         if let Some(attrs) = &upload_attrs {
-            self.save_object_attributes(&bucket, &key, attrs, None).await?;
+            staged.push(self.stage_object_attributes(&bucket, &key, attrs).await?);
         }
-
-        debug!(?e_tag, path = %object_path.display(), "multipart etag");
-
         {
             let mut info: InternalInfo = default();
             crate::checksum::save_e_tag(&mut info, &e_tag);
             crate::checksum::modify_internal_info(&mut info, &checksum);
-            self.save_internal_info(&bucket, &key, &info).await?;
+            staged.push(self.stage_internal_info(&bucket, &key, &info).await?);
         }
+
+        let object_guard = self.lock_object_write(&bucket, &key).await;
+        self.check_write_conditions(&bucket, &key, &object_path, if_none_match.as_ref(), if_match.as_ref())
+            .await?;
+        crate::fs::publish(object_guard, staged).await?;
+
+        debug!(?e_tag, path = %object_path.display(), "multipart etag");
 
         // The object is committed. Its upload directory holds the parts, their metadata and the
         // upload record, so removing the directory retires all of them at once; if that fails, the
@@ -2186,8 +2244,16 @@ mod tests {
     use super::*;
 
     use std::env;
+    use std::pin::Pin;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering as AtomicOrdering};
+    use std::task::{Context, Poll};
 
+    use bytes::Bytes;
+    use futures::{Stream, StreamExt};
+    use http::{Extensions, HeaderMap, Method, Uri};
     use s3s::S3ErrorCode;
+    use tokio::task::JoinHandle;
     use uuid::Uuid;
 
     struct TestRoot(PathBuf);
@@ -2701,5 +2767,341 @@ mod tests {
             "the full scan reads the subtree anyway: {} entries",
             listing_stats::visited()
         );
+    }
+
+    fn request<T>(input: T) -> S3Request<T> {
+        S3Request {
+            input,
+            method: Method::PUT,
+            uri: Uri::from_static("/"),
+            headers: HeaderMap::new(),
+            extensions: Extensions::new(),
+            credentials: None,
+            region: None,
+            service: None,
+            trailing_headers: None,
+        }
+    }
+
+    fn new_fs(name: &str) -> (TestRoot, Arc<FileSystem>) {
+        let root = env::temp_dir().join(format!("s3s-fs-{name}-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("bucket")).unwrap();
+        let fs = Arc::new(FileSystem::new(&root).unwrap());
+        (TestRoot(root), fs)
+    }
+
+    fn crc64nvme(body: &[u8]) -> Option<String> {
+        let mut hasher = s3s::checksum::ChecksumHasher {
+            crc64nvme: Some(default()),
+            ..Default::default()
+        };
+        hasher.update(body);
+        hasher.finalize().checksum_crc64nvme
+    }
+
+    /// A body that sends its first chunk, then holds back its last one until every writer
+    /// counted in `arrived` has sent a first chunk. A writer streams its body only after its early
+    /// condition check, so once the gate opens every writer has passed that check and they all
+    /// reach the publish step together.
+    struct GatedBody {
+        chunks: VecDeque<Bytes>,
+        arrived: Arc<AtomicUsize>,
+        writers: usize,
+        counted: bool,
+    }
+
+    impl Stream for GatedBody {
+        type Item = Result<Bytes, io::Error>;
+
+        fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+            let this = self.get_mut();
+            if this.chunks.len() == 1 {
+                if !this.counted {
+                    this.arrived.fetch_add(1, AtomicOrdering::SeqCst);
+                    this.counted = true;
+                }
+                if this.arrived.load(AtomicOrdering::SeqCst) < this.writers {
+                    cx.waker().wake_by_ref();
+                    return Poll::Pending;
+                }
+            }
+            Poll::Ready(this.chunks.pop_front().map(Ok))
+        }
+    }
+
+    fn gated_put(key: &str, body: &[u8], arrived: &Arc<AtomicUsize>, writers: usize) -> PutObjectInput {
+        let (head, tail) = body.split_at(1);
+        let stream = GatedBody {
+            chunks: VecDeque::from([Bytes::copy_from_slice(head), Bytes::copy_from_slice(tail)]),
+            arrived: Arc::clone(arrived),
+            writers,
+            counted: false,
+        };
+        PutObjectInput::builder()
+            .bucket("bucket".to_owned())
+            .key(key.to_owned())
+            .body(Some(StreamingBlob::wrap(stream)))
+            .checksum_crc64nvme(crc64nvme(body))
+            .content_type(Some(String::from_utf8(body.to_vec()).unwrap()))
+            .build()
+            .unwrap()
+    }
+
+    /// Runs every put at once. A writer that errors before the gate leaves the others waiting at
+    /// it for good, so each one is bounded.
+    async fn race_puts(fs: &Arc<FileSystem>, inputs: Vec<PutObjectInput>) -> Vec<S3Result<S3Response<PutObjectOutput>>> {
+        let tasks: Vec<_> = inputs
+            .into_iter()
+            .map(|input| {
+                let fs = Arc::clone(fs);
+                tokio::spawn(async move { fs.put_object(request(input)).await })
+            })
+            .collect();
+        let mut results = Vec::with_capacity(tasks.len());
+        for task in tasks {
+            let joined = tokio::time::timeout(Duration::from_secs(60), task)
+                .await
+                .expect("a writer did not finish within 60 s");
+            results.push(joined.unwrap());
+        }
+        results
+    }
+
+    /// An object as one read returned it. Every test body is also written as its content type,
+    /// so a read pairs correctly only when its body, checksum and attributes all come from one
+    /// write.
+    struct Stored {
+        body: Vec<u8>,
+        checksum: Option<String>,
+        content_type: Option<String>,
+    }
+
+    impl Stored {
+        fn is_paired(&self) -> bool {
+            self.checksum == crc64nvme(&self.body) && self.content_type.as_deref().map(str::as_bytes) == Some(&self.body[..])
+        }
+    }
+
+    async fn get(fs: &FileSystem, key: &str) -> Stored {
+        let input = GetObjectInput::builder()
+            .bucket("bucket".to_owned())
+            .key(key.to_owned())
+            .build()
+            .unwrap();
+        let output = fs.get_object(request(input)).await.unwrap().output;
+        let mut body = output.body.unwrap();
+        let mut bytes = Vec::new();
+        while let Some(chunk) = body.next().await {
+            bytes.extend_from_slice(&chunk.unwrap());
+        }
+        Stored {
+            body: bytes,
+            checksum: output.checksum_crc64nvme,
+            content_type: output.content_type,
+        }
+    }
+
+    async fn put(fs: &FileSystem, key: &str, body: &[u8]) {
+        let input = gated_put(key, body, &Arc::new(AtomicUsize::new(0)), 1);
+        fs.put_object(request(input)).await.unwrap();
+    }
+
+    async fn copy(fs: &FileSystem, source: &str, destination: &str) {
+        let input = CopyObjectInput::builder()
+            .bucket("bucket".to_owned())
+            .key(destination.to_owned())
+            .copy_source(CopySource::Bucket {
+                bucket: "bucket".into(),
+                key: source.into(),
+                version_id: None,
+            })
+            .build()
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(60), fs.copy_object(request(input)))
+            .await
+            .expect("a copy did not finish within 60 s")
+            .unwrap();
+    }
+
+    /// Starts two readers that read `key` until `stop` is set. Each returns how many reads it made
+    /// and how many of them were not paired.
+    fn spawn_readers(fs: &Arc<FileSystem>, key: &'static str, stop: &Arc<AtomicBool>) -> Vec<JoinHandle<(usize, usize)>> {
+        (0..2)
+            .map(|_| {
+                let fs = Arc::clone(fs);
+                let stop = Arc::clone(stop);
+                tokio::spawn(async move {
+                    let (mut total, mut torn) = (0_usize, 0_usize);
+                    while !stop.load(AtomicOrdering::SeqCst) {
+                        total += 1;
+                        if !get(&fs, key).await.is_paired() {
+                            torn += 1;
+                        }
+                    }
+                    (total, torn)
+                })
+            })
+            .collect()
+    }
+
+    /// Stops the readers and checks that each one ran and that every read it made was paired.
+    async fn assert_reads_paired(readers: Vec<JoinHandle<(usize, usize)>>, stop: &AtomicBool) {
+        stop.store(true, AtomicOrdering::SeqCst);
+        for reader in readers {
+            let (total, torn) = tokio::time::timeout(Duration::from_secs(60), reader)
+                .await
+                .expect("a reader did not stop within 60 s")
+                .unwrap();
+            assert!(total > 0, "a reader never ran");
+            assert_eq!(torn, 0, "{torn} of {total} reads paired a body with another write's files");
+        }
+    }
+
+    /// The single successful writer among `results`, after checking that every other one was
+    /// refused with `PreconditionFailed`.
+    fn sole_winner(results: &[S3Result<S3Response<PutObjectOutput>>]) -> usize {
+        let winners: Vec<usize> = (0..results.len()).filter(|&i| results[i].is_ok()).collect();
+        assert_eq!(winners.len(), 1, "exactly one conditional writer may succeed, got {}", winners.len());
+        for result in results {
+            if let Err(err) = result {
+                assert_eq!(err.code(), &S3ErrorCode::PreconditionFailed);
+            }
+        }
+        winners[0]
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn concurrent_create_if_absent_has_one_winner() {
+        const WRITERS: usize = 16;
+        let (_root, fs) = new_fs("create-race");
+        let arrived = Arc::new(AtomicUsize::new(0));
+        let bodies: Vec<Vec<u8>> = (0..WRITERS).map(|i| format!("writer {i:02} record").into_bytes()).collect();
+        let inputs = bodies
+            .iter()
+            .map(|body| {
+                let mut input = gated_put("prov", body, &arrived, WRITERS);
+                input.if_none_match = Some(ETagCondition::Any);
+                input
+            })
+            .collect();
+
+        let winner = sole_winner(&race_puts(&fs, inputs).await);
+
+        let stored = get(&fs, "prov").await;
+        assert_eq!(stored.body, bodies[winner], "the stored body is the winner's");
+        assert!(stored.is_paired(), "the stored checksum and attributes belong to the stored body");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn concurrent_if_match_has_one_winner() {
+        const WRITERS: usize = 16;
+        let (_root, fs) = new_fs("cas-race");
+        let seed = gated_put("record", b"version 0", &Arc::new(AtomicUsize::new(0)), 1);
+        let etag = fs.put_object(request(seed)).await.unwrap().output.e_tag.unwrap();
+        let arrived = Arc::new(AtomicUsize::new(0));
+        let bodies: Vec<Vec<u8>> = (0..WRITERS)
+            .map(|i| format!("version 1 from writer {i:02}").into_bytes())
+            .collect();
+        let inputs = bodies
+            .iter()
+            .map(|body| {
+                let mut input = gated_put("record", body, &arrived, WRITERS);
+                input.if_match = Some(ETagCondition::ETag(etag.clone()));
+                input
+            })
+            .collect();
+
+        let winner = sole_winner(&race_puts(&fs, inputs).await);
+
+        let stored = get(&fs, "record").await;
+        assert_eq!(stored.body, bodies[winner], "the stored body is the winner's");
+        assert!(stored.is_paired(), "the stored checksum and attributes belong to the stored body");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn overwrites_and_reads_pair_each_body_with_its_checksum() {
+        const WRITERS: usize = 8;
+        const ROUNDS: usize = 40;
+        let (_root, fs) = new_fs("overwrite-race");
+        let seed = gated_put("object", b"seed", &Arc::new(AtomicUsize::new(0)), 1);
+        fs.put_object(request(seed)).await.unwrap();
+
+        let stop = Arc::new(AtomicBool::new(false));
+        let readers = spawn_readers(&fs, "object", &stop);
+
+        for round in 0..ROUNDS {
+            let arrived = Arc::new(AtomicUsize::new(0));
+            let inputs = (0..WRITERS)
+                .map(|i| gated_put("object", format!("round {round:02} writer {i:02}").as_bytes(), &arrived, WRITERS))
+                .collect();
+            for result in race_puts(&fs, inputs).await {
+                result.unwrap();
+            }
+            assert!(
+                get(&fs, "object").await.is_paired(),
+                "round {round}: the last write's body, checksum and attributes differ"
+            );
+        }
+
+        assert_reads_paired(readers, &stop).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn copies_and_reads_pair_each_body_with_its_checksum() {
+        const ROUNDS: usize = 40;
+        let (_root, fs) = new_fs("copy-race");
+        put(&fs, "source-a", b"the body of source a").await;
+        put(&fs, "source-b", b"a longer body, written to source b").await;
+        copy(&fs, "source-a", "copy").await;
+
+        let stop = Arc::new(AtomicBool::new(false));
+        let readers = spawn_readers(&fs, "copy", &stop);
+
+        let copier = {
+            let fs = Arc::clone(&fs);
+            tokio::spawn(async move {
+                for round in 0..ROUNDS {
+                    let source = if round % 2 == 0 { "source-b" } else { "source-a" };
+                    copy(&fs, source, "copy").await;
+                }
+            })
+        };
+        tokio::time::timeout(Duration::from_secs(60), copier)
+            .await
+            .expect("the copies did not finish within 60 s")
+            .unwrap();
+
+        assert_reads_paired(readers, &stop).await;
+        assert!(get(&fs, "copy").await.is_paired(), "the last copy's body, checksum and attributes differ");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn opposite_copies_finish_and_leave_both_objects_paired() {
+        const ROUNDS: usize = 40;
+        let (_root, fs) = new_fs("copy-swap");
+        put(&fs, "left", b"the body of left").await;
+        put(&fs, "right", b"a longer body, written to right").await;
+
+        let copiers: Vec<_> = [("left", "right"), ("right", "left")]
+            .into_iter()
+            .map(|(source, destination)| {
+                let fs = Arc::clone(&fs);
+                tokio::spawn(async move {
+                    for _ in 0..ROUNDS {
+                        copy(&fs, source, destination).await;
+                    }
+                })
+            })
+            .collect();
+        for copier in copiers {
+            tokio::time::timeout(Duration::from_secs(60), copier)
+                .await
+                .expect("copies in opposite directions did not finish within 60 s")
+                .unwrap();
+        }
+
+        for key in ["left", "right"] {
+            assert!(get(&fs, key).await.is_paired(), "{key}: the body, checksum and attributes differ");
+        }
     }
 }

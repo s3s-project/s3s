@@ -11,23 +11,44 @@ use s3s::dto;
 use s3s::dto::PartNumber;
 
 use std::env;
+use std::fmt;
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::ops::Not;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::SystemTime;
 
 use tokio::fs;
 use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
+use tokio::sync::{OwnedRwLockReadGuard, OwnedRwLockWriteGuard, RwLock};
 
+use numeric_cast::NumericCast;
 use path_absolutize::Absolutize;
 use tracing::warn;
 use uuid::Uuid;
+
+/// How many locks the objects share; see [`FileSystem::lock_object_write`].
+const OBJECT_LOCK_STRIPES: u64 = 1024;
 
 #[derive(Debug)]
 pub struct FileSystem {
     pub(crate) root: PathBuf,
     tmp_file_counter: AtomicU64,
+    object_locks: ObjectLocks,
+}
+
+/// The locks that objects share by hash. Its `Debug` output stays short because every request
+/// span records the file system.
+struct ObjectLocks(Box<[Arc<RwLock<()>>]>);
+
+impl fmt::Debug for ObjectLocks {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ObjectLocks")
+            .field("len", &self.0.len())
+            .finish_non_exhaustive()
+    }
 }
 
 pub(crate) type InternalInfo = serde_json::Map<String, serde_json::Value>;
@@ -123,7 +144,41 @@ impl FileSystem {
         let root = env::current_dir()?.join(root).canonicalize()?;
         clean_old_tmp_files(&root)?;
         let tmp_file_counter = AtomicU64::new(0);
-        Ok(Self { root, tmp_file_counter })
+        let object_locks = ObjectLocks((0..OBJECT_LOCK_STRIPES).map(|_| Arc::new(RwLock::new(()))).collect());
+        Ok(Self {
+            root,
+            tmp_file_counter,
+            object_locks,
+        })
+    }
+
+    fn object_lock(&self, bucket: &str, key: &str) -> Arc<RwLock<()>> {
+        let mut hasher = DefaultHasher::new();
+        bucket.hash(&mut hasher);
+        key.hash(&mut hasher);
+        let index = (hasher.finish() % OBJECT_LOCK_STRIPES).numeric_cast::<usize>();
+        Arc::clone(&self.object_locks.0[index])
+    }
+
+    /// Locks an object for writing.
+    ///
+    /// An object is three files: the body, its attributes and its internal info, which holds the
+    /// stored checksums and `ETag`. A write stages all three as temporary files, then checks its
+    /// conditions under this lock and renames them into place with [`publish`], and a read opens
+    /// the body and loads both sidecars under [`Self::lock_object_read`]. So two conditional
+    /// writers cannot both pass their check, and a reader never pairs one write's body with
+    /// another write's checksums. Objects share a fixed set of locks by hash: unrelated objects
+    /// can contend, but the set never grows.
+    ///
+    /// The lock is not reentrant, and objects share locks: a task that holds one must not lock
+    /// any object again until it has released it.
+    pub(crate) async fn lock_object_write(&self, bucket: &str, key: &str) -> OwnedRwLockWriteGuard<()> {
+        self.object_lock(bucket, key).write_owned().await
+    }
+
+    /// Locks an object for reading; see [`Self::lock_object_write`].
+    pub(crate) async fn lock_object_read(&self, bucket: &str, key: &str) -> OwnedRwLockReadGuard<()> {
+        self.object_lock(bucket, key).read_owned().await
     }
 
     pub(crate) fn resolve_abs_path(&self, path: impl AsRef<Path>) -> Result<PathBuf> {
@@ -284,6 +339,8 @@ impl FileSystem {
     /// when it was opened. Without that check a request racing with a replacement would pin an `ETag`
     /// that never matches the new body, while an unremembered value only stays stale until the next
     /// request, as it did before.
+    ///
+    /// The caller holds the object's read or write lock, which [`Self::remember_e_tag`] needs.
     pub(crate) async fn get_md5_sum(&self, bucket: &str, key: &str) -> Result<String> {
         let object_path = self.get_object_path(bucket, key)?;
         let mut file = File::open(&object_path).await?;
@@ -318,6 +375,7 @@ impl FileSystem {
     ///
     /// The stored tag is preferred; a stored one is absent for objects written
     /// before it was recorded or by another writer, so the body is hashed then.
+    /// The caller holds the object's read or write lock, as for [`Self::get_md5_sum`].
     pub(crate) async fn current_etag(&self, bucket: &str, key: &str) -> Result<dto::ETag> {
         let info = self.load_internal_info(bucket, key).await?;
         let value = match info.as_ref().and_then(crate::checksum::load_e_tag) {
@@ -329,11 +387,14 @@ impl FileSystem {
 
     /// Write a computed `e_tag` into the object's `internal.json`, best effort.
     ///
-    /// The sidecar is re-read here and merged, so a checksum that a concurrent write stored in the
-    /// meantime is kept; only a missing `e_tag` is filled in. The caller already holds the value it
-    /// needed, so any failure is logged and ignored instead of changing the response. A concurrent
-    /// writer can still replace the sidecar between this read and the write, in which case the
-    /// later write wins, exactly as it does for two writers of the same object today.
+    /// The sidecar is re-read here and merged, so the checksums it holds are kept; only a missing
+    /// `e_tag` is filled in. The caller already holds the value it needed, so any failure is logged
+    /// and ignored instead of changing the response.
+    ///
+    /// The caller holds the object's read or write lock, so no write can publish the object between
+    /// this read and the rename below. A read lock is enough: other holders only read the object
+    /// or remember the same digest of the same body, and the rename replaces the sidecar
+    /// atomically.
     async fn remember_e_tag(&self, bucket: &str, key: &str, e_tag: &str) {
         let result: Result<()> = async {
             let path = self.get_internal_info_path(bucket, key)?;
@@ -441,6 +502,23 @@ impl FileSystem {
         }
     }
 
+    /// Writes `content` to a temporary file to be renamed over `path` by [`publish`].
+    pub(crate) async fn stage_bytes(&self, path: &Path, content: &[u8]) -> Result<Staged> {
+        let mut file_writer = self.prepare_file_write(path).await?;
+        file_writer.writer().write_all(content).await?;
+        file_writer.stage().await
+    }
+
+    pub(crate) async fn stage_object_attributes(&self, bucket: &str, key: &str, attrs: &ObjectAttributes) -> Result<Staged> {
+        let path = self.get_metadata_path(bucket, key, None)?;
+        self.stage_bytes(&path, &serde_json::to_vec(attrs)?).await
+    }
+
+    pub(crate) async fn stage_internal_info(&self, bucket: &str, key: &str, info: &InternalInfo) -> Result<Staged> {
+        let path = self.get_internal_info_path(bucket, key)?;
+        self.stage_bytes(&path, &serde_json::to_vec(info)?).await
+    }
+
     /// Write to the filesystem atomically.
     /// This is done by first writing to a temporary location and then moving the file.
     pub(crate) async fn prepare_file_write<'a>(&self, path: &'a Path) -> Result<FileWriter<'a>> {
@@ -490,6 +568,57 @@ impl<'a> FileWriter<'a> {
         self.clean_tmp = false;
         Ok(())
     }
+
+    /// Flushes the temporary file and hands it to [`publish`] instead of renaming it now.
+    pub(crate) async fn stage(mut self) -> Result<Staged> {
+        self.writer.flush().await?;
+        self.clean_tmp = false;
+        Ok(Staged {
+            tmp_path: std::mem::take(&mut self.tmp_path),
+            dest_path: self.dest_path.to_owned(),
+        })
+    }
+}
+
+/// A flushed temporary file waiting to be renamed over its destination by [`publish`]. Dropped
+/// unpublished, it removes the temporary file.
+pub(crate) struct Staged {
+    tmp_path: PathBuf,
+    dest_path: PathBuf,
+}
+
+impl Staged {
+    pub(crate) fn tmp_path(&self) -> &Path {
+        &self.tmp_path
+    }
+}
+
+impl Drop for Staged {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.tmp_path);
+    }
+}
+
+/// Renames each staged file over its destination, in order, while `guard` is held.
+///
+/// The renames run in one blocking task that owns the guard, so once they start they all run
+/// with the lock held, even if the request that started them is dropped: a cancelled write cannot
+/// leave a body beside the previous write's sidecars, and no reader sees the files half
+/// published. The data was written and flushed when it was staged, so a full disk fails the
+/// write before anything is published.
+pub(crate) async fn publish(guard: OwnedRwLockWriteGuard<()>, files: Vec<Staged>) -> Result<()> {
+    tokio::task::spawn_blocking(move || {
+        let renamed = files.iter().try_for_each(|file| {
+            if let Some(dir) = file.dest_path.parent() {
+                std::fs::create_dir_all(dir)?;
+            }
+            std::fs::rename(&file.tmp_path, &file.dest_path)
+        });
+        drop(guard);
+        renamed
+    })
+    .await??;
+    Ok(())
 }
 
 impl Drop for FileWriter<'_> {
