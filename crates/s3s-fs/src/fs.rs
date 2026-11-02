@@ -45,6 +45,19 @@ async fn read_sidecar(path: &Path) -> Result<Option<Vec<u8>>> {
     }
 }
 
+/// Read a sidecar like [`read_sidecar`], also treating a name the filesystem cannot represent as absent.
+///
+/// A sidecar name holds the whole encoded key in one path component, so an object imported under a
+/// long nested key can have a sidecar name over the component limit. No sidecar can exist under such
+/// a name, and a listing reports the object as it would one whose sidecar is missing.
+async fn read_nameable_sidecar(path: &Path) -> Result<Option<Vec<u8>>> {
+    match fs::read(path).await {
+        Ok(content) => Ok(Some(content)),
+        Err(err) if matches!(err.kind(), std::io::ErrorKind::NotFound | std::io::ErrorKind::InvalidFilename) => Ok(None),
+        Err(err) => Err(err.into()),
+    }
+}
+
 /// Stores standard object attributes alongside user metadata
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub(crate) struct ObjectAttributes {
@@ -233,6 +246,16 @@ impl FileSystem {
     pub(crate) async fn load_internal_info(&self, bucket: &str, key: &str) -> Result<Option<InternalInfo>> {
         let path = self.get_internal_info_path(bucket, key)?;
         let Some(content) = read_sidecar(&path).await? else {
+            return Ok(None);
+        };
+        let map = serde_json::from_slice(&content)?;
+        Ok(Some(map))
+    }
+
+    /// Load internal info for a listed object, where a sidecar name too long to exist reads as absent.
+    pub(crate) async fn load_listed_internal_info(&self, bucket: &str, key: &str) -> Result<Option<InternalInfo>> {
+        let path = self.get_internal_info_path(bucket, key)?;
+        let Some(content) = read_nameable_sidecar(&path).await? else {
             return Ok(None);
         };
         let map = serde_json::from_slice(&content)?;

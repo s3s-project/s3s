@@ -2,8 +2,9 @@
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
 use crate::case;
-use crate::suite::{List, create_bucket, delete_bucket, delete_object};
+use crate::suite::{FS_ROOT, List, create_bucket, delete_bucket, delete_object};
 
+use std::path::Path;
 use std::sync::Arc;
 
 use aws_sdk_s3::primitives::ByteStream;
@@ -29,6 +30,11 @@ pub fn register(tcx: &mut TestContext) {
     case!(tcx, FsServer, List, test_list_objects_v2_continuation_token_pagination);
     case!(tcx, FsServer, List, test_list_objects_v2_continuation_token_and_start_after_uses_max);
     case!(tcx, FsServer, List, test_list_objects_v2_max_keys_zero);
+    case!(tcx, FsServer, List, test_list_objects_v2_lists_etags);
+    case!(tcx, FsServer, List, test_list_objects_v2_url_encodes_keys);
+    case!(tcx, FsServer, List, test_list_objects_lists_imported_key_with_unnameable_sidecar);
+    case!(tcx, FsServer, List, test_list_objects_v2_url_encodes_echoed_fields);
+    case!(tcx, FsServer, List, test_list_objects_v1_url_encodes_echoed_fields);
 }
 
 impl List {
@@ -744,6 +750,273 @@ impl List {
         assert!(result.contents().is_empty(), "max_keys=0 should return no objects");
 
         // Cleanup
+        for key in &keys {
+            delete_object(c, bucket, key).await?;
+        }
+        delete_bucket(c, bucket).await?;
+
+        Ok(())
+    }
+
+    async fn test_list_objects_v2_lists_etags(self: Arc<Self>) -> Result<()> {
+        let c = &self.s3;
+        let bucket = format!("test-list-etags-{}", Uuid::new_v4());
+        let bucket = bucket.as_str();
+        create_bucket(c, bucket).await?;
+
+        let put = c
+            .put_object()
+            .bucket(bucket)
+            .key("a.txt")
+            .body(ByteStream::from_static(b"hello"))
+            .send()
+            .await?;
+
+        let result = c.list_objects_v2().bucket(bucket).send().await?;
+        let listed: Vec<_> = result.contents().iter().map(|obj| obj.e_tag()).collect();
+        assert_eq!(listed, [put.e_tag()], "a listed object carries the ETag its PUT returned");
+
+        delete_object(c, bucket, "a.txt").await?;
+        delete_bucket(c, bucket).await?;
+
+        Ok(())
+    }
+
+    async fn test_list_objects_v2_url_encodes_keys(self: Arc<Self>) -> Result<()> {
+        let c = &self.s3;
+        let bucket = format!("test-list-url-encoding-{}", Uuid::new_v4());
+        let bucket = bucket.as_str();
+        create_bucket(c, bucket).await?;
+
+        let keys = ["d/a b", "d/a+b", "e f/x"];
+        for key in &keys {
+            c.put_object()
+                .bucket(bucket)
+                .key(*key)
+                .body(ByteStream::from_static(b"x"))
+                .send()
+                .await?;
+        }
+
+        let encoded = c
+            .list_objects_v2()
+            .bucket(bucket)
+            .encoding_type(aws_sdk_s3::types::EncodingType::Url)
+            .send()
+            .await?;
+        let listed: Vec<_> = encoded.contents().iter().filter_map(|obj| obj.key()).collect();
+        assert_eq!(listed, ["d/a%20b", "d/a%2Bb", "e%20f/x"], "keys are url-encoded, `+` included");
+
+        let grouped = c
+            .list_objects_v2()
+            .bucket(bucket)
+            .delimiter("/")
+            .encoding_type(aws_sdk_s3::types::EncodingType::Url)
+            .send()
+            .await?;
+        let prefixes: Vec<_> = grouped.common_prefixes().iter().filter_map(|p| p.prefix()).collect();
+        assert_eq!(prefixes, ["d/", "e%20f/"], "common prefixes are url-encoded too");
+
+        let raw = c.list_objects_v2().bucket(bucket).send().await?;
+        let listed: Vec<_> = raw.contents().iter().filter_map(|obj| obj.key()).collect();
+        assert_eq!(listed, keys, "without encoding-type the keys are returned as stored");
+
+        for key in &keys {
+            delete_object(c, bucket, key).await?;
+        }
+        delete_bucket(c, bucket).await?;
+
+        Ok(())
+    }
+
+    async fn test_list_objects_lists_imported_key_with_unnameable_sidecar(self: Arc<Self>) -> Result<()> {
+        let c = &self.s3;
+        let bucket = format!("test-list-long-key-{}", Uuid::new_v4());
+        let bucket = bucket.as_str();
+        create_bucket(c, bucket).await?;
+
+        let put = c
+            .put_object()
+            .bucket(bucket)
+            .key("a.txt")
+            .body(ByteStream::from_static(b"hello"))
+            .send()
+            .await?;
+
+        // Every path component of the key is short, so the object itself can be imported, but the
+        // sidecar name embeds the whole encoded key in one component.
+        let long_key = format!("{}object", "segment/".repeat(25));
+        let encode = |s: &str| base64_simd::URL_SAFE_NO_PAD.encode_to_string(s);
+        let sidecar_name = format!(".bucket-{}.object-{}.internal.json", encode(bucket), encode(&long_key));
+        assert!(sidecar_name.len() > 255, "the sidecar name must exceed the 255-byte component limit");
+
+        let object_path = Path::new(FS_ROOT).join(bucket).join(&long_key);
+        if let Some(parent) = object_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(&object_path, b"imported")?;
+
+        for v1 in [false, true] {
+            let listed: Vec<(Option<String>, Option<String>)> = if v1 {
+                let result = c.list_objects().bucket(bucket).send().await?;
+                result
+                    .contents()
+                    .iter()
+                    .map(|obj| (obj.key().map(str::to_owned), obj.e_tag().map(str::to_owned)))
+                    .collect()
+            } else {
+                let result = c.list_objects_v2().bucket(bucket).send().await?;
+                result
+                    .contents()
+                    .iter()
+                    .map(|obj| (obj.key().map(str::to_owned), obj.e_tag().map(str::to_owned)))
+                    .collect()
+            };
+            assert_eq!(
+                listed,
+                [
+                    (Some("a.txt".to_owned()), put.e_tag().map(str::to_owned)),
+                    (Some(long_key.clone()), None),
+                ],
+                "the imported key lists without an ETag and the stored object keeps its ETag (v1: {v1})"
+            );
+        }
+
+        delete_bucket(c, bucket).await?;
+
+        Ok(())
+    }
+
+    async fn test_list_objects_v2_url_encodes_echoed_fields(self: Arc<Self>) -> Result<()> {
+        use aws_sdk_s3::types::EncodingType;
+
+        let c = &self.s3;
+        let bucket = format!("test-list-url-echo-v2-{}", Uuid::new_v4());
+        let bucket = bucket.as_str();
+        create_bucket(c, bucket).await?;
+
+        // The prefix holds a literal `%2F`: a client that decodes the echoed prefix must get it back.
+        let keys = ["a%2Fb/x+1", "a%2Fb/y"];
+        for key in &keys {
+            c.put_object()
+                .bucket(bucket)
+                .key(*key)
+                .body(ByteStream::from_static(b"x"))
+                .send()
+                .await?;
+        }
+
+        let grouped = c
+            .list_objects_v2()
+            .bucket(bucket)
+            .prefix("a%2Fb/")
+            .delimiter("+")
+            .start_after("a%2Fb/")
+            .encoding_type(EncodingType::Url)
+            .send()
+            .await?;
+        assert_eq!(grouped.prefix(), Some("a%252Fb/"), "the echoed prefix is url-encoded");
+        assert_eq!(grouped.delimiter(), Some("%2B"), "the echoed delimiter is url-encoded");
+        assert_eq!(grouped.start_after(), Some("a%252Fb/"), "the echoed start-after is url-encoded");
+        let listed: Vec<_> = grouped.contents().iter().filter_map(|obj| obj.key()).collect();
+        assert_eq!(listed, ["a%252Fb/y"], "filtering uses the raw prefix, delimiter and start-after");
+        let prefixes: Vec<_> = grouped.common_prefixes().iter().filter_map(|p| p.prefix()).collect();
+        assert_eq!(prefixes, ["a%252Fb/x%2B"]);
+
+        // The continuation token is opaque: it is passed back as returned and echoed as sent.
+        let first = c
+            .list_objects_v2()
+            .bucket(bucket)
+            .prefix("a%2Fb/")
+            .max_keys(1)
+            .encoding_type(EncodingType::Url)
+            .send()
+            .await?;
+        let listed: Vec<_> = first.contents().iter().filter_map(|obj| obj.key()).collect();
+        assert_eq!(listed, ["a%252Fb/x%2B1"]);
+        let token = first
+            .next_continuation_token()
+            .expect("a truncated page carries a continuation token");
+
+        let second = c
+            .list_objects_v2()
+            .bucket(bucket)
+            .prefix("a%2Fb/")
+            .max_keys(1)
+            .continuation_token(token)
+            .encoding_type(EncodingType::Url)
+            .send()
+            .await?;
+        assert_eq!(second.continuation_token(), Some(token), "the continuation token is echoed as sent");
+        let listed: Vec<_> = second.contents().iter().filter_map(|obj| obj.key()).collect();
+        assert_eq!(listed, ["a%252Fb/y"], "the returned continuation token resumes after the first page");
+
+        for key in &keys {
+            delete_object(c, bucket, key).await?;
+        }
+        delete_bucket(c, bucket).await?;
+
+        Ok(())
+    }
+
+    async fn test_list_objects_v1_url_encodes_echoed_fields(self: Arc<Self>) -> Result<()> {
+        use aws_sdk_s3::types::EncodingType;
+
+        let c = &self.s3;
+        let bucket = format!("test-list-url-echo-v1-{}", Uuid::new_v4());
+        let bucket = bucket.as_str();
+        create_bucket(c, bucket).await?;
+
+        let keys = ["a%2Fb/x+1", "a%2Fb/y"];
+        for key in &keys {
+            c.put_object()
+                .bucket(bucket)
+                .key(*key)
+                .body(ByteStream::from_static(b"x"))
+                .send()
+                .await?;
+        }
+
+        let grouped = c
+            .list_objects()
+            .bucket(bucket)
+            .prefix("a%2Fb/")
+            .delimiter("+")
+            .marker("a%2Fb/")
+            .encoding_type(EncodingType::Url)
+            .send()
+            .await?;
+        assert_eq!(grouped.prefix(), Some("a%252Fb/"), "the echoed prefix is url-encoded");
+        assert_eq!(grouped.delimiter(), Some("%2B"), "the echoed delimiter is url-encoded");
+        assert_eq!(grouped.marker(), Some("a%252Fb/"), "the echoed marker is url-encoded");
+        let listed: Vec<_> = grouped.contents().iter().filter_map(|obj| obj.key()).collect();
+        assert_eq!(listed, ["a%252Fb/y"], "filtering uses the raw prefix, delimiter and marker");
+        let prefixes: Vec<_> = grouped.common_prefixes().iter().filter_map(|p| p.prefix()).collect();
+        assert_eq!(prefixes, ["a%252Fb/x%2B"]);
+
+        // `NextMarker` is a key, so it is encoded like one; the client decodes it before sending it back.
+        let first = c
+            .list_objects()
+            .bucket(bucket)
+            .prefix("a%2Fb/")
+            .max_keys(1)
+            .encoding_type(EncodingType::Url)
+            .send()
+            .await?;
+        assert_eq!(first.next_marker(), Some("a%252Fb/x%2B1"), "the next marker is url-encoded");
+
+        let second = c
+            .list_objects()
+            .bucket(bucket)
+            .prefix("a%2Fb/")
+            .max_keys(1)
+            .marker("a%2Fb/x+1")
+            .encoding_type(EncodingType::Url)
+            .send()
+            .await?;
+        let listed: Vec<_> = second.contents().iter().filter_map(|obj| obj.key()).collect();
+        assert_eq!(listed, ["a%252Fb/y"], "the decoded next marker resumes after the first page");
+
         for key in &keys {
             delete_object(c, bucket, key).await?;
         }
