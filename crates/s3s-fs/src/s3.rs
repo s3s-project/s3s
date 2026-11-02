@@ -951,10 +951,12 @@ impl S3 for FileSystem {
         // object's write lock before publishing; this early refusal only saves streaming a body
         // that cannot be stored.
         let object_path = self.get_object_path(&bucket, &key)?;
-        let object_guard = self.lock_object_read(&bucket, &key).await;
-        self.check_write_conditions(&bucket, &key, &object_path, if_none_match.as_ref(), if_match.as_ref())
-            .await?;
-        drop(object_guard);
+        if if_none_match.is_some() || if_match.is_some() {
+            let object_guard = self.lock_object_read(&bucket, &key).await;
+            self.check_write_conditions(&bucket, &key, &object_path, if_none_match.as_ref(), if_match.as_ref())
+                .await?;
+            drop(object_guard);
+        }
 
         let mut checksum: s3s::checksum::ChecksumHasher = default();
         if input.checksum_crc32.is_some() {
@@ -1569,10 +1571,12 @@ impl S3 for FileSystem {
         // object's write lock before publishing; this early refusal only saves assembling an
         // object that cannot be stored.
         let object_path = self.get_object_path(&bucket, &key)?;
-        let object_guard = self.lock_object_read(&bucket, &key).await;
-        self.check_write_conditions(&bucket, &key, &object_path, if_none_match.as_ref(), if_match.as_ref())
-            .await?;
-        drop(object_guard);
+        if if_none_match.is_some() || if_match.is_some() {
+            let object_guard = self.lock_object_read(&bucket, &key).await;
+            self.check_write_conditions(&bucket, &key, &object_path, if_none_match.as_ref(), if_match.as_ref())
+                .await?;
+            drop(object_guard);
+        }
 
         let expected_checksum = s3s::dto::Checksum {
             checksum_crc32,
