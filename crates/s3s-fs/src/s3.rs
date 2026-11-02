@@ -831,7 +831,7 @@ impl S3 for FileSystem {
         // reads ETags from a listing (conditional writes, consistency checks) needs it.
         for object in &mut page.objects {
             if let Some(key) = object.key.as_deref() {
-                let info = self.load_internal_info(&input.bucket, key).await?;
+                let info = self.load_listed_internal_info(&input.bucket, key).await?;
                 object.e_tag = info.as_ref().and_then(crate::checksum::load_e_tag).map(ETag::Strong);
             }
         }
