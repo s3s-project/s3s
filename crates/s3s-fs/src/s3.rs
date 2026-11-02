@@ -47,7 +47,7 @@ use uuid::Uuid;
 /// size; 64 KiB is a stable point to pair with connection limiting later on.
 const READ_CHUNK_SIZE: usize = 64 * 1024;
 
-/// Copy chunk size for assembling a multipart object out of its parts, and for copying an object.
+/// Copy chunk size for assembling a multipart object out of its parts.
 ///
 /// One buffer is reused for every read from a part and every write to the temporary object, so
 /// copying an object of `n` bytes costs roughly `2n / COPY_CHUNK_SIZE` syscalls and the buffer is
@@ -359,7 +359,16 @@ impl S3 for FileSystem {
         let src_path = self.get_object_path(bucket, key)?;
         let dst_path = self.get_object_path(&input.bucket, &input.key)?;
 
-        let object_guards = self.lock_object_copy(bucket, key, &input.bucket, &input.key).await;
+        // A copy onto itself only updates the object in place, so it holds the object's write lock
+        // throughout. Any other copy stages the destination's files under the source's read lock
+        // and takes the destination's write lock only to publish them, so copying a large body
+        // never blocks the destination's readers and writers. No copy holds two locks at once.
+        let self_replace = src_path == dst_path;
+        let (src_guard, dst_guard) = if self_replace {
+            (None, Some(self.lock_object_write(&input.bucket, &input.key).await))
+        } else {
+            (Some(self.lock_object_read(bucket, key).await), None)
+        };
         if src_path.exists().not() {
             return Err(s3_error!(NoSuchKey));
         }
@@ -420,18 +429,15 @@ impl S3 for FileSystem {
         // a reader still streaming the old body keeps reading the old bytes. A self-replace leaves
         // the body untouched and only updates LastModified.
         let mut staged = Vec::new();
-        let dst_last_modified = if src_path == dst_path {
+        let dst_last_modified = if self_replace {
             let now = SystemTime::now();
             let file = try_!(std::fs::OpenOptions::new().write(true).open(&dst_path));
             try_!(file.set_times(FileTimes::new().set_modified(now)));
             debug!(path = %dst_path.display(), "replace file in place");
             Timestamp::from(now)
         } else {
-            let src_file = try_!(fs::File::open(&src_path).await);
-            let mut src_reader = tokio::io::BufReader::with_capacity(COPY_CHUNK_SIZE, src_file);
-            let mut file_writer = self.prepare_file_write(&dst_path).await?;
-            let _ = try_!(tokio::io::copy_buf(&mut src_reader, file_writer.writer()).await);
-            let body_file = file_writer.stage().await?;
+            let body_file = self.prepare_file_write(&dst_path).await?.stage().await?;
+            let _ = try_!(fs::copy(&src_path, body_file.tmp_path()).await);
             debug!(from = %src_path.display(), to = %dst_path.display(), "copy file");
             // A rename keeps the modification time, so the staged file already has the final one.
             let dst_metadata = try_!(fs::metadata(body_file.tmp_path()).await);
@@ -483,7 +489,14 @@ impl S3 for FileSystem {
             crate::checksum::save_e_tag(&mut info, &dst_etag_str);
             staged.push(self.stage_internal_info(&input.bucket, &input.key, &info).await?);
         }
-        crate::fs::publish(object_guards, staged).await?;
+
+        drop(src_guard);
+        let dst_guard = if let Some(guard) = dst_guard {
+            guard
+        } else {
+            self.lock_object_write(&input.bucket, &input.key).await
+        };
+        crate::fs::publish(dst_guard, staged).await?;
 
         let copy_object_result = CopyObjectResult {
             e_tag: Some(ETag::Strong(dst_etag_str)),

@@ -152,12 +152,12 @@ impl FileSystem {
         })
     }
 
-    fn object_lock(&self, bucket: &str, key: &str) -> (usize, Arc<RwLock<()>>) {
+    fn object_lock(&self, bucket: &str, key: &str) -> Arc<RwLock<()>> {
         let mut hasher = DefaultHasher::new();
         bucket.hash(&mut hasher);
         key.hash(&mut hasher);
         let index = (hasher.finish() % OBJECT_LOCK_STRIPES).numeric_cast::<usize>();
-        (index, Arc::clone(&self.object_locks.0[index]))
+        Arc::clone(&self.object_locks.0[index])
     }
 
     /// Locks an object for writing.
@@ -170,41 +170,15 @@ impl FileSystem {
     /// another write's checksums. Objects share a fixed set of locks by hash: unrelated objects
     /// can contend, but the set never grows.
     ///
-    /// The lock is not reentrant: a task that holds it for an object must not lock that object
-    /// again.
+    /// The lock is not reentrant, and objects share locks: a task that holds one must not lock
+    /// any object again until it has released it.
     pub(crate) async fn lock_object_write(&self, bucket: &str, key: &str) -> OwnedRwLockWriteGuard<()> {
-        self.object_lock(bucket, key).1.write_owned().await
+        self.object_lock(bucket, key).write_owned().await
     }
 
     /// Locks an object for reading; see [`Self::lock_object_write`].
     pub(crate) async fn lock_object_read(&self, bucket: &str, key: &str) -> OwnedRwLockReadGuard<()> {
-        self.object_lock(bucket, key).1.read_owned().await
-    }
-
-    /// Locks a copy's destination for writing and its source for reading. The two are taken in
-    /// index order, so two copies in opposite directions cannot deadlock. A source that shares the
-    /// destination's lock is covered by the write lock alone.
-    pub(crate) async fn lock_object_copy(
-        &self,
-        src_bucket: &str,
-        src_key: &str,
-        dst_bucket: &str,
-        dst_key: &str,
-    ) -> (Option<OwnedRwLockReadGuard<()>>, OwnedRwLockWriteGuard<()>) {
-        let (src_index, src_lock) = self.object_lock(src_bucket, src_key);
-        let (dst_index, dst_lock) = self.object_lock(dst_bucket, dst_key);
-        if src_index == dst_index {
-            return (None, dst_lock.write_owned().await);
-        }
-        if src_index < dst_index {
-            let read = src_lock.read_owned().await;
-            let write = dst_lock.write_owned().await;
-            (Some(read), write)
-        } else {
-            let write = dst_lock.write_owned().await;
-            let read = src_lock.read_owned().await;
-            (Some(read), write)
-        }
+        self.object_lock(bucket, key).read_owned().await
     }
 
     pub(crate) fn resolve_abs_path(&self, path: impl AsRef<Path>) -> Result<PathBuf> {
@@ -632,7 +606,7 @@ impl Drop for Staged {
 /// leave a body beside the previous write's sidecars, and no reader sees the files half
 /// published. The data was written and flushed when it was staged, so a full disk fails the
 /// write before anything is published.
-pub(crate) async fn publish<G: Send + 'static>(guard: G, files: Vec<Staged>) -> Result<()> {
+pub(crate) async fn publish(guard: OwnedRwLockWriteGuard<()>, files: Vec<Staged>) -> Result<()> {
     tokio::task::spawn_blocking(move || {
         let renamed = files.iter().try_for_each(|file| {
             if let Some(dir) = file.dest_path.parent() {
