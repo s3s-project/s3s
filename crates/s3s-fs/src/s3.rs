@@ -2186,7 +2186,14 @@ mod tests {
     use super::*;
 
     use std::env;
+    use std::pin::Pin;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering as AtomicOrdering};
+    use std::task::{Context, Poll};
 
+    use bytes::Bytes;
+    use futures::{Stream, StreamExt};
+    use http::{Extensions, HeaderMap, Method, Uri};
     use s3s::S3ErrorCode;
     use uuid::Uuid;
 
@@ -2701,5 +2708,246 @@ mod tests {
             "the full scan reads the subtree anyway: {} entries",
             listing_stats::visited()
         );
+    }
+
+    fn request<T>(input: T) -> S3Request<T> {
+        S3Request {
+            input,
+            method: Method::PUT,
+            uri: Uri::from_static("/"),
+            headers: HeaderMap::new(),
+            extensions: Extensions::new(),
+            credentials: None,
+            region: None,
+            service: None,
+            trailing_headers: None,
+        }
+    }
+
+    fn new_fs(name: &str) -> (TestRoot, Arc<FileSystem>) {
+        let root = env::temp_dir().join(format!("s3s-fs-{name}-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("bucket")).unwrap();
+        let fs = Arc::new(FileSystem::new(&root).unwrap());
+        (TestRoot(root), fs)
+    }
+
+    fn crc64nvme(body: &[u8]) -> Option<String> {
+        let mut hasher = s3s::checksum::ChecksumHasher {
+            crc64nvme: Some(default()),
+            ..Default::default()
+        };
+        hasher.update(body);
+        hasher.finalize().checksum_crc64nvme
+    }
+
+    /// A body that sends its first chunk, then holds back its last one until every writer
+    /// counted in `arrived` has sent a first chunk. A writer streams its body only after its early
+    /// condition check, so once the gate opens every writer has passed that check and they all
+    /// reach the publish step together.
+    struct GatedBody {
+        chunks: VecDeque<Bytes>,
+        arrived: Arc<AtomicUsize>,
+        writers: usize,
+        counted: bool,
+    }
+
+    impl Stream for GatedBody {
+        type Item = Result<Bytes, io::Error>;
+
+        fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+            let this = self.get_mut();
+            if this.chunks.len() == 1 {
+                if !this.counted {
+                    this.arrived.fetch_add(1, AtomicOrdering::SeqCst);
+                    this.counted = true;
+                }
+                if this.arrived.load(AtomicOrdering::SeqCst) < this.writers {
+                    cx.waker().wake_by_ref();
+                    return Poll::Pending;
+                }
+            }
+            Poll::Ready(this.chunks.pop_front().map(Ok))
+        }
+    }
+
+    fn gated_put(key: &str, body: &[u8], arrived: &Arc<AtomicUsize>, writers: usize) -> PutObjectInput {
+        let (head, tail) = body.split_at(1);
+        let stream = GatedBody {
+            chunks: VecDeque::from([Bytes::copy_from_slice(head), Bytes::copy_from_slice(tail)]),
+            arrived: Arc::clone(arrived),
+            writers,
+            counted: false,
+        };
+        PutObjectInput::builder()
+            .bucket("bucket".to_owned())
+            .key(key.to_owned())
+            .body(Some(StreamingBlob::wrap(stream)))
+            .checksum_crc64nvme(crc64nvme(body))
+            .content_type(Some(String::from_utf8(body.to_vec()).unwrap()))
+            .build()
+            .unwrap()
+    }
+
+    /// Runs every put at once. A writer that errors before the gate leaves the others waiting at
+    /// it for good, so each one is bounded.
+    async fn race_puts(fs: &Arc<FileSystem>, inputs: Vec<PutObjectInput>) -> Vec<S3Result<S3Response<PutObjectOutput>>> {
+        let tasks: Vec<_> = inputs
+            .into_iter()
+            .map(|input| {
+                let fs = Arc::clone(fs);
+                tokio::spawn(async move { fs.put_object(request(input)).await })
+            })
+            .collect();
+        let mut results = Vec::with_capacity(tasks.len());
+        for task in tasks {
+            let joined = tokio::time::timeout(Duration::from_secs(60), task)
+                .await
+                .expect("a writer did not finish within 60 s");
+            results.push(joined.unwrap());
+        }
+        results
+    }
+
+    /// An object as one read returned it. Every test body is also written as its content type,
+    /// so a read pairs correctly only when its body, checksum and attributes all come from one
+    /// write.
+    struct Stored {
+        body: Vec<u8>,
+        checksum: Option<String>,
+        content_type: Option<String>,
+    }
+
+    impl Stored {
+        fn is_paired(&self) -> bool {
+            self.checksum == crc64nvme(&self.body) && self.content_type.as_deref().map(str::as_bytes) == Some(&self.body[..])
+        }
+    }
+
+    async fn get(fs: &FileSystem, key: &str) -> Stored {
+        let input = GetObjectInput::builder()
+            .bucket("bucket".to_owned())
+            .key(key.to_owned())
+            .build()
+            .unwrap();
+        let output = fs.get_object(request(input)).await.unwrap().output;
+        let mut body = output.body.unwrap();
+        let mut bytes = Vec::new();
+        while let Some(chunk) = body.next().await {
+            bytes.extend_from_slice(&chunk.unwrap());
+        }
+        Stored {
+            body: bytes,
+            checksum: output.checksum_crc64nvme,
+            content_type: output.content_type,
+        }
+    }
+
+    /// The single successful writer among `results`, after checking that every other one was
+    /// refused with `PreconditionFailed`.
+    fn sole_winner(results: &[S3Result<S3Response<PutObjectOutput>>]) -> usize {
+        let winners: Vec<usize> = (0..results.len()).filter(|&i| results[i].is_ok()).collect();
+        assert_eq!(winners.len(), 1, "exactly one conditional writer may succeed, got {}", winners.len());
+        for result in results {
+            if let Err(err) = result {
+                assert_eq!(err.code(), &S3ErrorCode::PreconditionFailed);
+            }
+        }
+        winners[0]
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn concurrent_create_if_absent_has_one_winner() {
+        const WRITERS: usize = 16;
+        let (_root, fs) = new_fs("create-race");
+        let arrived = Arc::new(AtomicUsize::new(0));
+        let bodies: Vec<Vec<u8>> = (0..WRITERS).map(|i| format!("writer {i:02} record").into_bytes()).collect();
+        let inputs = bodies
+            .iter()
+            .map(|body| {
+                let mut input = gated_put("prov", body, &arrived, WRITERS);
+                input.if_none_match = Some(ETagCondition::Any);
+                input
+            })
+            .collect();
+
+        let winner = sole_winner(&race_puts(&fs, inputs).await);
+
+        let stored = get(&fs, "prov").await;
+        assert_eq!(stored.body, bodies[winner], "the stored body is the winner's");
+        assert!(stored.is_paired(), "the stored checksum and attributes belong to the stored body");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn concurrent_if_match_has_one_winner() {
+        const WRITERS: usize = 16;
+        let (_root, fs) = new_fs("cas-race");
+        let seed = gated_put("record", b"version 0", &Arc::new(AtomicUsize::new(0)), 1);
+        let etag = fs.put_object(request(seed)).await.unwrap().output.e_tag.unwrap();
+        let arrived = Arc::new(AtomicUsize::new(0));
+        let bodies: Vec<Vec<u8>> = (0..WRITERS)
+            .map(|i| format!("version 1 from writer {i:02}").into_bytes())
+            .collect();
+        let inputs = bodies
+            .iter()
+            .map(|body| {
+                let mut input = gated_put("record", body, &arrived, WRITERS);
+                input.if_match = Some(ETagCondition::ETag(etag.clone()));
+                input
+            })
+            .collect();
+
+        let winner = sole_winner(&race_puts(&fs, inputs).await);
+
+        let stored = get(&fs, "record").await;
+        assert_eq!(stored.body, bodies[winner], "the stored body is the winner's");
+        assert!(stored.is_paired(), "the stored checksum and attributes belong to the stored body");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn overwrites_and_reads_pair_each_body_with_its_checksum() {
+        const WRITERS: usize = 8;
+        const ROUNDS: usize = 40;
+        let (_root, fs) = new_fs("overwrite-race");
+        let seed = gated_put("object", b"seed", &Arc::new(AtomicUsize::new(0)), 1);
+        fs.put_object(request(seed)).await.unwrap();
+
+        let stop = Arc::new(AtomicBool::new(false));
+        let readers: Vec<_> = (0..2)
+            .map(|_| {
+                let fs = Arc::clone(&fs);
+                let stop = Arc::clone(&stop);
+                tokio::spawn(async move {
+                    let (mut total, mut torn) = (0_usize, 0_usize);
+                    while !stop.load(AtomicOrdering::SeqCst) {
+                        total += 1;
+                        if !get(&fs, "object").await.is_paired() {
+                            torn += 1;
+                        }
+                    }
+                    (total, torn)
+                })
+            })
+            .collect();
+
+        for round in 0..ROUNDS {
+            let arrived = Arc::new(AtomicUsize::new(0));
+            let inputs = (0..WRITERS)
+                .map(|i| gated_put("object", format!("round {round:02} writer {i:02}").as_bytes(), &arrived, WRITERS))
+                .collect();
+            for result in race_puts(&fs, inputs).await {
+                result.unwrap();
+            }
+            assert!(
+                get(&fs, "object").await.is_paired(),
+                "round {round}: the last write's body, checksum and attributes differ"
+            );
+        }
+
+        stop.store(true, AtomicOrdering::SeqCst);
+        for reader in readers {
+            let (total, torn) = reader.await.unwrap();
+            assert!(total > 0, "a reader never ran");
+            assert_eq!(torn, 0, "{torn} of {total} reads paired a body with another write's files");
+        }
     }
 }
