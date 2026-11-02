@@ -47,7 +47,7 @@ use uuid::Uuid;
 /// size; 64 KiB is a stable point to pair with connection limiting later on.
 const READ_CHUNK_SIZE: usize = 64 * 1024;
 
-/// Copy chunk size for assembling a multipart object out of its parts.
+/// Copy chunk size for assembling a multipart object out of its parts, and for copying an object.
 ///
 /// One buffer is reused for every read from a part and every write to the temporary object, so
 /// copying an object of `n` bytes costs roughly `2n / COPY_CHUNK_SIZE` syscalls and the buffer is
@@ -293,6 +293,44 @@ fn completed_part_checksum(part: &CompletedPart) -> s3s::dto::Checksum {
     }
 }
 
+impl FileSystem {
+    /// Checks a write's `If-None-Match` and `If-Match` conditions against the stored object.
+    ///
+    /// A write calls this before it streams its body, as an early refusal, and again under the
+    /// object's write lock, where the answer cannot change before the write publishes. The caller
+    /// holds the object's read or write lock either way, because an `ETag` computed here is
+    /// remembered in the object's internal info.
+    async fn check_write_conditions(
+        &self,
+        bucket: &str,
+        key: &str,
+        object_path: &Path,
+        if_none_match: Option<&ETagCondition>,
+        if_match: Option<&ETagCondition>,
+    ) -> S3Result<()> {
+        // If-None-Match: * means "only write if the object does not exist". A tag
+        // or a list is not implemented, which is what Amazon S3 answers for it.
+        if let Some(condition) = if_none_match {
+            if !condition.is_any() {
+                return Err(s3_error!(NotImplemented));
+            }
+            if object_path.exists() {
+                return Err(s3_error!(PreconditionFailed, "Object already exists"));
+            }
+        }
+        // If-Match: <etag> means "only overwrite if ETag matches" (CAS).
+        if let Some(condition) = if_match {
+            if !object_path.exists() {
+                return Err(s3_error!(PreconditionFailed, "Object does not exist"));
+            }
+            if !condition.is_any() && !condition.matches_strong(&self.current_etag(bucket, key).await?) {
+                return Err(s3_error!(PreconditionFailed, "ETag does not match"));
+            }
+        }
+        Ok(())
+    }
+}
+
 #[async_trait::async_trait]
 impl S3 for FileSystem {
     #[tracing::instrument]
@@ -321,6 +359,7 @@ impl S3 for FileSystem {
         let src_path = self.get_object_path(bucket, key)?;
         let dst_path = self.get_object_path(&input.bucket, &input.key)?;
 
+        let object_guards = self.lock_object_copy(bucket, key, &input.bucket, &input.key).await;
         if src_path.exists().not() {
             return Err(s3_error!(NoSuchKey));
         }
@@ -369,12 +408,18 @@ impl S3 for FileSystem {
             return Err(s3_error!(PreconditionFailed));
         }
 
-        if let Some(dir_path) = dst_path.parent() {
-            try_!(fs::create_dir_all(&dir_path).await);
-        }
+        // Derive the destination ETag from the source ETag when available.
+        // This preserves non-MD5 ETag formats (e.g., multipart `{hash}-{part_count}`)
+        // and avoids re-hashing the copied bytes when the source has a stored ETag.
+        let dst_etag_str = match src_etag {
+            Some(etag) => etag.into_value(),
+            None => self.get_md5_sum(bucket, key).await?,
+        };
 
-        // `fs::copy(p, p)` truncates the file before reading it, so self-replace
-        // must preserve bytes in place while still updating LastModified.
+        // The destination's files are staged and renamed into place, never rewritten in place, so
+        // a reader still streaming the old body keeps reading the old bytes. A self-replace leaves
+        // the body untouched and only updates LastModified.
+        let mut staged = Vec::new();
         let dst_last_modified = if src_path == dst_path {
             let now = SystemTime::now();
             let file = try_!(std::fs::OpenOptions::new().write(true).open(&dst_path));
@@ -382,18 +427,16 @@ impl S3 for FileSystem {
             debug!(path = %dst_path.display(), "replace file in place");
             Timestamp::from(now)
         } else {
-            let _ = try_!(fs::copy(&src_path, &dst_path).await);
+            let src_file = try_!(fs::File::open(&src_path).await);
+            let mut src_reader = tokio::io::BufReader::with_capacity(COPY_CHUNK_SIZE, src_file);
+            let mut file_writer = self.prepare_file_write(&dst_path).await?;
+            let _ = try_!(tokio::io::copy_buf(&mut src_reader, file_writer.writer()).await);
+            let body_file = file_writer.stage().await?;
             debug!(from = %src_path.display(), to = %dst_path.display(), "copy file");
-            let dst_metadata = try_!(fs::metadata(&dst_path).await);
+            // A rename keeps the modification time, so the staged file already has the final one.
+            let dst_metadata = try_!(fs::metadata(body_file.tmp_path()).await);
+            staged.push(body_file);
             Timestamp::from(try_!(dst_metadata.modified()))
-        };
-
-        // Derive the destination ETag from the source ETag when available.
-        // This preserves non-MD5 ETag formats (e.g., multipart `{hash}-{part_count}`)
-        // and avoids re-hashing the destination file.
-        let dst_etag_str = match src_etag {
-            Some(etag) => etag.into_value(),
-            None => self.get_md5_sum(&input.bucket, &input.key).await?,
         };
 
         // `MetadataDirective` defaults to `COPY` per AWS API: when the
@@ -422,16 +465,15 @@ impl S3 for FileSystem {
                 checksum_type: None,
             };
             dst_attrs.expires = input.expires;
-            self.save_object_attributes(&input.bucket, &input.key, &dst_attrs, None)
-                .await?;
+            staged.push(self.stage_object_attributes(&input.bucket, &input.key, &dst_attrs).await?);
         } else {
             let src_metadata_path = self.get_metadata_path(bucket, key, None)?;
             if src_metadata_path.exists() {
                 let dst_metadata_path = self.get_metadata_path(&input.bucket, &input.key, None)?;
-                // Same self-replace guard as for the payload above — `fs::copy`
-                // would zero the metadata sidecar when src == dst.
+                // A self-replace keeps the sidecar it already has.
                 if src_metadata_path != dst_metadata_path {
-                    let _ = try_!(fs::copy(src_metadata_path, dst_metadata_path).await);
+                    let content = try_!(fs::read(&src_metadata_path).await);
+                    staged.push(self.stage_bytes(&dst_metadata_path, &content).await?);
                 }
             }
         }
@@ -439,8 +481,9 @@ impl S3 for FileSystem {
         {
             let mut info = src_info.unwrap_or_default();
             crate::checksum::save_e_tag(&mut info, &dst_etag_str);
-            self.save_internal_info(&input.bucket, &input.key, &info).await?;
+            staged.push(self.stage_internal_info(&input.bucket, &input.key, &info).await?);
         }
+        crate::fs::publish(object_guards, staged).await?;
 
         let copy_object_result = CopyObjectResult {
             e_tag: Some(ETag::Strong(dst_etag_str)),
@@ -471,6 +514,7 @@ impl S3 for FileSystem {
     async fn delete_object(&self, req: S3Request<DeleteObjectInput>) -> S3Result<S3Response<DeleteObjectOutput>> {
         let input = req.input;
         let path = self.get_object_path(&input.bucket, &input.key)?;
+        let object_guard = self.lock_object_write(&input.bucket, &input.key).await;
         if path.exists().not() {
             if self.get_bucket_path(&input.bucket)?.exists().not() {
                 return Err(s3_error!(NoSuchBucket));
@@ -487,6 +531,7 @@ impl S3 for FileSystem {
         } else {
             try_!(fs::remove_file(&path).await);
         }
+        drop(object_guard);
         let output = DeleteObjectOutput::default(); // TODO: handle other fields
         Ok(S3Response::new(output))
     }
@@ -498,6 +543,7 @@ impl S3 for FileSystem {
         let mut deleted_objects: Vec<DeletedObject> = Vec::new();
         for object in input.delete.objects {
             let path = self.get_object_path(&input.bucket, &object.key)?;
+            let object_guard = self.lock_object_write(&input.bucket, &object.key).await;
             if object.key.ends_with('/') {
                 match fs::read_dir(&path).await {
                     Ok(mut dir) => {
@@ -520,6 +566,7 @@ impl S3 for FileSystem {
                     }
                 }
             }
+            drop(object_guard);
 
             let deleted_object = DeletedObject {
                 key: Some(object.key),
@@ -555,6 +602,9 @@ impl S3 for FileSystem {
         let input = req.input;
         let object_path = self.get_object_path(&input.bucket, &input.key)?;
 
+        // The body streams from the file opened here after the lock is released, so it stays the
+        // version that the sidecars loaded under the same lock describe.
+        let object_guard = self.lock_object_read(&input.bucket, &input.key).await;
         let mut file = fs::File::open(&object_path).await.map_err(|e| s3_error!(e, NoSuchKey))?;
 
         let file_metadata = try_!(file.metadata().await);
@@ -594,6 +644,7 @@ impl S3 for FileSystem {
             Some(e_tag) => e_tag,
             None => self.get_md5_sum(&input.bucket, &input.key).await?,
         };
+        drop(object_guard);
 
         let current = ETag::Strong(md5_sum.clone());
         match evaluate_read_condition(input.if_match.as_ref(), input.if_none_match.as_ref(), &current) {
@@ -665,6 +716,7 @@ impl S3 for FileSystem {
         let input = req.input;
         let path = self.get_object_path(&input.bucket, &input.key)?;
 
+        let object_guard = self.lock_object_read(&input.bucket, &input.key).await;
         if !path.exists() {
             if self.get_bucket_path(&input.bucket)?.exists().not() {
                 return Err(s3_error!(NoSuchBucket));
@@ -687,6 +739,7 @@ impl S3 for FileSystem {
             Some(e_tag) => e_tag,
             None => self.get_md5_sum(&input.bucket, &input.key).await?,
         };
+        drop(object_guard);
 
         let current = ETag::Strong(md5_sum.clone());
         match evaluate_read_condition(input.if_match.as_ref(), input.if_none_match.as_ref(), &current) {
@@ -881,28 +934,14 @@ impl S3 for FileSystem {
 
         let Some(body) = body else { return Err(s3_error!(IncompleteBody)) };
 
-        // Check conditional headers before modifying any state.
-        // If-None-Match: * means "only create if the object doesn't exist".
-        // If-Match: <etag> means "only overwrite if ETag matches" (CAS).
+        // Check conditional headers before modifying any state. They are checked again under the
+        // object's write lock before publishing; this early refusal only saves streaming a body
+        // that cannot be stored.
         let object_path = self.get_object_path(&bucket, &key)?;
-        // If-None-Match: * means "only write if the object does not exist". A tag
-        // or a list is not implemented, which is what Amazon S3 answers for it.
-        if let Some(ref condition) = if_none_match {
-            if !condition.is_any() {
-                return Err(s3_error!(NotImplemented));
-            }
-            if object_path.exists() {
-                return Err(s3_error!(PreconditionFailed, "Object already exists"));
-            }
-        }
-        if let Some(ref condition) = if_match {
-            if !object_path.exists() {
-                return Err(s3_error!(PreconditionFailed, "Object does not exist"));
-            }
-            if !condition.is_any() && !condition.matches_strong(&self.current_etag(&bucket, &key).await?) {
-                return Err(s3_error!(PreconditionFailed, "ETag does not match"));
-            }
-        }
+        let object_guard = self.lock_object_read(&bucket, &key).await;
+        self.check_write_conditions(&bucket, &key, &object_path, if_none_match.as_ref(), if_match.as_ref())
+            .await?;
+        drop(object_guard);
 
         let mut checksum: s3s::checksum::ChecksumHasher = default();
         if input.checksum_crc32.is_some() {
@@ -957,7 +996,11 @@ impl S3 for FileSystem {
             {
                 return Err(s3_error!(UnexpectedContent, "Unexpected request body when creating a directory object."));
             }
+            let object_guard = self.lock_object_write(&bucket, &key).await;
+            self.check_write_conditions(&bucket, &key, &object_path, if_none_match.as_ref(), if_match.as_ref())
+                .await?;
             try_!(fs::create_dir_all(&object_path).await);
+            drop(object_guard);
             let output = PutObjectOutput::default();
             return Ok(S3Response::new(output));
         }
@@ -1056,9 +1099,7 @@ impl S3 for FileSystem {
             return Err(s3_error!(BadDigest, "checksum_xxhash128 mismatch"));
         }
 
-        file_writer.done().await?;
-
-        debug!(path = %object_path.display(), ?size, %md5_sum, ?checksum, "write file");
+        let body_file = file_writer.stage().await?;
 
         // Save object attributes (including user metadata and standard attributes)
         let mut obj_attrs = ObjectAttributes {
@@ -1074,12 +1115,19 @@ impl S3 for FileSystem {
             checksum_type: None,
         };
         obj_attrs.expires = expires;
-        self.save_object_attributes(&bucket, &key, &obj_attrs, None).await?;
+        let attrs_file = self.stage_object_attributes(&bucket, &key, &obj_attrs).await?;
 
         let mut info: InternalInfo = default();
         crate::checksum::save_e_tag(&mut info, &md5_sum);
         crate::checksum::modify_internal_info(&mut info, &checksum);
-        self.save_internal_info(&bucket, &key, &info).await?;
+        let info_file = self.stage_internal_info(&bucket, &key, &info).await?;
+
+        let object_guard = self.lock_object_write(&bucket, &key).await;
+        self.check_write_conditions(&bucket, &key, &object_path, if_none_match.as_ref(), if_match.as_ref())
+            .await?;
+        crate::fs::publish(object_guard, vec![body_file, attrs_file, info_file]).await?;
+
+        debug!(path = %object_path.display(), ?size, %md5_sum, ?checksum, "write file");
 
         let output = PutObjectOutput {
             e_tag: Some(ETag::Strong(md5_sum)),
@@ -1299,7 +1347,9 @@ impl S3 for FileSystem {
         let src_path = self.get_object_path(src_bucket, src_key)?;
         let dst_path = self.resolve_upload_part_path(upload_id, part_number)?;
 
+        let src_guard = self.lock_object_read(src_bucket, src_key).await;
         let mut src_file = fs::File::open(&src_path).await.map_err(|e| s3_error!(e, NoSuchKey))?;
+        drop(src_guard);
         let file_len = try_!(src_file.metadata().await).len();
 
         let (start, content_length) = if let Some(copy_range) = &input.copy_source_range {
@@ -1502,26 +1552,14 @@ impl S3 for FileSystem {
             return Err(s3_error!(NotImplemented, "Unsupported multipart checksum type"));
         }
 
-        // Check conditional headers before modifying any state
+        // Check conditional headers before modifying any state. They are checked again under the
+        // object's write lock before publishing; this early refusal only saves assembling an
+        // object that cannot be stored.
         let object_path = self.get_object_path(&bucket, &key)?;
-        // If-None-Match: * means "only write if the object does not exist". A tag
-        // or a list is not implemented, which is what Amazon S3 answers for it.
-        if let Some(ref condition) = if_none_match {
-            if !condition.is_any() {
-                return Err(s3_error!(NotImplemented));
-            }
-            if object_path.exists() {
-                return Err(s3_error!(PreconditionFailed, "Object already exists"));
-            }
-        }
-        if let Some(ref condition) = if_match {
-            if !object_path.exists() {
-                return Err(s3_error!(PreconditionFailed, "Object does not exist"));
-            }
-            if !condition.is_any() && !condition.matches_strong(&self.current_etag(&bucket, &key).await?) {
-                return Err(s3_error!(PreconditionFailed, "ETag does not match"));
-            }
-        }
+        let object_guard = self.lock_object_read(&bucket, &key).await;
+        self.check_write_conditions(&bucket, &key, &object_path, if_none_match.as_ref(), if_match.as_ref())
+            .await?;
+        drop(object_guard);
 
         let expected_checksum = s3s::dto::Checksum {
             checksum_crc32,
@@ -1582,7 +1620,7 @@ impl S3 for FileSystem {
                 try_!(file_writer.writer().write_all(&buf[..nread]).await);
                 size += nread as u64;
             }
-            // No flush per part: `done` flushes once, before it renames the temporary object.
+            // No flush per part: `stage` flushes once, before the temporary object is published.
             part_md5_hashes.push(part_md5.finalize());
 
             if part_number != total_parts_cnt && size < 5 * 1024 * 1024 {
@@ -1605,20 +1643,23 @@ impl S3 for FileSystem {
             return Err(s3_error!(BadDigest, "{} mismatch", field));
         }
 
-        file_writer.done().await?;
-
+        let mut staged = vec![file_writer.stage().await?];
         if let Some(attrs) = &upload_attrs {
-            self.save_object_attributes(&bucket, &key, attrs, None).await?;
+            staged.push(self.stage_object_attributes(&bucket, &key, attrs).await?);
         }
-
-        debug!(?e_tag, path = %object_path.display(), "multipart etag");
-
         {
             let mut info: InternalInfo = default();
             crate::checksum::save_e_tag(&mut info, &e_tag);
             crate::checksum::modify_internal_info(&mut info, &checksum);
-            self.save_internal_info(&bucket, &key, &info).await?;
+            staged.push(self.stage_internal_info(&bucket, &key, &info).await?);
         }
+
+        let object_guard = self.lock_object_write(&bucket, &key).await;
+        self.check_write_conditions(&bucket, &key, &object_path, if_none_match.as_ref(), if_match.as_ref())
+            .await?;
+        crate::fs::publish(object_guard, staged).await?;
+
+        debug!(?e_tag, path = %object_path.display(), "multipart etag");
 
         // The object is committed. Its upload directory holds the parts, their metadata and the
         // upload record, so removing the directory retires all of them at once; if that fails, the
