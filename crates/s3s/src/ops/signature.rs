@@ -1208,9 +1208,12 @@ impl<'a> SignatureContext<'a> {
         // could be replayed indefinitely.
         let config = self.config.snapshot();
         let request_time = if let Some(x) = http::get_unique_header_str(self.hs, "x-amz-date") {
-            AmzDate::parse(x)
-                .map_err(|_| invalid_request!("invalid x-amz-date"))?
-                .to_time()
+            // Normalize AWS's +0000 form only for timestamp validation.
+            let http_date = x.strip_suffix(" +0000").map(|date| format!("{date} GMT"));
+            httpdate::parse_http_date(http_date.as_deref().unwrap_or(x))
+                .ok()
+                .and_then(|date| jiff::Timestamp::try_from(date).ok())
+                .or_else(|| AmzDate::parse(x).ok()?.to_time())
                 .ok_or_else(|| invalid_request!("invalid x-amz-date"))?
         } else {
             let ts = crate::dto::Timestamp::parse(crate::dto::TimestampFormat::HttpDate, date)
