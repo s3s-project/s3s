@@ -978,7 +978,12 @@ mod tests {
         let seed_signature = "4f232c4386841ef735655705268965c44a0e4690baa4adea153f7db9fa80a0a9";
 
         let chunk1: Vec<u8> = vec![b'a'; 64 * 1024];
-        let chunk1_string_to_sign = create_chunk_string_to_sign(&date, region, service, seed_signature, &[chunk1]);
+        let chunk1_string_to_sign = create_chunk_string_to_sign(&date, region, service, seed_signature, &[chunk1.as_slice()]);
+        let (first, rest) = chunk1.split_at(13);
+        assert_eq!(
+            create_chunk_string_to_sign(&date, region, service, seed_signature, &[first, rest]),
+            chunk1_string_to_sign
+        );
         assert_eq!(
             chunk1_string_to_sign,
             concat!(

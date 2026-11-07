@@ -73,6 +73,9 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - run: just ci-rust
+      - name: Check the native SigV4 crypto services
+        if: matrix.toolchain == 'stable'
+        run: ./scripts/sigv4-fips/check.sh
       # The workspace commands above build everything with --all-features, so a
       # default build is never checked for the optional HTTP/3 dependencies, and
       # the feature is never checked without the binary feature.
