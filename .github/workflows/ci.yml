@@ -106,8 +106,15 @@ jobs:
       - uses: taiki-e/install-action@just
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - name: Set up Go for AWS-LC FIPS
+        if: runner.os == 'macOS'
+        uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          cache: false
       - name: Install NASM for AWS-LC FIPS
         if: runner.os == 'Windows'
+        shell: pwsh
         run: |
           choco install nasm --yes --no-progress
           "$env:ProgramFiles\NASM" | Out-File -FilePath $env:GITHUB_PATH -Append
