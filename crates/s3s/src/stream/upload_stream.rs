@@ -12,14 +12,13 @@
 //! forwarding bytes, used to enforce the signed body hash of single-chunk
 //! `SigV4` uploads.
 
-use crate::crypto::Checksum as _;
-use crate::crypto::Sha256;
 use crate::error::{S3ErrorCode, StdError};
 use crate::stream::{ByteStream, DynByteStream, RemainingLength};
 use crate::utils::crypto::Sha256Sum;
 
 use bytes::Bytes;
 use futures::Stream;
+use s3s_sigv4::PayloadSha256;
 use std::fmt;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -29,7 +28,7 @@ use thiserror::Error;
 /// Stream wrapper that verifies payload SHA-256 while forwarding bytes.
 pub struct UploadStream<S> {
     inner: S,
-    hasher: Option<Sha256>,
+    hasher: Option<PayloadSha256>,
     expected_sha256: Sha256Sum,
     remaining_length: usize,
     state: State,
@@ -87,7 +86,7 @@ impl<S> UploadStream<S> {
     pub fn new(inner: S, length: usize, expected_sha256: Sha256Sum) -> Self {
         Self {
             inner,
-            hasher: Some(Sha256::new()),
+            hasher: Some(PayloadSha256::default()),
             expected_sha256,
             remaining_length: length,
             state: State::Reading,
@@ -247,6 +246,7 @@ where
 )]
 mod tests {
     use super::*;
+    use crate::crypto::{Checksum as _, Sha256};
 
     use futures::StreamExt as _;
     use std::io;
