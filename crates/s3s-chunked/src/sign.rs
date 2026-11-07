@@ -119,8 +119,7 @@ impl ChunkBuffer {
 
     /// Hashes the buffered payload without copying it.
     fn sha256(&self) -> crate::Sha256Sum {
-        use sha2::{Digest, Sha256};
-        let mut hasher = Sha256::new();
+        let mut hasher = s3s_sigv4::PayloadSha256::default();
         match self {
             Self::Fragments(fragments) => {
                 for fragment in fragments {
@@ -130,7 +129,7 @@ impl ChunkBuffer {
             Self::Coalesced(buffer) => hasher.update(&buffer[..]),
             Self::Sealed(bytes) => hasher.update(bytes.as_ref()),
         }
-        crate::Sha256Sum::from_bytes(hasher.finalize().into())
+        crate::Sha256Sum::from_bytes(hasher.finalize())
     }
 
     /// Freezes a coalesced buffer, so a verified chunk is handed out without

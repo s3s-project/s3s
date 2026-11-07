@@ -19,15 +19,13 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 default = ["http2", "tokio-timer"]
-openssl = ["dep:openssl", "s3s-sigv4/openssl"]
+fips = ["s3s-sigv4/fips", "s3s-chunked/fips"]
+openssl = ["s3s-sigv4/openssl"]
 http2 = ["hyper/http2"]
 tokio-timer = ["dep:tokio"]
 futures-timer = ["dep:futures-timer"]
 wasm = ["futures-timer?/wasm-bindgen"]
 minio = []
-
-[target.'cfg(not(windows))'.dependencies]
-openssl = { workspace = true, optional = true }
 
 [dependencies]
 arc-swap.workspace = true

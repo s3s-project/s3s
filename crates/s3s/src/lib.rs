@@ -19,6 +19,8 @@
 //!
 //! # Cargo features
 //!
+//! - `fips`: uses AWS-LC FIPS for the HMAC-SHA256 and SHA-256 operations in
+//!   `SigV4`, including signed payload verification.
 //! - `http2` (enabled by default): HTTP/2 support through hyper. Build with
 //!   `default-features = false` to serve HTTP/1.1 only without the `h2`
 //!   dependency, and enable `http2` explicitly when it is needed.

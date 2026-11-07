@@ -946,7 +946,6 @@ dependencies = [
  "memchr",
  "pin-project-lite",
  "s3s-sigv4",
- "sha2",
  "thiserror",
  "zeroize",
 ]

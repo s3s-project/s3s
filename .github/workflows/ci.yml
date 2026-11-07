@@ -74,6 +74,9 @@ jobs:
       - run: just spdx-check
       - run: just link-license-check
       - run: just ci-rust
+      - name: Test the default SigV4 backend
+        if: matrix.toolchain == 'stable'
+        run: cargo test --locked -p s3s -p s3s-chunked -p s3s-sigv4 --lib
       # The workspace commands above build everything with --all-features, so a
       # default build is never checked for the optional HTTP/3 dependencies, and
       # the feature is never checked without the binary feature.
@@ -103,6 +106,11 @@ jobs:
       - uses: taiki-e/install-action@just
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - name: Install NASM for AWS-LC FIPS
+        if: runner.os == 'Windows'
+        run: |
+          choco install nasm --yes --no-progress
+          "$env:ProgramFiles\NASM" | Out-File -FilePath $env:GITHUB_PATH -Append
       - run: just test
 
   wasm-test:

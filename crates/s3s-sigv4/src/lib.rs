@@ -42,5 +42,6 @@ pub use self::presigned_url::*;
 mod sha256_sum;
 pub use self::sha256_sum::Sha256Sum;
 
-pub(crate) mod crypto;
+mod crypto;
+pub use self::crypto::{PayloadSha256, hex_sha256};
 pub(crate) mod parser;
