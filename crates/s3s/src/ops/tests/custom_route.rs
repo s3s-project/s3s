@@ -84,6 +84,18 @@ fn get_request(path: &str, host: &str) -> Request {
 }
 
 #[tokio::test]
+async fn delete_acl_reaches_matched_custom_route() {
+    let parts = ctx();
+    let route = MatchAllRoute::new();
+    let ccx = ccx(&parts, false, false, Some(&route));
+    let mut req = get_request("/bucket/key?acl", "localhost");
+    req.method = Method::DELETE;
+    let resp = call(&mut req, &ccx).await.unwrap();
+    assert_eq!(resp.status, hyper::StatusCode::OK);
+    assert_eq!(route.call_count(), 1);
+}
+
+#[tokio::test]
 async fn invalid_paths_reach_matched_custom_route() {
     let parts = ctx();
     let route = MatchAllRoute::new();

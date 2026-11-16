@@ -34,6 +34,7 @@ mod content_length;
 mod custom_route;
 mod custom_route_body_limit;
 mod decoded_content_length;
+mod delete_acl;
 mod error_response;
 mod generated_ops;
 mod header_validation;
