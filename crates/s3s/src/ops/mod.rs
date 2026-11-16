@@ -1093,6 +1093,15 @@ async fn prepare(req: &mut Request, ccx: &CallContext<'_>) -> S3Result<Prepare> 
         return Err(err);
     }
 
+    // ACL subresources support GET and PUT only. Validate both routing paths
+    // before a DELETE can fall through to a bucket or object deletion.
+    if req.method == Method::DELETE
+        && matches!(req.s3ext.s3_path, Some(S3Path::Bucket { .. } | S3Path::Object { .. }))
+        && req.s3ext.qs.as_ref().is_some_and(|qs| qs.has("acl"))
+    {
+        return Err(s3_error!(MethodNotAllowed));
+    }
+
     let op = if let Some(op) = resolved_op {
         op
     } else {
