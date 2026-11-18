@@ -5,10 +5,23 @@
 //!
 //! The form fields, the policy and the `success_action_*` response semantics
 //! live here; the generated operation module delegates to these functions.
+//!
+//! Most form fields reuse the name of the `PutObject` header they stand for, and
+//! the generated `PutObject` form reader takes them by that name. Two do not:
+//! Amazon S3 names the canned ACL field `acl` (the header is `x-amz-acl`) and the
+//! tag set field `tagging` (the header is `x-amz-tagging`), and the `tagging`
+//! field carries an XML `Tagging` document where the header carries a URL-encoded
+//! query string. Both are read here, from the same form the POST policy was
+//! checked against, so the value applied is the value the policy saw: a repeated
+//! field resolves to its last occurrence in both places. The header-named fields
+//! are still read when the AWS-named field is absent.
 
 use crate::dto::ETag;
+use crate::dto::ObjectCannedACL;
 use crate::dto::PostObjectInput;
 use crate::dto::PostObjectOutput;
+use crate::dto::Tagging;
+use crate::dto::TaggingHeader;
 use crate::dto::put_object_input_into_post_object_input;
 use crate::error::*;
 use crate::http;
@@ -26,15 +39,53 @@ pub(crate) fn deserialize_http(req: &mut http::Request) -> S3Result<PostObjectIn
     };
     let success_action_status: Option<i32> = http::parse_field_value(&m, "success_action_status")?;
 
+    // The AWS names of the canned ACL and tag set fields; see the module docs.
+    let acl: Option<ObjectCannedACL> = http::parse_field_value(&m, "acl")?;
+    let tagging: Option<TaggingHeader> = m.find_field_value("tagging").map(tagging_header).transpose()?;
+
     // Get the validated POST policy from request extensions
     let policy = req.s3ext.post_policy.take();
 
     let put_input = PutObject::deserialize_http_multipart(req, m)?;
     let mut post_input = put_object_input_into_post_object_input(put_input);
+    if acl.is_some() {
+        post_input.acl = acl;
+    }
+    if tagging.is_some() {
+        post_input.tagging = tagging;
+    }
     post_input.success_action_redirect = success_action_redirect;
     post_input.success_action_status = success_action_status;
     post_input.policy = policy;
     Ok(post_input)
+}
+
+/// Converts the `tagging` form field, an XML `Tagging` document, into the
+/// URL-encoded query string (`k1=v1&k2=v2`) that `PutObject`'s `x-amz-tagging`
+/// header carries.
+///
+/// Keys and values are percent-encoded except for the RFC 3986 unreserved
+/// characters, so a space becomes `%20` and a literal `&`, `=` or `+` is escaped:
+/// a plain percent-decoder and a form decoder read back the same tags.
+///
+/// # Errors
+/// Returns `MalformedXML` if the document is not a `Tagging` document, or if a
+/// tag lacks its `Key` or its `Value`.
+fn tagging_header(xml: &str) -> S3Result<TaggingHeader> {
+    let tagging: Tagging = http::deserialize_xml(xml.as_bytes())?;
+    let mut header = String::new();
+    for tag in &tagging.tag_set {
+        let (Some(key), Some(value)) = (&tag.key, &tag.value) else {
+            return Err(s3_error!(MalformedXML, "a tag in the tagging form field lacks its Key or its Value"));
+        };
+        if !header.is_empty() {
+            header.push('&');
+        }
+        header.push_str(&urlencoding::encode(key));
+        header.push('=');
+        header.push_str(&urlencoding::encode(value));
+    }
+    Ok(header)
 }
 
 pub(crate) fn serialize_http(
@@ -253,5 +304,154 @@ mod tests {
             .err()
             .expect("the redirect is rejected when the response is serialized");
         assert_eq!(*err.code(), S3ErrorCode::InvalidArgument);
+    }
+
+    /// The tag set `{a: b}` as the AWS POST form carries it.
+    const TAGGING_XML: &str = "<Tagging><TagSet><Tag><Key>a</Key><Value>b</Value></Tag></TagSet></Tagging>";
+
+    /// Builds a prepared POST request whose form carries `fields` in this order.
+    ///
+    /// Each field name is covered by an empty `starts-with` condition, so prepare accepts any
+    /// value; the wire suite (`tests/post_object_wire.rs`) pins the value checks themselves.
+    async fn prepared_post_form(fields: &[(&str, &str)]) -> crate::http::Request {
+        use crate::auth::SecretKey;
+        use crate::ops::tests::common::post_policy_test_helpers as post;
+        use std::sync::Arc;
+
+        let s3: Arc<dyn crate::s3_trait::S3> = Arc::new(post::TestS3NoOp);
+        let config = post::create_test_config(1024 * 1024);
+        let auth = post::create_test_auth();
+        let ccx = post::create_test_context(&s3, &config, &auth);
+        let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into();
+
+        let mut names: Vec<&str> = fields.iter().map(|&(name, _)| name).collect();
+        names.sort_unstable();
+        names.dedup();
+        let mut conditions = vec![post::BASE_CONDITIONS.to_owned()];
+        conditions.extend(names.iter().map(|name| format!(r#"["starts-with","${name}",""]"#)));
+        let policy_json = format!(r#"{{"expiration":"2030-01-01T00:00:00.000Z","conditions":[{}]}}"#, conditions.join(","));
+        let mut req = post::build_post_object_request_with(policy_json.as_str(), "content", &secret_key, false, fields, &[]);
+        crate::ops::prepare(&mut req, &ccx).await.expect("the signed form prepares");
+        req
+    }
+
+    #[tokio::test]
+    async fn deserialize_http_reads_the_aws_acl_and_tagging_fields() {
+        let mut req = prepared_post_form(&[("acl", "public-read"), ("tagging", TAGGING_XML)]).await;
+
+        let input = deserialize_http(&mut req).expect("the form parses");
+        assert_eq!(input.acl.as_ref().map(ObjectCannedACL::as_str), Some(ObjectCannedACL::PUBLIC_READ));
+        assert_eq!(input.tagging.as_deref(), Some("a=b"));
+    }
+
+    #[tokio::test]
+    async fn deserialize_http_prefers_the_aws_fields_over_the_header_named_fields() {
+        let mut req = prepared_post_form(&[
+            ("x-amz-acl", "public-read"),
+            ("acl", "private"),
+            ("x-amz-tagging", "c=d"),
+            ("tagging", TAGGING_XML),
+        ])
+        .await;
+
+        let input = deserialize_http(&mut req).expect("the form parses");
+        assert_eq!(input.acl.as_ref().map(ObjectCannedACL::as_str), Some(ObjectCannedACL::PRIVATE));
+        assert_eq!(input.tagging.as_deref(), Some("a=b"));
+    }
+
+    #[tokio::test]
+    async fn deserialize_http_still_reads_the_header_named_fields_alone() {
+        let mut req = prepared_post_form(&[("x-amz-acl", "public-read"), ("x-amz-tagging", "c=d")]).await;
+
+        let input = deserialize_http(&mut req).expect("the form parses");
+        assert_eq!(input.acl.as_ref().map(ObjectCannedACL::as_str), Some(ObjectCannedACL::PUBLIC_READ));
+        assert_eq!(input.tagging.as_deref(), Some("c=d"));
+    }
+
+    #[tokio::test]
+    async fn deserialize_http_without_acl_or_tagging_leaves_both_unset() {
+        let mut req = prepared_post_form(&[]).await;
+
+        let input = deserialize_http(&mut req).expect("the form parses");
+        assert_eq!(input.acl, None);
+        assert_eq!(input.tagging, None);
+    }
+
+    #[tokio::test]
+    async fn a_repeated_field_resolves_to_its_last_occurrence_like_the_policy_check() {
+        let other = "<Tagging><TagSet><Tag><Key>c</Key><Value>d</Value></Tag></TagSet></Tagging>";
+        let mut req = prepared_post_form(&[
+            ("acl", "public-read"),
+            ("tagging", other),
+            ("acl", "private"),
+            ("tagging", TAGGING_XML),
+        ])
+        .await;
+
+        // The policy conditions are evaluated against `find_field_value`, which returns the
+        // last occurrence of a repeated field; the input has to carry that same occurrence.
+        let form = req.s3ext.multipart.as_ref().expect("the form is kept for the operation");
+        assert_eq!(form.find_field_value("acl"), Some("private"));
+        assert_eq!(form.find_field_value("tagging"), Some(TAGGING_XML));
+
+        let input = deserialize_http(&mut req).expect("the form parses");
+        assert_eq!(input.acl.as_ref().map(ObjectCannedACL::as_str), Some(ObjectCannedACL::PRIVATE));
+        assert_eq!(input.tagging.as_deref(), Some("a=b"));
+    }
+
+    #[tokio::test]
+    async fn deserialize_http_rejects_a_tagging_field_that_is_not_a_tagging_document() {
+        let mut req = prepared_post_form(&[("tagging", "a=b")]).await;
+
+        let err = deserialize_http(&mut req).expect_err("a query string is not a Tagging document");
+        assert_eq!(*err.code(), S3ErrorCode::MalformedXML);
+    }
+
+    #[test]
+    fn tagging_header_percent_encodes_each_tag_as_a_query_pair() {
+        let xml = concat!(
+            "<Tagging><TagSet>",
+            "<Tag><Key>project name</Key><Value>a&amp;b=c+d</Value></Tag>",
+            "<Tag><Key>caf\u{e9}/x</Key><Value>~ok-_.</Value></Tag>",
+            "</TagSet></Tagging>",
+        );
+        let header = tagging_header(xml).expect("a valid Tagging document");
+        assert_eq!(header, "project%20name=a%26b%3Dc%2Bd&caf%C3%A9%2Fx=~ok-_.");
+
+        // The header decodes back to the tags the document named.
+        let decoded: Vec<(String, String)> = url::form_urlencoded::parse(header.as_bytes()).into_owned().collect();
+        assert_eq!(
+            decoded,
+            vec![
+                ("project name".to_owned(), "a&b=c+d".to_owned()),
+                ("caf\u{e9}/x".to_owned(), "~ok-_.".to_owned()),
+            ]
+        );
+    }
+
+    #[test]
+    fn tagging_header_accepts_a_namespace_an_empty_value_and_an_empty_tag_set() {
+        let xml = r#"<Tagging xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><TagSet><Tag><Key>k</Key><Value></Value></Tag></TagSet></Tagging>"#;
+        assert_eq!(tagging_header(xml).expect("an empty value is a value"), "k=");
+
+        let xml = "<Tagging><TagSet></TagSet></Tagging>";
+        assert_eq!(tagging_header(xml).expect("an empty tag set"), "");
+    }
+
+    #[test]
+    fn tagging_header_rejects_what_is_not_a_complete_tagging_document() {
+        let samples = [
+            ("a query string", "a=b"),
+            ("an empty value", ""),
+            ("another root element", "<TagSet><Tag><Key>a</Key><Value>b</Value></Tag></TagSet>"),
+            ("no TagSet", "<Tagging></Tagging>"),
+            ("a tag without a Value", "<Tagging><TagSet><Tag><Key>a</Key></Tag></TagSet></Tagging>"),
+            ("a tag without a Key", "<Tagging><TagSet><Tag><Value>b</Value></Tag></TagSet></Tagging>"),
+            ("trailing content", "<Tagging><TagSet></TagSet></Tagging><Tagging/>"),
+        ];
+        for (what, xml) in samples {
+            let err = tagging_header(xml).expect_err(what);
+            assert_eq!(*err.code(), S3ErrorCode::MalformedXML, "{what}");
+        }
     }
 }
