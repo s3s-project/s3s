@@ -64,6 +64,8 @@ struct Stored {
     key: String,
     content_md5: Option<String>,
     content_type: Option<String>,
+    acl: Option<String>,
+    tagging: Option<String>,
     body: Vec<u8>,
 }
 
@@ -74,7 +76,19 @@ fn stored_file(content_md5: Option<&str>) -> Stored {
         key: KEY.to_owned(),
         content_md5: content_md5.map(str::to_owned),
         content_type: Some(CONTENT_TYPE.to_owned()),
+        acl: None,
+        tagging: None,
         body: FILE_CONTENT.as_bytes().to_vec(),
+    }
+}
+
+/// The record a successful upload of [`FILE_CONTENT`] with a canned ACL and a tag set leaves
+/// behind.
+fn stored_file_with(acl: &str, tagging: &str) -> Stored {
+    Stored {
+        acl: Some(acl.to_owned()),
+        tagging: Some(tagging.to_owned()),
+        ..stored_file(None)
     }
 }
 
@@ -109,6 +123,8 @@ impl S3 for TestS3 {
             key: req.input.key.clone(),
             content_md5: req.input.content_md5.clone(),
             content_type: req.input.content_type.clone(),
+            acl: req.input.acl.as_ref().map(|acl| acl.as_str().to_owned()),
+            tagging: req.input.tagging.clone(),
             body,
         });
         Ok(S3Response::new(PutObjectOutput {
@@ -494,4 +510,140 @@ async fn a_successful_upload_reaches_the_implementation_byte_for_byte() {
     }
     assert_eq!(hex, STORED_ETAG);
     assert_eq!(base64_simd::STANDARD.encode_to_string(digest.as_slice()), FILE_CONTENT_MD5);
+}
+
+/// The tag set `{a: b}` as the AWS POST form's `tagging` field carries it.
+const TAGGING_XML: &str = "<Tagging><TagSet><Tag><Key>a</Key><Value>b</Value></Tag></TagSet></Tagging>";
+
+/// The same tag set as `PutObject`'s `x-amz-tagging` header carries it.
+const TAGGING_QUERY: &str = "a=b";
+
+/// Another tag set, `{c: d}`, as an XML document.
+const OTHER_TAGGING_XML: &str = "<Tagging><TagSet><Tag><Key>c</Key><Value>d</Value></Tag></TagSet></Tagging>";
+
+#[tokio::test]
+async fn the_acl_and_tagging_fields_reach_the_implementation() {
+    // A form as AWS documents it, and as boto3's `generate_presigned_post` builds it.
+    let s3 = TestS3::new();
+    let service = service(s3.clone());
+    let form = PostForm::new(FILE_CONTENT)
+        .field("acl", "public-read")
+        .field("tagging", TAGGING_XML)
+        .condition(json!({ "acl": "public-read" }))
+        .condition(json!(["eq", "$tagging", TAGGING_XML]));
+    let wire = send(&service, form.to_request()).await;
+
+    assert_eq!(wire.status, StatusCode::NO_CONTENT, "{}", wire.body);
+    assert_eq!(s3.stored(), vec![stored_file_with("public-read", TAGGING_QUERY)]);
+}
+
+#[tokio::test]
+async fn an_acl_or_tagging_field_without_a_condition_is_access_denied() {
+    for (name, value) in [("acl", "public-read"), ("tagging", TAGGING_XML)] {
+        let s3 = TestS3::new();
+        let service = service(s3.clone());
+        let form = PostForm::new(FILE_CONTENT).field(name, value);
+        let wire = send(&service, form.to_request()).await;
+
+        assert_error(&wire, StatusCode::FORBIDDEN, "AccessDenied");
+        assert_eq!(s3.stored(), Vec::new(), "{name}");
+    }
+}
+
+#[tokio::test]
+async fn an_acl_or_tagging_value_the_policy_does_not_allow_is_invalid_policy_document() {
+    let cases = [
+        ("acl", "public-read", json!({ "acl": "private" })),
+        ("tagging", OTHER_TAGGING_XML, json!(["eq", "$tagging", TAGGING_XML])),
+    ];
+    for (name, value, condition) in cases {
+        let s3 = TestS3::new();
+        let service = service(s3.clone());
+        let form = PostForm::new(FILE_CONTENT).field(name, value).condition(condition);
+        let wire = send(&service, form.to_request()).await;
+
+        assert_error(&wire, StatusCode::BAD_REQUEST, "InvalidPolicyDocument");
+        assert_eq!(s3.stored(), Vec::new(), "{name}");
+    }
+}
+
+#[tokio::test]
+async fn a_repeated_acl_or_tagging_field_applies_the_occurrence_the_policy_checked() {
+    // The policy allows `private` and `{a: b}` only. The last occurrence of a repeated field is
+    // the one the policy checks, and it is also the one the implementation receives.
+    let policy = [json!({ "acl": "private" }), json!(["eq", "$tagging", TAGGING_XML])];
+
+    let s3 = TestS3::new();
+    let form = PostForm::new(FILE_CONTENT)
+        .field("acl", "public-read")
+        .field("tagging", OTHER_TAGGING_XML)
+        .field("acl", "private")
+        .field("tagging", TAGGING_XML)
+        .condition(policy[0].clone())
+        .condition(policy[1].clone());
+    let wire = send(&service(s3.clone()), form.to_request()).await;
+    assert_eq!(wire.status, StatusCode::NO_CONTENT, "{}", wire.body);
+    assert_eq!(s3.stored(), vec![stored_file_with("private", TAGGING_QUERY)]);
+
+    // The allowed values first and the others last: the policy check sees the others.
+    for (name, allowed, other) in [("acl", "private", "public-read"), ("tagging", TAGGING_XML, OTHER_TAGGING_XML)] {
+        let s3 = TestS3::new();
+        let service = service(s3.clone());
+        let form = PostForm::new(FILE_CONTENT)
+            .field(name, allowed)
+            .field(name, other)
+            .condition(policy[0].clone())
+            .condition(policy[1].clone());
+        let wire = send(&service, form.to_request()).await;
+
+        assert_error(&wire, StatusCode::BAD_REQUEST, "InvalidPolicyDocument");
+        assert_eq!(s3.stored(), Vec::new(), "{name}");
+    }
+}
+
+#[tokio::test]
+async fn the_aws_fields_win_over_the_header_named_fields() {
+    let s3 = TestS3::new();
+    let service = service(s3.clone());
+    let form = PostForm::new(FILE_CONTENT)
+        .field("x-amz-acl", "public-read")
+        .field("acl", "private")
+        .field("x-amz-tagging", "c=d")
+        .field("tagging", TAGGING_XML)
+        .condition(json!(["eq", "$x-amz-acl", "public-read"]))
+        .condition(json!({ "acl": "private" }))
+        .condition(json!(["eq", "$x-amz-tagging", "c=d"]))
+        .condition(json!(["eq", "$tagging", TAGGING_XML]));
+    let wire = send(&service, form.to_request()).await;
+
+    assert_eq!(wire.status, StatusCode::NO_CONTENT, "{}", wire.body);
+    assert_eq!(s3.stored(), vec![stored_file_with("private", TAGGING_QUERY)]);
+}
+
+#[tokio::test]
+async fn the_header_named_fields_alone_are_still_read() {
+    let s3 = TestS3::new();
+    let service = service(s3.clone());
+    let form = PostForm::new(FILE_CONTENT)
+        .field("x-amz-acl", "public-read")
+        .field("x-amz-tagging", "c=d")
+        .condition(json!(["eq", "$x-amz-acl", "public-read"]))
+        .condition(json!(["eq", "$x-amz-tagging", "c=d"]));
+    let wire = send(&service, form.to_request()).await;
+
+    assert_eq!(wire.status, StatusCode::NO_CONTENT, "{}", wire.body);
+    assert_eq!(s3.stored(), vec![stored_file_with("public-read", "c=d")]);
+}
+
+#[tokio::test]
+async fn a_tagging_field_that_is_not_a_tagging_document_is_malformed_xml() {
+    let s3 = TestS3::new();
+    let service = service(s3.clone());
+    let form = PostForm::new(FILE_CONTENT)
+        .field("tagging", TAGGING_QUERY)
+        .condition(json!(["starts-with", "$tagging", ""]));
+    let wire = send(&service, form.to_request()).await;
+
+    assert_error(&wire, StatusCode::BAD_REQUEST, "MalformedXML");
+    assert_eq!(s3.stored(), Vec::new());
 }

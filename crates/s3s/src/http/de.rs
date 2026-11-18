@@ -437,7 +437,7 @@ fn malformed_xml(source: xml::DeError) -> S3Error {
     S3Error::with_source(S3ErrorCode::MalformedXML, Box::new(source))
 }
 
-fn deserialize_xml<T>(bytes: &[u8]) -> S3Result<T>
+pub(crate) fn deserialize_xml<T>(bytes: &[u8]) -> S3Result<T>
 where
     T: for<'xml> xml::Deserialize<'xml>,
 {
