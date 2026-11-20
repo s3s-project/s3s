@@ -2,7 +2,9 @@
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
 use crate::case;
-use crate::suite::{DOMAIN_NAME, FS_ROOT, Multipart, REGION, create_bucket, delete_bucket, delete_object, do_multipart_upload};
+use crate::suite::{
+    DOMAIN_NAME, FS_ROOT, Multipart, REGION, create_bucket, delete_bucket, delete_object, do_multipart_upload, long_keys,
+};
 
 use std::fs;
 use std::path::Path;
@@ -273,6 +275,7 @@ pub fn register(tcx: &mut TestContext) {
     case!(tcx, FsServer, Multipart, test_upload_part_copy);
     case!(tcx, FsServer, Multipart, test_upload_part_copy_invalid_source_range);
     case!(tcx, FsServer, Multipart, test_multipart_with_attributes);
+    case!(tcx, FsServer, Multipart, test_multipart_long_key);
     case!(tcx, FsServer, Multipart, test_multipart_upload_id_auth);
     case!(tcx, FsServer, Multipart, test_complete_multipart_if_none_match);
     case!(tcx, FsServer, Multipart, test_complete_multipart_if_match);
@@ -944,6 +947,58 @@ impl Multipart {
         delete_object(c, bucket, src_key).await?;
         delete_bucket(c, bucket).await?;
 
+        Ok(())
+    }
+
+    /// Multipart uploads to long keys keep their attributes and `ETag` (#997).
+    async fn test_multipart_long_key(self: Arc<Self>) -> Result<()> {
+        let c = &self.s3;
+        let bucket = format!("test-multipart-long-key-{}", Uuid::new_v4());
+        let bucket = bucket.as_str();
+        create_bucket(c, bucket).await?;
+
+        for key in long_keys() {
+            let key = key.as_str();
+            let content = b"long key part";
+
+            let upload_id = c
+                .create_multipart_upload()
+                .bucket(bucket)
+                .key(key)
+                .content_type("text/x-long-key")
+                .send()
+                .await?
+                .upload_id
+                .unwrap();
+
+            let part = c
+                .upload_part()
+                .bucket(bucket)
+                .key(key)
+                .upload_id(&upload_id)
+                .part_number(1)
+                .body(ByteStream::from_static(content))
+                .send()
+                .await?;
+            let parts = vec![CompletedPart::builder().e_tag(part.e_tag.unwrap()).part_number(1).build()];
+
+            let complete = c
+                .complete_multipart_upload()
+                .bucket(bucket)
+                .key(key)
+                .upload_id(&upload_id)
+                .multipart_upload(CompletedMultipartUpload::builder().set_parts(Some(parts)).build())
+                .send()
+                .await?;
+
+            let head = c.head_object().bucket(bucket).key(key).send().await?;
+            assert_eq!(head.e_tag(), complete.e_tag());
+            assert_eq!(head.content_type(), Some("text/x-long-key"));
+
+            delete_object(c, bucket, key).await?;
+        }
+
+        delete_bucket(c, bucket).await?;
         Ok(())
     }
 
