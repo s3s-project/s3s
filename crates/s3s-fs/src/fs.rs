@@ -7,6 +7,7 @@ use crate::utils::hex;
 use s3s::auth::Credentials;
 use s3s::crypto::Checksum;
 use s3s::crypto::Md5;
+use s3s::crypto::Sha256;
 use s3s::dto;
 use s3s::dto::PartNumber;
 
@@ -80,6 +81,29 @@ pub(crate) struct ObjectAttributes {
 /// and their metadata. Bounding the state to a directory keeps listing the parts and aborting the
 /// upload off the file system root.
 const UPLOADS_DIR: &str = ".uploads";
+
+/// Name of the per-object sidecar file that ends in `suffix`.
+///
+/// The name is the SHA-256 of `bucket/key`, so its length does not depend on the key: embedding the
+/// key itself made names of keys over ~150 bytes exceed the 255-byte file name limit. A bucket
+/// name cannot contain `/`, so the digest input names exactly one object, and the leading `.`
+/// keeps sidecars apart from bucket directories.
+fn sidecar_file_name(bucket: &str, key: &str, suffix: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(bucket.as_bytes());
+    hasher.update(b"/");
+    hasher.update(key.as_bytes());
+    format!(".object-{}.{suffix}", hex(hasher.finalize()))
+}
+
+/// Name an object's sidecar had before [`sidecar_file_name`].
+///
+/// Sidecars are still read under this name when no digest-named one exists, so objects stored by
+/// earlier versions keep their attributes and `ETag`; the next write stores them under the new name.
+fn legacy_sidecar_file_name(bucket: &str, key: &str, suffix: &str) -> String {
+    let encode = |s: &str| base64_simd::URL_SAFE_NO_PAD.encode_to_string(s);
+    format!(".bucket-{}.object-{}.{suffix}", encode(bucket), encode(key))
+}
 
 /// Identity of an object body: its size and modification time.
 ///
@@ -170,15 +194,26 @@ impl FileSystem {
         if let Some(upload_id) = upload_id {
             return self.get_upload_attributes_path(&upload_id);
         }
-        let encode = |s: &str| base64_simd::URL_SAFE_NO_PAD.encode_to_string(s);
-        let file_path = format!(".bucket-{}.object-{}.metadata.json", encode(bucket), encode(key));
-        self.resolve_abs_path(file_path)
+        self.resolve_abs_path(sidecar_file_name(bucket, key, "metadata.json"))
     }
 
     pub(crate) fn get_internal_info_path(&self, bucket: &str, key: &str) -> Result<PathBuf> {
-        let encode = |s: &str| base64_simd::URL_SAFE_NO_PAD.encode_to_string(s);
-        let file_path = format!(".bucket-{}.object-{}.internal.json", encode(bucket), encode(key));
-        self.resolve_abs_path(file_path)
+        self.resolve_abs_path(sidecar_file_name(bucket, key, "internal.json"))
+    }
+
+    /// Read an object's sidecar, falling back to the name earlier versions used.
+    async fn read_object_sidecar(&self, bucket: &str, key: &str, suffix: &str) -> Result<Option<Vec<u8>>> {
+        let path = self.resolve_abs_path(sidecar_file_name(bucket, key, suffix))?;
+        if let Some(content) = read_sidecar(&path).await? {
+            return Ok(Some(content));
+        }
+        // A legacy name too long for the file system (a long key) cannot exist, so it is absent.
+        let legacy_path = self.resolve_abs_path(legacy_sidecar_file_name(bucket, key, suffix))?;
+        match fs::read(legacy_path).await {
+            Ok(content) => Ok(Some(content)),
+            Err(err) if matches!(err.kind(), std::io::ErrorKind::NotFound | std::io::ErrorKind::InvalidFilename) => Ok(None),
+            Err(err) => Err(err.into()),
+        }
     }
 
     pub(crate) fn get_upload_part_info_path(&self, upload_id: Uuid, part_number: PartNumber) -> Result<PathBuf> {
@@ -192,8 +227,11 @@ impl FileSystem {
         key: &str,
         upload_id: Option<Uuid>,
     ) -> Result<Option<ObjectAttributes>> {
-        let path = self.get_metadata_path(bucket, key, upload_id)?;
-        let Some(content) = read_sidecar(&path).await? else {
+        let content = match upload_id {
+            Some(upload_id) => read_sidecar(&self.get_upload_attributes_path(&upload_id)?).await?,
+            None => self.read_object_sidecar(bucket, key, "metadata.json").await?,
+        };
+        let Some(content) = content else {
             return Ok(None);
         };
 
@@ -231,8 +269,7 @@ impl FileSystem {
     }
 
     pub(crate) async fn load_internal_info(&self, bucket: &str, key: &str) -> Result<Option<InternalInfo>> {
-        let path = self.get_internal_info_path(bucket, key)?;
-        let Some(content) = read_sidecar(&path).await? else {
+        let Some(content) = self.read_object_sidecar(bucket, key, "internal.json").await? else {
             return Ok(None);
         };
         let map = serde_json::from_slice(&content)?;
@@ -336,12 +373,7 @@ impl FileSystem {
     /// later write wins, exactly as it does for two writers of the same object today.
     async fn remember_e_tag(&self, bucket: &str, key: &str, e_tag: &str) {
         let result: Result<()> = async {
-            let path = self.get_internal_info_path(bucket, key)?;
-            let mut info = match fs::read(&path).await {
-                Ok(content) => serde_json::from_slice::<InternalInfo>(&content)?,
-                Err(err) if err.kind() == std::io::ErrorKind::NotFound => InternalInfo::default(),
-                Err(err) => return Err(err.into()),
-            };
+            let mut info = self.load_internal_info(bucket, key).await?.unwrap_or_default();
             if crate::checksum::load_e_tag(&info).is_some() {
                 return Ok(());
             }
@@ -655,6 +687,18 @@ mod tests {
             std::fs::read(&dest).unwrap(),
             b"buffered bytes",
             "done() must flush before it renames the temporary file"
+        );
+    }
+
+    #[test]
+    fn sidecar_file_name_is_bounded_and_unambiguous() {
+        let name = sidecar_file_name("bucket", &"k".repeat(1024), "internal.json");
+        assert_eq!(name.len(), ".object-".len() + 64 + ".internal.json".len());
+
+        // The `/` separator keeps the split between bucket and key part of the digest.
+        assert_ne!(
+            sidecar_file_name("abc", "dx", "internal.json"),
+            sidecar_file_name("abcd", "x", "internal.json")
         );
     }
 }

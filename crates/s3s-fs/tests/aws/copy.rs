@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
 use crate::case;
-use crate::suite::{Copy, create_bucket, delete_bucket, delete_object};
+use crate::suite::{Copy, create_bucket, delete_bucket, delete_object, long_keys};
 
 use std::sync::Arc;
 
@@ -26,6 +26,7 @@ pub fn register(tcx: &mut TestContext) {
     case!(tcx, FsServer, Copy, test_copy_object_if_none_match);
     case!(tcx, FsServer, Copy, test_copy_object_if_modified_since);
     case!(tcx, FsServer, Copy, test_copy_object_conditional_with_multipart_source_etag);
+    case!(tcx, FsServer, Copy, test_copy_object_long_keys);
 }
 
 impl Copy {
@@ -629,6 +630,56 @@ impl Copy {
         delete_object(c, bucket, dst_key).await?;
         delete_bucket(c, bucket).await?;
 
+        Ok(())
+    }
+
+    /// Copying keeps the attributes of sources and destinations with long keys.
+    async fn test_copy_object_long_keys(self: Arc<Self>) -> Result<()> {
+        let c = &self.s3;
+        let bucket = format!("test-copy-long-keys-{}", Uuid::new_v4());
+        let bucket = bucket.as_str();
+        create_bucket(c, bucket).await?;
+
+        let keys = long_keys();
+        let (src, long_dst) = (keys[0].clone(), keys[1].clone());
+        let short_src = "short-source.txt";
+        c.put_object()
+            .bucket(bucket)
+            .key(short_src)
+            .content_type("text/x-short")
+            .body(ByteStream::from_static(b"short"))
+            .send()
+            .await?;
+        c.put_object()
+            .bucket(bucket)
+            .key(&src)
+            .content_type("text/x-long-key")
+            .metadata("origin", "long-key")
+            .body(ByteStream::from_static(b"long"))
+            .send()
+            .await?;
+
+        // long -> long with the default COPY directive, and short -> long.
+        for (from, content_type, origin) in [
+            (src.as_str(), "text/x-long-key", Some("long-key")),
+            (short_src, "text/x-short", None),
+        ] {
+            c.copy_object()
+                .bucket(bucket)
+                .key(&long_dst)
+                .copy_source(format!("{bucket}/{from}"))
+                .send()
+                .await?;
+
+            let head = c.head_object().bucket(bucket).key(&long_dst).send().await?;
+            assert_eq!(head.content_type(), Some(content_type));
+            assert_eq!(head.metadata().and_then(|m| m.get("origin")).map(String::as_str), origin);
+        }
+
+        for key in [short_src, src.as_str(), long_dst.as_str()] {
+            delete_object(c, bucket, key).await?;
+        }
+        delete_bucket(c, bucket).await?;
         Ok(())
     }
 }

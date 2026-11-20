@@ -351,9 +351,7 @@ impl Conditional {
             result.e_tag().expect("put_object should return e_tag").to_owned()
         };
 
-        let encode = |s: &str| base64_simd::URL_SAFE_NO_PAD.encode_to_string(s);
-        let internal_info_path =
-            std::path::Path::new(FS_ROOT).join(format!(".bucket-{}.object-{}.internal.json", encode(bucket), encode(key)));
+        let internal_info_path = std::path::Path::new(FS_ROOT).join(crate::suite::sidecar_name(bucket, key, "internal.json"));
         fs::remove_file(internal_info_path)?;
 
         let err = c

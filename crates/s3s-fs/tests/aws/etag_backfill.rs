@@ -71,8 +71,7 @@ fn object_path(bucket: &str, key: &str) -> std::path::PathBuf {
 }
 
 fn internal_info_path(bucket: &str, key: &str) -> std::path::PathBuf {
-    let encode = |s: &str| base64_simd::URL_SAFE_NO_PAD.encode_to_string(s);
-    Path::new(FS_ROOT).join(format!(".bucket-{}.object-{}.internal.json", encode(bucket), encode(key)))
+    Path::new(FS_ROOT).join(crate::suite::sidecar_name(bucket, key, "internal.json"))
 }
 
 fn read_internal_info(bucket: &str, key: &str) -> Result<serde_json::Map<String, serde_json::Value>> {
@@ -365,11 +364,7 @@ impl Object {
 
         create_bucket(&c, bucket).await?;
         std::fs::write(root.join(bucket).join(key), content)?;
-        let sidecar = root.join(format!(
-            ".bucket-{}.object-{}.internal.json",
-            base64_simd::URL_SAFE_NO_PAD.encode_to_string(bucket),
-            base64_simd::URL_SAFE_NO_PAD.encode_to_string(key)
-        ));
+        let sidecar = root.join(crate::suite::sidecar_name(bucket, key, "internal.json"));
 
         // A read-only root still serves reads but refuses the temporary file the atomic write needs.
         std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o555))?;
