@@ -62,27 +62,37 @@ fn check() -> Result<bool> {
 }
 
 /// Local source paths of the `COPY` instructions, without the `./` prefix.
+///
+/// The options come first and never name a path in the build context, so they
+/// are skipped. The last operand is the destination and every operand before it
+/// is a source, which is how `COPY ./crates ./codegen ./sources/` copies two
+/// trees. An instruction with `--from` reads out of another stage, so it
+/// contributes nothing to the build context.
 fn copy_sources(text: &str) -> Vec<String> {
     let mut sources: Vec<String> = Vec::new();
     for line in text.lines() {
-        let mut parts = line.split_whitespace();
-        let Some(instruction) = parts.next() else {
+        let mut tokens = line.split_whitespace();
+        let Some(instruction) = tokens.next() else {
             continue;
         };
         if !instruction.eq_ignore_ascii_case("COPY") {
             continue;
         }
-        let Some(source) = parts.next() else {
+        let tokens: Vec<&str> = tokens.collect();
+        let options = tokens.iter().take_while(|token| token.starts_with("--")).count();
+        if tokens[..options].iter().any(|option| option.starts_with("--from=")) {
+            continue;
+        }
+        let Some((_destination, operands)) = tokens[options..].split_last() else {
             continue;
         };
-        if source.starts_with("--") {
-            continue;
+        for &source in operands {
+            let source = source.strip_prefix("./").unwrap_or(source);
+            if source.is_empty() || sources.iter().any(|existing| existing == source) {
+                continue;
+            }
+            sources.push(source.to_owned());
         }
-        let source = source.strip_prefix("./").unwrap_or(source);
-        if source.is_empty() || sources.iter().any(|existing| existing == source) {
-            continue;
-        }
-        sources.push(source.to_owned());
     }
     sources
 }
@@ -142,6 +152,24 @@ COPY ./crates ./crates
     #[test]
     fn copy_sources_ignores_lines_that_are_not_copy_instructions() {
         let text = "# COPY ./commented ./commented\nRUN echo COPY ./run ./run\n";
+        assert_eq!(copy_sources(text), Vec::<String>::new());
+    }
+
+    #[test]
+    fn copy_sources_keeps_the_sources_of_a_copy_with_options() {
+        let text = "COPY --chown=root:root ./xtask ./xtask\nCOPY --chmod=755 ./crates ./crates\n";
+        assert_eq!(copy_sources(text), ["xtask", "crates"]);
+    }
+
+    #[test]
+    fn copy_sources_records_every_operand_except_the_destination() {
+        let text = "COPY ./crates ./codegen ./sources/\n";
+        assert_eq!(copy_sources(text), ["crates", "codegen"]);
+    }
+
+    #[test]
+    fn copy_sources_ignores_a_copy_from_another_stage() {
+        let text = "COPY --from=planner /app/recipe.json recipe.json\n";
         assert_eq!(copy_sources(text), Vec::<String>::new());
     }
 
