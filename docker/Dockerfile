@@ -55,6 +55,7 @@ COPY ./Cargo.toml ./Cargo.toml
 COPY ./Cargo.lock ./Cargo.lock
 COPY ./crates ./crates
 COPY ./codegen ./codegen
+COPY ./xtask ./xtask
 
 RUN cargo chef prepare --recipe-path recipe.json
 
@@ -77,6 +78,7 @@ COPY ./Cargo.toml ./Cargo.toml
 COPY ./Cargo.lock ./Cargo.lock
 COPY ./crates ./crates
 COPY ./codegen ./codegen
+COPY ./xtask ./xtask
 
 RUN RUST_TARGET="$(cat /rust_target)" \
     && cargo build --release --locked --target "${RUST_TARGET}" \
