@@ -41,6 +41,9 @@ link-license:
 link-license-check:
     cargo run -p xtask -- link-license --check
 
+docker-context-check:
+    cargo run -p xtask -- docker check
+
 codegen:
     cargo run -p s3s-codegen
     cargo fmt --all

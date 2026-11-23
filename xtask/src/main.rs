@@ -9,6 +9,7 @@
 
 mod coverage;
 mod crawl;
+mod docker;
 mod fuzz;
 mod link_license;
 mod mutants;
@@ -35,6 +36,9 @@ enum Command {
     /// Crawl the AWS Smithy models and the S3 error code documentation.
     #[command(subcommand)]
     Crawl(crawl::Crawl),
+    /// Check the Docker build context.
+    #[command(subcommand)]
+    Docker(docker::Docker),
     /// Plan and run the scheduled fuzzing.
     #[command(subcommand)]
     Fuzz(fuzz::Fuzz),
@@ -57,6 +61,7 @@ fn main() -> ExitCode {
     let result = match Cli::parse().command {
         Command::Coverage(cmd) => cmd.run(),
         Command::Crawl(cmd) => cmd.run(),
+        Command::Docker(cmd) => cmd.run(),
         Command::Fuzz(cmd) => cmd.run(),
         Command::LinkLicense(cmd) => cmd.run(),
         Command::Mutants(cmd) => cmd.run(),
