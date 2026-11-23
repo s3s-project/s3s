@@ -10,4 +10,15 @@ ignore = [
     # async-std. Revisit: remove this ignore once minio drops the
     # async-std dependency.
     "RUSTSEC-2025-0052",
+    # chrono is unmaintained (RUSTSEC-2026-0543).
+    # Transitive via minio 0.4.0 (optional dependency behind the minio
+    # feature), which requires it unconditionally; s3s-proxy runs on tokio
+    # and never calls into it, and no replacement exists upstream yet.
+    # Revisit: remove this ignore once minio drops chrono.
+    "RUSTSEC-2026-0543",
+    # pin-utils is unmaintained (RUSTSEC-2026-0441).
+    # Transitive via async-std, itself only reachable through minio 0.4.0;
+    # no patched release exists upstream. Revisit together with
+    # RUSTSEC-2025-0052.
+    "RUSTSEC-2026-0441",
 ]
