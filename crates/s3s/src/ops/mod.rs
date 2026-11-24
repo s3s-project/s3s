@@ -825,7 +825,13 @@ async fn verify_signature(
     mut content_length: Option<u64>,
     path_encoding: crate::auth::SigV4PathEncoding,
 ) -> S3Result<Option<u64>> {
-    let decoded_uri_path = urlencoding::decode(req.uri.path()).map_err(|_| S3ErrorCode::InvalidURI)?;
+    // Path-signing inputs use the path the client signed when trusted server code
+    // provides it; routing keeps using `req.uri`.
+    let raw_uri_path = req
+        .extensions
+        .get::<crate::auth::SignedUriPath>()
+        .map_or(req.uri.path(), crate::auth::SignedUriPath::as_str);
+    let decoded_uri_path = urlencoding::decode(raw_uri_path).map_err(|_| S3ErrorCode::InvalidURI)?;
 
     let mime = extract_mime(&req.headers);
     let decoded_content_length = extract_decoded_content_length(&req.headers)?;
@@ -844,7 +850,7 @@ async fn verify_signature(
         hs: &req.headers,
 
         decoded_uri_path: &decoded_uri_path,
-        raw_uri_path: req.uri.path(),
+        raw_uri_path,
         path_encoding,
         vh_bucket,
 

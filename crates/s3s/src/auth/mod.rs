@@ -110,6 +110,33 @@ pub enum SigV4PathEncoding {
     DoubleEncoded,
 }
 
+/// The request path exactly as the client sent and signed it, for servers that
+/// route on a rewritten path (for example a deployment path prefix).
+///
+/// Insert it into the HTTP request extensions before calling the service. When
+/// present, it replaces the request URI's path as the input to `SigV4` (header and
+/// presigned) and `SigV2` (header and presigned) path canonicalization. Routing
+/// still uses the request URI, and POST policy signatures are unaffected.
+///
+/// Only trusted server code may set this value; never derive it from request
+/// headers or other client-controlled input.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SignedUriPath(String);
+
+impl SignedUriPath {
+    /// Creates a signed path from the raw (still percent-encoded) path the client signed.
+    #[must_use]
+    pub fn new(raw_path: impl Into<String>) -> Self {
+        Self(raw_path.into())
+    }
+
+    /// Returns the raw signed path.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 /// S3 Authentication Provider
 ///
 /// This trait defines the interface for authenticating S3 requests using AWS signatures.
