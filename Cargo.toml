@@ -68,7 +68,7 @@ nom = "8.0.0"
 regex = "1.13.1"
 
 # Date & time
-jiff = { version = "0.2.35", default-features = false, features = ["std"] }
+jiff = { version = "1.0.1", default-features = false, features = ["std"] }
 
 # Utilities
 cfg-if = "1.0.4"
