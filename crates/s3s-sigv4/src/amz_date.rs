@@ -82,7 +82,7 @@ impl AmzDate {
             0,
         )
         .ok()?;
-        Some(dt.to_zoned(jiff::tz::TimeZone::UTC).ok()?.timestamp())
+        Some(dt.to_zoned_datetime(jiff::tz::TimeZone::UTC).ok()?.timestamp())
     }
 }
 

@@ -61,7 +61,7 @@ pub fn epoch_seconds(ts: &Timestamp, w: &mut impl io::Write) -> Result<(), Forma
 
 /// Rejects instants whose year does not fit the four digits of the wire formats.
 fn check_year(ts: &Timestamp) -> Result<(), FormatTimestampError> {
-    let year = ts.to_zoned(TimeZone::UTC).year();
+    let year = ts.to_zoned_datetime(TimeZone::UTC).year();
     if (0..=9999).contains(&year) {
         Ok(())
     } else {

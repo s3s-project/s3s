@@ -359,9 +359,7 @@ fn validate_sig_v4_clock_skew(amz_date: &AmzDate, now: jiff::Timestamp, config: 
 /// time than the configured skew allowance. Shared by `SigV4` and `SigV2`
 /// header authentication.
 fn validate_clock_skew(request_time: jiff::Timestamp, now: jiff::Timestamp, config: &S3Config) -> S3Result<()> {
-    let duration = (now - request_time)
-        .to_duration(jiff::SpanRelativeTo::days_are_24_hours())
-        .map_err(|_| invalid_request!("invalid request time"))?;
+    let duration = now - request_time;
     let max_skew_time = jiff::SignedDuration::from_secs(i64::from(config.presigned_url_max_skew_time_secs));
 
     if duration.abs() > max_skew_time {
@@ -876,9 +874,7 @@ impl<'a> SignatureContext<'a> {
                 .to_time()
                 .ok_or_else(|| invalid_request!("invalid amz date"))?;
 
-            let duration = (now - date)
-                .to_duration(jiff::SpanRelativeTo::days_are_24_hours())
-                .map_err(|_| invalid_request!("invalid amz date"))?;
+            let duration = now - date;
 
             // Allow requests that are up to max_skew_time_secs in the future.
             // This is to account for clock skew between the client and server.
