@@ -3775,7 +3775,7 @@ dependencies = [
  "hyper",
  "hyper-util",
  "itoa",
- "jiff 0.2.46",
+ "jiff 1.0.2",
  "md-5",
  "memchr",
  "mime",
@@ -4034,7 +4034,7 @@ version = "0.17.0"
 dependencies = [
  "base64-simd",
  "hmac 0.13.0",
- "jiff 0.2.46",
+ "jiff 1.0.2",
  "sha1 0.11.0",
  "smallvec",
  "thiserror",
@@ -4048,7 +4048,7 @@ dependencies = [
  "base64-simd",
  "hex-simd",
  "hmac 0.13.0",
- "jiff 0.2.46",
+ "jiff 1.0.2",
  "nom 8.0.0",
  "openssl",
  "serde",
@@ -4082,7 +4082,7 @@ dependencies = [
 name = "s3s-time"
 version = "0.18.0-alpha.1"
 dependencies = [
- "jiff 0.2.46",
+ "jiff 1.0.2",
  "serde",
  "serde_json",
  "thiserror",
@@ -5390,7 +5390,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "clap",
- "jiff 0.2.46",
+ "jiff 1.0.2",
  "quick-xml",
  "regex",
  "reqwest 0.13.5",
