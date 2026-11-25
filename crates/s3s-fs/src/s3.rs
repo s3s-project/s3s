@@ -496,8 +496,20 @@ impl S3 for FileSystem {
         let input = req.input;
 
         let mut deleted_objects: Vec<DeletedObject> = Vec::new();
+        let mut errors = Vec::new();
         for object in input.delete.objects {
-            let path = self.get_object_path(&input.bucket, &object.key)?;
+            let path = match self.get_object_path(&input.bucket, &object.key) {
+                Ok(path) => path,
+                Err(error) => {
+                    errors.push(s3s::dto::Error {
+                        key: Some(object.key),
+                        version_id: object.version_id,
+                        code: Some(error.code().as_str().to_owned()),
+                        message: error.message().map(str::to_owned),
+                    });
+                    continue;
+                }
+            };
             if object.key.ends_with('/') {
                 match fs::read_dir(&path).await {
                     Ok(mut dir) => {
@@ -532,6 +544,7 @@ impl S3 for FileSystem {
 
         let output = DeleteObjectsOutput {
             deleted: Some(deleted_objects),
+            errors: (!errors.is_empty()).then_some(errors),
             ..Default::default()
         };
         Ok(S3Response::new(output))
@@ -2195,6 +2208,86 @@ mod tests {
     impl Drop for TestRoot {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[tokio::test]
+    async fn batch_delete_rejects_path_aliases_and_preserves_other_objects() {
+        let root = env::temp_dir().join(format!("s3s-fs-delete-path-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("bucket/allowed")).unwrap();
+        std::fs::create_dir_all(root.join("other-bucket")).unwrap();
+        let _root = TestRoot(root.clone());
+        let fs = FileSystem::new(&root).unwrap();
+        for (key, content) in [
+            ("bucket/allowed/ok", "delete me"),
+            ("bucket/allowed/after", "delete me too"),
+            ("bucket/victim", "keep victim"),
+            ("bucket/allowed/sibling", "keep sibling"),
+            ("bucket/allowed/repeated", "keep repeated-separator victim"),
+            ("other-bucket/secret", "keep other bucket"),
+        ] {
+            std::fs::write(root.join(key), content).unwrap();
+        }
+
+        let invalid_keys = [
+            "allowed//repeated",
+            "allowed/../victim",
+            "allowed/./sibling",
+            "../other-bucket/secret",
+            "/other-bucket/secret",
+        ];
+        let objects = std::iter::once("allowed/ok")
+            .chain(invalid_keys)
+            .chain(std::iter::once("allowed/after"))
+            .map(|key| ObjectIdentifier {
+                key: key.to_owned(),
+                ..Default::default()
+            })
+            .collect();
+        let input = DeleteObjectsInput {
+            bucket: "bucket".to_owned(),
+            delete: Delete {
+                objects,
+                ..Default::default()
+            },
+            bypass_governance_retention: None,
+            checksum_algorithm: None,
+            expected_bucket_owner: None,
+            mfa: None,
+            request_payer: None,
+        };
+        let request = S3Request {
+            input,
+            method: http::Method::POST,
+            uri: http::Uri::from_static("/bucket?delete"),
+            headers: http::HeaderMap::new(),
+            extensions: http::Extensions::new(),
+            credentials: None,
+            region: None,
+            service: None,
+            trailing_headers: None,
+        };
+        let result = fs.delete_objects(request).await;
+
+        assert_eq!(std::fs::read(root.join("bucket/victim")).unwrap(), b"keep victim");
+        assert_eq!(std::fs::read(root.join("bucket/allowed/sibling")).unwrap(), b"keep sibling");
+        assert_eq!(
+            std::fs::read(root.join("bucket/allowed/repeated")).unwrap(),
+            b"keep repeated-separator victim"
+        );
+        assert_eq!(std::fs::read(root.join("other-bucket/secret")).unwrap(), b"keep other bucket");
+        assert!(!root.join("bucket/allowed/ok").exists());
+        assert!(!root.join("bucket/allowed/after").exists());
+        let output = result.unwrap().output;
+        let deleted = output.deleted.unwrap();
+        assert_eq!(deleted.len(), 2);
+        assert_eq!(deleted[0].key.as_deref(), Some("allowed/ok"));
+        assert_eq!(deleted[1].key.as_deref(), Some("allowed/after"));
+        let errors = output.errors.unwrap();
+        assert_eq!(errors.len(), invalid_keys.len());
+        for (error, key) in errors.iter().zip(invalid_keys) {
+            assert_eq!(error.key.as_deref(), Some(key));
+            assert_eq!(error.code.as_deref(), Some("InvalidArgument"));
         }
     }
 
