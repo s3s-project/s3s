@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2023-2026 The s3s Authors
 
 use crate::case;
-use crate::suite::{FS_ROOT, Object, create_bucket, delete_bucket, delete_object};
+use crate::suite::{FS_ROOT, Object, create_bucket, delete_bucket, delete_object, legacy_sidecar_name, long_keys};
 
 use std::sync::Arc;
 
@@ -28,6 +28,9 @@ pub fn register(tcx: &mut TestContext) {
     case!(tcx, FsServer, Object, test_head_object_directory_prefix_reports_not_found);
     case!(tcx, FsServer, Object, test_head_object_missing_bucket_reports_not_found);
     case!(tcx, FsServer, Object, test_head_object_etag_and_checksum);
+    case!(tcx, FsServer, Object, test_put_object_long_key);
+    case!(tcx, FsServer, Object, test_legacy_sidecars_are_still_read);
+    case!(tcx, FsServer, Object, test_imported_long_key_without_sidecars);
 }
 
 fn assert_no_temp_files() -> Result<()> {
@@ -453,6 +456,105 @@ impl Object {
         delete_object(c, bucket, key).await?;
         delete_bucket(c, bucket).await?;
 
+        Ok(())
+    }
+
+    /// Long keys keep their attributes and `ETag` (#997).
+    async fn test_put_object_long_key(self: Arc<Self>) -> Result<()> {
+        let c = &self.s3;
+        let bucket = format!("test-put-long-key-{}", Uuid::new_v4());
+        let bucket = bucket.as_str();
+        create_bucket(c, bucket).await?;
+
+        for key in long_keys() {
+            let key = key.as_str();
+            let content = b"long key body";
+            let put = c
+                .put_object()
+                .bucket(bucket)
+                .key(key)
+                .content_type("text/x-long-key")
+                .metadata("origin", "long-key")
+                .body(ByteStream::from_static(content))
+                .send()
+                .await?;
+
+            let head = c.head_object().bucket(bucket).key(key).send().await?;
+            assert_eq!(head.e_tag(), put.e_tag());
+            assert_eq!(head.content_type(), Some("text/x-long-key"));
+            assert_eq!(head.metadata().and_then(|m| m.get("origin")).map(String::as_str), Some("long-key"));
+
+            let get = c.get_object().bucket(bucket).key(key).send().await?;
+            assert_eq!(get.body.collect().await?.into_bytes().as_ref(), content);
+
+            delete_object(c, bucket, key).await?;
+        }
+
+        delete_bucket(c, bucket).await?;
+        Ok(())
+    }
+
+    /// Objects stored before sidecars were named by a digest keep their attributes and `ETag`.
+    async fn test_legacy_sidecars_are_still_read(self: Arc<Self>) -> Result<()> {
+        let c = &self.s3;
+        let bucket = format!("test-legacy-sidecars-{}", Uuid::new_v4());
+        let bucket = bucket.as_str();
+        let key = "stored-by-0.17.bin";
+        create_bucket(c, bucket).await?;
+
+        let root = std::path::Path::new(FS_ROOT);
+        fs::write(root.join(bucket).join(key), b"two parts")?;
+        fs::write(
+            root.join(legacy_sidecar_name(bucket, key, "metadata.json")),
+            br#"{"user_metadata":{"origin":"legacy"},"content_type":"text/x-legacy"}"#,
+        )?;
+        let multipart_etag = "0123456789abcdef0123456789abcdef-2";
+        fs::write(
+            root.join(legacy_sidecar_name(bucket, key, "internal.json")),
+            format!(r#"{{"e_tag":"{multipart_etag}"}}"#),
+        )?;
+
+        let head = c.head_object().bucket(bucket).key(key).send().await?;
+        assert_eq!(head.e_tag(), Some(format!("\"{multipart_etag}\"").as_str()));
+        assert_eq!(head.content_type(), Some("text/x-legacy"));
+        assert_eq!(head.metadata().and_then(|m| m.get("origin")).map(String::as_str), Some("legacy"));
+
+        // A copy carries the legacy attributes over to the destination.
+        let dst = "copied.bin";
+        c.copy_object()
+            .bucket(bucket)
+            .key(dst)
+            .copy_source(format!("{bucket}/{key}"))
+            .send()
+            .await?;
+        let head = c.head_object().bucket(bucket).key(dst).send().await?;
+        assert_eq!(head.content_type(), Some("text/x-legacy"));
+        assert_eq!(head.metadata().and_then(|m| m.get("origin")).map(String::as_str), Some("legacy"));
+
+        delete_object(c, bucket, key).await?;
+        delete_object(c, bucket, dst).await?;
+        delete_bucket(c, bucket).await?;
+        Ok(())
+    }
+
+    /// A long-key object placed in the store by hand has no sidecar under either name; its legacy
+    /// name is too long to exist, and the lookup must read as absent instead of failing.
+    async fn test_imported_long_key_without_sidecars(self: Arc<Self>) -> Result<()> {
+        let c = &self.s3;
+        let bucket = format!("test-imported-long-key-{}", Uuid::new_v4());
+        let bucket = bucket.as_str();
+        create_bucket(c, bucket).await?;
+
+        let key = "k".repeat(200);
+        fs::write(std::path::Path::new(FS_ROOT).join(bucket).join(&key), b"imported")?;
+
+        let head = c.head_object().bucket(bucket).key(&key).send().await?;
+        assert_eq!(head.content_length(), Some(8));
+        let get = c.get_object().bucket(bucket).key(&key).send().await?;
+        assert_eq!(get.body.collect().await?.into_bytes().as_ref(), b"imported");
+
+        delete_object(c, bucket, &key).await?;
+        delete_bucket(c, bucket).await?;
         Ok(())
     }
 }

@@ -425,15 +425,9 @@ impl S3 for FileSystem {
             self.save_object_attributes(&input.bucket, &input.key, &dst_attrs, None)
                 .await?;
         } else {
-            let src_metadata_path = self.get_metadata_path(bucket, key, None)?;
-            if src_metadata_path.exists() {
-                let dst_metadata_path = self.get_metadata_path(&input.bucket, &input.key, None)?;
-                // Same self-replace guard as for the payload above — `fs::copy`
-                // would zero the metadata sidecar when src == dst.
-                if src_metadata_path != dst_metadata_path {
-                    let _ = try_!(fs::copy(src_metadata_path, dst_metadata_path).await);
-                }
-            }
+            let src_attrs = self.load_object_attributes(bucket, key, None).await?.unwrap_or_default();
+            self.save_object_attributes(&input.bucket, &input.key, &src_attrs, None)
+                .await?;
         }
 
         {

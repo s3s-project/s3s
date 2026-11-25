@@ -248,3 +248,39 @@ pub(crate) async fn do_multipart_upload(
 
     Ok((upload_id, vec![part]))
 }
+
+/// Object keys too long to embed in a 255-byte file name (regression keys for #997).
+///
+/// A key with a single component longer than 255 bytes cannot be stored at all, because the
+/// object body is a file named by the key. The 1024-byte key runs on Linux only: macOS caps the
+/// whole object path, store root included, at 1024 bytes, and Windows is not exercised locally.
+pub(crate) fn long_keys() -> Vec<String> {
+    let nested = |len: usize| {
+        let mut key = "segment/".repeat(len / 8 - 1);
+        key.push_str("lastpart");
+        assert_eq!(key.len(), len);
+        key
+    };
+    let mut keys = vec!["k".repeat(200), nested(512)];
+    if cfg!(target_os = "linux") {
+        keys.push(nested(1024));
+    }
+    keys
+}
+
+/// File name of an object's sidecar in the store root; mirrors `sidecar_file_name` in `fs.rs`.
+pub(crate) fn sidecar_name(bucket: &str, key: &str, suffix: &str) -> String {
+    use s3s::crypto::{Checksum as _, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(bucket.as_bytes());
+    hasher.update(b"/");
+    hasher.update(key.as_bytes());
+    let digest = hex_simd::encode_to_string(hasher.finalize(), hex_simd::AsciiCase::Lower);
+    format!(".object-{digest}.{suffix}")
+}
+
+/// File name an object's sidecar had before sidecars were named by a digest.
+pub(crate) fn legacy_sidecar_name(bucket: &str, key: &str, suffix: &str) -> String {
+    let encode = |s: &str| base64_simd::URL_SAFE_NO_PAD.encode_to_string(s);
+    format!(".bucket-{}.object-{}.{suffix}", encode(bucket), encode(key))
+}
