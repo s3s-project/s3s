@@ -9,11 +9,13 @@ use crate::ops::signature::*;
 
 use crate::auth::SecretKey;
 use crate::auth::signature::Signature;
+use crate::config::{S3Config, S3ConfigProvider, StaticConfigProvider};
 use crate::error::S3ErrorCode;
 use crate::http::Body;
 use hyper::{Method, Uri};
 use s3s_sigv2::AuthorizationV2;
 use s3s_sigv4::AmzDate;
+use std::sync::Arc;
 
 #[test]
 fn raw_path_fallback_rejects_missing_or_mismatched_signatures() {
@@ -151,6 +153,208 @@ async fn sig_v2_header_auth_accepts_fresh_date() {
         .expect("v2 header auth must be detected")
         .expect("a fresh date with a valid signature must pass");
     assert_eq!(cred.access_key, access_key);
+}
+
+const HTTP_DATE_FORMATS: [&str; 4] = [
+    "%a, %d %b %Y %H:%M:%S GMT",
+    "%A, %d-%b-%y %H:%M:%S GMT",
+    "%a %b %e %H:%M:%S %Y",
+    "%a, %d %b %Y %H:%M:%S +0000",
+];
+const ISO_BASIC_DATE_FORMAT: &str = "%Y%m%dT%H%M%SZ";
+
+async fn check_sig_v2_x_amz_date(
+    config: &Arc<dyn S3ConfigProvider>,
+    x_amz_date: &str,
+    date: Option<&str>,
+    signed_x_amz_date: &str,
+) -> crate::S3Result<CredentialsExt> {
+    let access_key = "AKIAIOSFODNN7EXAMPLE";
+    let secret_key: SecretKey = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".into();
+    let auth = crate::auth::SimpleAuth::from_single(access_key, secret_key.clone());
+    let string_to_sign = format!("GET\n\n\n\nx-amz-date:{signed_x_amz_date}\n/test.txt");
+    let signature = s3s_sigv2::calculate_signature(secret_key.expose(), &string_to_sign);
+    let mut headers = headers_from_slice(&[
+        ("authorization", &format!("AWS {access_key}:{signature}")),
+        ("x-amz-date", x_amz_date),
+    ]);
+    if let Some(date) = date {
+        headers.insert(::http::header::DATE, date.parse().expect("valid test header"));
+    }
+    let method = Method::GET;
+    let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+    let mut body = Body::empty();
+    let mut cx = sig_v2_test_context(config, Some(&auth), &method, &uri, &mut body, None, &headers, None);
+    cx.v2_check().await.expect("v2 header auth must be detected")
+}
+
+#[tokio::test]
+async fn sig_v2_header_auth_accepts_supported_x_amz_date_formats() {
+    let config = sig_v2_test_config(true);
+    let now = jiff::Timestamp::now();
+    for format in HTTP_DATE_FORMATS.into_iter().chain([ISO_BASIC_DATE_FORMAT]) {
+        let x_amz_date = now.strftime(format).to_string();
+        let cred = check_sig_v2_x_amz_date(&config, &x_amz_date, None, &x_amz_date)
+            .await
+            .expect("a fresh supported x-amz-date with a valid signature must pass");
+        assert_eq!(cred.access_key, "AKIAIOSFODNN7EXAMPLE", "{x_amz_date}");
+    }
+}
+
+#[tokio::test]
+async fn sig_v2_header_auth_prefers_http_x_amz_date() {
+    let config = sig_v2_test_config(true);
+    let now = jiff::Timestamp::now();
+    let stale_date = fmt_rfc1123(now - jiff::SignedDuration::from_hours(2));
+    for x_amz_date in [fmt_rfc1123(now), now.strftime("%a, %d %b %Y %H:%M:%S +0000").to_string()] {
+        for date in [stale_date.as_str(), "not-a-date"] {
+            let cred = check_sig_v2_x_amz_date(&config, &x_amz_date, Some(date), &x_amz_date)
+                .await
+                .expect("a fresh x-amz-date must override a stale or invalid Date");
+            assert_eq!(cred.access_key, "AKIAIOSFODNN7EXAMPLE", "{x_amz_date} with Date {date}");
+        }
+    }
+}
+
+#[tokio::test]
+async fn sig_v2_header_auth_rejects_out_of_window_x_amz_date() {
+    let config = sig_v2_test_config(true);
+    let now = jiff::Timestamp::now();
+    let fresh_date = fmt_rfc1123(now);
+    for format in HTTP_DATE_FORMATS.into_iter().chain([ISO_BASIC_DATE_FORMAT]) {
+        for minutes in [-16, 16] {
+            let time = now + jiff::SignedDuration::from_mins(minutes);
+            let x_amz_date = time.strftime(format).to_string();
+            let err = check_sig_v2_x_amz_date(&config, &x_amz_date, Some(&fresh_date), &x_amz_date)
+                .await
+                .expect_err("a fresh Date must not hide an out-of-window x-amz-date");
+            assert_eq!(err.code(), &S3ErrorCode::RequestTimeTooSkewed, "{x_amz_date}");
+        }
+    }
+}
+
+#[tokio::test]
+async fn sig_v2_header_auth_rejects_invalid_x_amz_date() {
+    let config = sig_v2_test_config(true);
+    let fresh_date = fmt_rfc1123(jiff::Timestamp::now());
+    for x_amz_date in [
+        "",
+        "not-a-date",
+        "Mon, 32 Nov 2026 12:00:00 GMT",
+        "Mon, 02 Nov 2026 24:00:00 GMT",
+        "Mon, 02 Nov 2026 12:00:00 PST",
+        "Monday, 32-Nov-26 12:00:00 GMT",
+        "Mon Nov 32 12:00:00 2026",
+        "Mon, 02 Nov 2026 12:00:00 GMT trailing",
+        "Mon, 32 Nov 2026 12:00:00 +0000",
+        "Mon, 02 Nov 2026 24:00:00 +0000",
+        "Mon, 02 Nov 2026 12:00:00 +000",
+        "Mon, 02 Nov 2026 12:00:00 +00000",
+        "Mon, 02 Nov 2026 12:00:00 +00:00",
+        "Mon, 02 Nov 2026 12:00:00 +0100",
+        "Mon, 02 Nov 2026 12:00:00 GMT +0000",
+        "20260230T120000Z",
+        "20261102T240000Z",
+        "2026-11-02T12:00:00Z",
+    ] {
+        let err = check_sig_v2_x_amz_date(&config, x_amz_date, Some(&fresh_date), x_amz_date)
+            .await
+            .expect_err("a valid Date must not mask an invalid x-amz-date");
+        assert_eq!(err.code(), &S3ErrorCode::InvalidRequest, "{x_amz_date:?}");
+        assert_eq!(err.message(), Some("invalid x-amz-date"));
+    }
+}
+
+#[tokio::test]
+async fn sig_v2_header_auth_signs_the_original_x_amz_date() {
+    let config = sig_v2_test_config(true);
+    let now = jiff::Timestamp::now();
+    let signed_date = fmt_current_amz_date(now);
+    check_sig_v2_x_amz_date(&config, &signed_date, None, &signed_date)
+        .await
+        .expect("the original signed date must pass");
+    for format in HTTP_DATE_FORMATS {
+        let reformatted_date = now.strftime(format).to_string();
+        let err = check_sig_v2_x_amz_date(&config, &reformatted_date, None, &signed_date)
+            .await
+            .expect_err("reformatting the same timestamp must invalidate the signature");
+        assert_eq!(err.code(), &S3ErrorCode::SignatureDoesNotMatch);
+    }
+    let changed_date = fmt_current_amz_date(now + jiff::SignedDuration::from_mins(1));
+    let err = check_sig_v2_x_amz_date(&config, &changed_date, None, &signed_date)
+        .await
+        .expect_err("changing the signed timestamp must invalidate the signature");
+    assert_eq!(err.code(), &S3ErrorCode::SignatureDoesNotMatch);
+}
+
+#[tokio::test]
+async fn sig_v2_header_auth_preserves_utc_offset_signature() {
+    let config = sig_v2_test_config(true);
+    let now = jiff::Timestamp::now();
+    let utc_offset_date = now.strftime("%a, %d %b %Y %H:%M:%S +0000").to_string();
+    let gmt_date = fmt_rfc1123(now);
+    check_sig_v2_x_amz_date(&config, &utc_offset_date, None, &utc_offset_date)
+        .await
+        .expect("the original UTC-offset signature must pass");
+    for (received_date, signed_date) in [(&gmt_date, &utc_offset_date), (&utc_offset_date, &gmt_date)] {
+        let err = check_sig_v2_x_amz_date(&config, received_date, None, signed_date)
+            .await
+            .expect_err("rewriting a signed date between GMT and a UTC offset must invalidate the signature");
+        assert_eq!(err.code(), &S3ErrorCode::SignatureDoesNotMatch);
+    }
+}
+
+#[tokio::test]
+async fn sig_v2_header_auth_respects_configured_x_amz_date_skew() {
+    let config = S3Config {
+        enable_sig_v2: true,
+        presigned_url_max_skew_time_secs: 60,
+        ..Default::default()
+    };
+    let config: Arc<dyn S3ConfigProvider> = Arc::new(StaticConfigProvider::new(Arc::new(config)));
+    let now = jiff::Timestamp::now();
+    for seconds in [-120_i64, -30, 30, 120] {
+        let x_amz_date = (now + jiff::SignedDuration::from_secs(seconds))
+            .strftime("%a, %d %b %Y %H:%M:%S +0000")
+            .to_string();
+        let result = check_sig_v2_x_amz_date(&config, &x_amz_date, None, &x_amz_date).await;
+        if seconds.abs() > 60 {
+            let err = result.expect_err("timestamps outside the configured window must fail");
+            assert_eq!(err.code(), &S3ErrorCode::RequestTimeTooSkewed);
+        } else {
+            let cred = result.expect("timestamps inside the configured window must pass");
+            assert_eq!(cred.access_key, "AKIAIOSFODNN7EXAMPLE");
+        }
+    }
+}
+
+#[tokio::test]
+async fn sig_v4_header_auth_rejects_http_x_amz_date() {
+    let auth = crate::auth::SimpleAuth::from_single("AKIAIOSFODNN7EXAMPLE", "EXAMPLEKEY");
+    let config = sig_v2_test_config(true);
+    let method = Method::GET;
+    let uri = Uri::from_static("https://s3.amazonaws.com/test.txt");
+    let now: jiff::Timestamp = "2026-11-02T12:00:00Z".parse().unwrap();
+    for format in HTTP_DATE_FORMATS {
+        let date = now.strftime(format).to_string();
+        let headers = headers_from_slice(&[
+            (
+                "authorization",
+                "AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20261102/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature=0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+            ("host", "s3.amazonaws.com"),
+            ("x-amz-content-sha256", "UNSIGNED-PAYLOAD"),
+            ("x-amz-date", &date),
+        ]);
+        let mut body = Body::empty();
+        let mut cx = sig_v2_test_context(&config, Some(&auth), &method, &uri, &mut body, None, &headers, None);
+        let err = cx
+            .v4_check_header_auth()
+            .await
+            .expect_err("SigV4 must reject HTTP x-amz-date");
+        assert_eq!(err.code(), &S3ErrorCode::InvalidRequest);
+        assert_eq!(err.message(), Some("invalid header: x-amz-date"));
+    }
 }
 
 #[tokio::test]
