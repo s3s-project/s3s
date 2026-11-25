@@ -180,6 +180,13 @@ async fn run(opt: Opt) -> Result {
             }
         };
 
+        // Without it a response written as a head and a body holds the body
+        // until the client ACKs the head, which a delayed-ACK client takes
+        // 40 ms to do.
+        if let Err(err) = socket.set_nodelay(true) {
+            tracing::debug!("could not set TCP_NODELAY on an accepted connection: {err}");
+        }
+
         let conn = http_server.serve_connection(TokioIo::new(socket), service.clone());
         let conn = graceful.watch(conn.into_owned());
         tokio::spawn(async move {
