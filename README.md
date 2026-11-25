@@ -39,6 +39,8 @@ This experimental project intends to offer an ergonomic adapter for building S3-
 
 `s3s` implements Amazon S3 REST API in the form of a generic [hyper](https://github.com/hyperium/hyper) service. S3-compatible services can focus on the S3 API itself and don't have to care about the HTTP layer.
 
+Enable the optional `fips` feature on `s3s` or `s3s-sigv4` to use AWS-LC FIPS for SigV4 HMAC-SHA256 and SHA-256, including signed payloads. This feature takes precedence over `openssl` for SigV4. See the [AWS-LC platform and build requirements](https://aws.github.io/aws-lc-rs/platform_support.html).
+
 `s3s-aws` provides useful types and integration with [`aws-sdk-s3`](https://crates.io/crates/aws-sdk-s3).
 
 `s3s-multipart` is a general-purpose asynchronous streaming parser for `multipart/form-data`. It is not tied to S3, and `s3s` builds on it for `POST Object` form uploads.
